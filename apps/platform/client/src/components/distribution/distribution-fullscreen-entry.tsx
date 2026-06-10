@@ -193,6 +193,7 @@ type Props = {
   actorName: string;
   onClose: () => void;
   onBackToList?: () => void;
+  initialProductId?: string;
 };
 
 export function DistributionFullscreenEntry({
@@ -202,6 +203,7 @@ export function DistributionFullscreenEntry({
   actorName,
   onClose,
   onBackToList,
+  initialProductId,
 }: Props) {
   const { toast } = useToast();
   const { user } = useCurrentUser();
@@ -349,6 +351,19 @@ export function DistributionFullscreenEntry({
     for (const model of matrixModels) m.set(model.id, model);
     return m;
   }, [matrixModels]);
+
+  useEffect(() => {
+    if (!initialProductId) return;
+    const inMatrix = matrixModels.some((m) => m.id === initialProductId);
+    setSourceTab(inMatrix ? "matrix" : "catalog");
+    setStatusFilter("all");
+    setSearchQuery("");
+    const t = window.setTimeout(() => {
+      const el = document.querySelector(`[data-testid="card-fullscreen-entry-quick-${initialProductId}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [initialProductId, matrixModels]);
 
   const baselineForProduct = useCallback(
     (productId: string): FullscreenEntryBaseline => {
@@ -604,8 +619,12 @@ export function DistributionFullscreenEntry({
   const handleSave = useCallback(async () => {
     const saveIds = needInstallMode ? Array.from(needInstallMarkedIds) : changedIds;
     if (saveIds.length === 0 || saving) return;
-    const shouldOpenAssignmentDialog =
-      needInstallMode && canCreateAssignment && saveIds.length > 0;
+    const needInstallSaveIds = needInstallMode
+      ? saveIds
+      : saveIds.filter(
+          (id) => (draft[id]?.status ?? baselines[id]?.status ?? "need_install") === "need_install",
+        );
+    const shouldOpenAssignmentDialog = canCreateAssignment && needInstallSaveIds.length > 0;
     setSaving(true);
     try {
       for (const productId of saveIds) {
@@ -724,7 +743,7 @@ export function DistributionFullscreenEntry({
         setExplicitQuickMarks(new Set());
       }
       if (shouldOpenAssignmentDialog) {
-        setPendingAssignmentOpenIds([...saveIds]);
+        setPendingAssignmentOpenIds([...needInstallSaveIds]);
       }
     } finally {
       setSaving(false);

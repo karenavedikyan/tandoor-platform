@@ -83,6 +83,7 @@ export function DistributionTradePointMatrixEntry({
     [profile, dealer],
   );
   const [fullscreenOpen, setFullscreenOpen] = useState(false);
+  const [fullscreenFocusProductId, setFullscreenFocusProductId] = useState<string | undefined>();
   const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
@@ -201,6 +202,16 @@ export function DistributionTradePointMatrixEntry({
 
   const showcaseTasksLinkHref = useMemo(() => buildHashPath("/tasks", { dealerId: dealer.id }), [dealer.id]);
 
+  const openFullscreenEntry = useCallback((productId?: string) => {
+    setFullscreenFocusProductId(productId);
+    setFullscreenOpen(true);
+  }, []);
+
+  const closeFullscreenEntry = useCallback(() => {
+    setFullscreenOpen(false);
+    setFullscreenFocusProductId(undefined);
+  }, []);
+
   const showcasePage = useMemo(
     () => ({
       matrixSummary,
@@ -301,13 +312,14 @@ export function DistributionTradePointMatrixEntry({
                   size="sm"
                   className="h-9 w-full justify-center gap-1.5 bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700"
                   data-testid="button-distribution-entry-fullscreen"
-                  onClick={() => setFullscreenOpen(true)}
+                  onClick={() => openFullscreenEntry()}
                 >
                   <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
                   Внести дистрибуцию
                 </Button>
               ) : null
             }
+            onOpenEntry={canEdit ? openFullscreenEntry : undefined}
           />
           {fullscreenOpen && canEdit ? (
             <DistributionFullscreenEntry
@@ -316,11 +328,12 @@ export function DistributionTradePointMatrixEntry({
               profile={profile}
               actorUserId={actorUserId}
               actorName={actorName}
-              onClose={() => setFullscreenOpen(false)}
+              initialProductId={fullscreenFocusProductId}
+              onClose={closeFullscreenEntry}
               onBackToList={
                 onBackToList
                   ? () => {
-                      setFullscreenOpen(false);
+                      closeFullscreenEntry();
                       onBackToList();
                     }
                   : undefined
