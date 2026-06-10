@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Grid3x3,
   LayoutGrid,
   List,
   Loader2,
@@ -14,7 +13,7 @@ import {
   Minimize2,
   RotateCcw,
   Search,
-  Square,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +109,13 @@ import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
 const ASSIGNMENT_ASSIGNEE_NONE = "__none__";
+
+type FullscreenViewMode = "m" | "list";
+
+function readFullscreenViewMode(): FullscreenViewMode {
+  const raw = readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m");
+  return raw === "list" ? "list" : "m";
+}
 
 function assigneeRoleLabel(role: string): string {
   if (role === "manager") return "менеджер";
@@ -287,9 +293,8 @@ export function DistributionFullscreenEntry({
   const [doorFilter, setDoorFilter] = useState<DoorFilter>("all");
   /** Единый селектор: фильтр списка + кисть в compact-режиме (кроме «Все статусы»). */
   const [workStatus, setWorkStatus] = useState<StatusFilter>("all");
-  const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
-    readCatalogCardSizeFromStorage(CARD_SIZE_STORAGE_KEY, "m"),
-  );
+  const [cardSize, setCardSize] = useState<FullscreenViewMode>(() => readFullscreenViewMode());
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [compactMode, setCompactMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
@@ -326,6 +331,8 @@ export function DistributionFullscreenEntry({
   useEffect(() => {
     writeCatalogCardSizeToStorage(CARD_SIZE_STORAGE_KEY, cardSize);
   }, [cardSize]);
+
+  const filtersActive = sourceTab !== "matrix" || doorFilter !== "all";
 
   useEffect(() => {
     try {
@@ -1231,82 +1238,162 @@ export function DistributionFullscreenEntry({
       <div
         className={cn(
           "z-10 shrink-0 overflow-hidden border-b border-border/60 bg-background/95 backdrop-blur-sm transition-[max-height,opacity] duration-200 ease-out",
-          headerCollapsed && !compactMode ? "max-h-0 border-transparent opacity-0" : "max-h-[min(40vh,520px)] opacity-100",
+          headerCollapsed && !compactMode ? "max-h-0 border-transparent opacity-0" : "max-h-[min(36vh,420px)] opacity-100",
         )}
         aria-hidden={headerCollapsed && !compactMode}
       >
-        <div className="flex flex-col gap-2 px-3 py-2 sm:px-4 md:gap-2 md:py-2.5">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex flex-col gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              onClick={handleBack}
+              data-testid="button-fullscreen-entry-back-compact"
+              aria-label="Назад"
+              title="Назад"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+            </Button>
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по каталогу"
+                className="h-9 pl-9"
+                data-testid="input-fullscreen-entry-search"
+              />
+            </div>
+            {(
+              [
+                ["m", LayoutGrid, "Сетка"],
+                ["list", List, "Список"],
+              ] as const
+            ).map(([size, Icon, label]) => (
               <Button
+                key={size}
                 type="button"
-                variant="outline"
                 size="icon"
+                variant={cardSize === size ? "default" : "outline"}
                 className="h-9 w-9 shrink-0"
-                onClick={handleBack}
-                data-testid="button-fullscreen-entry-back-compact"
-                aria-label="Назад"
-                title="Назад"
+                onClick={() => setCardSize(size)}
+                data-testid={`button-fullscreen-entry-size-${size}`}
+                aria-label={label}
+                title={label}
               >
-                <ArrowLeft className="h-4 w-4" aria-hidden />
+                <Icon className="h-4 w-4" aria-hidden />
               </Button>
-              <div className="relative min-w-0 flex-1">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Поиск по каталогу"
-                  className="min-h-9 pl-9"
-                  data-testid="input-fullscreen-entry-search"
-                />
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-1 md:ml-auto">
-              {(
-                [
-                  ["xl", Square],
-                  ["m", LayoutGrid],
-                  ["s", Grid3x3],
-                  ["list", List],
-                ] as const
-              ).map(([size, Icon]) => (
-                <Button
-                  key={size}
-                  type="button"
-                  size="icon"
-                  variant={cardSize === size ? "default" : "outline"}
-                  className="h-9 w-9"
-                  onClick={() => setCardSize(size)}
-                  data-testid={`button-fullscreen-entry-size-${size}`}
-                  aria-label={size}
-                >
-                  <Icon className="h-4 w-4" />
-                </Button>
-              ))}
-              <Button
-                type="button"
-                size="icon"
-                variant={compactMode ? "default" : "outline"}
-                className="h-9 w-9"
-                onClick={() => setCompactMode((v) => !v)}
-                data-testid="button-fullscreen-entry-compact"
-                aria-label="Компактный режим"
-                title="Компактный режим — больше моделей на экране"
-              >
-                {compactMode ? (
-                  <Minimize2 className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Maximize2 className="h-4 w-4" aria-hidden />
-                )}
-              </Button>
-            </div>
+            ))}
+            <Button
+              type="button"
+              size="icon"
+              variant={compactMode ? "default" : "outline"}
+              className="h-9 w-9 shrink-0"
+              onClick={() => setCompactMode((v) => !v)}
+              data-testid="button-fullscreen-entry-compact"
+              aria-label="Компактный режим"
+              title="Компактный режим — больше моделей на экране"
+            >
+              {compactMode ? (
+                <Minimize2 className="h-4 w-4" aria-hidden />
+              ) : (
+                <Maximize2 className="h-4 w-4" aria-hidden />
+              )}
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant={filtersOpen || filtersActive ? "default" : "outline"}
+              className="relative h-9 w-9 shrink-0"
+              onClick={() => setFiltersOpen((v) => !v)}
+              data-testid="button-fullscreen-entry-filters-toggle"
+              aria-label="Фильтры источника и дверей"
+              aria-expanded={filtersOpen}
+              title="Фильтры источника и дверей"
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden />
+              {filtersActive && !filtersOpen ? (
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary-foreground" aria-hidden />
+              ) : null}
+            </Button>
           </div>
 
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Статус:</span>
+            <Select value={workStatus} onValueChange={(v) => handleWorkStatusChange(v as StatusFilter)}>
+              <SelectTrigger
+                className="h-9 min-w-0 flex-1 text-xs sm:max-w-xs sm:text-sm"
+                data-testid="select-fullscreen-entry-quick-status"
+              >
+                <SelectValue>
+                  {workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">
+                  Все статусы
+                </SelectItem>
+                {STATUS_OPTIONS.map((o) => (
+                  <SelectItem key={o.id} value={o.id} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {placementTypeMode ? (
+            <div
+              className="space-y-1 rounded-lg border border-border/80 bg-muted/20 px-2 py-1.5"
+              data-testid="section-fullscreen-entry-placement-type"
+            >
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 text-[11px] text-muted-foreground">Тип:</span>
+                <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto pb-0.5">
+                  {placementTypeOptions.map((t) => (
+                    <Button
+                      key={t}
+                      type="button"
+                      size="sm"
+                      variant={activePlacementType === t ? "default" : "outline"}
+                      className="h-8 shrink-0 px-2 text-xs"
+                      data-testid={`button-fullscreen-entry-placement-type-${t}`}
+                      onClick={() => setActivePlacementType(t)}
+                    >
+                      {PLACEMENT_TYPE_LABEL_RU[t]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground" data-testid="text-fullscreen-entry-placement-counter">
+                Отмечено{" "}
+                <span className="font-semibold tabular-nums text-foreground">{markedInActivePlacement}</span>
+                {activeSlotLimit != null ? (
+                  <>
+                    {" "}
+                    из <span className="font-semibold tabular-nums text-foreground">{activeSlotLimit}</span>
+                  </>
+                ) : null}
+              </p>
+              {activeSlotLimit == null ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Ёмкость для типа «{PLACEMENT_TYPE_LABEL_RU[activePlacementType]}» не задана — лимит не
+                  контролируется
+                </p>
+              ) : null}
+              {slotLimitMessage ? (
+                <p className="text-[11px] text-amber-800 dark:text-amber-200">{slotLimitMessage}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           {pendingCount > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
               <span
                 className="text-[11px] font-medium text-amber-900 dark:text-amber-200"
                 data-testid="text-fullscreen-entry-pending-count"
@@ -1327,133 +1414,70 @@ export function DistributionFullscreenEntry({
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Tabs
-              value={sourceTab}
-              onValueChange={(v) => setSourceTab(v as SourceTab)}
-              className="min-w-0 shrink-0"
+          {filtersOpen ? (
+            <div
+              className="space-y-2 rounded-lg border border-border/80 bg-muted/20 px-2 py-2"
+              data-testid="panel-fullscreen-entry-filters"
             >
-              <TabsList className="grid h-auto min-h-9 w-full min-w-[12rem] max-w-md grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
-                <TabsTrigger
-                  value="matrix"
-                  className={cn(
-                    "min-h-9 text-xs sm:text-sm",
-                    "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
-                  )}
-                  data-testid="tab-fullscreen-entry-matrix"
-                >
-                  Из матрицы
-                </TabsTrigger>
-                <TabsTrigger
-                  value="catalog"
-                  className={cn(
-                    "min-h-9 text-xs sm:text-sm",
-                    "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
-                  )}
-                  data-testid="tab-fullscreen-entry-catalog"
-                >
-                  Весь каталог
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            <div className="flex flex-wrap gap-1">
-              {(
-                [
-                  ["all", "Все"],
-                  ["vh", "ВХ"],
-                  ["mk", "МК"],
-                ] as const
-              ).map(([id, label]) => (
-                <Button
-                  key={id}
-                  type="button"
-                  size="sm"
-                  variant={doorFilter === id ? "default" : "outline"}
-                  className="min-h-9 px-2.5"
-                  onClick={() => setDoorFilter(id)}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-1 sm:min-w-[14rem]">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="shrink-0 text-xs text-muted-foreground">Работаю со статусом:</span>
-                <Select value={workStatus} onValueChange={(v) => handleWorkStatusChange(v as StatusFilter)}>
-                  <SelectTrigger
-                    className="h-9 min-w-[10rem] text-xs sm:text-sm"
-                    data-testid="select-fullscreen-entry-quick-status"
+              <Tabs
+                value={sourceTab}
+                onValueChange={(v) => setSourceTab(v as SourceTab)}
+                className="min-w-0"
+              >
+                <TabsList className="grid h-auto min-h-9 w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
+                  <TabsTrigger
+                    value="matrix"
+                    className={cn(
+                      "min-h-9 text-xs",
+                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                    )}
+                    data-testid="tab-fullscreen-entry-matrix"
                   >
-                    <SelectValue>
-                      {workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-xs">
-                      Все статусы
-                    </SelectItem>
-                    {STATUS_OPTIONS.map((o) => (
-                      <SelectItem key={o.id} value={o.id} className="text-xs">
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    Из матрицы
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="catalog"
+                    className={cn(
+                      "min-h-9 text-xs",
+                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                    )}
+                    data-testid="tab-fullscreen-entry-catalog"
+                  >
+                    Весь каталог
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <div className="flex flex-wrap gap-1">
+                {(
+                  [
+                    ["all", "Все"],
+                    ["vh", "ВХ"],
+                    ["mk", "МК"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <Button
+                    key={id}
+                    type="button"
+                    size="sm"
+                    variant={doorFilter === id ? "default" : "outline"}
+                    className="h-8 px-2.5 text-xs"
+                    onClick={() => setDoorFilter(id)}
+                    data-testid={`button-fullscreen-entry-door-filter-${id}`}
+                  >
+                    {label}
+                  </Button>
+                ))}
               </div>
-              <p className="text-[10px] leading-snug text-muted-foreground sm:text-[11px]">{workStatusHint}</p>
+
+              <p className="text-[10px] leading-snug text-muted-foreground">{workStatusHint}</p>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-4 sm:px-4 md:pb-28 md:pr-4">
-          {placementTypeMode ? (
-            <div
-              className="mb-3 space-y-2 rounded-xl border border-border/80 bg-muted/20 px-3 py-2.5"
-              data-testid="section-fullscreen-entry-placement-type"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Тип витрины:</span>
-                <div className="flex flex-wrap gap-1">
-                  {placementTypeOptions.map((t) => (
-                    <Button
-                      key={t}
-                      type="button"
-                      size="sm"
-                      variant={activePlacementType === t ? "default" : "outline"}
-                      className="min-h-8 px-2.5 text-xs"
-                      data-testid={`button-fullscreen-entry-placement-type-${t}`}
-                      onClick={() => setActivePlacementType(t)}
-                    >
-                      {PLACEMENT_TYPE_LABEL_RU[t]}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground" data-testid="text-fullscreen-entry-placement-counter">
-                Отмечено{" "}
-                <span className="font-semibold tabular-nums text-foreground">{markedInActivePlacement}</span>
-                {activeSlotLimit != null ? (
-                  <>
-                    {" "}
-                    из <span className="font-semibold tabular-nums text-foreground">{activeSlotLimit}</span>
-                  </>
-                ) : null}
-              </p>
-              {activeSlotLimit == null ? (
-                <p className="text-xs text-muted-foreground">
-                  Ёмкость для типа «{PLACEMENT_TYPE_LABEL_RU[activePlacementType]}» не задана — лимит не
-                  контролируется
-                </p>
-              ) : null}
-              {slotLimitMessage ? (
-                <p className="text-xs text-amber-800 dark:text-amber-200">{slotLimitMessage}</p>
-              ) : null}
-            </div>
-          ) : null}
           {productsForList.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
           ) : cardSize === "list" ? (
