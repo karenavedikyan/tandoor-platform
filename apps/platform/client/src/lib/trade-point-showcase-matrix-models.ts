@@ -273,6 +273,10 @@ export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Высокий"
   return "Низкий";
 }
 
+export function resolveCatalog1cId(m: ShowcaseMatrixModelDefinition): string | null {
+  return m.catalog1cId ?? null;
+}
+
 /** Ссылка на карточку каталога: напрямую в 1С при известном UUID, иначе через legacy-мост. */
 export function catalogHrefForMatrixModel(m: ShowcaseMatrixModelDefinition): string {
   if (m.catalog1cId) return `/catalog/1c/${m.catalog1cId}`;

@@ -177,6 +177,7 @@ class InMemoryMatrixCatalogDb implements PoolLike {
         segment: params[4],
         value_weight: params[5],
         sort_order: params[6],
+        catalog_1c_id: params[7] ?? null,
         created_at: "2026-05-01T12:00:00.000Z",
         updated_at: "2026-05-01T12:00:00.000Z",
       };

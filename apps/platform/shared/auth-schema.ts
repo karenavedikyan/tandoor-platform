@@ -376,6 +376,7 @@ export const showcaseMatrixDefModels = pgTable(
     priority: text("priority").notNull().default("medium"),
     segment: text("segment").notNull(),
     valueWeight: integer("value_weight"),
+    catalog1cId: text("catalog_1c_id"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .notNull()

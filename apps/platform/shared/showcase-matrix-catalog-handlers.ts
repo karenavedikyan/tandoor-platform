@@ -67,6 +67,7 @@ export type ShowcaseMatrixDefModelDto = {
   priority: ShowcaseMatrixCatalogPriority;
   segment: ShowcaseMatrixCatalogSegment;
   valueWeight: number | null;
+  catalog1cId: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -106,6 +107,7 @@ export type ShowcaseMatrixDefModelInput = {
   priority?: ShowcaseMatrixCatalogPriority;
   segment: ShowcaseMatrixCatalogSegment;
   valueWeight?: number | null;
+  catalog1cId?: string | null;
   sortOrder?: number;
 };
 
@@ -224,6 +226,13 @@ function parseSortOrder(raw: unknown): number {
   return n;
 }
 
+function parseOptionalCatalog1cId(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  return t || null;
+}
+
 function parseOptionalValueWeight(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
   let n: number;
@@ -329,6 +338,7 @@ export function parseMatrixDefModelInput(body: Record<string, unknown>): Showcas
     priority: parsePriority(body.priority),
     segment: parseSegment(body.segment),
     valueWeight: parseOptionalValueWeight(body.valueWeight),
+    catalog1cId: parseOptionalCatalog1cId(body.catalog1cId),
     sortOrder: parseSortOrder(body.sortOrder),
   };
 }
@@ -373,6 +383,7 @@ function mapModelRow(row: Record<string, unknown>): ShowcaseMatrixDefModelDto {
     priority: String(row.priority) as ShowcaseMatrixCatalogPriority,
     segment: String(row.segment) as ShowcaseMatrixCatalogSegment,
     valueWeight: row.value_weight != null ? Number(row.value_weight) : null,
+    catalog1cId: row.catalog_1c_id != null ? String(row.catalog_1c_id) : null,
     sortOrder: Number(row.sort_order),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -692,8 +703,8 @@ export async function replaceMatrixDefModels(
     for (const m of models) {
       const r = await pool.query<Record<string, unknown>>(
         `INSERT INTO showcase_matrix_def_models (
-           def_id, target_kind, target_id, priority, segment, value_weight, sort_order
-         ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+           def_id, target_kind, target_id, priority, segment, value_weight, sort_order, catalog_1c_id
+         ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           defId,
@@ -703,6 +714,7 @@ export async function replaceMatrixDefModels(
           m.segment,
           m.valueWeight ?? null,
           m.sortOrder ?? 0,
+          m.catalog1cId ?? null,
         ],
       );
       inserted.push(mapModelRow(r.rows[0]!));
@@ -737,6 +749,7 @@ export async function upsertMatrixDefModel(
          segment = $6,
          value_weight = $7,
          sort_order = $8,
+         catalog_1c_id = $9,
          updated_at = NOW()
        WHERE id = $1::uuid AND def_id = $2::uuid
        RETURNING *`,
@@ -749,6 +762,7 @@ export async function upsertMatrixDefModel(
         model.segment,
         model.valueWeight ?? null,
         model.sortOrder ?? 0,
+        model.catalog1cId ?? null,
       ],
     );
     if (!r.rows[0]) {
@@ -759,13 +773,14 @@ export async function upsertMatrixDefModel(
 
   const r = await pool.query<Record<string, unknown>>(
     `INSERT INTO showcase_matrix_def_models (
-       def_id, target_kind, target_id, priority, segment, value_weight, sort_order
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+       def_id, target_kind, target_id, priority, segment, value_weight, sort_order, catalog_1c_id
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (def_id, target_kind, target_id) DO UPDATE SET
        priority = EXCLUDED.priority,
        segment = EXCLUDED.segment,
        value_weight = EXCLUDED.value_weight,
        sort_order = EXCLUDED.sort_order,
+       catalog_1c_id = EXCLUDED.catalog_1c_id,
        updated_at = NOW()
      RETURNING *`,
     [
@@ -776,6 +791,7 @@ export async function upsertMatrixDefModel(
       model.segment,
       model.valueWeight ?? null,
       model.sortOrder ?? 0,
+      model.catalog1cId ?? null,
     ],
   );
   return mapModelRow(r.rows[0]!);
