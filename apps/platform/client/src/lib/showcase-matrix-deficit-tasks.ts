@@ -59,6 +59,18 @@ function matrixScopeForDealerPoint(dealer: DealerRow, tradePointId: string): { r
   return { region: dealer.region, city: point?.city ?? dealer.city };
 }
 
+function catalogNameForTargetId(id: string): string {
+  return getProductById(id)?.name?.trim() || id;
+}
+
+function matrixModelDisplayName(modelName: string | undefined, targetId: string): string {
+  const trimmed = modelName?.trim();
+  if (!trimmed || trimmed === targetId || (trimmed.startsWith("tc-") && trimmed === targetId)) {
+    return catalogNameForTargetId(targetId);
+  }
+  return trimmed;
+}
+
 /** Имя позиции матрицы (model/variant) — единый резолв для задач и дерева дистрибуции. */
 export function resolveShowcaseMatrixPositionForEntry(
   entry: ShowcaseMatrixEntryDto,
@@ -77,11 +89,16 @@ export function resolveShowcaseMatrixPositionForEntry(
     if (model) {
       return {
         productId: entry.targetId,
-        productName: model.name,
+        productName: matrixModelDisplayName(model.name, entry.targetId),
         showcaseMatrixImageSrc: model.imageUrl,
       };
     }
-    return { productId: entry.targetId, productName: entry.targetId };
+    const catalogProduct = getProductById(entry.targetId);
+    return {
+      productId: entry.targetId,
+      productName: catalogNameForTargetId(entry.targetId),
+      showcaseMatrixImageSrc: catalogProduct?.image?.trim() || undefined,
+    };
   }
 
   const product = getProductById(entry.targetId);
@@ -92,7 +109,7 @@ export function resolveShowcaseMatrixPositionForEntry(
       showcaseMatrixImageSrc: product.image?.trim() || undefined,
     };
   }
-  return { productId: entry.targetId, productName: entry.targetId };
+  return { productId: entry.targetId, productName: catalogNameForTargetId(entry.targetId) };
 }
 
 export function mapBackendEntriesToDeficitTasks(
