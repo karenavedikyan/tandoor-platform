@@ -5,6 +5,8 @@ import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import { getEffectiveDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import { type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
+import { normalizeShowcaseMatrixModelId } from "@/lib/showcase-matrix-store";
+import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 
 export const SHOWCASE_MATRIX_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-v1";
 
@@ -85,13 +87,46 @@ export function statusLabelRu(s: ShowcaseMatrixStatusId): string {
   }
 }
 
+function localMatrixEntry(
+  dealerId: string,
+  tradePointId: string,
+  modelId: string,
+  storage: ShowcaseMatrixStorageV1,
+): ShowcaseMatrixEntryStored | null {
+  const key = showcaseMatrixEntryKey(dealerId, tradePointId, modelId);
+  const normalizedKey = showcaseMatrixEntryKey(
+    dealerId,
+    tradePointId,
+    normalizeShowcaseMatrixModelId(modelId),
+  );
+  return storage.entries[key] ?? storage.entries[normalizedKey] ?? null;
+}
+
+export function resolveMatrixModelStatus(params: {
+  dealerId: string;
+  tradePointId: string;
+  modelId: string;
+  backend: Pick<ShowcaseMatrixEntryDto, "status" | "updatedAt"> | undefined;
+  storage: ShowcaseMatrixStorageV1;
+}): ShowcaseMatrixStatusId {
+  const local = localMatrixEntry(params.dealerId, params.tradePointId, params.modelId, params.storage);
+  const backend = params.backend;
+  if (backend && local) {
+    const backendAt = backend.updatedAt ?? "";
+    const localAt = local.updatedAt ?? "";
+    return backendAt >= localAt ? (backend.status as ShowcaseMatrixStatusId) : local.status;
+  }
+  if (backend) return backend.status as ShowcaseMatrixStatusId;
+  return local?.status ?? "need_install";
+}
+
 export function getEffectiveMatrixStatus(
   dealerId: string,
   tradePointId: string,
   modelId: string,
   storage: ShowcaseMatrixStorageV1,
 ): ShowcaseMatrixStatusId {
-  return storage.entries[showcaseMatrixEntryKey(dealerId, tradePointId, modelId)]?.status ?? "need_install";
+  return localMatrixEntry(dealerId, tradePointId, modelId, storage)?.status ?? "need_install";
 }
 
 export function getEffectiveMatrixEntry(
@@ -101,7 +136,7 @@ export function getEffectiveMatrixEntry(
   storage: ShowcaseMatrixStorageV1,
 ): ShowcaseMatrixEntryStored {
   return (
-    storage.entries[showcaseMatrixEntryKey(dealerId, tradePointId, modelId)] ?? {
+    localMatrixEntry(dealerId, tradePointId, modelId, storage) ?? {
       status: "need_install",
       comment: "",
       updatedAt: "",
@@ -109,6 +144,39 @@ export function getEffectiveMatrixEntry(
       updatedByName: "",
     }
   );
+}
+
+export function resolveMatrixModelEntry(params: {
+  dealerId: string;
+  tradePointId: string;
+  modelId: string;
+  backend: ShowcaseMatrixEntryDto | undefined;
+  storage: ShowcaseMatrixStorageV1;
+}): ShowcaseMatrixEntryStored {
+  const local = localMatrixEntry(params.dealerId, params.tradePointId, params.modelId, params.storage);
+  const backend = params.backend;
+  if (backend && local) {
+    const backendAt = backend.updatedAt ?? "";
+    const localAt = local.updatedAt ?? "";
+    if (localAt > backendAt) return local;
+    return {
+      status: backend.status as ShowcaseMatrixStatusId,
+      comment: backend.comment ?? "",
+      updatedAt: backend.updatedAt,
+      updatedBy: backend.updatedBy ?? "",
+      updatedByName: backend.updatedByName ?? "",
+    };
+  }
+  if (backend) {
+    return {
+      status: backend.status as ShowcaseMatrixStatusId,
+      comment: backend.comment ?? "",
+      updatedAt: backend.updatedAt,
+      updatedBy: backend.updatedBy ?? "",
+      updatedByName: backend.updatedByName ?? "",
+    };
+  }
+  return getEffectiveMatrixEntry(params.dealerId, params.tradePointId, params.modelId, params.storage);
 }
 
 function countsAsMissing(status: ShowcaseMatrixStatusId): boolean {

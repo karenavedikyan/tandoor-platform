@@ -61,6 +61,7 @@ import {
 import type { ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrix,
+  normalizeShowcaseMatrixModelId,
   setMatrixStatus,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
 } from "@/lib/showcase-matrix-store";
@@ -80,6 +81,7 @@ import {
   getEffectiveMatrixStatus,
   getShowcaseMatrixTpHistoryEvents,
   loadShowcaseMatrixStorage,
+  resolveMatrixModelStatus,
   SHOWCASE_MATRIX_CHANGED_EVENT,
   upsertShowcaseMatrixModelState,
   type ShowcaseMatrixStatusId,
@@ -333,10 +335,18 @@ export function DistributionFullscreenEntry({
     void bump;
     const map = new Map<string, ReturnType<typeof loadCachedMatrix>[number]>();
     for (const entry of loadCachedMatrix(point.id)) {
-      if (entry.targetKind === "variant") map.set(entry.targetId, entry);
+      if (entry.targetKind === "variant") {
+        const key = normalizeShowcaseMatrixModelId(entry.targetId);
+        const prev = map.get(key);
+        if (!prev || entry.updatedAt > prev.updatedAt) map.set(key, entry);
+      }
     }
     for (const entry of loadCachedMatrix(point.id)) {
-      if (entry.targetKind === "model") map.set(entry.targetId, entry);
+      if (entry.targetKind === "model") {
+        const key = normalizeShowcaseMatrixModelId(entry.targetId);
+        const prev = map.get(key);
+        if (!prev || entry.updatedAt > prev.updatedAt) map.set(key, entry);
+      }
     }
     return map;
   }, [bump, point.id]);
@@ -367,10 +377,17 @@ export function DistributionFullscreenEntry({
 
   const baselineForProduct = useCallback(
     (productId: string): FullscreenEntryBaseline => {
-      const backend = backendByModelId.get(productId);
+      const backend = backendByModelId.get(normalizeShowcaseMatrixModelId(productId));
+      const status = resolveMatrixModelStatus({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        modelId: productId,
+        backend,
+        storage,
+      });
       if (backend) {
         return {
-          status: backend.status as ShowcaseMatrixStatusId,
+          status,
           placementType: backend.placementType,
           placementSegment: backend.placementSegment,
           comment: backend.comment ?? "",
@@ -378,7 +395,7 @@ export function DistributionFullscreenEntry({
       }
       const local = getEffectiveMatrixEntry(dealer.id, point.id, productId, storage);
       return {
-        status: getEffectiveMatrixStatus(dealer.id, point.id, productId, storage),
+        status,
         placementType: null,
         placementSegment: null,
         comment: local.comment,
@@ -701,10 +718,12 @@ export function DistributionFullscreenEntry({
         const freshStorage = loadShowcaseMatrixStorage();
         const freshBackend = new Map<string, ReturnType<typeof loadCachedMatrix>[number]>();
         for (const entry of loadCachedMatrix(point.id)) {
-          if (entry.targetKind === "model") freshBackend.set(entry.targetId, entry);
+          if (entry.targetKind === "model") {
+            freshBackend.set(normalizeShowcaseMatrixModelId(entry.targetId), entry);
+          }
         }
         for (const productId of saveIds) {
-          const backend = freshBackend.get(productId);
+          const backend = freshBackend.get(normalizeShowcaseMatrixModelId(productId));
           const baseline: FullscreenEntryBaseline = backend
             ? {
                 status: backend.status as ShowcaseMatrixStatusId,
@@ -1193,10 +1212,14 @@ export function DistributionFullscreenEntry({
               </div>
             ) : null}
 
-            <Select
-              value={statusFilter}
-              onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-            >
+            <div className="flex min-w-[10rem] flex-col gap-1">
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Фильтр: статус
+              </span>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as StatusFilter)}
+              >
               <SelectTrigger
                 className="h-9 min-w-[10rem] text-xs sm:text-sm"
                 data-testid="select-fullscreen-entry-status-filter"
@@ -1213,7 +1236,8 @@ export function DistributionFullscreenEntry({
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
+              </Select>
+            </div>
           </div>
         </div>
       </div>
