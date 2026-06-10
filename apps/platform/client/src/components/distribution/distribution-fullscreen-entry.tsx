@@ -495,6 +495,25 @@ export function DistributionFullscreenEntry({
     (onBackToList ?? onClose)();
   }, [onBackToList, onClose]);
 
+  const handleWorkStatusChange = useCallback((value: StatusFilter) => {
+    setWorkStatus(value);
+    if (value === "need_install") {
+      setSourceTab("matrix");
+    } else if (value !== "all") {
+      setSourceTab("catalog");
+    }
+  }, []);
+
+  const workStatusHint = useMemo(() => {
+    if (workStatus === "all") {
+      return "Выбранный статус показывается в списке. Тапните по карточкам — статус применится к ним и сохранится по кнопке «Сохранить».";
+    }
+    if (workStatus === "need_install") {
+      return "Показаны модели из матрицы, которые нужно поставить. Чтобы добавить другие — откройте «Весь каталог».";
+    }
+    return "Показан весь каталог. Найдите модели, отметьте статусом и сохраните.";
+  }, [workStatus]);
+
   const changedIds = useMemo(() => collectChangedProductIds(draft, baselines), [draft, baselines]);
   const changedSet = useMemo(() => new Set(changedIds), [changedIds]);
   const needInstallMarkedIds = useMemo(() => {
@@ -1194,7 +1213,7 @@ export function DistributionFullscreenEntry({
             <div className="flex min-w-0 flex-col gap-1 sm:min-w-[14rem]">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="shrink-0 text-xs text-muted-foreground">Работаю со статусом:</span>
-                <Select value={workStatus} onValueChange={(v) => setWorkStatus(v as StatusFilter)}>
+                <Select value={workStatus} onValueChange={(v) => handleWorkStatusChange(v as StatusFilter)}>
                   <SelectTrigger
                     className="h-9 min-w-[10rem] text-xs sm:text-sm"
                     data-testid="select-fullscreen-entry-quick-status"
@@ -1215,10 +1234,7 @@ export function DistributionFullscreenEntry({
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
-                Выбранный статус показывается в списке. Тапните по карточкам — статус применится к ним и
-                сохранится по кнопке «Сохранить».
-              </p>
+              <p className="text-[10px] leading-snug text-muted-foreground sm:text-[11px]">{workStatusHint}</p>
             </div>
           </div>
         </div>
