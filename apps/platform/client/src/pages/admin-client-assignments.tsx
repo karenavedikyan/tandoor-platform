@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
-import { History, Loader2 } from "lucide-react";
+import { Check, ChevronsUpDown, History, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,14 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Select,
   SelectContent,
@@ -81,6 +89,87 @@ function cellText(value: string | null | undefined): string {
 function categoryLabel(code: string | null | undefined): string {
   if (!code?.trim()) return "—";
   return CATEGORY_LABELS[code] ?? code;
+}
+
+type FilterComboboxOption = {
+  value: string;
+  label: string;
+  searchValue?: string;
+};
+
+function FilterCombobox({
+  value,
+  onValueChange,
+  options,
+  placeholder = "Все",
+  testId,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: FilterComboboxOption[];
+  placeholder?: string;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedOption = options.find((o) => o.value === value);
+  const displayLabel = selectedOption?.label ?? "";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "min-h-11 w-full justify-between bg-background px-3 text-left font-normal",
+            !value && "text-muted-foreground",
+          )}
+          data-testid={testId}
+        >
+          <span className="min-w-0 truncate">{displayLabel || placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Поиск..." />
+          <CommandList className="max-h-72 overflow-auto">
+            <CommandEmpty>Ничего не найдено</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value="__all__"
+                onSelect={() => {
+                  onValueChange("");
+                  setOpen(false);
+                }}
+              >
+                <Check className={cn("h-4 w-4 text-primary", !value ? "opacity-100" : "opacity-0")} aria-hidden />
+                <span className="min-w-0 truncate">Все</span>
+              </CommandItem>
+              {options.map((option) => (
+                <CommandItem
+                  key={option.value}
+                  value={option.searchValue ?? option.label}
+                  onSelect={() => {
+                    onValueChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn("h-4 w-4 text-primary", value === option.value ? "opacity-100" : "opacity-0")}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 truncate">{option.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function AssignmentHistoryPopover({ clientCode }: { clientCode: string }) {
@@ -292,6 +381,36 @@ export default function AdminClientAssignmentsPage() {
   const ropUsers = useMemo(() => users.filter((u) => u.role === "rop"), [users]);
   const filterOptions = filterOptionsQ.data;
 
+  const userFilterOptions = useMemo(
+    () =>
+      users.map((u) => ({
+        value: u.id,
+        label: `${u.fullName} (${u.email})`,
+        searchValue: `${u.fullName} ${u.email}`,
+      })),
+    [users],
+  );
+
+  const teamFilterOptions = useMemo(
+    () => teams.map((t) => ({ value: t.id, label: t.name })),
+    [teams],
+  );
+
+  const cityFilterOptions = useMemo(
+    () => (filterOptions?.cities ?? []).map((city) => ({ value: city, label: city })),
+    [filterOptions?.cities],
+  );
+
+  const regionalFilterOptions = useMemo(
+    () => (filterOptions?.regionalManagers ?? []).map((name) => ({ value: name, label: name })),
+    [filterOptions?.regionalManagers],
+  );
+
+  const ropFilterOptions = useMemo(
+    () => (filterOptions?.rops ?? []).map((name) => ({ value: name, label: name })),
+    [filterOptions?.rops],
+  );
+
   const ropGrantsQ = useQuery({
     queryKey: ["client-assignments", "rop-grants", grantRopUserId],
     queryFn: async () => {
@@ -368,51 +487,30 @@ export default function AdminClientAssignmentsPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[220px]">
             <Label>Ответственный</Label>
-            <Select value={userIdFilter || "all"} onValueChange={(v) => setUserIdFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-user">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.fullName} ({u.email})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              value={userIdFilter}
+              onValueChange={setUserIdFilter}
+              options={userFilterOptions}
+              testId="select-client-assignments-user"
+            />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[220px]">
             <Label>Команда</Label>
-            <Select value={teamIdFilter || "all"} onValueChange={(v) => setTeamIdFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-team">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {teams.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              value={teamIdFilter}
+              onValueChange={setTeamIdFilter}
+              options={teamFilterOptions}
+              testId="select-client-assignments-team"
+            />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
             <Label>Город</Label>
-            <Select value={cityFilter || "all"} onValueChange={(v) => setCityFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-city">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {(filterOptions?.cities ?? []).map((city) => (
-                  <SelectItem key={city} value={city}>
-                    {city}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              value={cityFilter}
+              onValueChange={setCityFilter}
+              options={cityFilterOptions}
+              testId="select-client-assignments-city"
+            />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[180px]">
             <Label>Категория</Label>
@@ -432,35 +530,21 @@ export default function AdminClientAssignmentsPage() {
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
             <Label>Регионал</Label>
-            <Select value={regionalFilter || "all"} onValueChange={(v) => setRegionalFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-regional">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {(filterOptions?.regionalManagers ?? []).map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              value={regionalFilter}
+              onValueChange={setRegionalFilter}
+              options={regionalFilterOptions}
+              testId="select-client-assignments-regional"
+            />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[200px]">
             <Label>РОП</Label>
-            <Select value={ropFilter || "all"} onValueChange={(v) => setRopFilter(v === "all" ? "" : v)}>
-              <SelectTrigger className="min-h-11" data-testid="select-client-assignments-rop">
-                <SelectValue placeholder="Все" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Все</SelectItem>
-                {(filterOptions?.rops ?? []).map((name) => (
-                  <SelectItem key={name} value={name}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterCombobox
+              value={ropFilter}
+              onValueChange={setRopFilter}
+              options={ropFilterOptions}
+              testId="select-client-assignments-rop"
+            />
           </div>
         </CardContent>
       </Card>
