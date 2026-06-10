@@ -1097,13 +1097,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
       try {
         const sql = await createSqlExecutor(dbUrl);
+        let prevState: Record<string, unknown> | null = null;
         // Защита корзины: читаем prev state перед записью.
         try {
           const prevRows = await sql`
             SELECT state FROM client_base_actualization_state WHERE scope_key = ${scopeKey} LIMIT 1
           `;
           const prevRaw = prevRows[0]?.state;
-          const prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
+          prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
           const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
           if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
             console.warn(
@@ -1135,6 +1136,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const first = rows[0];
         const saved = coerceState(first?.state);
         const updatedAt = rowUpdatedAtIso(first?.updated_at) ?? now;
+        try {
+          const { neon } = await import("@neondatabase/serverless");
+          const { makePoolFromNeon, wrapNeonWithShadow } = await import("../../server/db/neon-client.js");
+          const { shadowWriteCitiesFromActualization } = await import("../../shared/actualization-city-shadow.js");
+          const pool = makePoolFromNeon(wrapNeonWithShadow(neon(dbUrl), "actualization-shadow-city"));
+          await shadowWriteCitiesFromActualization(pool, prevState, saved, userId);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          console.error("[actualization-api] shadow city write failed", m.slice(0, 200));
+        }
         sendJson(res, 200, buildResponse(true, "persistent", saved, updatedAt, MSG_PERSISTENT_OK));
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);

@@ -49,6 +49,38 @@ async function fetchOverride(pool: PoolLike, dealerId: string): Promise<DealerOv
   return r.rows[0] ? mapDealerOverrideRow(r.rows[0]) : null;
 }
 
+export async function upsertDealerOverrideCity(
+  pool: PoolLike,
+  dealerId: string,
+  city: string,
+  actorUserId: string,
+): Promise<void> {
+  const patch: Partial<Record<DealerOverrideField, unknown>> = { city };
+  await runOverridesHandlerSafe(
+    pool,
+    "dealer",
+    dealerId,
+    { dealer_id: dealerId, fields: patch },
+    actorUserId,
+    async () => {
+      const prev = await fetchOverride(pool, dealerId);
+      await logEvents(pool, dealerId, prev, patch, actorUserId);
+
+      if (prev) {
+        await pool.query(
+          `UPDATE dealer_overrides SET city = $2, updated_at = NOW(), updated_by = $3::uuid WHERE dealer_id = $1`,
+          [dealerId, city, actorUserId],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO dealer_overrides (dealer_id, city, updated_by) VALUES ($1, $2, $3::uuid)`,
+          [dealerId, city, actorUserId],
+        );
+      }
+    },
+  );
+}
+
 async function logEvents(
   pool: PoolLike,
   dealerId: string,
