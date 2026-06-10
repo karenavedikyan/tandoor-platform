@@ -229,11 +229,12 @@ function matrixCardShellClass(st: ShowcaseMatrixStatusId): string {
 }
 
 function modelMatchesQuickFilter(st: ShowcaseMatrixStatusId, f: ShowcaseMatrixQuickFilterId): boolean {
+  if (st === "not_relevant") return f === "not_relevant";
   if (f === "all") return true;
   if (f === "needed") return st === "need_install";
   if (f === "installed") return st === "installed";
   if (f === "postponed") return st === "postponed";
-  return st === "not_relevant";
+  return false;
 }
 
 const MANUAL_MODEL_PRESENTATION_DEFAULTS = {
