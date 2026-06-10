@@ -1111,7 +1111,21 @@ async function buildVisibleClientsPayload(pool: PoolLike, row: DbUserRow): Promi
        ORDER BY ca.client_code`,
       [row.id],
     );
-    const rows = q.rows;
+    // Гранты (rop_client_grants): клиенты из чужих команд, выданные этому РОПу.
+    // Ответственный/команда берутся из реального client_assignments клиента,
+    // чтобы карточка менеджера собиралась под фактическим ответственным.
+    const grantedQ = await pool.query<ClientAssignmentRow>(
+      `SELECT DISTINCT ON (g.client_code) g.client_code, ca.responsible_user_id, ca.team_id
+       FROM rop_client_grants g
+       LEFT JOIN client_assignments ca ON ca.client_code = g.client_code
+       WHERE g.rop_user_id = $1::uuid
+       ORDER BY g.client_code`,
+      [row.id],
+    );
+    const byCode = new Map<string, ClientAssignmentRow>();
+    for (const r of q.rows) if (r.client_code) byCode.set(r.client_code, r);
+    for (const r of grantedQ.rows) if (r.client_code && !byCode.has(r.client_code)) byCode.set(r.client_code, r);
+    const rows = Array.from(byCode.values());
     return {
       all: false,
       codes: rows.map((r) => r.client_code).filter(Boolean),
