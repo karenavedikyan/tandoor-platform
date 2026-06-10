@@ -104,6 +104,7 @@ export type TradePointShowcaseCatalogPanelProps = {
   onChangeTasks: (next: ShowcaseMatrixTask[]) => void;
   onMarkDirty: () => void;
   portalCaps: ShowcasePortalCaps;
+  onOpenEntry?: (productId?: string) => void;
 };
 
 function isDoorProduct(p: CatalogProduct): boolean {
@@ -131,6 +132,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     onChangeTasks,
     onMarkDirty,
     portalCaps,
+    onOpenEntry,
   } = props;
 
   const [hydrated, setHydrated] = useState(false);
@@ -330,6 +332,18 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     [actorLabel, actorUserId, canEdit, dealerId, onChangeSelected, onMarkDirty, selectedShowcaseModels, tradePointId],
   );
 
+  const requestEntryForProduct = useCallback(
+    (p: CatalogProduct) => {
+      if (!canEdit) return;
+      if (onOpenEntry) {
+        onOpenEntry(p.id);
+        return;
+      }
+      toggleSelected(p, !isProductSelected(p.id));
+    },
+    [canEdit, isProductSelected, onOpenEntry, toggleSelected],
+  );
+
   const addMatrixTask = useCallback(
     (productId: string, productName: string) => {
       if (!canEdit) return;
@@ -448,7 +462,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         setDetailProductId(p.id);
         return;
       }
-      toggleSelected(p, !sel);
+      requestEntryForProduct(p);
     };
 
     const cornerToggle = (
@@ -463,7 +477,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           className="h-6 w-6 min-h-[24px] min-w-[24px] rounded-md border-2 [&_svg]:h-4 [&_svg]:w-4"
           data-testid={`button-showcase-model-select-${p.id}`}
           aria-label={sel ? "Убрать с витрины" : "На витрину"}
-          onCheckedChange={(v) => toggleSelected(p, v === true)}
+          onCheckedChange={() => requestEntryForProduct(p)}
         />
       </div>
     );
@@ -865,7 +879,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                     <Button
                       type="button"
                       onClick={() => {
-                        toggleSelected(detailProduct, !isProductSelected(detailProduct.id));
+                        requestEntryForProduct(detailProduct);
                       }}
                     >
                       {isProductSelected(detailProduct.id) ? "Убрать с витрины" : "Отметить на витрине"}

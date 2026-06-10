@@ -384,6 +384,7 @@ type Props = {
   page: TradePointShowcasePageBundle;
   density?: ShowcaseSectionDensity;
   statusFilterActionSlot?: ReactNode;
+  onOpenEntry?: (productId?: string) => void;
 };
 
 export function TradePointShowcaseMatrixSection({
@@ -395,6 +396,7 @@ export function TradePointShowcaseMatrixSection({
   page,
   density = "comfortable",
   statusFilterActionSlot,
+  onOpenEntry,
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
@@ -672,6 +674,17 @@ export function TradePointShowcaseMatrixSection({
     [actorName, actorUserId, dealer.id, point.id],
   );
 
+  const tryOpenEntry = useCallback(
+    (modelId: string): boolean => {
+      if (onOpenEntry) {
+        onOpenEntry(modelId);
+        return true;
+      }
+      return false;
+    },
+    [onOpenEntry],
+  );
+
   if (!canView) return null;
 
   const gridClass =
@@ -749,7 +762,9 @@ export function TradePointShowcaseMatrixSection({
                             st === "need_install" && "ring-1 ring-amber-400/50",
                           )}
                           data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                          onClick={() => persist(m, "installed", commentVal)}
+                          onClick={() => {
+                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
+                          }}
                         >
                           На витрине
                         </Button>
@@ -790,7 +805,9 @@ export function TradePointShowcaseMatrixSection({
                               size="sm"
                               className="h-8 w-full text-xs"
                               data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                              onClick={() => persist(m, "postponed", commentVal)}
+                              onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
+                              }}
                             >
                               Отложить
                             </Button>
@@ -799,7 +816,9 @@ export function TradePointShowcaseMatrixSection({
                               variant="ghost"
                               size="sm"
                               className="h-8 w-full text-xs text-muted-foreground"
-                              onClick={() => persist(m, "not_relevant", commentVal)}
+                              onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
+                              }}
                             >
                               Не актуально
                             </Button>
@@ -936,7 +955,9 @@ export function TradePointShowcaseMatrixSection({
                               st === "installed" && "border border-emerald-200/90 bg-emerald-50/80 font-medium text-emerald-950 hover:bg-emerald-50",
                             )}
                             data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                            onClick={() => persist(m, "installed", commentVal)}
+                            onClick={() => {
+                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
+                          }}
                           >
                             На витрине
                           </Button>
@@ -1021,7 +1042,9 @@ export function TradePointShowcaseMatrixSection({
                                     size="sm"
                                     className="h-8 w-full text-xs"
                                     data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                                    onClick={() => persist(m, "postponed", commentVal)}
+                                    onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
+                              }}
                                   >
                                     Отложить
                                   </Button>
@@ -1030,7 +1053,9 @@ export function TradePointShowcaseMatrixSection({
                                     variant="ghost"
                                     size="sm"
                                     className="h-8 w-full text-xs text-muted-foreground"
-                                    onClick={() => persist(m, "not_relevant", commentVal)}
+                                    onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
+                              }}
                                   >
                                     Не актуально
                                   </Button>
@@ -1173,7 +1198,9 @@ export function TradePointShowcaseMatrixSection({
                               size="sm"
                               className="min-h-9 flex-1 font-semibold sm:flex-none"
                               data-testid={`button-trade-point-showcase-mark-installed-${m.id}`}
-                              onClick={() => persist(m, "installed", commentVal)}
+                              onClick={() => {
+                            if (!tryOpenEntry(m.id)) persist(m, "installed", commentVal);
+                          }}
                             >
                               Стоит на витрине
                             </Button>
@@ -1183,7 +1210,9 @@ export function TradePointShowcaseMatrixSection({
                               size="sm"
                               className="min-h-9 flex-1 font-semibold sm:flex-none"
                               data-testid={`button-trade-point-showcase-postpone-${m.id}`}
-                              onClick={() => persist(m, "postponed", commentVal)}
+                              onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "postponed", commentVal);
+                              }}
                             >
                               Отложить
                             </Button>
@@ -1192,7 +1221,9 @@ export function TradePointShowcaseMatrixSection({
                               variant="ghost"
                               size="sm"
                               className="min-h-9 flex-1 text-muted-foreground sm:flex-none"
-                              onClick={() => persist(m, "not_relevant", commentVal)}
+                              onClick={() => {
+                                if (!tryOpenEntry(m.id)) persist(m, "not_relevant", commentVal);
+                              }}
                             >
                               Не актуально
                             </Button>
