@@ -152,16 +152,16 @@ export function computeTradePointShowcaseMatrixStats(
   });
   let installed = 0;
   let missing = 0;
+  let notRelevant = 0;
   for (const m of models) {
     const st = getEffectiveMatrixStatus(dealer.id, point.id, m.id, storage);
     if (countsAsInstalled(st)) installed += 1;
     else if (countsAsMissing(st)) missing += 1;
-    else if (st === "not_relevant") {
-      /* не в числителе дефицита */
-    }
+    else if (st === "not_relevant") notRelevant += 1;
   }
   const total = models.length;
-  const completionPct = total <= 0 ? 100 : Math.min(100, Math.round((installed / total) * 100));
+  const relevant = total - notRelevant;
+  const completionPct = relevant <= 0 ? 100 : Math.min(100, Math.round((installed / relevant) * 100));
   return { total, installed, missing, completionPct };
 }
 
@@ -185,6 +185,7 @@ export function computeDealerShowcaseMatrixSummary(dealer: DealerRow, storage: S
     });
     let installed = 0;
     let missing = 0;
+    let notRelevant = 0;
     for (const m of models) {
       const st = getEffectiveMatrixStatus(dealer.id, tp.id, m.id, storage);
       if (countsAsInstalled(st)) installed += 1;
@@ -194,10 +195,13 @@ export function computeDealerShowcaseMatrixSummary(dealer: DealerRow, storage: S
         const prev = modelMissingById.get(m.id);
         if (prev) prev.n += 1;
         else modelMissingById.set(m.id, { name: m.name, n: 1 });
+      } else if (st === "not_relevant") {
+        notRelevant += 1;
       }
     }
     const total = models.length;
-    const completionPct = total <= 0 ? 100 : Math.min(100, Math.round((installed / total) * 100));
+    const relevant = total - notRelevant;
+    const completionPct = relevant <= 0 ? 100 : Math.min(100, Math.round((installed / relevant) * 100));
     const addressLine = [tp.city, tp.address]
       .map((x) => x.trim())
       .filter((x) => x && x !== "—" && x !== "-")
