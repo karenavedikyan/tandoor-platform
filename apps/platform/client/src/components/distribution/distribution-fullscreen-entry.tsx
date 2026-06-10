@@ -331,6 +331,9 @@ export function DistributionFullscreenEntry({
     void bump;
     const map = new Map<string, ReturnType<typeof loadCachedMatrix>[number]>();
     for (const entry of loadCachedMatrix(point.id)) {
+      if (entry.targetKind === "variant") map.set(entry.targetId, entry);
+    }
+    for (const entry of loadCachedMatrix(point.id)) {
       if (entry.targetKind === "model") map.set(entry.targetId, entry);
     }
     return map;
@@ -1690,16 +1693,13 @@ function FullscreenProductCard({
   const titleSize =
     cardSize === "xl" ? "text-sm" : cardSize === "s" ? "text-[11px]" : "text-xs";
 
-  const currentStatus = row?.status ?? baselineStatus;
-  const hasExplicitMark =
-    isChanged ||
-    isExplicitMark ||
-    (baselineStatus === quickStatus && quickStatus !== "need_install");
-  const isMarked = quickMode && currentStatus === quickStatus && hasExplicitMark;
+  const effectiveStatus = row?.status ?? baselineStatus;
+  const isMarked = quickMode && effectiveStatus === quickStatus;
 
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
-    if (hasExplicitMark && currentStatus === quickStatus) {
+    const isToggledOn = (isExplicitMark || isChanged) && effectiveStatus === quickStatus;
+    if (isToggledOn) {
       if (quickStatus === "need_install" && baselineStatus === quickStatus) {
         onSetExplicitMark(product.id, false);
       } else {
@@ -1708,6 +1708,7 @@ function FullscreenProductCard({
           placementSegment: row?.placementSegment ?? seg,
           placementType: row?.placementType ?? "portal",
         });
+        onSetExplicitMark(product.id, false);
       }
       return;
     }
@@ -1720,6 +1721,7 @@ function FullscreenProductCard({
       placementSegment: row?.placementSegment ?? seg,
       placementType: row?.placementType ?? "portal",
     });
+    onSetExplicitMark(product.id, true);
   };
 
   return (
@@ -1776,7 +1778,7 @@ function FullscreenProductCard({
       {!quickMode ? (
         <>
           <StatusSelectControl
-            value={currentStatus}
+            value={effectiveStatus}
             onChange={(newStatus) => {
               const seg = segmentForProduct(product, matrixModel);
               onDraftChange(product.id, {
