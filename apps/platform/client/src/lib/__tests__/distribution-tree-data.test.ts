@@ -5,10 +5,12 @@ import assert from "node:assert/strict";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import {
+  collectScopeTradePoints,
   collectScopeTradePointIds,
   countStatuses,
   groupMatrixEntries,
   matchesSearch,
+  setBackendScopeProvider,
 } from "../distribution-tree-data";
 
 const dealer: DealerRow = {
@@ -48,6 +50,27 @@ assert.deepEqual(
   collectScopeTradePointIds({ kind: "trade-point", dealer, point: dealer.tradePoints[0]! }),
   ["tp1"],
 );
+
+const dealerScope = { kind: "dealer" as const, dealer };
+const baseRefs = collectScopeTradePoints(dealerScope);
+assert.deepEqual(collectScopeTradePoints(dealerScope, undefined), baseRefs);
+
+setBackendScopeProvider(null);
+const withoutProvider = collectScopeTradePoints(dealerScope);
+assert.deepEqual(withoutProvider, baseRefs);
+
+const withBackend = collectScopeTradePoints(dealerScope, () => ["tp-backend"]);
+assert.equal(withBackend.length, baseRefs.length + 1);
+assert.ok(withBackend.some((r) => r.point.id === "tp-backend" && r.dealer.id === "d1"));
+assert.equal(
+  withBackend.filter((r) => r.point.id === "tp-backend").length,
+  1,
+  "backend ТТ без дубликата",
+);
+assert.equal(withBackend.find((r) => r.point.id === "tp-backend")?.point.name, "Точка (синхронизирована)");
+
+const withDuplicate = collectScopeTradePoints(dealerScope, () => ["tp1"]);
+assert.equal(withDuplicate.length, baseRefs.length, "совпадающий backend-id не дублируется");
 
 const grouped = groupMatrixEntries([
   entry({ id: "e1", status: "need_install" }),

@@ -3,7 +3,7 @@
  */
 
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
+import { buildSyntheticBackendTradePoint, getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
@@ -27,26 +27,48 @@ export const EMPTY_STATUS_COUNTS = (): ShowcaseMatrixStatusCounts => ({
   not_relevant: 0,
 });
 
-export function collectScopeTradePoints(scope: DistributionScope): ScopeTradePointRef[] {
+let backendScopeProvider: ((dealerId: string) => string[]) | null = null;
+
+export function setBackendScopeProvider(fn: ((dealerId: string) => string[]) | null): void {
+  backendScopeProvider = fn;
+}
+
+export function collectScopeTradePoints(
+  scope: DistributionScope,
+  getBackendIds?: (dealerId: string) => string[],
+): ScopeTradePointRef[] {
   if (scope.kind === "trade-point") {
     return [{ dealer: scope.dealer, point: scope.point }];
   }
 
   const dealers = scope.kind === "global" ? scope.dealers : [scope.dealer];
   const out: ScopeTradePointRef[] = [];
+  const provider = getBackendIds ?? backendScopeProvider ?? undefined;
 
   for (const dealer of dealers) {
+    const seen = new Set<string>();
     for (const { point } of getMergedDealerTradePoints(dealer, { includeArchived: false })) {
       if (point.status?.trim() === "Архив") continue;
+      seen.add(point.id);
       out.push({ dealer, point });
+    }
+    if (provider) {
+      for (const tpId of provider(dealer.id)) {
+        if (seen.has(tpId)) continue;
+        seen.add(tpId);
+        out.push({ dealer, point: buildSyntheticBackendTradePoint(dealer, tpId) });
+      }
     }
   }
 
   return out;
 }
 
-export function collectScopeTradePointIds(scope: DistributionScope): string[] {
-  return collectScopeTradePoints(scope).map((r) => r.point.id);
+export function collectScopeTradePointIds(
+  scope: DistributionScope,
+  getBackendIds?: (dealerId: string) => string[],
+): string[] {
+  return collectScopeTradePoints(scope, getBackendIds).map((r) => r.point.id);
 }
 
 export function countStatuses(entries: readonly ShowcaseMatrixEntryDto[]): ShowcaseMatrixStatusCounts {

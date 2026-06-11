@@ -5,9 +5,14 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import {
   collectScopeTradePointIds,
+  setBackendScopeProvider,
   type DistributionScope,
 } from "@/lib/distribution-tree-data";
-import { fetchShowcaseMatrixScope, fetchShowcaseMatrixScopeAll } from "@/lib/showcase-matrix-api";
+import {
+  fetchShowcaseMatrixScope,
+  fetchShowcaseMatrixScopeAll,
+  type ShowcaseMatrixEntryDto,
+} from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrixDefs,
   refreshMatrixCatalogFromServer,
@@ -47,6 +52,35 @@ const inflightByScopeKey = new Map<string, Promise<{ ok: boolean; network: boole
 const lastCompletedAtByScopeKey = new Map<string, number>();
 const lastNetworkByScopeKey = new Map<string, boolean>();
 
+const backendTradePointIdsByDealerId = new Map<string, Set<string>>();
+
+export function getBackendTradePointIds(dealerId: string): string[] {
+  const s = backendTradePointIdsByDealerId.get(dealerId);
+  return s ? Array.from(s) : [];
+}
+
+function registerBackendTradePoints(entries: readonly ShowcaseMatrixEntryDto[]): boolean {
+  let changed = false;
+  for (const e of entries) {
+    const dealerId = (e.dealerId ?? "").trim();
+    const tpId = (e.tradePointId ?? "").trim();
+    if (!dealerId || !tpId) continue;
+    let set = backendTradePointIdsByDealerId.get(dealerId);
+    if (!set) {
+      set = new Set<string>();
+      backendTradePointIdsByDealerId.set(dealerId, set);
+      changed = true;
+    }
+    if (!set.has(tpId)) {
+      set.add(tpId);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+setBackendScopeProvider(getBackendTradePointIds);
+
 function emit(): void {
   for (const listener of Array.from(listeners)) {
     listener();
@@ -72,8 +106,12 @@ function bumpSnapshotReference(): void {
   emit();
 }
 
+const EMPTY_BACKEND_PROVIDER = () => [] as string[];
+
 export function distributionAnalyticsScopeKey(scope: DistributionScope): string {
-  const ids = [...collectScopeTradePointIds(scope)].sort();
+  // Ключ кэша/throttle строится ТОЛЬКО от локального скоупа: явный пустой backend-провайдер,
+  // чтобы ключ не «прыгал» по мере наполнения реестра backend-ТТ из scope-all.
+  const ids = [...collectScopeTradePointIds(scope, EMPTY_BACKEND_PROVIDER)].sort();
   if (scope.kind === "trade-point") {
     return `tp:${scope.dealer.id}:${scope.point.id}`;
   }
@@ -123,6 +161,9 @@ export async function ensureDistributionAnalyticsData(opts: {
     const remoteAll = await fetchShowcaseMatrixScopeAll({});
     if (remoteAll != null) {
       applyScopeEntriesToMatrixCache(remoteAll.entries);
+      if (registerBackendTradePoints(remoteAll.entries)) {
+        bumpSnapshotReference();
+      }
       allIds = Array.from(new Set([...localIds, ...remoteAll.tradePointIds]));
     } else if (localIds.length > 0) {
       const remote = await fetchShowcaseMatrixScope({ tradePointIds: localIds });
@@ -193,6 +234,7 @@ export function resetDistributionAnalyticsStoreForTests(): void {
   inflightByScopeKey.clear();
   lastCompletedAtByScopeKey.clear();
   lastNetworkByScopeKey.clear();
+  backendTradePointIdsByDealerId.clear();
 }
 
 export function useDistributionAnalytics(scope: DistributionScope): {
