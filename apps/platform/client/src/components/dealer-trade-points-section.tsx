@@ -422,6 +422,22 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         });
       });
       if (r.success) {
+        try {
+          const tpFields = mapActualizationTpFieldsToOverrides({
+            name: addName.trim(),
+            city: addCity.trim(),
+            address: addAddress.trim(),
+            contactName: addContactName.trim(),
+            contactPhone: formattedPhone,
+            comment: addComment.trim(),
+          });
+          await saveTradePointFields(id, tpFields, row.id, {
+            fieldLabel: "Торговая точка",
+            source: "dealer-trade-points-section",
+          });
+        } catch {
+          /* очередь tp-upsert подхватит воркер */
+        }
         setAddOpen(false);
         resetAddForm();
         return true;
@@ -516,6 +532,22 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
           variant: "destructive",
         });
         return null;
+      }
+      try {
+        const tpFields = mapActualizationTpFieldsToOverrides({
+          name: fields.name,
+          city: fields.city,
+          address: fields.address,
+          contactName: fields.contactName,
+          contactPhone: fields.contactPhone,
+          comment: fields.comment,
+        });
+        await saveTradePointFields(newId, tpFields, row.id, {
+          fieldLabel: "Торговая точка",
+          source: "dealer-trade-points-section",
+        });
+      } catch {
+        /* очередь tp-upsert подхватит воркер */
       }
       setTpBump((n) => n + 1);
       return {
