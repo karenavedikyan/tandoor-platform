@@ -85,6 +85,7 @@ export function DistributionTradePointMatrixEntry({
   const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
+  const [showcaseFullscreenOpen, setShowcaseFullscreenOpen] = useState(false);
 
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
@@ -135,6 +136,7 @@ export function DistributionTradePointMatrixEntry({
     setExpandedTaskIds(new Set());
     setMatrixTaskFilter("all");
     setMatrixFilter("all");
+    setShowcaseFullscreenOpen(false);
   }, [dealer.id, point.id]);
 
   const createdTaskByProductId = useMemo(() => {
@@ -284,15 +286,45 @@ export function DistributionTradePointMatrixEntry({
           </CardContent>
         </Card>
       ) : canEdit ? (
-        <DistributionFullscreenEntry
-          dealer={dealer}
-          point={point}
-          profile={profile}
-          actorUserId={actorUserId}
-          actorName={actorName}
-          onClose={onBackToList ?? (() => undefined)}
-          onBackToList={onBackToList}
-        />
+        showcaseFullscreenOpen ? (
+          <DistributionFullscreenEntry
+            dealer={dealer}
+            point={point}
+            profile={profile}
+            actorUserId={actorUserId}
+            actorName={actorName}
+            onClose={() => {
+              setShowcaseFullscreenOpen(false);
+              onBackToList?.();
+            }}
+            onBackToList={() => {
+              setShowcaseFullscreenOpen(false);
+              onBackToList?.();
+            }}
+          />
+        ) : (
+          <div className="space-y-3">
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              className="h-9 w-full font-semibold"
+              data-testid="button-open-showcase-fullscreen"
+              onClick={() => setShowcaseFullscreenOpen(true)}
+            >
+              Открыть витрину на весь экран
+            </Button>
+            <TradePointShowcaseMatrixSection
+              dealer={dealer}
+              point={point}
+              profile={profile}
+              actorUserId={actorUserId}
+              actorName={actorName}
+              page={showcasePage}
+              density="compact"
+            />
+          </div>
+        )
       ) : (
         <TradePointShowcaseMatrixSection
           dealer={dealer}
