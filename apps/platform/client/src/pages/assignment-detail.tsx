@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Camera,
   Check,
+  CheckCircle2,
   Grid2x2,
   Grid3x3,
   List,
@@ -58,6 +59,21 @@ type CatalogImageEntry = {
   image_url: string | null;
 };
 
+type AssignmentImageMaps = {
+  byTargetId: Map<string, CatalogImageEntry>;
+  byModelName: Map<string, CatalogImageEntry>;
+};
+
+const CATALOG_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeModelName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isCatalogProductUuid(id: string): boolean {
+  return CATALOG_UUID_RE.test(id);
+}
+
 const ASSIGNMENT_STATUS_LABEL: Record<AssignmentStatus, string> = {
   open: "Открыто",
   in_progress: "В работе",
@@ -90,11 +106,11 @@ function assignmentStatusTone(status: AssignmentStatus): string {
 }
 
 function itemStatusTone(status: AssignmentItemStatus): string {
-  if (status === "installed") return "border-emerald-200 bg-emerald-50 text-emerald-900";
-  if (status === "shipped") return "border-sky-200 bg-sky-50 text-sky-950";
-  if (status === "problem") return "border-red-200 bg-red-50 text-red-900";
+  if (status === "installed") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+  if (status === "shipped") return "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400";
+  if (status === "problem") return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-400";
   if (status === "not_relevant") return "border-border bg-muted/60 text-muted-foreground";
-  return "border-border bg-muted/60 text-foreground";
+  return "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-400";
 }
 
 function isItemDone(item: AssignmentDto["items"][number]): boolean {
@@ -148,22 +164,55 @@ function canUserCommentAssignment(
   return assignment.createdBy === userId || assignment.assigneeUserId === userId;
 }
 
-async function fetchCatalogImagesByIds(ids: string[]): Promise<Map<string, CatalogImageEntry>> {
-  const map = new Map<string, CatalogImageEntry>();
-  if (!ids.length) return map;
-  const res = await fetch(`/api/catalog/products?ids=${encodeURIComponent(ids.join(","))}`, {
-    credentials: "include",
-  });
-  if (!res.ok) return map;
-  const json = (await res.json()) as {
-    success?: boolean;
-    items?: CatalogImageEntry[];
-  };
-  if (json.success !== true || !Array.isArray(json.items)) return map;
-  for (const item of json.items) {
-    map.set(item.id, item);
+async function fetchCatalogBatch(query: { ids?: string; names?: string }): Promise<CatalogImageEntry[]> {
+  const params = new URLSearchParams();
+  if (query.ids) params.set("ids", query.ids);
+  if (query.names) params.set("names", query.names);
+  const res = await fetch(`/api/catalog/products?${params.toString()}`, { credentials: "include" });
+  if (!res.ok) return [];
+  const json = (await res.json()) as { success?: boolean; items?: CatalogImageEntry[] };
+  if (json.success !== true || !Array.isArray(json.items)) return [];
+  return json.items;
+}
+
+async function fetchAssignmentCatalogImages(items: AssignmentDto["items"]): Promise<AssignmentImageMaps> {
+  const byTargetId = new Map<string, CatalogImageEntry>();
+  const byModelName = new Map<string, CatalogImageEntry>();
+
+  const uuidIds: string[] = [];
+  const legacyNames: string[] = [];
+
+  for (const item of items) {
+    if (item.targetId && isCatalogProductUuid(item.targetId) && !uuidIds.includes(item.targetId)) {
+      uuidIds.push(item.targetId);
+    } else if (item.modelName) {
+      const norm = normalizeModelName(item.modelName);
+      if (norm && !legacyNames.includes(norm)) legacyNames.push(norm);
+    }
   }
-  return map;
+
+  if (uuidIds.length) {
+    const entries = await fetchCatalogBatch({ ids: uuidIds.join(",") });
+    for (const entry of entries) byTargetId.set(entry.id, entry);
+  }
+  if (legacyNames.length) {
+    const entries = await fetchCatalogBatch({ names: legacyNames.join(",") });
+    for (const entry of entries) byModelName.set(normalizeModelName(entry.name), entry);
+  }
+
+  return { byTargetId, byModelName };
+}
+
+function resolveItemModelImage(item: AssignmentDto["items"][number], maps: AssignmentImageMaps): string | null {
+  if (item.targetId && isCatalogProductUuid(item.targetId)) {
+    const entry = maps.byTargetId.get(item.targetId);
+    if (entry) return entry.image_url ?? entry.image_path ?? null;
+  }
+  if (item.modelName) {
+    const entry = maps.byModelName.get(normalizeModelName(item.modelName));
+    if (entry) return entry.image_url ?? entry.image_path ?? null;
+  }
+  return null;
 }
 
 function formatCommentDate(iso: string): string {
@@ -313,11 +362,11 @@ function AssignmentCommentsBlock({
                       className={cn(
                         "max-w-[85%] rounded-2xl px-3 py-2",
                         isOwn
-                          ? "rounded-br-sm bg-primary/10 text-foreground"
-                          : "rounded-bl-sm border border-border/60 bg-muted/30 text-foreground",
+                          ? "rounded-br-sm bg-primary/15 text-foreground"
+                          : "rounded-bl-sm bg-muted/60 text-foreground",
                       )}
                     >
-                      <p className="text-[10px] leading-tight text-muted-foreground">
+                      <p className="text-[11px] leading-tight text-muted-foreground">
                         {c.authorName ?? "—"}
                         {c.authorRole ? ` · ${c.authorRole}` : ""}
                         {" · "}
@@ -471,15 +520,6 @@ function AssignmentItemCard({
     void applyStatus("problem", reason);
   };
 
-  const handleCheckboxChange = (checked: boolean | "indeterminate") => {
-    if (readOnly || busy || uploadingPhoto) return;
-    if (done) {
-      if (checked === false) void applyStatus("pending");
-      return;
-    }
-    if (checked === true) setMenuOpen(true);
-  };
-
   const completionMenu = (
     <PopoverContent className="w-56 space-y-2 p-2" align="start" side="bottom">
       <Button
@@ -528,37 +568,48 @@ function AssignmentItemCard({
     </PopoverContent>
   );
 
-  const checkboxControl = readOnly ? (
-    <Checkbox checked={done} disabled className="mt-0.5 shrink-0" />
-  ) : (
-    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="mt-0.5 shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={(e) => {
-            if (!done) {
-              e.preventDefault();
-              setMenuOpen(true);
-            }
-          }}
-          data-testid={`checkbox-item-${item.id}`}
-          aria-label={done ? "Сбросить позицию" : "Отметить позицию"}
-        >
-          <Checkbox checked={done} onCheckedChange={handleCheckboxChange} disabled={busy || uploadingPhoto} />
-        </button>
-      </PopoverTrigger>
-      {!done ? completionMenu : null}
-    </Popover>
+  const checkboxButton = (
+    <button
+      type="button"
+      disabled={readOnly || busy || uploadingPhoto}
+      onClick={() => {
+        if (readOnly || busy || uploadingPhoto) return;
+        if (done) void applyStatus("pending");
+        else setMenuOpen(true);
+      }}
+      data-testid={`checkbox-item-${item.id}`}
+      aria-label={done ? "Сбросить позицию" : "Отметить позицию"}
+      className={cn(
+        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        done
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border bg-background hover:border-primary/50",
+      )}
+    >
+      {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} aria-hidden /> : null}
+    </button>
   );
 
+  const checkboxControl =
+    readOnly || done ? (
+      checkboxButton
+    ) : (
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+        <PopoverTrigger asChild>{checkboxButton}</PopoverTrigger>
+        {completionMenu}
+      </Popover>
+    );
+
   const actionButtons = !readOnly ? (
-    <div className="flex shrink-0 items-center gap-1">
+    <div className="flex shrink-0 items-center gap-0.5">
       <Button
         type="button"
         size="icon"
-        variant={item.itemStatus === "problem" ? "destructive" : "ghost"}
-        className="h-8 w-8"
+        variant="ghost"
+        className={cn(
+          "h-8 w-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
+          item.itemStatus === "problem" && "text-destructive hover:text-destructive",
+        )}
         disabled={busy || uploadingPhoto}
         onClick={() => setProblemOpen((v) => !v)}
         data-testid={`button-item-problem-${item.id}`}
@@ -583,7 +634,7 @@ function AssignmentItemCard({
         type="button"
         size="icon"
         variant="ghost"
-        className="h-8 w-8"
+        className="h-8 w-8 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
         disabled={busy || uploadingPhoto}
         onClick={() => fileRef.current?.click()}
         data-testid={`button-item-photo-${item.id}`}
@@ -600,9 +651,14 @@ function AssignmentItemCard({
   ) : null;
 
   const statusBadge = (
-    <Badge className={cn("shrink-0 border text-[10px]", itemStatusTone(item.itemStatus))}>
+    <span
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none",
+        itemStatusTone(item.itemStatus),
+      )}
+    >
       {ITEM_STATUS_LABEL[item.itemStatus]}
-    </Badge>
+    </span>
   );
 
   const reasonNote =
@@ -670,24 +726,25 @@ function AssignmentItemCard({
     return (
       <div
         className={cn(
-          "rounded-lg border border-border/80 bg-card px-2 py-2",
+          "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-border",
           done && "opacity-60",
         )}
         data-testid={`assignment-item-${item.id}`}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {checkboxControl}
           <ModelDoorPhotoFrame
             src={modelImageSrc}
             alt={item.modelName}
             size={photoSize}
-            imgPaddingClass="p-0.5"
+            variant="assignment"
+            imgPaddingClass="p-1"
             placeholderDensity="compact"
           />
           <div className="min-w-0 flex-1">
             <p
               className={cn(
-                "truncate text-sm font-medium",
+                "line-clamp-2 text-sm font-medium leading-snug",
                 done && "text-muted-foreground line-through",
               )}
             >
@@ -695,7 +752,7 @@ function AssignmentItemCard({
             </p>
             {reasonNote}
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
             {proofPhoto}
             {statusBadge}
             {actionButtons}
@@ -709,38 +766,41 @@ function AssignmentItemCard({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border/80 bg-card p-2",
+        "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-border",
         done && "opacity-60",
       )}
       data-testid={`assignment-item-${item.id}`}
     >
-      <div className="flex items-start gap-2">
-        {checkboxControl}
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-start justify-between gap-2">
-            <ModelDoorPhotoFrame
-              src={modelImageSrc}
-              alt={item.modelName}
-              size={photoSize}
-              imgPaddingClass="p-1"
-              placeholderDensity="compact"
-            />
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              {statusBadge}
-              {actionButtons}
-            </div>
+      <div className="relative">
+        <ModelDoorPhotoFrame
+          src={modelImageSrc}
+          alt={item.modelName}
+          size={photoSize}
+          variant="assignment"
+          imgPaddingClass="p-1.5"
+          placeholderDensity="compact"
+        />
+        <div className="absolute left-2 top-2">{checkboxControl}</div>
+      </div>
+      <div className="mt-2 space-y-1.5">
+        <p
+          className={cn(
+            "line-clamp-2 font-medium leading-snug",
+            viewMode === "s" ? "text-xs" : "text-sm",
+            done && "text-muted-foreground line-through",
+          )}
+        >
+          {item.modelName || item.targetId}
+        </p>
+        {reasonNote}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {statusBadge}
+            {proofPhoto}
           </div>
-          <p
-            className={cn(
-              "text-sm font-medium leading-snug",
-              done && "text-muted-foreground line-through",
-            )}
-          >
-            {item.modelName || item.targetId}
-          </p>
-          {reasonNote}
-          {proofPhoto}
+          {viewMode === "s" ? null : actionButtons}
         </div>
+        {viewMode === "s" ? <div className="flex justify-end">{actionButtons}</div> : null}
       </div>
       {problemForm}
     </div>
@@ -754,7 +814,10 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const [, setLocation] = useLocation();
   const [assignment, setAssignment] = useState(initial);
   const [viewMode, setViewMode] = useState<AssignmentViewMode>("list");
-  const [imageMap, setImageMap] = useState<Map<string, CatalogImageEntry>>(new Map());
+  const [imageMaps, setImageMaps] = useState<AssignmentImageMaps>({
+    byTargetId: new Map(),
+    byModelName: new Map(),
+  });
   const [shippedDate, setShippedDate] = useState(initial.shippedDate ?? "");
   const [comment, setComment] = useState(initial.comment ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -767,23 +830,15 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const canVerify = VERIFY_ROLES.has(user?.role ?? "");
   const canComment = canUserCommentAssignment(assignment, user?.id, user?.role);
 
-  const targetIds = useMemo(() => {
-    const ids: string[] = [];
-    for (const item of assignment.items) {
-      if (item.targetId && !ids.includes(item.targetId)) ids.push(item.targetId);
-    }
-    return ids;
-  }, [assignment.items]);
-
   useEffect(() => {
     let cancelled = false;
-    void fetchCatalogImagesByIds(targetIds).then((map) => {
-      if (!cancelled) setImageMap(map);
+    void fetchAssignmentCatalogImages(assignment.items).then((maps) => {
+      if (!cancelled) setImageMaps(maps);
     });
     return () => {
       cancelled = true;
     };
-  }, [targetIds]);
+  }, [assignment.items]);
 
   const verifyCandidates = useMemo(
     () => assignment.items.filter(isVerifyCandidate),
@@ -823,15 +878,6 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       void qc.setQueryData(["assignment", assignment.id], next);
     },
     [assignment.id, qc],
-  );
-
-  const resolveModelImage = useCallback(
-    (targetId: string): string | null => {
-      const entry = imageMap.get(targetId);
-      if (!entry) return null;
-      return entry.image_url ?? entry.image_path ?? null;
-    },
-    [imageMap],
   );
 
   const handleSubmit = async () => {
@@ -920,43 +966,47 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
         testId="button-assignment-back"
       />
 
-      <Card className="rounded-2xl border border-border shadow-sm">
-        <CardHeader className="space-y-2 pb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Package className="h-5 w-5 text-primary" aria-hidden />
-            <CardTitle className="text-lg leading-tight">{assignment.title}</CardTitle>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge className={cn("border", assignmentStatusTone(assignment.status))}>
-              {ASSIGNMENT_STATUS_LABEL[assignment.status]}
-            </Badge>
-            {isViewOnly ? (
-              <Badge variant="outline" className="text-muted-foreground">
-                Просмотр
-              </Badge>
-            ) : null}
+      <Card className="rounded-xl border border-border/60 shadow-sm">
+        <CardHeader className="space-y-3 pb-2">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+              <Package className="h-5 w-5 text-primary" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <CardTitle className="text-lg font-semibold leading-tight">{assignment.title}</CardTitle>
+              <div className="flex flex-wrap gap-2">
+                <Badge className={cn("border", assignmentStatusTone(assignment.status))}>
+                  {ASSIGNMENT_STATUS_LABEL[assignment.status]}
+                </Badge>
+                {isViewOnly ? (
+                  <Badge variant="outline" className="text-muted-foreground">
+                    Просмотр
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <span className="text-muted-foreground">Торговая точка: </span>
-            <span className="font-medium">{assignment.tradePointId}</span>
+        <CardContent className="space-y-1.5 pb-4 text-sm">
+          <p className="text-muted-foreground">
+            <span className="text-foreground/70">Торговая точка: </span>
+            {assignment.tradePointId}
           </p>
           {assignment.createdByName ? (
-            <p>
-              <span className="text-muted-foreground">Создатель: </span>
+            <p className="text-muted-foreground">
+              <span className="text-foreground/70">Создатель: </span>
               {assignment.createdByName}
             </p>
           ) : null}
           {assignment.assigneeName ? (
-            <p>
-              <span className="text-muted-foreground">Исполнитель: </span>
+            <p className="text-muted-foreground">
+              <span className="text-foreground/70">Исполнитель: </span>
               {assignment.assigneeName}
             </p>
           ) : null}
           {assignment.dueDate ? (
-            <p>
-              <span className="text-muted-foreground">Срок: </span>
+            <p className="text-muted-foreground">
+              <span className="text-foreground/70">Срок: </span>
               <span
                 className={cn(
                   isDueOverdue(assignment.dueDate) &&
@@ -977,45 +1027,49 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
         </CardContent>
       </Card>
 
-      <Card className="rounded-xl border border-border/80">
-        <CardContent className="grid grid-cols-2 gap-3 p-3 text-sm sm:grid-cols-4">
-          <div>
-            <p className="text-muted-foreground">Отгружено</p>
-            <p className="text-lg font-semibold tabular-nums" data-testid="text-assignment-shipped-count">
-              {summary.shipped} / {summary.total}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          {
+            label: "Отгружено",
+            value: `${summary.shipped}/${summary.total}`,
+            tone: "text-primary",
+            testId: "text-assignment-shipped-count",
+          },
+          {
+            label: "Проблемы",
+            value: String(summary.problems),
+            tone: summary.problems > 0 ? "text-destructive" : "text-foreground",
+            testId: "text-assignment-problems-count",
+          },
+          {
+            label: "На витрине",
+            value: String(summary.installed),
+            tone: "text-emerald-600 dark:text-emerald-400",
+            testId: "text-assignment-installed-count",
+          },
+          {
+            label: "Ожидает",
+            value: String(summary.pending),
+            tone: summary.pending > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground",
+            testId: "text-assignment-pending-count",
+          },
+        ].map((tile) => (
+          <div
+            key={tile.label}
+            className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
+          >
+            <p className="text-xs text-muted-foreground">{tile.label}</p>
+            <p className={cn("mt-0.5 text-xl font-bold tabular-nums", tile.tone)} data-testid={tile.testId}>
+              {tile.value}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground">Проблемы</p>
-            <p
-              className="text-lg font-semibold tabular-nums text-destructive"
-              data-testid="text-assignment-problems-count"
-            >
-              {summary.problems}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">На витрине</p>
-            <p
-              className="text-lg font-semibold tabular-nums text-emerald-700"
-              data-testid="text-assignment-installed-count"
-            >
-              {summary.installed}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Ожидает</p>
-            <p className="text-lg font-semibold tabular-nums" data-testid="text-assignment-pending-count">
-              {summary.pending}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-base font-semibold">Позиции</h2>
-          <div className="flex shrink-0 gap-1">
+          <div className="flex shrink-0 rounded-lg bg-muted/50 p-0.5">
             {(
               [
                 ["list", List, "Список"],
@@ -1023,19 +1077,22 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
                 ["s", Grid3x3, "Мельче"],
               ] as const
             ).map(([mode, Icon, label]) => (
-              <Button
+              <button
                 key={mode}
                 type="button"
-                size="icon"
-                variant={viewMode === mode ? "default" : "outline"}
-                className="h-8 w-8"
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                  viewMode === mode
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
                 onClick={() => setViewMode(mode)}
                 data-testid={`button-assignment-view-${mode}`}
                 aria-label={label}
                 title={label}
               >
                 <Icon className="h-4 w-4" aria-hidden />
-              </Button>
+              </button>
             ))}
           </div>
         </div>
@@ -1047,7 +1104,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
               item={item}
               canEdit={canEdit}
               viewMode={viewMode}
-              modelImageSrc={item.targetId ? resolveModelImage(item.targetId) : null}
+              modelImageSrc={resolveItemModelImage(item, imageMaps)}
               onUpdated={onAssignmentUpdated}
             />
           ))}
@@ -1067,7 +1124,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
               value={shippedDate}
               onChange={(e) => setShippedDate(e.target.value)}
               disabled={!canEdit || submitting}
-              className="min-h-10"
+              className="h-10"
               data-testid="input-assignment-shipped-date"
             />
           </div>
@@ -1095,7 +1152,11 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
               onClick={() => void handleSubmit()}
               data-testid="button-assignment-submit"
             >
-              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+              {submitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden />
+              )}
               Завершить задание
             </Button>
           ) : null}

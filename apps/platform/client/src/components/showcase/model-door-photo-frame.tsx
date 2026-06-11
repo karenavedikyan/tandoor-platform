@@ -5,9 +5,9 @@ export type ModelDoorPhotoFrameSize = "list" | "m" | "s";
 export type ModelDoorPhotoPlaceholderDensity = "comfortable" | "compact" | "micro";
 
 const SIZE_FRAME_CLASS: Record<ModelDoorPhotoFrameSize, string> = {
-  list: "h-14 w-10 shrink-0",
-  m: "h-24 w-[4.5rem] shrink-0",
-  s: "h-16 w-12 shrink-0",
+  list: "h-16 w-12 shrink-0",
+  m: "aspect-[3/4] h-32 w-full shrink-0",
+  s: "aspect-[3/4] h-24 w-full shrink-0",
 };
 
 /** Фото двери: фиксированная рамка + object-contain (как в матрице витрины). */
@@ -16,6 +16,7 @@ export function ModelDoorPhotoFrame({
   alt,
   frameClass,
   size,
+  variant = "default",
   imgTestId,
   imgPaddingClass = "p-2",
   placeholderDensity = "comfortable",
@@ -24,6 +25,7 @@ export function ModelDoorPhotoFrame({
   alt?: string;
   frameClass?: string;
   size?: ModelDoorPhotoFrameSize;
+  variant?: "default" | "assignment";
   imgTestId?: string;
   imgPaddingClass?: string;
   placeholderDensity?: ModelDoorPhotoPlaceholderDensity;
@@ -31,17 +33,19 @@ export function ModelDoorPhotoFrame({
   const resolvedFrameClass = frameClass ?? (size ? SIZE_FRAME_CLASS[size] : "h-20 w-16 shrink-0");
   const emptyClass =
     placeholderDensity === "micro"
-      ? "text-[8px] font-medium text-muted-foreground/80"
+      ? "text-[8px] font-medium text-muted-foreground/60"
       : placeholderDensity === "compact"
-        ? "text-[8px] text-muted-foreground"
-        : "text-[9px] text-muted-foreground";
+        ? "text-[9px] text-muted-foreground/60"
+        : "text-[9px] text-muted-foreground/60";
   const emptyLabel = placeholderDensity === "micro" ? "—" : "Нет фото";
   const imageSrc = src?.trim() || null;
+  const isAssignment = variant === "assignment";
 
   return (
     <div
       className={cn(
-        "relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40",
+        "relative shrink-0 overflow-hidden",
+        isAssignment ? "rounded-lg border border-border/50 bg-muted/30" : "rounded-md border border-border/60 bg-muted/40",
         resolvedFrameClass,
       )}
     >
@@ -59,7 +63,8 @@ export function ModelDoorPhotoFrame({
       ) : (
         <span
           className={cn(
-            "absolute inset-0 flex items-center justify-center bg-muted/25 px-0.5 text-center leading-none",
+            "absolute inset-0 flex items-center justify-center px-0.5 text-center leading-none",
+            isAssignment ? "bg-transparent" : "bg-muted/25",
             emptyClass,
           )}
         >

@@ -40,6 +40,30 @@ function parseVariantJson(raw: unknown): VariantOptionRow[] {
   return [];
 }
 
+const CATALOG_IMAGE_URL_SQL = `(SELECT i.blob_url FROM catalog_product_images i
+ WHERE i.product_id = p.id AND i.blob_url IS NOT NULL
+ ORDER BY i.sort_order ASC NULLS LAST, i.path ASC LIMIT 1)`;
+
+const CATALOG_IMAGE_PATH_SQL = `(SELECT i.path FROM catalog_product_images i
+ WHERE i.product_id = p.id AND i.path IS NOT NULL
+ ORDER BY i.sort_order ASC NULLS LAST, i.path ASC LIMIT 1)`;
+
+type CatalogBatchRow = {
+  id: string;
+  name: string;
+  image_path: string | null;
+  image_url: string | null;
+};
+
+function mapCatalogBatchItems(rows: CatalogBatchRow[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    image_path: row.image_path,
+    image_url: row.image_url,
+  }));
+}
+
 function parseVariantsJson(raw: unknown): CatalogVariantRow[] {
   return parseVariantJson(raw).map((item) => {
     const row = item as unknown as CatalogVariantRow;
@@ -79,15 +103,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const filters = parseCatalogListFilters(req);
 
     if (filters.ids?.length) {
-      const r = await pool.query<{
-        id: string;
-        name: string;
-        image_path: string | null;
-        image_url: string | null;
-      }>(
-        `SELECT id, name, image_path, image_url
-         FROM catalog_products
-         WHERE active = TRUE AND id = ANY($1::uuid[])`,
+      const r = await pool.query<CatalogBatchRow>(
+        `SELECT
+           p.id,
+           COALESCE(p.display_name, p.name) AS name,
+           ${CATALOG_IMAGE_PATH_SQL} AS image_path,
+           ${CATALOG_IMAGE_URL_SQL} AS image_url
+         FROM catalog_products p
+         WHERE p.active = TRUE AND p.id = ANY($1::uuid[])`,
         [filters.ids],
       );
       sendJson(res, 200, {
@@ -95,12 +118,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         total: r.rows.length,
         limit: r.rows.length,
         offset: 0,
-        items: r.rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          image_path: row.image_path,
-          image_url: row.image_url,
-        })),
+        items: mapCatalogBatchItems(r.rows),
+      });
+      return;
+    }
+
+    if (filters.names?.length) {
+      const r = await pool.query<CatalogBatchRow>(
+        `SELECT DISTINCT ON (lower(p.name))
+           p.id,
+           COALESCE(p.display_name, p.name) AS name,
+           ${CATALOG_IMAGE_PATH_SQL} AS image_path,
+           ${CATALOG_IMAGE_URL_SQL} AS image_url
+         FROM catalog_products p
+         WHERE p.active = TRUE AND (
+           lower(p.name) = ANY($1::text[])
+           OR lower(COALESCE(p.display_name, p.name)) = ANY($1::text[])
+         )
+         ORDER BY lower(p.name), p.id`,
+        [filters.names],
+      );
+      sendJson(res, 200, {
+        success: true,
+        total: r.rows.length,
+        limit: r.rows.length,
+        offset: 0,
+        items: mapCatalogBatchItems(r.rows),
       });
       return;
     }
