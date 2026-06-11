@@ -21,6 +21,7 @@ export const CATALOG_EFFECTIVE_PRICE_SQL = `COALESCE(
 
 export type CatalogListFilters = {
   ids?: string[];
+  names?: string[];
   q?: string;
   categoryId?: string;
   groupId?: string;
@@ -107,8 +108,28 @@ function parseIdsParam(raw: unknown): string[] | undefined {
   return ids.length ? ids : undefined;
 }
 
+const MAX_NAMES_BATCH = 50;
+
+function parseNamesParam(raw: unknown): string[] | undefined {
+  const parts = Array.isArray(raw) ? raw : raw != null && raw !== "" ? [raw] : [];
+  const names: string[] = [];
+  for (const item of parts) {
+    const segments = String(item).split(",");
+    for (const segment of segments) {
+      const name = sanitizeStr(segment, MAX_STR);
+      if (!name) continue;
+      const normalized = name.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!normalized || names.includes(normalized)) continue;
+      names.push(normalized);
+      if (names.length >= MAX_NAMES_BATCH) return names;
+    }
+  }
+  return names.length ? names : undefined;
+}
+
 export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters {
   const ids = parseIdsParam(req.query.ids);
+  const names = parseNamesParam(req.query.names);
   const q = sanitizeStr(String(req.query.q ?? ""), 500) ?? undefined;
   const categoryId = parseUuid(req.query.category_id);
   const groupId = parseUuid(req.query.group_id);
@@ -139,6 +160,7 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
 
   return {
     ids,
+    names,
     q: q || undefined,
     categoryId,
     groupId,
