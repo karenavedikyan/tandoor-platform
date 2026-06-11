@@ -1,3 +1,4 @@
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Gift } from "lucide-react";
 import type {
@@ -63,17 +64,109 @@ function asCallout(payload: Record<string, unknown>): CalloutBlockPayload {
   };
 }
 
-function Paragraphs({ text, className }: { text: string; className?: string }) {
+export type BriefInlineWrapKind = "bold" | "italic" | "underline" | "link";
+
+const INLINE_MARKUP_RE =
+  /(\*\*(.+?)\*\*|\*(.+?)\*|__(.+?)__|\[(.+?)\]\((.+?)\))/g;
+
+function safeBriefLinkHref(raw: string): string {
+  const url = raw.trim();
+  return /^https?:\/\//i.test(url) ? url : "#";
+}
+
+function renderBriefInlineSegment(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  INLINE_MARKUP_RE.lastIndex = 0;
+  while ((match = INLINE_MARKUP_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(
+        <Fragment key={`${keyPrefix}-t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</Fragment>,
+      );
+    }
+    const key = `${keyPrefix}-m-${match.index}`;
+    if (match[2] != null) {
+      nodes.push(<strong key={key}>{match[2]}</strong>);
+    } else if (match[3] != null) {
+      nodes.push(<em key={key}>{match[3]}</em>);
+    } else if (match[4] != null) {
+      nodes.push(<u key={key}>{match[4]}</u>);
+    } else if (match[5] != null && match[6] != null) {
+      nodes.push(
+        <a
+          key={key}
+          href={safeBriefLinkHref(match[6])}
+          className="text-[#3F8CFF] underline underline-offset-2"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {match[5]}
+        </a>,
+      );
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(<Fragment key={`${keyPrefix}-t-end`}>{text.slice(lastIndex)}</Fragment>);
+  }
+  return nodes.length > 0 ? nodes : [text];
+}
+
+export function BriefInlineSpan({ text }: { text: string }) {
+  return <>{renderBriefInlineSegment(text, "span")}</>;
+}
+
+export function BriefInlineText({
+  text,
+  className,
+  style,
+}: {
+  text: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
   const lines = text.split("\n");
   return (
-    <div className={className}>
+    <div className={className} style={style}>
       {lines.map((line, i) => (
         <p key={i} className={line.trim() === "" ? "min-h-[0.75rem]" : undefined}>
-          {line || "\u00a0"}
+          {line.trim() === "" ? "\u00a0" : renderBriefInlineSegment(line, `line-${i}`)}
         </p>
       ))}
     </div>
   );
+}
+
+export function wrapBriefTextSelection(
+  value: string,
+  start: number,
+  end: number,
+  kind: BriefInlineWrapKind,
+  linkUrl?: string,
+): string {
+  const selected = value.slice(start, end);
+  const inner = selected || "текст";
+  let wrapped: string;
+  switch (kind) {
+    case "bold":
+      wrapped = `**${inner}**`;
+      break;
+    case "italic":
+      wrapped = `*${inner}*`;
+      break;
+    case "underline":
+      wrapped = `__${inner}__`;
+      break;
+    case "link":
+      wrapped = `[${inner}](${(linkUrl ?? "https://").trim() || "https://"})`;
+      break;
+  }
+  return value.slice(0, start) + wrapped + value.slice(end);
+}
+
+function Paragraphs({ text, className }: { text: string; className?: string }) {
+  return <BriefInlineText text={text} className={className} />;
 }
 
 function formatSectionNumber(num: string | undefined, fallbackIndex: number): string {
@@ -187,7 +280,9 @@ export function MarketingBriefBlocksPublished({
           return (
             <section key={block.id} className="space-y-2">
               {p.heading?.trim() ? (
-                <h3 className="text-lg font-semibold text-[#222631]">{p.heading}</h3>
+                <h3 className="text-lg font-semibold text-[#222631]">
+                  <BriefInlineSpan text={p.heading} />
+                </h3>
               ) : null}
               <Paragraphs text={p.body} className="text-sm leading-relaxed text-muted-foreground sm:text-base" />
             </section>
