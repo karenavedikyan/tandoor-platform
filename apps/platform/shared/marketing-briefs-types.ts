@@ -104,7 +104,8 @@ export type MarketingBriefBlockType =
   | "callout"
   | "products"
   | "price_table"
-  | "bonus";
+  | "bonus"
+  | "image";
 
 export type BriefProductSegment = "top150" | "top350" | "top500" | "top500plus";
 
@@ -182,6 +183,13 @@ export interface CalloutBlockPayload {
   body: string;
 }
 
+export interface ImageBlockPayload {
+  url?: string;
+  thumbnail_url?: string;
+  caption?: string;
+  alt?: string;
+}
+
 export type MarketingBriefBlockPayload =
   | SectionBlockPayload
   | TextBlockPayload
@@ -189,7 +197,8 @@ export type MarketingBriefBlockPayload =
   | CalloutBlockPayload
   | ProductsBlockPayload
   | PriceTableBlockPayload
-  | BonusBlockPayload;
+  | BonusBlockPayload
+  | ImageBlockPayload;
 
 export type MarketingBriefBlockRow = {
   id: string;
@@ -209,6 +218,7 @@ const BLOCK_TYPES: MarketingBriefBlockType[] = [
   "products",
   "price_table",
   "bonus",
+  "image",
 ];
 
 export function isMarketingBriefBlockType(raw: unknown): raw is MarketingBriefBlockType {
@@ -246,6 +256,8 @@ export function defaultBlockPayload(type: MarketingBriefBlockType): Record<strin
       return { rows: [], show_benefit: true };
     case "bonus":
       return { items: [] };
+    case "image":
+      return {};
     default:
       return {};
   }

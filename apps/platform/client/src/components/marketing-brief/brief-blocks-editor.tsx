@@ -22,6 +22,7 @@ import {
   ChevronDown,
   Gift,
   GripVertical,
+  Image as ImageIcon,
   Link2,
   ListOrdered,
   Loader2,
@@ -62,6 +63,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { mergeBlocksFromServer } from "@/lib/brief-blocks-editor-state";
+import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
+import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { BonusBlockEditor } from "@/components/marketing-brief/bonus-block-editor";
 import {
   wrapBriefTextSelection,
@@ -83,6 +86,7 @@ import {
   reorderBlocks,
   updateBlock,
   type CalloutBlockPayload,
+  type ImageBlockPayload,
   type MarketingBriefBlockRow,
   type MarketingBriefBlockType,
   type SectionBlockPayload,
@@ -99,6 +103,7 @@ export const BRIEF_TOOLBAR_BLOCK_TYPES: ReadonlyArray<{
 }> = [
   { type: "section", label: "Добавить раздел", Icon: ListOrdered },
   { type: "text", label: "Добавить текст", Icon: Type },
+  { type: "image", label: "Добавить изображение", Icon: ImageIcon },
   { type: "callout", label: "Добавить важное", Icon: AlertTriangle },
   { type: "price_table", label: "Добавить таблицу", Icon: Table2 },
   { type: "products", label: "Добавить товары", Icon: Package },
@@ -285,6 +290,7 @@ function blockSummary(block: MarketingBriefBlockRow): string {
   if (block.type === "text") return asText(block.payload).heading || "Текст";
   if (block.type === "segments") return asSegments(block.payload).heading || "Сегменты";
   if (block.type === "callout") return asCallout(block.payload).heading || "Выноска";
+  if (block.type === "image") return asImage(block.payload).caption || "Изображение";
   if (block.type === "products") {
     const pb = asProductsBlock(block.payload);
     if (pb.items.length === 0) return "Товары";
@@ -340,6 +346,110 @@ function asCallout(payload: Record<string, unknown>): CalloutBlockPayload {
     heading: typeof payload.heading === "string" ? payload.heading : "",
     body: typeof payload.body === "string" ? payload.body : "",
   };
+}
+
+function asImage(payload: Record<string, unknown>): ImageBlockPayload {
+  return {
+    url: typeof payload.url === "string" ? payload.url : undefined,
+    thumbnail_url: typeof payload.thumbnail_url === "string" ? payload.thumbnail_url : undefined,
+    caption: typeof payload.caption === "string" ? payload.caption : undefined,
+    alt: typeof payload.alt === "string" ? payload.alt : undefined,
+  };
+}
+
+function ImageBlockFields({
+  block,
+  readOnly,
+  onPatch,
+}: {
+  block: MarketingBriefBlockRow;
+  readOnly: boolean;
+  onPatch: (patch: Record<string, unknown>) => void;
+}) {
+  const p = asImage(block.payload);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const previewUrl = p.url || p.thumbnail_url;
+
+  async function handleFile(file: File) {
+    setUploading(true);
+    try {
+      const prep = await prepareImageFileForUpload(file);
+      if (!prep.ok) {
+        toast({ title: "Файл не подходит", description: prep.error, variant: "destructive" });
+        return;
+      }
+      const up = await uploadClientBaseImagePair({
+        image: prep.image,
+        thumbnail: prep.thumbnail,
+        fileName: file.name,
+      });
+      if (!up.success) {
+        toast({ title: "Ошибка загрузки", description: up.message, variant: "destructive" });
+        return;
+      }
+      onPatch({ url: up.url, thumbnail_url: up.thumbnailUrl });
+      toast({ title: "Изображение загружено" });
+    } catch (e) {
+      toast({
+        title: "Ошибка загрузки",
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label className={LABEL_CLASS}>Заголовок</Label>
+        <Input
+          value={p.caption ?? ""}
+          disabled={readOnly}
+          className={FIELD_CLASS}
+          placeholder="Подпись под изображением"
+          onChange={(e) => {
+            const caption = e.target.value;
+            onPatch({ caption, alt: caption });
+          }}
+        />
+      </div>
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt={p.alt || p.caption || ""}
+          className="max-h-64 w-full rounded-[7px] border border-card-border object-contain"
+        />
+      ) : null}
+      {!readOnly ? (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFile(file);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className={ACTION_BTN_CLASS}
+            disabled={uploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+            {previewUrl ? "Заменить изображение" : "Добавить изображение"}
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function AddBlockButtons({
@@ -494,6 +604,10 @@ function BlockFields({
         </div>
       </div>
     );
+  }
+
+  if (block.type === "image") {
+    return <ImageBlockFields block={block} readOnly={readOnly} onPatch={onPatch} />;
   }
 
   if (block.type === "callout") {

@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Gift } from "lucide-react";
 import type {
   CalloutBlockPayload,
+  ImageBlockPayload,
   MarketingBriefBlockRow,
   SectionBlockPayload,
   SegmentsBlockPayload,
@@ -61,6 +62,15 @@ function asCallout(payload: Record<string, unknown>): CalloutBlockPayload {
     tone,
     heading: typeof payload.heading === "string" ? payload.heading : undefined,
     body: typeof payload.body === "string" ? payload.body : "",
+  };
+}
+
+function asImage(payload: Record<string, unknown>): ImageBlockPayload {
+  return {
+    url: typeof payload.url === "string" ? payload.url : undefined,
+    thumbnail_url: typeof payload.thumbnail_url === "string" ? payload.thumbnail_url : undefined,
+    caption: typeof payload.caption === "string" ? payload.caption : undefined,
+    alt: typeof payload.alt === "string" ? payload.alt : undefined,
   };
 }
 
@@ -340,6 +350,24 @@ export function MarketingBriefBlocksPublished({
               {p.heading?.trim() ? <p className="mb-1 font-semibold">{p.heading}</p> : null}
               <Paragraphs text={p.body} className="text-sm leading-relaxed" />
             </aside>
+          );
+        }
+
+        if (block.type === "image") {
+          const p = asImage(block.payload);
+          if (!p.url) return null;
+          return (
+            <figure key={block.id} className="space-y-2">
+              <img
+                src={p.url}
+                alt={p.alt || p.caption || ""}
+                className="w-full rounded-[7px] border border-card-border"
+                loading="lazy"
+              />
+              {p.caption?.trim() ? (
+                <figcaption className="text-center text-sm text-muted-foreground">{p.caption}</figcaption>
+              ) : null}
+            </figure>
           );
         }
 
