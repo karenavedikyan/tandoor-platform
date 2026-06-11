@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Bell, ClipboardList, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, Bell, ClipboardList, Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,6 +27,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDate } from "@/lib/format-datetime";
 import {
   archiveAssignments,
+  assignmentShareUrl,
   deleteAssignments,
   listIncomingAssignments,
   listOutgoingAssignments,
@@ -94,6 +95,36 @@ function canEditOutgoingTask(userRole: string | undefined, userId: string | unde
   return canManageOutgoingTask(userRole, userId, task);
 }
 
+async function copyToClipboard(text: string): Promise<boolean> {
+  const v = text.trim();
+  if (!v) return false;
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(v);
+      return true;
+    }
+  } catch {
+    /* fallback ниже */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = v;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function formatTaskShareText(task: UnifiedTask): string {
+  return `${task.title}\nИсполнитель: ${task.assigneeName ?? "не назначен"}\nСсылка: ${assignmentShareUrl(task.entityId)}`;
+}
+
 type TaskCardProps = {
   task: UnifiedTask;
   selectable?: boolean;
@@ -101,9 +132,20 @@ type TaskCardProps = {
   onToggleSelect?: (id: string, checked: boolean) => void;
   onEdit?: (task: UnifiedTask) => void;
   canEdit?: boolean;
+  showCopyLink?: boolean;
+  onCopyLink?: (task: UnifiedTask) => void;
 };
 
-function TaskCard({ task, selectable, selected, onToggleSelect, onEdit, canEdit }: TaskCardProps) {
+function TaskCard({
+  task,
+  selectable,
+  selected,
+  onToggleSelect,
+  onEdit,
+  canEdit,
+  showCopyLink,
+  onCopyLink,
+}: TaskCardProps) {
   const overdue = isDueOverdue(task.dueDate, task.status);
 
   return (
@@ -154,6 +196,24 @@ function TaskCard({ task, selectable, selected, onToggleSelect, onEdit, canEdit 
             </div>
           </Link>
         </div>
+        {showCopyLink && onCopyLink ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onCopyLink(task);
+            }}
+            data-testid={`button-task-copy-link-${task.entityId}`}
+            aria-label="Скопировать ссылку"
+            title="Скопировать ссылку ответственному"
+          >
+            <Link2 className="h-4 w-4" />
+          </Button>
+        ) : null}
         {canEdit && onEdit ? (
           <Button
             type="button"
@@ -360,6 +420,7 @@ function BulkActionsBar({
   onArchive,
   onUnarchive,
   onRemind,
+  onCopyLinks,
   onDelete,
   onClear,
   busy,
@@ -369,6 +430,7 @@ function BulkActionsBar({
   onArchive: () => void;
   onUnarchive: () => void;
   onRemind: () => void;
+  onCopyLinks: () => void;
   onDelete: () => void;
   onClear: () => void;
   busy: boolean;
@@ -393,6 +455,10 @@ function BulkActionsBar({
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onRemind} data-testid="button-tasks-bulk-remind">
         <Bell className="mr-1 h-3.5 w-3.5" />
         Напомнить
+      </Button>
+      <Button type="button" size="sm" variant="outline" disabled={busy} onClick={onCopyLinks} data-testid="button-tasks-bulk-copy-links">
+        <Link2 className="mr-1 h-3.5 w-3.5" />
+        Скопировать ссылки
       </Button>
       <Button
         type="button"
@@ -470,6 +536,30 @@ function TaskDirectionPanel({
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
+  const handleCopyLink = useCallback(
+    async (task: UnifiedTask) => {
+      const ok = await copyToClipboard(formatTaskShareText(task));
+      if (ok) {
+        toast({ title: "Ссылка скопирована", description: "Вставьте её ответственному в чат" });
+      } else {
+        toast({ title: "Не удалось скопировать", variant: "destructive" });
+      }
+    },
+    [toast],
+  );
+
+  const handleBulkCopyLinks = useCallback(async () => {
+    const selected = filtered.filter((t) => selectedIds.has(t.entityId));
+    if (selected.length === 0) return;
+    const text = selected.map(formatTaskShareText).join("\n\n");
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      toast({ title: `Скопировано ссылок: ${selected.length}` });
+    } else {
+      toast({ title: "Не удалось скопировать", variant: "destructive" });
+    }
+  }, [filtered, selectedIds, toast]);
+
   const runBulk = async (action: "archive" | "unarchive" | "remind" | "delete") => {
     if (selectedList.length === 0 || bulkBusy) return;
     setBulkBusy(true);
@@ -525,6 +615,7 @@ function TaskDirectionPanel({
           onArchive={() => void runBulk("archive")}
           onUnarchive={() => void runBulk("unarchive")}
           onRemind={() => void runBulk("remind")}
+          onCopyLinks={() => void handleBulkCopyLinks()}
           onDelete={() => setDeleteConfirmOpen(true)}
           onClear={clearSelection}
           busy={bulkBusy}
@@ -548,6 +639,8 @@ function TaskDirectionPanel({
                 onToggleSelect={toggleSelect}
                 canEdit={direction === "outgoing" && canEditOutgoingTask(userRole, userId, task)}
                 onEdit={direction === "outgoing" ? setEditTask : undefined}
+                showCopyLink={direction === "outgoing"}
+                onCopyLink={direction === "outgoing" ? handleCopyLink : undefined}
               />
             </li>
           ))}
