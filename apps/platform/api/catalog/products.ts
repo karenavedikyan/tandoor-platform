@@ -51,6 +51,7 @@ const CATALOG_IMAGE_PATH_SQL = `(SELECT i.path FROM catalog_product_images i
 type CatalogBatchRow = {
   id: string;
   name: string;
+  display_name: string | null;
   image_path: string | null;
   image_url: string | null;
 };
@@ -59,6 +60,7 @@ function mapCatalogBatchItems(rows: CatalogBatchRow[]) {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    display_name: row.display_name,
     image_path: row.image_path,
     image_url: row.image_url,
   }));
@@ -106,7 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const r = await pool.query<CatalogBatchRow>(
         `SELECT
            p.id,
-           COALESCE(p.display_name, p.name) AS name,
+           p.name AS name,
+           p.display_name AS display_name,
            ${CATALOG_IMAGE_PATH_SQL} AS image_path,
            ${CATALOG_IMAGE_URL_SQL} AS image_url
          FROM catalog_products p
@@ -127,7 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const r = await pool.query<CatalogBatchRow>(
         `SELECT DISTINCT ON (lower(p.name))
            p.id,
-           COALESCE(p.display_name, p.name) AS name,
+           p.name AS name,
+           p.display_name AS display_name,
            ${CATALOG_IMAGE_PATH_SQL} AS image_path,
            ${CATALOG_IMAGE_URL_SQL} AS image_url
          FROM catalog_products p
