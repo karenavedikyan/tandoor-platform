@@ -67,6 +67,7 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   model: ShowcaseMatrixModelDefinition | null;
+  hideMatrixMeta?: boolean;
 };
 
 function isUuid(value: string): boolean {
@@ -419,7 +420,7 @@ function PhotoPlaceholder() {
   );
 }
 
-export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: Props) {
+export function ShowcaseModelPresentationDialog({ open, onOpenChange, model, hideMatrixMeta }: Props) {
   const [fallbackText, setFallbackText] = useState("");
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -704,7 +705,9 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
                   {displayTitle}
                 </p>
                 <p className="mt-1 break-words text-xs text-muted-foreground">
-                  Тип: {model.typeLabelRu} · Приоритет матрицы: {priorityLabelRu(model.basePriority)}
+                  {hideMatrixMeta
+                    ? `Тип: ${model.typeLabelRu}`
+                    : `Тип: ${model.typeLabelRu} · Приоритет матрицы: ${priorityLabelRu(model.basePriority)}`}
                 </p>
               </div>
 

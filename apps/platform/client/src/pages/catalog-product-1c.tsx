@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
-import { ArrowLeft, Heart, Package, Share2, ShoppingCart, Tag } from "lucide-react";
+import { ArrowLeft, Heart, Package, Presentation, Share2, ShoppingCart, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,11 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { optimizedImage } from "@/lib/catalog-image";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
+import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
+import {
+  buildPresentationModelFromCatalogProduct,
+  type ShowcaseMatrixModelType,
+} from "@/lib/trade-point-showcase-matrix-models";
 import {
   groupProperties,
   LONG_VALUE_THRESHOLD,
@@ -73,6 +78,19 @@ function fmtQty(n: number | null | undefined): string {
 function discountPercent(retail: number, sale: number): number | null {
   if (retail <= 0 || sale >= retail) return null;
   return Math.round((1 - sale / retail) * 100);
+}
+
+function inferPresentationModelType(
+  title: string,
+  brand: string | null | undefined,
+  groupName: string | null | undefined,
+): ShowcaseMatrixModelType {
+  for (const part of [title, brand ?? "", groupName ?? ""]) {
+    const lower = part.toLowerCase();
+    if (lower.includes("вход") || lower.includes("входная")) return "entrance";
+    if (part.trim().toUpperCase().startsWith("ВХ")) return "entrance";
+  }
+  return "interior";
 }
 
 function warehouseDisplayName(s: Stock): string {
@@ -237,6 +255,7 @@ export default function CatalogProduct1cPage() {
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [presentationOpen, setPresentationOpen] = useState(false);
   const [qty, setQty] = useState(1);
   const [brokenImages, setBrokenImages] = useState<Set<number>>(() => new Set());
 
@@ -363,6 +382,8 @@ export default function CatalogProduct1cPage() {
       setLocation("/catalog");
     }
   };
+
+  const presentationModelType = inferPresentationModelType(title, product.brand, product.group?.name);
 
   return (
     <div className="catalog-font space-y-8 p-4 lg:p-6" data-testid="page-catalog-product-1c">
@@ -540,6 +561,16 @@ export default function CatalogProduct1cPage() {
                     В корзину
                   </Button>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => setPresentationOpen(true)}
+                  data-testid="catalog-detail-open-presentation"
+                >
+                  <Presentation className="h-4 w-4" />
+                  Презентация модели
+                </Button>
                 <Button type="button" variant="outline" className="w-full gap-2">
                   <Heart className="h-4 w-4" />
                   В избранное
@@ -691,6 +722,22 @@ export default function CatalogProduct1cPage() {
           Синхронизировано: {new Date(product.synced_at).toLocaleString("ru-RU")}
         </p>
       ) : null}
+
+      <ShowcaseModelPresentationDialog
+        open={presentationOpen}
+        onOpenChange={setPresentationOpen}
+        hideMatrixMeta
+        model={
+          presentationOpen
+            ? buildPresentationModelFromCatalogProduct({
+                id: product.id,
+                name: title,
+                type: presentationModelType,
+                imageUrl: mainImageUrl ?? undefined,
+              })
+            : null
+        }
+      />
     </div>
   );
 }

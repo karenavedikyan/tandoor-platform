@@ -181,6 +181,40 @@ export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Высокий"
   return "Низкий";
 }
 
+/**
+ * Минимальная модель презентации для произвольного товара каталога 1С.
+ * Контент (характеристики/преимущества/выгоды) диалог строит из свойств 1С по catalog1cId.
+ * Используется при открытии презентации из карточки каталога (вне матрицы/задания).
+ */
+export function buildPresentationModelFromCatalogProduct(input: {
+  /** UUID товара в каталоге 1С. */
+  id: string;
+  name: string;
+  /** "entrance" — входная дверь (ВХ), иначе — межкомнатная (МК). */
+  type?: ShowcaseMatrixModelType;
+  imageUrl?: string;
+}): ShowcaseMatrixModelDefinition {
+  const type: ShowcaseMatrixModelType = input.type ?? "interior";
+  return {
+    id: input.id,
+    catalog1cId: input.id,
+    name: input.name,
+    type,
+    typeLabelRu: type === "entrance" ? "ВХ" : "МК",
+    imageUrl: input.imageUrl ?? "",
+    basePriority: "medium",
+    importanceReason: "",
+    categoryRules: [],
+    characteristics: EMPTY_LEGACY_PRESENTATION.characteristics,
+    advantages: EMPTY_LEGACY_PRESENTATION.advantages,
+    benefitsDealer: EMPTY_LEGACY_PRESENTATION.benefitsDealer,
+    benefitsBuyer: EMPTY_LEGACY_PRESENTATION.benefitsBuyer,
+    objections: EMPTY_LEGACY_PRESENTATION.objections,
+    objectionAnswers: EMPTY_LEGACY_PRESENTATION.objectionAnswers,
+    copyMessage: EMPTY_LEGACY_PRESENTATION.copyMessage,
+  };
+}
+
 export function resolveCatalog1cId(m: ShowcaseMatrixModelDefinition): string | null {
   return m.catalog1cId ?? null;
 }
