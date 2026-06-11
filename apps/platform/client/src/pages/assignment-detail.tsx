@@ -145,9 +145,9 @@ function photoSizeForView(viewMode: AssignmentViewMode): ModelDoorPhotoFrameSize
 }
 
 function thumbWidthForViewMode(viewMode: AssignmentViewMode): number {
-  if (viewMode === "list") return 120;
+  if (viewMode === "list") return 128;
   if (viewMode === "m") return 320;
-  return 240;
+  return 256;
 }
 
 const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
