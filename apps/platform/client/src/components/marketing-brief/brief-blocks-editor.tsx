@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  AlertTriangle,
   ChevronDown,
   Gift,
   GripVertical,
@@ -98,6 +99,7 @@ export const BRIEF_TOOLBAR_BLOCK_TYPES: ReadonlyArray<{
 }> = [
   { type: "section", label: "Добавить раздел", Icon: ListOrdered },
   { type: "text", label: "Добавить текст", Icon: Type },
+  { type: "callout", label: "Добавить важное", Icon: AlertTriangle },
   { type: "price_table", label: "Добавить таблицу", Icon: Table2 },
   { type: "products", label: "Добавить товары", Icon: Package },
   { type: "segments", label: "Добавить сегменты", Icon: Tags },
