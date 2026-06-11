@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { LayoutGrid, List, Loader2, Table2 } from "lucide-react";
+import { LayoutGrid, Loader2, Table2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +38,6 @@ import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
   BriefBulkActionBar,
   BriefCardsListView,
-  BriefCardsSelectAllLink,
   BriefCompactListView,
   BriefTableListView,
   readBriefListViewMode,
@@ -63,6 +61,7 @@ import {
   restoreBrief,
   unpublishBrief,
   type MarketingBriefBlockRow,
+  type MarketingBriefCategory,
   type MarketingBriefRow,
   type MarketingBriefStatus,
   type MarketingBriefVisibility,
@@ -452,95 +451,99 @@ export default function MarketingBriefsPage() {
 
   const menuHandlers: BriefRowMenuHandlers = {
     onOpen: (brief) => setLocation(`/marketing-briefs/${brief.id}`),
+    onPublish: canManage ? (id) => void runAction("Опубликовано", publishBrief, id) : undefined,
+    onUnpublish: canManage ? (id) => void runAction("Снято с публикации", unpublishBrief, id) : undefined,
     onArchive: (id) => void runAction("В архиве", archiveBrief, id),
     onRestore: (id) => void runAction("Восстановлено", restoreBrief, id),
     onDelete: (id) => setSingleDeleteId(id),
     onMutate: () => void reload(),
   };
 
-  function renderCardFooter(b: MarketingBriefRow) {
-    if (!canManage) {
-      return (
-        <Button asChild variant="outline" size="sm" className="min-h-9">
-          <Link href={`/marketing-briefs/view/${b.id}`}>Открыть</Link>
-        </Button>
-      );
-    }
-    return (
-      <>
-        <Button asChild variant="outline" size="sm" className="min-h-9">
-          <Link href={`/marketing-briefs/${b.id}`}>Открыть</Link>
-        </Button>
-        {b.status === "draft" || b.status === "archived" ? (
-          <Button
-            type="button"
-            size="sm"
-            className="min-h-9"
-            data-testid={`button-marketing-brief-publish-${b.id}`}
-            onClick={() => void runAction("Опубликовано", publishBrief, b.id)}
-          >
-            Опубликовать
-          </Button>
-        ) : null}
-        {b.status === "published" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="min-h-9"
-            onClick={() => void runAction("Снято с публикации", unpublishBrief, b.id)}
-          >
-            Снять с публикации
-          </Button>
-        ) : null}
-        {b.status !== "archived" ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="min-h-9 text-muted-foreground"
-            onClick={() => void runAction("В архиве", archiveBrief, b.id)}
-          >
-            В архив
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="min-h-9"
-            onClick={() => void runAction("Восстановлено", restoreBrief, b.id)}
-          >
-            Восстановить
-          </Button>
-        )}
-      </>
-    );
-  }
+  const statusTabs: { value: StatusFilter; label: string }[] = canManage
+    ? [
+        { value: "all", label: "Все" },
+        { value: "draft", label: "Черновики" },
+        { value: "published", label: "Опубликованные" },
+        { value: "archived", label: "Архив" },
+      ]
+    : [
+        { value: "all", label: "Все" },
+        { value: "published", label: "Опубликованные" },
+        { value: "archived", label: "Архив" },
+      ];
 
-  const emptyMessage = canManage
-    ? "Брифов пока нет. Создайте первый — он появится у команды после публикации."
-    : "Опубликованных брифов пока нет. Маркетинг готовит свежие материалы.";
+  const listFilterKey = `${statusFilter}-${periodFilter}`;
+
+  const selectAllInSection = useCallback(
+    (category: MarketingBriefCategory) => {
+      if (!canManage) return;
+      const sectionIds = briefs.filter((b) => (b.category ?? "brief") === category).map((b) => b.id);
+      const allSelected = sectionIds.length > 0 && sectionIds.every((id) => selectedSet.has(id));
+      if (allSelected) {
+        setSelectedIds((prev) => prev.filter((id) => !sectionIds.includes(id)));
+      } else {
+        setSelectedIds((prev) => Array.from(new Set([...prev, ...sectionIds])));
+      }
+    },
+    [canManage, briefs, selectedSet],
+  );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24" data-testid="page-marketing-briefs">
-      <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-marketing-briefs" />
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Маркетинговые брифы</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {canManage ? (
-              <>Ежемесячные материалы для команды продаж. Создание и публикация ведутся в этом кабинете.</>
-            ) : (
-              <span data-testid="text-marketing-briefs-readonly">
-                Опубликованные брифы для команды продаж. Редактирование доступно руководителям и маркетологам.
-              </span>
-            )}
-          </p>
+    <div className="min-h-screen bg-[#EEEFF6] pb-24" data-testid="page-marketing-briefs">
+      <div className="mx-auto max-w-6xl space-y-5 px-4 pt-4 sm:px-6">
+        <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-marketing-briefs" />
+
+        <div className="flex overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white">
+          <div className="w-1.5 shrink-0 bg-[#9ACA3C]" aria-hidden />
+          <div className="px-5 py-5">
+            <h1 className="text-2xl font-semibold text-[#222631]">Маркетинговые активности</h1>
+            <p className="mt-1 max-w-3xl text-base font-normal text-[#8F96B0]">
+              Ежемесячные материалы для команды продаж. Создание и публикация ведутся в этом кабинете.
+            </p>
+          </div>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <div
+              className="inline-flex flex-wrap rounded-[6px] border border-[#E8EAEE] bg-white p-1"
+              role="tablist"
+              aria-label="Фильтр по статусу"
+            >
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={statusFilter === tab.value}
+                  className={cn(
+                    "rounded-[6px] px-3 py-1.5 text-sm transition-colors",
+                    statusFilter === tab.value
+                      ? "bg-white font-medium text-[#222631] shadow-sm"
+                      : "text-[#8F96B0] hover:text-[#343F5B]",
+                  )}
+                  onClick={() => setStatusFilter(tab.value)}
+                  data-testid={`tab-brief-status-${tab.value}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <Select value={periodFilter} onValueChange={setPeriodFilter}>
+              <SelectTrigger className="w-full min-w-[180px] rounded-[6px] border-[#E8EAEE] bg-white sm:w-[220px]">
+                <SelectValue placeholder="Все периоды" />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div
-            className="flex rounded-lg border border-border p-0.5"
+            className="flex shrink-0 rounded-[6px] border border-[#E8EAEE] bg-white p-0.5"
             role="group"
             aria-label="Режим отображения списка"
             data-testid="brief-list-view-mode"
@@ -549,7 +552,6 @@ export default function MarketingBriefsPage() {
               [
                 { mode: "cards" as const, icon: LayoutGrid, label: "Карточки" },
                 { mode: "table" as const, icon: Table2, label: "Таблица" },
-                { mode: "compact" as const, icon: List, label: "Компактный список" },
               ] as const
             ).map(({ mode, icon: Icon, label }) => (
               <Button
@@ -557,7 +559,10 @@ export default function MarketingBriefsPage() {
                 type="button"
                 size="icon"
                 variant="ghost"
-                className={cn("h-9 w-9", viewMode === mode && "bg-secondary")}
+                className={cn(
+                  "h-9 w-9 rounded-[6px]",
+                  viewMode === mode && "bg-white text-[#222631] shadow-sm",
+                )}
                 aria-label={label}
                 aria-pressed={viewMode === mode}
                 data-testid={`button-brief-view-${mode}`}
@@ -567,84 +572,45 @@ export default function MarketingBriefsPage() {
               </Button>
             ))}
           </div>
-          {canManage ? (
-            <Button type="button" className="min-h-10" data-testid="button-marketing-brief-new" onClick={() => setCreateOpen(true)}>
-              Новый бриф
-            </Button>
-          ) : null}
         </div>
-      </div>
 
-      {canManage ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-            <TabsList>
-              <TabsTrigger value="all">Все</TabsTrigger>
-              <TabsTrigger value="draft">Черновики</TabsTrigger>
-              <TabsTrigger value="published">Опубликованные</TabsTrigger>
-              <TabsTrigger value="archived">Архив</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Select value={periodFilter} onValueChange={setPeriodFilter}>
-            <SelectTrigger className="w-full min-w-[180px] sm:w-[220px]">
-              <SelectValue placeholder="Период" />
-            </SelectTrigger>
-            <SelectContent>
-              {periodOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
-
-      {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-        </div>
-      ) : briefs.length === 0 ? (
-        <p
-          className="rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground"
-          data-testid={canManage ? "text-marketing-briefs-empty-manage" : "text-marketing-briefs-empty-published"}
-        >
-          {emptyMessage}
-        </p>
-      ) : (
-        <div className="space-y-3" data-testid="section-marketing-briefs-list">
-          {canManage && selection && viewMode === "cards" ? (
-            <BriefCardsSelectAllLink selection={selection} />
-          ) : null}
-          {viewMode === "cards" ? (
-            <BriefCardsListView
-              briefs={briefs}
-              canManage={canManage}
-              selection={selection}
-              menuHandlers={menuHandlers}
-              renderCardFooter={renderCardFooter}
-            />
-          ) : null}
-          {viewMode === "table" ? (
-            <BriefTableListView
-              briefs={briefs}
-              canManage={canManage}
-              selection={selection}
-              selectAllRef={selectAllRef}
-              menuHandlers={menuHandlers}
-            />
-          ) : null}
-          {viewMode === "compact" ? (
-            <BriefCompactListView
-              briefs={briefs}
-              canManage={canManage}
-              selection={selection}
-              selectAllRef={selectAllRef}
-              menuHandlers={menuHandlers}
-            />
-          ) : null}
-        </div>
-      )}
+        {loading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-[#8F96B0]" aria-hidden />
+          </div>
+        ) : (
+          <div className="space-y-3" data-testid="section-marketing-briefs-list">
+            {viewMode === "cards" ? (
+              <BriefCardsListView
+                briefs={briefs}
+                canManage={canManage}
+                selection={selection}
+                menuHandlers={menuHandlers}
+                onAddActivity={canManage ? () => setCreateOpen(true) : undefined}
+                onSelectAllInSection={selectAllInSection}
+                listKey={listFilterKey}
+              />
+            ) : null}
+            {viewMode === "table" ? (
+              <BriefTableListView
+                briefs={briefs}
+                canManage={canManage}
+                selection={selection}
+                selectAllRef={selectAllRef}
+                menuHandlers={menuHandlers}
+              />
+            ) : null}
+            {viewMode === "compact" ? (
+              <BriefCompactListView
+                briefs={briefs}
+                canManage={canManage}
+                selection={selection}
+                selectAllRef={selectAllRef}
+                menuHandlers={menuHandlers}
+              />
+            ) : null}
+          </div>
+        )}
 
       {canManage ? (
         <BriefBulkActionBar
@@ -810,6 +776,7 @@ export default function MarketingBriefsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

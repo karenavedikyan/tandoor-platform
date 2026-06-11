@@ -8,6 +8,7 @@ const categoryConfig: Record<
   brief: { label: "Бриф", bg: "#9ACA3C", text: "#0F1419" },
   promo: { label: "Акция", bg: "#FF9F1C", text: "#0F1419" },
   info: { label: "Инфо", bg: "#3B82F6", text: "#FFFFFF" },
+  letter: { label: "Письмо", bg: "#3F8CFF", text: "#FFFFFF" },
 };
 
 export function CategoryBadge({

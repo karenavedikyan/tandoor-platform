@@ -6,7 +6,7 @@ export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
 
-export type MarketingBriefCategory = "brief" | "promo" | "info";
+export type MarketingBriefCategory = "brief" | "promo" | "info" | "letter";
 
 export type MarketingBriefRow = {
   id: string;
@@ -46,7 +46,7 @@ export function parseMarketingBriefVisibility(raw: unknown): MarketingBriefVisib
 
 export function parseMarketingBriefCategory(raw: unknown): MarketingBriefCategory {
   const v = typeof raw === "string" ? raw.trim() : "";
-  if (v === "promo" || v === "info") return v;
+  if (v === "promo" || v === "info" || v === "letter") return v;
   return "brief";
 }
 

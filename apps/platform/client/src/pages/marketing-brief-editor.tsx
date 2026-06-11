@@ -343,6 +343,7 @@ export default function MarketingBriefEditorPage() {
                 <SelectItem value="brief">Бриф</SelectItem>
                 <SelectItem value="promo">Акция</SelectItem>
                 <SelectItem value="info">Информация</SelectItem>
+                <SelectItem value="letter">Информационные письма</SelectItem>
               </SelectContent>
             </Select>
           </div>
