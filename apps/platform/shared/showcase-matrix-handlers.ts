@@ -3,6 +3,7 @@
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
+import { fetchMyClientCodes } from "./my-client-codes-handlers.js";
 
 export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
@@ -126,12 +127,45 @@ export type ShowcaseMatrixBatchResultItem =
   | { clientOpId?: string; error: string };
 
 export class ShowcaseMatrixValidationError extends Error {
-  readonly code = "VALIDATION_ERROR" as const;
+  readonly code: string;
 
-  constructor(message: string) {
+  constructor(message: string, code = "VALIDATION_ERROR") {
     super(message);
     this.name = "ShowcaseMatrixValidationError";
+    this.code = code;
   }
+}
+
+/** client-ma-ma119856 → MA-MA119856 (как upper(regexp_replace(dealer_id,'^client-',''))) */
+export function clientCodeFromDealerId(dealerId: string): string {
+  return dealerId.replace(/^client-/i, "").toUpperCase();
+}
+
+export type ShowcaseVisibility =
+  | { unrestricted: true }
+  | { unrestricted: false; visibleCodes: Set<string> };
+
+export async function resolveShowcaseVisibility(
+  pool: PoolLike,
+  user: { id: string; role: string },
+): Promise<ShowcaseVisibility> {
+  const role = user.role;
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+    return { unrestricted: true };
+  }
+  const codes = await fetchMyClientCodes(pool, { id: user.id, role });
+  const visibleCodes = new Set<string>([
+    ...codes.ownCodes,
+    ...codes.teamCodes,
+    ...codes.grantedCodes,
+  ]);
+  return { unrestricted: false, visibleCodes };
+}
+
+export function isDealerVisible(vis: ShowcaseVisibility, dealerId: string): boolean {
+  if (vis.unrestricted) return true;
+  if (vis.visibleCodes.size === 0) return false;
+  return vis.visibleCodes.has(clientCodeFromDealerId(dealerId));
 }
 
 function trimStr(raw: unknown, field: string): string {
@@ -630,9 +664,43 @@ function parseScopeStatuses(raw: unknown): ShowcaseMatrixStatus[] | undefined {
   return [...new Set(out)];
 }
 
+export async function handleShowcaseMatrixScopeAll(
+  pool: PoolLike,
+  vis: ShowcaseVisibility,
+  params: { statuses?: unknown },
+): Promise<{ success: true; entries: ShowcaseMatrixEntryDto[]; tradePointIds: string[] }> {
+  const statuses = parseScopeStatuses(params.statuses);
+
+  if (!vis.unrestricted && vis.visibleCodes.size === 0) {
+    return { success: true, entries: [], tradePointIds: [] };
+  }
+
+  const queryParams: unknown[] = [];
+  const conditions: string[] = [];
+
+  if (!vis.unrestricted) {
+    queryParams.push(Array.from(vis.visibleCodes));
+    conditions.push(`upper(regexp_replace(dealer_id, '^client-', '')) = ANY($${queryParams.length}::text[])`);
+  }
+  if (statuses && statuses.length > 0) {
+    queryParams.push(statuses);
+    conditions.push(`status = ANY($${queryParams.length}::text[])`);
+  }
+
+  let sql = `SELECT * FROM showcase_matrix_entries`;
+  if (conditions.length > 0) sql += ` WHERE ${conditions.join(" AND ")}`;
+  sql += ` ORDER BY updated_at DESC`;
+
+  const r = await pool.query<Record<string, unknown>>(sql, queryParams);
+  const entries = r.rows.map(mapEntryRow);
+  const tradePointIds = Array.from(new Set(entries.map((e) => e.tradePointId).filter(Boolean)));
+  return { success: true, entries, tradePointIds };
+}
+
 export async function handleShowcaseMatrixScope(
   pool: PoolLike,
   params: { tradePointIds?: unknown; statuses?: unknown },
+  vis?: ShowcaseVisibility,
 ): Promise<{ success: true; entries: ShowcaseMatrixEntryDto[] }> {
   const tradePointIds = parseScopeTradePointIds(params.tradePointIds);
   const statuses = parseScopeStatuses(params.statuses);
@@ -646,15 +714,23 @@ export async function handleShowcaseMatrixScope(
   sql += ` ORDER BY updated_at DESC`;
 
   const r = await pool.query<Record<string, unknown>>(sql, queryParams);
-  return { success: true, entries: r.rows.map(mapEntryRow) };
+  let entries = r.rows.map(mapEntryRow);
+  if (vis && !vis.unrestricted) {
+    entries = entries.filter((e) => isDealerVisible(vis, e.dealerId));
+  }
+  return { success: true, entries };
 }
 
 export async function handleShowcaseMatrixUpsert(
   pool: PoolLike,
   sessionUser: ShowcaseMatrixSessionUser,
   body: Record<string, unknown>,
+  vis?: ShowcaseVisibility,
 ): Promise<{ success: true; entry: ShowcaseMatrixEntryDto }> {
   const input = parseShowcaseMatrixUpsertInput(body);
+  if (vis && !isDealerVisible(vis, input.dealerId)) {
+    throw new ShowcaseMatrixValidationError("Точка вне вашей зоны видимости.", "FORBIDDEN_SCOPE");
+  }
   const { entry } = await upsertShowcaseMatrixEntry(pool, sessionUser, input);
   return { success: true, entry };
 }
@@ -663,6 +739,7 @@ export async function handleShowcaseMatrixBatchSync(
   pool: PoolLike,
   sessionUser: ShowcaseMatrixSessionUser,
   body: Record<string, unknown>,
+  vis?: ShowcaseVisibility,
 ): Promise<{
   success: true;
   results: ShowcaseMatrixBatchResultItem[];
@@ -684,6 +761,10 @@ export async function handleShowcaseMatrixBatchSync(
       typeof op.clientOpId === "string" && op.clientOpId.trim() ? op.clientOpId.trim() : undefined;
     try {
       const input = parseShowcaseMatrixUpsertInput(op);
+      if (vis && !isDealerVisible(vis, input.dealerId)) {
+        results.push({ clientOpId, error: "Точка вне вашей зоны видимости." });
+        continue;
+      }
       const { entry, idempotent } = await upsertShowcaseMatrixEntry(pool, sessionUser, input);
       results.push({ clientOpId: clientOpId ?? input.clientOpId ?? undefined, entry });
       if (idempotent) skipped += 1;
