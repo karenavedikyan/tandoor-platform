@@ -40,7 +40,8 @@ export type MarketingBriefBlockType =
   | "callout"
   | "products"
   | "price_table"
-  | "bonus";
+  | "bonus"
+  | "image";
 
 export type BriefProductSegment = "top150" | "top350" | "top500" | "top500plus";
 
@@ -126,6 +127,13 @@ export type CalloutBlockPayload = {
   tone: "info" | "warning" | "success";
   heading?: string;
   body: string;
+};
+
+export type ImageBlockPayload = {
+  url?: string;
+  thumbnail_url?: string;
+  caption?: string;
+  alt?: string;
 };
 
 type ApiOk<T> = { success: true; data: T };
@@ -387,6 +395,8 @@ export function blockTypeLabel(type: MarketingBriefBlockType): string {
       return "Прайс";
     case "bonus":
       return "Бонус";
+    case "image":
+      return "Изображение";
     default:
       return type;
   }

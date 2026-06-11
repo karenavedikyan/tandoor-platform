@@ -835,6 +835,11 @@ function extractCoverFromBlocks(blocks: MarketingBriefBlockRow[]): string | null
       if (typeof url === "string" && url.trim()) return url.trim();
     }
   }
+  for (const block of blocks) {
+    if (block.type !== "image") continue;
+    const url = block.payload.url;
+    if (typeof url === "string" && url.trim()) return url.trim();
+  }
   return null;
 }
 
