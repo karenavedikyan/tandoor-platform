@@ -85,15 +85,16 @@ type ResolveResponse =
 async function copyText(label: string, text: string, onFallback: (v: string) => void): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) return;
+  const payload = `${label}:\n${trimmed}`;
   try {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(trimmed);
+      await navigator.clipboard.writeText(payload);
       return;
     }
   } catch {
     /* fallback */
   }
-  onFallback(`${label}\n\n${trimmed}`);
+  onFallback(payload);
 }
 
 function normalizePropName(name: string): string {
