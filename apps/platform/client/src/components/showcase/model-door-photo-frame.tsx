@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type ModelDoorPhotoFrameSize = "list" | "m" | "s";
@@ -30,6 +31,7 @@ export function ModelDoorPhotoFrame({
   imgPaddingClass?: string;
   placeholderDensity?: ModelDoorPhotoPlaceholderDensity;
 }) {
+  const [failed, setFailed] = useState(false);
   const resolvedFrameClass = frameClass ?? (size ? SIZE_FRAME_CLASS[size] : "h-20 w-16 shrink-0");
   const emptyClass =
     placeholderDensity === "micro"
@@ -41,6 +43,12 @@ export function ModelDoorPhotoFrame({
   const imageSrc = src?.trim() || null;
   const isAssignment = variant === "assignment";
 
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const showImage = Boolean(imageSrc && !failed);
+
   return (
     <div
       className={cn(
@@ -49,9 +57,9 @@ export function ModelDoorPhotoFrame({
         resolvedFrameClass,
       )}
     >
-      {imageSrc ? (
+      {showImage ? (
         <img
-          src={imageSrc}
+          src={imageSrc!}
           alt={alt ?? ""}
           data-testid={imgTestId}
           className={cn(
@@ -59,6 +67,7 @@ export function ModelDoorPhotoFrame({
             imgPaddingClass,
           )}
           loading="lazy"
+          onError={() => setFailed(true)}
         />
       ) : (
         <span

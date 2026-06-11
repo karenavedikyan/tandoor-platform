@@ -42,6 +42,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
+import { optimizedImage } from "@/lib/catalog-image";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import type { ModelDoorPhotoFrameSize } from "@/components/showcase/model-door-photo-frame";
@@ -141,6 +142,12 @@ function itemsGridClass(viewMode: AssignmentViewMode): string {
 
 function photoSizeForView(viewMode: AssignmentViewMode): ModelDoorPhotoFrameSize {
   return viewMode;
+}
+
+function thumbWidthForViewMode(viewMode: AssignmentViewMode): number {
+  if (viewMode === "list") return 120;
+  if (viewMode === "m") return 320;
+  return 240;
 }
 
 const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
@@ -775,6 +782,8 @@ function AssignmentItemCard({
       </div>
     ) : null;
 
+  const optimizedThumbSrc = optimizedImage(modelImageSrc, thumbWidthForViewMode(viewMode)) ?? null;
+
   const openPresentation = () => onOpenPresentation(item, modelImageSrc);
 
   const presentationTrigger = (
@@ -787,7 +796,7 @@ function AssignmentItemCard({
       aria-label={`Презентация: ${item.modelName || item.targetId}`}
     >
       <ModelDoorPhotoFrame
-        src={modelImageSrc}
+        src={optimizedThumbSrc}
         alt={item.modelName}
         size={photoSize}
         variant="assignment"
@@ -856,7 +865,7 @@ function AssignmentItemCard({
           aria-label={`Презентация: ${item.modelName || item.targetId}`}
         >
           <ModelDoorPhotoFrame
-            src={modelImageSrc}
+            src={optimizedThumbSrc}
             alt={item.modelName}
             size={photoSize}
             variant="assignment"
