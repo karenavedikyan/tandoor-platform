@@ -52,17 +52,17 @@ import { cn } from "@/lib/utils";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 
 const FIELD_CLASS =
-  "rounded-[6px] border border-[#E8EAEE] bg-[#F9FAFF] text-[#222631] focus-visible:ring-[#9ACA3C]/30";
+  "rounded-[6px] border border-card-border bg-background text-foreground focus-visible:ring-ring/30";
 
 function saveStatusText(
   saveState: "idle" | "saving" | "saved" | "error",
   readOnlyFields: boolean,
 ): { text: string; className: string } {
   if (readOnlyFields) {
-    return { text: "Только для просмотра", className: "text-[#8F96B0]" };
+    return { text: "Только для просмотра", className: "text-muted-foreground" };
   }
   if (saveState === "saving") {
-    return { text: "Сохранение…", className: "text-[#8F96B0]" };
+    return { text: "Сохранение…", className: "text-muted-foreground" };
   }
   if (saveState === "saved") {
     return { text: "Сохранено", className: "text-[#9ACA3C]" };
@@ -70,7 +70,7 @@ function saveStatusText(
   if (saveState === "error") {
     return { text: "Ошибка сохранения", className: "text-destructive" };
   }
-  return { text: "Изменения сохраняются автоматически", className: "text-[#8F96B0]" };
+  return { text: "Изменения сохраняются автоматически", className: "text-muted-foreground" };
 }
 
 export default function MarketingBriefEditorPage() {
@@ -221,17 +221,17 @@ export default function MarketingBriefEditorPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center bg-[#EEEFF6]" data-testid="page-marketing-brief-editor">
-        <Loader2 className="h-8 w-8 animate-spin text-[#8F96B0]" aria-hidden />
+      <div className="flex min-h-[40vh] items-center justify-center bg-background" data-testid="page-marketing-brief-editor">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
       </div>
     );
   }
 
   if (!brief) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 bg-[#EEEFF6] px-4 pb-24 pt-4" data-testid="page-marketing-brief-editor">
-        <p className="text-sm text-[#8F96B0]">Бриф не найден.</p>
-        <Button asChild variant="outline" className="rounded-[6px] border-[#E8EAEE] bg-white">
+      <div className="mx-auto max-w-lg space-y-4 bg-background px-4 pb-24 pt-4" data-testid="page-marketing-brief-editor">
+        <p className="text-sm text-muted-foreground">Бриф не найден.</p>
+        <Button asChild variant="outline" className="rounded-[6px] border-card-border bg-card">
           <Link href="/marketing-briefs">К списку</Link>
         </Button>
       </div>
@@ -242,23 +242,23 @@ export default function MarketingBriefEditorPage() {
   const saveStatus = saveStatusText(saveState, readOnlyFields);
 
   return (
-    <div className="min-h-screen bg-[#EEEFF6] pb-24" data-testid="page-marketing-brief-editor">
+    <div className="min-h-screen bg-background pb-24" data-testid="page-marketing-brief-editor">
       <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
             variant="outline"
-            className="gap-2 rounded-[6px] border-[#E8EAEE] bg-white text-[#343F5B] hover:bg-[#F9FAFF]"
+            className="gap-2 rounded-[6px] border-card-border bg-card text-foreground hover:bg-background"
             data-testid="button-marketing-brief-back"
             onClick={() => setLocation("/marketing-briefs")}
           >
-            <ArrowLeft className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+            <ArrowLeft className="h-4 w-4 text-muted-foreground" aria-hidden />
             Назад
           </Button>
           <Button
             type="button"
             variant="outline"
-            className="gap-1.5 rounded-[6px] border-[1.5px] border-[#9ACA3C] bg-white text-[#9ACA3C] hover:bg-[#9ACA3C]/5"
+            className="gap-1.5 rounded-[6px] border-[1.5px] border-[#9ACA3C] bg-card text-[#9ACA3C] hover:bg-[#9ACA3C]/5"
             data-testid="button-marketing-brief-preview"
             onClick={() => {
               const url = buildBrowserHashAppHref(`/marketing-briefs/view/${brief.id}`, { preview: 1 });
@@ -297,7 +297,7 @@ export default function MarketingBriefEditorPage() {
               type="button"
               size="sm"
               variant="outline"
-              className="rounded-[6px] border-[#E8EAEE] bg-white"
+              className="rounded-[6px] border-card-border bg-card"
               onClick={() => setArchiveOpen(true)}
             >
               В архив
@@ -307,7 +307,7 @@ export default function MarketingBriefEditorPage() {
               type="button"
               size="sm"
               variant="outline"
-              className="rounded-[6px] border-[#E8EAEE] bg-white"
+              className="rounded-[6px] border-card-border bg-card"
               onClick={() => void runStatusAction(restoreBrief, "Восстановлено")}
             >
               Восстановить
@@ -316,7 +316,7 @@ export default function MarketingBriefEditorPage() {
           {brief.status === "published" ? (
             <>
               <BriefShareActions brief={brief} onBriefUpdated={setBrief} />
-              <Button asChild variant="ghost" size="sm" className="text-[#8F96B0]">
+              <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
                 <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
               </Button>
             </>
@@ -333,17 +333,17 @@ export default function MarketingBriefEditorPage() {
         ) : null}
 
         {viewStats ? (
-          <p className="text-sm text-[#8F96B0]" data-testid="text-marketing-brief-view-stats">
+          <p className="text-sm text-muted-foreground" data-testid="text-marketing-brief-view-stats">
             👁 Прочитали: {viewStats.viewed_count} из {viewStats.audience_count} менеджеров ({viewStats.percent}%)
           </p>
         ) : null}
 
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0 flex-1 space-y-6">
-            <section className="relative overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white">
+            <section className="relative overflow-hidden rounded-[7px] border border-card-border bg-card">
               <div className="absolute inset-x-0 top-0 h-1.5 bg-[#9ACA3C]" aria-hidden />
               <div className="flex items-start justify-between gap-3 px-5 pb-5 pt-6 sm:px-6">
-                <h2 className="text-xl font-semibold text-[#222631] sm:text-2xl">Метаданные</h2>
+                <h2 className="text-xl font-semibold text-foreground sm:text-2xl">Метаданные</h2>
                 <p
                   className={cn("shrink-0 text-sm", saveStatus.className)}
                   data-testid="text-marketing-brief-save-status"
@@ -354,7 +354,7 @@ export default function MarketingBriefEditorPage() {
               <div className="space-y-4 px-5 pb-6 sm:px-6">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-[#8F96B0]">Категория</Label>
+                    <Label className="text-xs text-muted-foreground">Категория</Label>
                     <Select
                       value={category}
                       onValueChange={(v) => setCategory(v as MarketingBriefCategory)}
@@ -372,7 +372,7 @@ export default function MarketingBriefEditorPage() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-[#8F96B0]">Период</Label>
+                    <Label className="text-xs text-muted-foreground">Период</Label>
                     <div className="relative">
                       <Select value={periodLabel} onValueChange={setPeriodLabel} disabled={readOnlyFields}>
                         <SelectTrigger className={cn(FIELD_CLASS, "pr-9")}>
@@ -387,14 +387,14 @@ export default function MarketingBriefEditorPage() {
                         </SelectContent>
                       </Select>
                       <Calendar
-                        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8F96B0]"
+                        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                         aria-hidden
                       />
                     </div>
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-[#8F96B0]">Название</Label>
+                  <Label className="text-xs text-muted-foreground">Название</Label>
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -405,7 +405,7 @@ export default function MarketingBriefEditorPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-[#8F96B0]">Пояснительный текст</Label>
+                  <Label className="text-xs text-muted-foreground">Пояснительный текст</Label>
                   <Textarea
                     rows={4}
                     value={coverText}
@@ -434,12 +434,12 @@ export default function MarketingBriefEditorPage() {
             />
 
             {revisions.length > 0 ? (
-              <section className="space-y-2 rounded-[7px] border border-[#E8EAEE] bg-white p-4 sm:p-5">
-                <h2 className="text-sm font-semibold text-[#222631]">История изменений</h2>
-                <ul className="space-y-2 text-xs text-[#8F96B0]">
+              <section className="space-y-2 rounded-[7px] border border-card-border bg-card p-4 sm:p-5">
+                <h2 className="text-sm font-semibold text-foreground">История изменений</h2>
+                <ul className="space-y-2 text-xs text-muted-foreground">
                   {revisions.slice(0, 10).map((r) => (
-                    <li key={r.id} className="flex flex-wrap gap-x-2 gap-y-0.5 border-b border-[#E8EAEE] pb-2 last:border-0">
-                      <span className="tabular-nums text-[#222631]">{formatBriefUpdatedAt(r.created_at)}</span>
+                    <li key={r.id} className="flex flex-wrap gap-x-2 gap-y-0.5 border-b border-card-border pb-2 last:border-0">
+                      <span className="tabular-nums text-foreground">{formatBriefUpdatedAt(r.created_at)}</span>
                       <span>{r.actor_name ?? "—"}</span>
                       <span>{revisionActionLabel(r.action)}</span>
                     </li>

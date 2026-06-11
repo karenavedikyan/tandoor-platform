@@ -31,7 +31,7 @@ import type { MarketingBriefBlockRow, PriceTableRow } from "@/lib/marketing-brie
 import { cn } from "@/lib/utils";
 
 const FIELD_CLASS =
-  "h-9 rounded-[6px] border border-[#E8EAEE] bg-[#F9FAFF] text-[#222631] focus-visible:ring-[#9ACA3C]/30";
+  "h-9 rounded-[6px] border border-card-border bg-background text-foreground focus-visible:ring-ring/30";
 
 function SortablePriceRow({
   row,
@@ -54,12 +54,12 @@ function SortablePriceRow({
   const style = { transform: CSS.Transform.toString(transform), transition };
 
   return (
-    <tr ref={setNodeRef} style={style} className={cn(isDragging && "bg-[#F9FAFF]")}>
+    <tr ref={setNodeRef} style={style} className={cn(isDragging && "bg-background")}>
       <td className="w-8 p-1.5">
         {!readOnly ? (
           <button
             type="button"
-            className="flex h-9 w-9 cursor-grab items-center justify-center rounded-[6px] text-[#8F96B0] hover:bg-white active:cursor-grabbing"
+            className="flex h-9 w-9 cursor-grab items-center justify-center rounded-[6px] text-muted-foreground hover:bg-card active:cursor-grabbing"
             aria-label="Перетащить"
             {...attributes}
             {...listeners}
@@ -97,7 +97,7 @@ function SortablePriceRow({
         />
       </td>
       {showBenefit ? (
-        <td className="p-1.5 text-sm tabular-nums text-[#8F96B0] whitespace-nowrap">
+        <td className="p-1.5 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
           {benefit != null ? formatBriefPriceRub(benefit) : "—"}
         </td>
       ) : null}
@@ -115,7 +115,7 @@ function SortablePriceRow({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-9 w-9 text-[#8F96B0] hover:text-destructive"
+            className="h-9 w-9 text-muted-foreground hover:text-destructive"
             onClick={onDelete}
           >
             <Trash2 className="h-4 w-4" aria-hidden />
@@ -157,14 +157,14 @@ export function PriceTableBlockEditor({
   return (
     <div className="space-y-3" data-testid="price-table-block-editor">
       <div className="space-y-1.5">
-        <Label className="text-xs text-[#222631]">Заголовок таблицы</Label>
+        <Label className="text-xs text-foreground">Заголовок таблицы</Label>
         <Input
           value={p.heading ?? ""}
           disabled={readOnly}
           className={FIELD_CLASS}
           onChange={(e) => onPatch({ heading: e.target.value })}
         />
-        <p className="text-[10px] leading-snug text-[#8F96B0]">
+        <p className="text-[10px] leading-snug text-muted-foreground">
           Например: «АКЦИИ ИЮНЯ» или «НОВЫЕ ЦЕНЫ».
         </p>
       </div>
@@ -175,15 +175,15 @@ export function PriceTableBlockEditor({
           disabled={readOnly}
           onCheckedChange={(v) => onPatch({ show_benefit: v })}
         />
-        <Label htmlFor={`show-benefit-${block.id}`} className="text-xs text-[#222631]">
+        <Label htmlFor={`show-benefit-${block.id}`} className="text-xs text-foreground">
           Показывать выгоду
         </Label>
       </div>
-      <div className="overflow-x-auto rounded-[7px] border border-[#E8EAEE] bg-white">
+      <div className="overflow-x-auto rounded-[7px] border border-card-border bg-card">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="border-b border-[#E8EAEE] bg-[#F9FAFF] text-left text-xs text-[#8F96B0]">
+              <tr className="border-b border-card-border bg-background text-left text-xs text-muted-foreground">
                 <th className="w-8 p-2" />
                 <th className="p-2 font-medium">Модель</th>
                 <th className="p-2 font-medium">Было ₽</th>
@@ -217,7 +217,7 @@ export function PriceTableBlockEditor({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1 rounded-[6px] border-[#E8EAEE] bg-white text-[#343F5B]"
+          className="gap-1 rounded-[6px] border-card-border bg-card text-foreground"
           onClick={() =>
             updateRows([
               ...p.rows,

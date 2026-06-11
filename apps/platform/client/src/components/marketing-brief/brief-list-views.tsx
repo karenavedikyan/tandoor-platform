@@ -201,11 +201,11 @@ export function BriefStatusBadge({
     },
     draft: {
       label: "Черновик",
-      cls: onAccent ? "bg-white text-[#343F5B]" : "bg-[#F9FAFF] text-[#343F5B] border border-[#E8EAEE]",
+      cls: onAccent ? "bg-white text-[#343F5B]" : "bg-background text-foreground border border-card-border",
     },
     archived: {
       label: "Архивировано",
-      cls: onAccent ? "bg-white text-[#8F96B0]" : "bg-[#F9FAFF] text-[#8F96B0] border border-[#E8EAEE]",
+      cls: onAccent ? "bg-white text-[#8F96B0]" : "bg-background text-muted-foreground border border-card-border",
     },
   } as const;
   const m = map[status] ?? map.draft;
@@ -546,7 +546,7 @@ function MarketingBriefCard({
     <article
       className={cn(
         "group relative flex cursor-pointer flex-col rounded-[7px] border p-4 transition-shadow hover:shadow-sm",
-        isPublished ? "border-[#9ACA3C] bg-[#9ACA3C]" : "border-[#E8EAEE] bg-white",
+        isPublished ? "border-[#9ACA3C] bg-[#9ACA3C]" : "border-card-border bg-card",
         isArchived && !isPublished && "opacity-80",
       )}
       data-testid={`card-marketing-brief-${b.id}`}
@@ -573,7 +573,7 @@ function MarketingBriefCard({
               aria-label={`Выбрать ${b.title}`}
               data-testid={`checkbox-brief-${b.id}`}
               className={cn(
-                "border-[#E8EAEE] data-[state=checked]:border-[#9ACA3C] data-[state=checked]:bg-[#9ACA3C]",
+                "border-card-border data-[state=checked]:border-[#9ACA3C] data-[state=checked]:bg-[#9ACA3C]",
                 isPublished && "border-white/60 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#9ACA3C]",
                 !selected && !selectionActive && "opacity-0 group-hover:opacity-100",
               )}
@@ -597,7 +597,7 @@ function MarketingBriefCard({
       <h3
         className={cn(
           "text-xl font-semibold leading-snug",
-          isPublished ? "text-white" : isArchived ? "text-[#8F96B0]" : "text-[#222631]",
+          isPublished ? "text-white" : isArchived ? "text-muted-foreground" : "text-foreground",
         )}
         data-testid={`title-${b.id}`}
       >
@@ -606,7 +606,7 @@ function MarketingBriefCard({
       <p
         className={cn(
           "mt-1 text-base font-normal",
-          isPublished ? "text-white/90" : "text-[#8F96B0]",
+          isPublished ? "text-white/90" : "text-muted-foreground",
         )}
       >
         {formatMarketingBriefPeriodLabel(b.period_label)}
@@ -615,7 +615,7 @@ function MarketingBriefCard({
       <div
         className={cn(
           "mt-3 inline-flex w-fit flex-wrap items-center gap-1.5 rounded-md px-2 py-1",
-          isPublished ? "bg-white/95" : "bg-[#F9FAFF]",
+          isPublished ? "bg-white/95" : "bg-background",
         )}
       >
         <CategoryBadge category={b.category ?? "brief"} />
@@ -626,7 +626,7 @@ function MarketingBriefCard({
       <p
         className={cn(
           "mt-auto pt-3 text-[10px]",
-          isPublished ? "text-white/80" : "text-[#8F96B0]",
+          isPublished ? "text-white/80" : "text-muted-foreground",
         )}
       >
         {b.author_name ? `${b.author_name} · ` : ""}
@@ -644,10 +644,10 @@ function AddActivityTile({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       data-testid="button-add-marketing-activity"
     >
-      <span className="flex h-20 w-20 items-center justify-center rounded-full border border-[#E8EAEE] bg-white text-3xl font-light text-[#9ACA3C] transition-colors hover:border-[#9ACA3C]/50">
+      <span className="flex h-20 w-20 items-center justify-center rounded-full border border-card-border bg-card text-3xl font-light text-[#9ACA3C] transition-colors hover:border-[#9ACA3C]/50">
         +
       </span>
-      <span className="text-xs text-[#8F96B0]">Добавить активность</span>
+      <span className="text-xs text-muted-foreground">Добавить активность</span>
     </button>
   );
 }
@@ -710,7 +710,7 @@ function BriefCategorySection({
   return (
     <section className="space-y-4" data-testid={`section-marketing-briefs-category-${category}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-2xl font-semibold text-[#222631]">{label}</h2>
+        <h2 className="text-2xl font-semibold text-foreground">{label}</h2>
         {canManage && selection && sectionIds.length > 0 ? (
           <button
             type="button"
@@ -742,7 +742,7 @@ function BriefCategorySection({
 
       <button
         type="button"
-        className="text-sm text-[#8F96B0] hover:text-[#343F5B]"
+        className="text-sm text-muted-foreground hover:text-foreground"
         onClick={onToggleExpanded}
         data-testid={`button-toggle-category-${category}`}
       >

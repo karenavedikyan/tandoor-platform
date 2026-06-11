@@ -489,15 +489,15 @@ export default function MarketingBriefsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#EEEFF6] pb-24" data-testid="page-marketing-briefs">
+    <div className="min-h-screen bg-background pb-24" data-testid="page-marketing-briefs">
       <div className="mx-auto max-w-6xl space-y-5 px-4 pt-4 sm:px-6">
         <FloatingBackButton href="/main" label="На главную" testId="button-floating-back-marketing-briefs" />
 
-        <div className="flex overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white">
+        <div className="flex overflow-hidden rounded-[7px] border border-card-border bg-card">
           <div className="w-1.5 shrink-0 bg-[#9ACA3C]" aria-hidden />
           <div className="px-5 py-5">
-            <h1 className="text-2xl font-semibold text-[#222631]">Маркетинговые активности</h1>
-            <p className="mt-1 max-w-3xl text-base font-normal text-[#8F96B0]">
+            <h1 className="text-2xl font-semibold text-foreground">Маркетинговые активности</h1>
+            <p className="mt-1 max-w-3xl text-base font-normal text-muted-foreground">
               Ежемесячные материалы для команды продаж. Создание и публикация ведутся в этом кабинете.
             </p>
           </div>
@@ -506,7 +506,7 @@ export default function MarketingBriefsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <div
-              className="inline-flex flex-wrap rounded-[6px] border border-[#E8EAEE] bg-white p-1"
+              className="inline-flex flex-wrap rounded-[6px] border border-card-border bg-card p-1"
               role="tablist"
               aria-label="Фильтр по статусу"
             >
@@ -519,8 +519,8 @@ export default function MarketingBriefsPage() {
                   className={cn(
                     "rounded-[6px] px-3 py-1.5 text-sm transition-colors",
                     statusFilter === tab.value
-                      ? "bg-white font-medium text-[#222631] shadow-sm"
-                      : "text-[#8F96B0] hover:text-[#343F5B]",
+                      ? "bg-card font-medium text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                   onClick={() => setStatusFilter(tab.value)}
                   data-testid={`tab-brief-status-${tab.value}`}
@@ -530,7 +530,7 @@ export default function MarketingBriefsPage() {
               ))}
             </div>
             <Select value={periodFilter} onValueChange={setPeriodFilter}>
-              <SelectTrigger className="w-full min-w-[180px] rounded-[6px] border-[#E8EAEE] bg-white sm:w-[220px]">
+              <SelectTrigger className="w-full min-w-[180px] rounded-[6px] border-card-border bg-card sm:w-[220px]">
                 <SelectValue placeholder="Все периоды" />
               </SelectTrigger>
               <SelectContent>
@@ -543,7 +543,7 @@ export default function MarketingBriefsPage() {
             </Select>
           </div>
           <div
-            className="flex shrink-0 rounded-[6px] border border-[#E8EAEE] bg-white p-0.5"
+            className="flex shrink-0 rounded-[6px] border border-card-border bg-card p-0.5"
             role="group"
             aria-label="Режим отображения списка"
             data-testid="brief-list-view-mode"
@@ -561,7 +561,7 @@ export default function MarketingBriefsPage() {
                 variant="ghost"
                 className={cn(
                   "h-9 w-9 rounded-[6px]",
-                  viewMode === mode && "bg-white text-[#222631] shadow-sm",
+                  viewMode === mode && "bg-card text-foreground shadow-sm",
                 )}
                 aria-label={label}
                 aria-pressed={viewMode === mode}
@@ -576,7 +576,7 @@ export default function MarketingBriefsPage() {
 
         {loading ? (
           <div className="flex justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-[#8F96B0]" aria-hidden />
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
           </div>
         ) : (
           <div className="space-y-3" data-testid="section-marketing-briefs-list">
