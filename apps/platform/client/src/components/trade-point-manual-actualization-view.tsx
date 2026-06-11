@@ -35,6 +35,7 @@ import {
   canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { getClientCategoryLabel } from "@/lib/client-category";
+import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
@@ -423,6 +424,19 @@ export function TradePointManualActualizationView(props: {
       setOpenSections((prev) => prev.filter((id) => id !== "tasks"));
     }
   }, [showTasksSection, openSections]);
+
+  const routeQs = useRouteSearchParams();
+
+  useEffect(() => {
+    if (!sectionsHydrated) return;
+    if (routeQs.get("tradePointShowcase") !== "1") return;
+    setOpenSections((prev) => (prev.includes("showcase") ? prev : [...prev, "showcase"]));
+    requestAnimationFrame(() => {
+      document
+        .querySelector('[data-testid="section-trade-point-showcase-portals"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [routeQs, sectionsHydrated, point.id]);
 
   const onAccordionValueChange = useCallback(
     (next: string[]) => {
