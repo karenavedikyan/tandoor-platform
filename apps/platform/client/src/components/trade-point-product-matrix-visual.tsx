@@ -16,6 +16,7 @@ import type {
 } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import { MATRIX_TASK_STATUS_LABEL } from "@/lib/trade-point-task-data";
+import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 
 export type ProductMatrixViewMode = "large" | "compact" | "mini" | "list";
 
@@ -63,57 +64,6 @@ function productMatrixCardShellClass(presence: MatrixPresenceStatus): string {
     return "border-2 border-amber-400/90 bg-gradient-to-br from-amber-50 via-orange-50/70 to-amber-50/40 shadow-md ring-1 ring-amber-300/40";
   }
   return "border border-border bg-card shadow-sm";
-}
-
-/** Фото двери: фиксированная рамка + object-contain (как в матрице витрины). */
-function ModelDoorPhotoFrame({
-  src,
-  alt,
-  frameClass,
-  imgTestId,
-  imgPaddingClass = "p-2",
-  placeholderDensity = "comfortable",
-}: {
-  src: string;
-  alt?: string;
-  frameClass: string;
-  imgTestId?: string;
-  imgPaddingClass?: string;
-  placeholderDensity?: "comfortable" | "compact" | "micro";
-}) {
-  const emptyClass =
-    placeholderDensity === "micro"
-      ? "text-[8px] font-medium text-muted-foreground/80"
-      : placeholderDensity === "compact"
-        ? "text-[8px] text-muted-foreground"
-        : "text-[9px] text-muted-foreground";
-  const emptyLabel = placeholderDensity === "micro" ? "—" : "Нет фото";
-
-  return (
-    <div className={cn("relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40", frameClass)}>
-      {src ? (
-        <img
-          src={src}
-          alt={alt ?? ""}
-          data-testid={imgTestId}
-          className={cn(
-            "absolute inset-0 box-border h-full w-full object-contain object-center",
-            imgPaddingClass,
-          )}
-          loading="lazy"
-        />
-      ) : (
-        <span
-          className={cn(
-            "absolute inset-0 flex items-center justify-center bg-muted/25 px-0.5 text-center leading-none",
-            emptyClass,
-          )}
-        >
-          {emptyLabel}
-        </span>
-      )}
-    </div>
-  );
 }
 
 function ProductMatrixSummaryCard({ summary }: { summary: TradePointMatrixSummary }) {

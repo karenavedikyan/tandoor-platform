@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import {
-  Camera,
-  CheckCircle2,
   AlertTriangle,
-  Circle,
+  Camera,
+  Check,
+  Grid2x2,
+  Grid3x3,
+  List,
   Loader2,
   Package,
+  Send,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -24,12 +28,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
+import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
+import type { ModelDoorPhotoFrameSize } from "@/components/showcase/model-door-photo-frame";
 import {
   addAssignmentComment,
   createFollowup,
@@ -44,6 +49,15 @@ import {
 } from "@/lib/showcase-assignments-api";
 import type { AssignmentStatus } from "@shared/showcase-assignments-handlers";
 
+type AssignmentViewMode = "list" | "m" | "s";
+
+type CatalogImageEntry = {
+  id: string;
+  name: string;
+  image_path: string | null;
+  image_url: string | null;
+};
+
 const ASSIGNMENT_STATUS_LABEL: Record<AssignmentStatus, string> = {
   open: "Открыто",
   in_progress: "В работе",
@@ -57,6 +71,7 @@ const ITEM_STATUS_LABEL: Record<AssignmentItemStatus, string> = {
   shipped: "Отгружено",
   installed: "На витрине",
   problem: "Проблема",
+  not_relevant: "Уже не актуально",
 };
 
 const PROBLEM_PRESETS = [
@@ -64,6 +79,8 @@ const PROBLEM_PRESETS = [
   { value: "Клиент отказался", label: "Клиент отказался" },
   { value: "__other__", label: "Другое" },
 ] as const;
+
+const DONE_STATUSES = new Set<AssignmentItemStatus>(["shipped", "installed", "not_relevant"]);
 
 function assignmentStatusTone(status: AssignmentStatus): string {
   if (status === "verified" || status === "closed") return "border-emerald-200 bg-emerald-50 text-emerald-900";
@@ -76,13 +93,28 @@ function itemStatusTone(status: AssignmentItemStatus): string {
   if (status === "installed") return "border-emerald-200 bg-emerald-50 text-emerald-900";
   if (status === "shipped") return "border-sky-200 bg-sky-50 text-sky-950";
   if (status === "problem") return "border-red-200 bg-red-50 text-red-900";
+  if (status === "not_relevant") return "border-border bg-muted/60 text-muted-foreground";
   return "border-border bg-muted/60 text-foreground";
+}
+
+function isItemDone(item: AssignmentDto["items"][number]): boolean {
+  return item.done || DONE_STATUSES.has(item.itemStatus);
 }
 
 function isDueOverdue(dueDate: string | null): boolean {
   if (!dueDate) return false;
   const today = new Date().toISOString().slice(0, 10);
   return dueDate < today;
+}
+
+function itemsGridClass(viewMode: AssignmentViewMode): string {
+  if (viewMode === "list") return "flex flex-col gap-2";
+  if (viewMode === "m") return "grid grid-cols-2 gap-3";
+  return "grid grid-cols-2 gap-2 sm:grid-cols-3";
+}
+
+function photoSizeForView(viewMode: AssignmentViewMode): ModelDoorPhotoFrameSize {
+  return viewMode;
 }
 
 const VERIFY_ROLES = new Set(["admin", "director", "rop", "regional_manager"]);
@@ -114,6 +146,103 @@ function canUserCommentAssignment(
   if (!userId || !role) return false;
   if (VERIFY_ROLES.has(role)) return true;
   return assignment.createdBy === userId || assignment.assigneeUserId === userId;
+}
+
+async function fetchCatalogImagesByIds(ids: string[]): Promise<Map<string, CatalogImageEntry>> {
+  const map = new Map<string, CatalogImageEntry>();
+  if (!ids.length) return map;
+  const res = await fetch(`/api/catalog/products?ids=${encodeURIComponent(ids.join(","))}`, {
+    credentials: "include",
+  });
+  if (!res.ok) return map;
+  const json = (await res.json()) as {
+    success?: boolean;
+    items?: CatalogImageEntry[];
+  };
+  if (json.success !== true || !Array.isArray(json.items)) return map;
+  for (const item of json.items) {
+    map.set(item.id, item);
+  }
+  return map;
+}
+
+function formatCommentDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function ChatInputRow({
+  value,
+  onChange,
+  onSend,
+  placeholder,
+  disabled,
+  testIdInput,
+  testIdSend,
+  hideSendButton,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  placeholder: string;
+  disabled?: boolean;
+  testIdInput?: string;
+  testIdSend?: string;
+  hideSendButton?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!hideSendButton && e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      onSend();
+    }
+  };
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [value]);
+
+  return (
+    <div className="flex items-end gap-2">
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        rows={1}
+        placeholder={placeholder}
+        disabled={disabled}
+        data-testid={testIdInput}
+        className="min-h-9 max-h-[120px] flex-1 resize-none rounded-full border border-input bg-background px-3 py-2 text-sm leading-snug shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      />
+      {hideSendButton ? null : (
+        <Button
+          type="button"
+          size="icon"
+          className="h-9 w-9 shrink-0 rounded-full"
+          disabled={disabled || !value.trim()}
+          onClick={onSend}
+          data-testid={testIdSend}
+          aria-label="Отправить"
+        >
+          <Send className="h-4 w-4" aria-hidden />
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function AssignmentCommentsBlock({
@@ -169,7 +298,7 @@ function AssignmentCommentsBlock({
         {commentsQ.isLoading ? (
           <p className="text-sm text-muted-foreground">Загрузка…</p>
         ) : commentsQ.isError ? null : (
-          <ul className="space-y-3" data-testid="assignment-comments-list">
+          <ul className="space-y-2" data-testid="assignment-comments-list">
             {comments.length === 0 ? (
               <li className="text-sm text-muted-foreground">Комментариев пока нет</li>
             ) : (
@@ -178,61 +307,44 @@ function AssignmentCommentsBlock({
                 return (
                   <li
                     key={c.id}
-                    className={cn(
-                      "rounded-lg border px-3 py-2 text-sm",
-                      isOwn ? "border-primary/20 bg-primary/5" : "border-border/70 bg-muted/20",
-                    )}
+                    className={cn("flex", isOwn ? "justify-end" : "justify-start")}
                   >
-                    <p className="text-xs text-muted-foreground">
-                      {c.authorName ?? "—"}
-                      {c.authorRole ? ` · ${c.authorRole}` : ""}
-                      {" · "}
-                      {formatCommentDate(c.createdAt)}
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-foreground">{c.body}</p>
+                    <div
+                      className={cn(
+                        "max-w-[85%] rounded-2xl px-3 py-2",
+                        isOwn
+                          ? "rounded-br-sm bg-primary/10 text-foreground"
+                          : "rounded-bl-sm border border-border/60 bg-muted/30 text-foreground",
+                      )}
+                    >
+                      <p className="text-[10px] leading-tight text-muted-foreground">
+                        {c.authorName ?? "—"}
+                        {c.authorRole ? ` · ${c.authorRole}` : ""}
+                        {" · "}
+                        {formatCommentDate(c.createdAt)}
+                      </p>
+                      <p className="mt-0.5 whitespace-pre-wrap break-words text-sm">{c.body}</p>
+                    </div>
                   </li>
                 );
               })
             )}
           </ul>
         )}
-        <div className="space-y-2 border-t border-border/60 pt-3">
-          <Textarea
+        <div className="border-t border-border/60 pt-3">
+          <ChatInputRow
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={3}
+            onChange={setDraft}
+            onSend={() => void handleSend()}
             placeholder="Написать комментарий…"
             disabled={sending}
-            data-testid="textarea-assignment-comment-new"
+            testIdInput="textarea-assignment-comment-new"
+            testIdSend="button-assignment-comment-send"
           />
-          <Button
-            type="button"
-            className="min-h-10 w-full sm:w-auto"
-            disabled={!draft.trim() || sending}
-            onClick={() => void handleSend()}
-            data-testid="button-assignment-comment-send"
-          >
-            {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-            Отправить
-          </Button>
         </div>
       </CardContent>
     </Card>
   );
-}
-
-function formatCommentDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
 }
 
 function AssignmentNotFound() {
@@ -255,19 +367,33 @@ type ItemCardProps = {
   assignment: AssignmentDto;
   item: AssignmentDto["items"][number];
   canEdit: boolean;
+  viewMode: AssignmentViewMode;
+  modelImageSrc: string | null;
   onUpdated: (assignment: AssignmentDto) => void;
 };
 
-function AssignmentItemCard({ assignment, item, canEdit, onUpdated }: ItemCardProps) {
+function AssignmentItemCard({
+  assignment,
+  item,
+  canEdit,
+  viewMode,
+  modelImageSrc,
+  onUpdated,
+}: ItemCardProps) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [customReason, setCustomReason] = useState("");
   const [problemOpen, setProblemOpen] = useState(false);
   const [problemPreset, setProblemPreset] = useState<string>(PROBLEM_PRESETS[0].value);
   const [problemOther, setProblemOther] = useState("");
 
   const readOnly = !canEdit || item.itemStatus === "installed";
+  const done = isItemDone(item);
+  const photoSize = photoSizeForView(viewMode);
+  const isList = viewMode === "list";
 
   const applyStatus = useCallback(
     async (itemStatus: AssignmentItemStatus, problemReason?: string | null) => {
@@ -280,7 +406,9 @@ function AssignmentItemCard({ assignment, item, canEdit, onUpdated }: ItemCardPr
           problemReason: problemReason ?? null,
         });
         onUpdated(next);
+        setMenuOpen(false);
         setProblemOpen(false);
+        setCustomReason("");
         setProblemOther("");
       } catch (err) {
         toast({
@@ -335,8 +463,7 @@ function AssignmentItemCard({ assignment, item, canEdit, onUpdated }: ItemCardPr
   );
 
   const confirmProblem = () => {
-    const reason =
-      problemPreset === "__other__" ? problemOther.trim() : problemPreset;
+    const reason = problemPreset === "__other__" ? problemOther.trim() : problemPreset;
     if (!reason) {
       toast({ title: "Укажите причину проблемы", variant: "destructive" });
       return;
@@ -344,155 +471,279 @@ function AssignmentItemCard({ assignment, item, canEdit, onUpdated }: ItemCardPr
     void applyStatus("problem", reason);
   };
 
-  return (
-    <Card className="rounded-xl border border-border/80" data-testid={`assignment-item-${item.id}`}>
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-start justify-between gap-2">
+  const handleCheckboxChange = (checked: boolean | "indeterminate") => {
+    if (readOnly || busy || uploadingPhoto) return;
+    if (done) {
+      if (checked === false) void applyStatus("pending");
+      return;
+    }
+    if (checked === true) setMenuOpen(true);
+  };
+
+  const completionMenu = (
+    <PopoverContent className="w-56 space-y-2 p-2" align="start" side="bottom">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 w-full justify-start"
+        disabled={busy}
+        onClick={() => void applyStatus("shipped")}
+        data-testid={`button-item-shipped-${item.id}`}
+      >
+        <Check className="mr-2 h-4 w-4" aria-hidden />
+        Отгружено
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-8 w-full justify-start"
+        disabled={busy}
+        onClick={() => void applyStatus("not_relevant", "Уже не актуально")}
+        data-testid={`button-item-not-relevant-${item.id}`}
+      >
+        Уже не актуально
+      </Button>
+      <div className="space-y-1.5 border-t border-border/60 pt-2">
+        <Input
+          value={customReason}
+          onChange={(e) => setCustomReason(e.target.value)}
+          placeholder="Свой вариант…"
+          className="h-8 text-sm"
+          disabled={busy}
+          data-testid={`input-item-custom-reason-${item.id}`}
+        />
+        <Button
+          type="button"
+          size="sm"
+          className="h-8 w-full"
+          disabled={busy || !customReason.trim()}
+          onClick={() => void applyStatus("not_relevant", customReason.trim())}
+          data-testid={`button-item-custom-reason-${item.id}`}
+        >
+          Готово
+        </Button>
+      </div>
+    </PopoverContent>
+  );
+
+  const checkboxControl = readOnly ? (
+    <Checkbox checked={done} disabled className="mt-0.5 shrink-0" />
+  ) : (
+    <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="mt-0.5 shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={(e) => {
+            if (!done) {
+              e.preventDefault();
+              setMenuOpen(true);
+            }
+          }}
+          data-testid={`checkbox-item-${item.id}`}
+          aria-label={done ? "Сбросить позицию" : "Отметить позицию"}
+        >
+          <Checkbox checked={done} onCheckedChange={handleCheckboxChange} disabled={busy || uploadingPhoto} />
+        </button>
+      </PopoverTrigger>
+      {!done ? completionMenu : null}
+    </Popover>
+  );
+
+  const actionButtons = !readOnly ? (
+    <div className="flex shrink-0 items-center gap-1">
+      <Button
+        type="button"
+        size="icon"
+        variant={item.itemStatus === "problem" ? "destructive" : "ghost"}
+        className="h-8 w-8"
+        disabled={busy || uploadingPhoto}
+        onClick={() => setProblemOpen((v) => !v)}
+        data-testid={`button-item-problem-${item.id}`}
+        aria-label="Проблема"
+        title="Проблема"
+      >
+        <AlertTriangle className="h-4 w-4" aria-hidden />
+      </Button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void onPhotoSelected(f);
+        }}
+        data-testid={`input-item-photo-${item.id}`}
+      />
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8"
+        disabled={busy || uploadingPhoto}
+        onClick={() => fileRef.current?.click()}
+        data-testid={`button-item-photo-${item.id}`}
+        aria-label={item.photoUrl ? "Заменить фото" : "Добавить фото"}
+        title={item.photoUrl ? "Заменить фото" : "Добавить фото"}
+      >
+        {uploadingPhoto ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <Camera className="h-4 w-4" aria-hidden />
+        )}
+      </Button>
+    </div>
+  ) : null;
+
+  const statusBadge = (
+    <Badge className={cn("shrink-0 border text-[10px]", itemStatusTone(item.itemStatus))}>
+      {ITEM_STATUS_LABEL[item.itemStatus]}
+    </Badge>
+  );
+
+  const reasonNote =
+    item.itemStatus === "problem" && item.problemReason ? (
+      <p className="text-xs text-red-800">{item.problemReason}</p>
+    ) : item.itemStatus === "not_relevant" && item.problemReason ? (
+      <p className="text-xs text-muted-foreground">{item.problemReason}</p>
+    ) : null;
+
+  const proofPhoto =
+    item.photoThumbUrl || item.photoUrl ? (
+      <a
+        href={item.photoUrl ?? item.photoThumbUrl ?? "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-block shrink-0"
+      >
+        <img
+          src={item.photoThumbUrl ?? item.photoUrl ?? ""}
+          alt={`Фото-доказательство: ${item.modelName}`}
+          className="h-8 w-8 rounded border border-border object-cover"
+        />
+      </a>
+    ) : null;
+
+  const problemForm =
+    !readOnly && problemOpen ? (
+      <div className="col-span-full space-y-2 rounded-md border border-border/80 bg-muted/20 p-2">
+        <Select value={problemPreset} onValueChange={setProblemPreset}>
+          <SelectTrigger className="h-8 text-sm" data-testid={`select-problem-reason-${item.id}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PROBLEM_PRESETS.map((p) => (
+              <SelectItem key={p.value} value={p.value}>
+                {p.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {problemPreset === "__other__" ? (
+          <Input
+            value={problemOther}
+            onChange={(e) => setProblemOther(e.target.value)}
+            placeholder="Опишите проблему"
+            className="h-8 text-sm"
+            data-testid={`input-problem-other-${item.id}`}
+          />
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="destructive"
+          className="h-8"
+          disabled={busy}
+          onClick={confirmProblem}
+          data-testid={`button-problem-confirm-${item.id}`}
+        >
+          Сохранить проблему
+        </Button>
+      </div>
+    ) : null;
+
+  if (isList) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg border border-border/80 bg-card px-2 py-2",
+          done && "opacity-60",
+        )}
+        data-testid={`assignment-item-${item.id}`}
+      >
+        <div className="flex items-center gap-2">
+          {checkboxControl}
+          <ModelDoorPhotoFrame
+            src={modelImageSrc}
+            alt={item.modelName}
+            size={photoSize}
+            imgPaddingClass="p-0.5"
+            placeholderDensity="compact"
+          />
           <div className="min-w-0 flex-1">
-            <p className="font-medium text-foreground">{item.modelName || item.targetId}</p>
-            <p className="text-xs text-muted-foreground">{item.targetKind === "variant" ? "Вариант" : "Модель"}</p>
-          </div>
-          <Badge className={cn("shrink-0 border", itemStatusTone(item.itemStatus))}>
-            {ITEM_STATUS_LABEL[item.itemStatus]}
-          </Badge>
-        </div>
-
-        {item.itemStatus === "problem" && item.problemReason ? (
-          <p className="rounded-md border border-red-200/80 bg-red-50/80 px-2.5 py-1.5 text-sm text-red-900">
-            {item.problemReason}
-          </p>
-        ) : null}
-
-        {item.photoThumbUrl || item.photoUrl ? (
-          <a
-            href={item.photoUrl ?? item.photoThumbUrl ?? "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block"
-          >
-            <img
-              src={item.photoThumbUrl ?? item.photoUrl ?? ""}
-              alt={`Фото: ${item.modelName}`}
-              className="h-20 w-20 rounded-md border border-border object-cover"
-            />
-          </a>
-        ) : null}
-
-        {!readOnly ? (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={item.itemStatus === "shipped" ? "default" : "outline"}
-              className="min-h-9"
-              disabled={busy || uploadingPhoto}
-              onClick={() => void applyStatus("shipped")}
-              data-testid={`button-item-shipped-${item.id}`}
-            >
-              <CheckCircle2 className="mr-1.5 h-4 w-4" aria-hidden />
-              Отгружено
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={item.itemStatus === "problem" ? "destructive" : "outline"}
-              className="min-h-9"
-              disabled={busy || uploadingPhoto}
-              onClick={() => setProblemOpen((v) => !v)}
-              data-testid={`button-item-problem-${item.id}`}
-            >
-              <AlertTriangle className="mr-1.5 h-4 w-4" aria-hidden />
-              Проблема
-            </Button>
-            {item.itemStatus !== "pending" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="min-h-9"
-                disabled={busy || uploadingPhoto}
-                onClick={() => void applyStatus("pending")}
-                data-testid={`button-item-reset-${item.id}`}
-              >
-                <Circle className="mr-1.5 h-4 w-4" aria-hidden />
-                Сброс
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {!readOnly ? (
-          <div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onPhotoSelected(f);
-              }}
-              data-testid={`input-item-photo-${item.id}`}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-9 w-full"
-              disabled={busy || uploadingPhoto}
-              onClick={() => fileRef.current?.click()}
-              data-testid={`button-item-photo-${item.id}`}
-            >
-              {uploadingPhoto ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Camera className="mr-1.5 h-4 w-4" aria-hidden />
+            <p
+              className={cn(
+                "truncate text-sm font-medium",
+                done && "text-muted-foreground line-through",
               )}
-              {item.photoUrl ? "Заменить фото" : "Добавить фото"}
-            </Button>
-          </div>
-        ) : null}
-
-        {!readOnly && problemOpen ? (
-          <div className="space-y-2 rounded-md border border-border/80 bg-muted/20 p-3">
-            <Label className="text-xs">Причина проблемы</Label>
-            <Select value={problemPreset} onValueChange={setProblemPreset}>
-              <SelectTrigger className="min-h-9" data-testid={`select-problem-reason-${item.id}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PROBLEM_PRESETS.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {problemPreset === "__other__" ? (
-              <Input
-                value={problemOther}
-                onChange={(e) => setProblemOther(e.target.value)}
-                placeholder="Опишите проблему"
-                className="min-h-9"
-                data-testid={`input-problem-other-${item.id}`}
-              />
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="destructive"
-              className="min-h-9"
-              disabled={busy}
-              onClick={confirmProblem}
-              data-testid={`button-problem-confirm-${item.id}`}
             >
-              Сохранить проблему
-            </Button>
+              {item.modelName || item.targetId}
+            </p>
+            {reasonNote}
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {proofPhoto}
+            {statusBadge}
+            {actionButtons}
+          </div>
+        </div>
+        {problemForm}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border/80 bg-card p-2",
+        done && "opacity-60",
+      )}
+      data-testid={`assignment-item-${item.id}`}
+    >
+      <div className="flex items-start gap-2">
+        {checkboxControl}
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <ModelDoorPhotoFrame
+              src={modelImageSrc}
+              alt={item.modelName}
+              size={photoSize}
+              imgPaddingClass="p-1"
+              placeholderDensity="compact"
+            />
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {statusBadge}
+              {actionButtons}
+            </div>
+          </div>
+          <p
+            className={cn(
+              "text-sm font-medium leading-snug",
+              done && "text-muted-foreground line-through",
+            )}
+          >
+            {item.modelName || item.targetId}
+          </p>
+          {reasonNote}
+          {proofPhoto}
+        </div>
+      </div>
+      {problemForm}
+    </div>
   );
 }
 
@@ -502,6 +753,8 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const [assignment, setAssignment] = useState(initial);
+  const [viewMode, setViewMode] = useState<AssignmentViewMode>("list");
+  const [imageMap, setImageMap] = useState<Map<string, CatalogImageEntry>>(new Map());
   const [shippedDate, setShippedDate] = useState(initial.shippedDate ?? "");
   const [comment, setComment] = useState(initial.comment ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -513,6 +766,24 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const isViewOnly = !canEdit;
   const canVerify = VERIFY_ROLES.has(user?.role ?? "");
   const canComment = canUserCommentAssignment(assignment, user?.id, user?.role);
+
+  const targetIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const item of assignment.items) {
+      if (item.targetId && !ids.includes(item.targetId)) ids.push(item.targetId);
+    }
+    return ids;
+  }, [assignment.items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCatalogImagesByIds(targetIds).then((map) => {
+      if (!cancelled) setImageMap(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [targetIds]);
 
   const verifyCandidates = useMemo(
     () => assignment.items.filter(isVerifyCandidate),
@@ -535,7 +806,8 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
     const problems = assignment.items.filter((i) => i.itemStatus === "problem").length;
     const installed = assignment.items.filter((i) => i.itemStatus === "installed").length;
     const pending = assignment.items.filter((i) => i.itemStatus === "pending").length;
-    return { shipped, problems, installed, pending, total: assignment.items.length };
+    const notRelevant = assignment.items.filter((i) => i.itemStatus === "not_relevant").length;
+    return { shipped, problems, installed, pending, notRelevant, total: assignment.items.length };
   }, [assignment.items]);
 
   const canSubmit = canEdit && summary.pending === 0 && summary.total > 0;
@@ -551,6 +823,15 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       void qc.setQueryData(["assignment", assignment.id], next);
     },
     [assignment.id, qc],
+  );
+
+  const resolveModelImage = useCallback(
+    (targetId: string): string | null => {
+      const entry = imageMap.get(targetId);
+      if (!entry) return null;
+      return entry.image_url ?? entry.image_path ?? null;
+    },
+    [imageMap],
   );
 
   const handleSubmit = async () => {
@@ -624,7 +905,13 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   };
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-28 pt-2" data-testid="page-assignment-detail">
+    <div
+      className={cn(
+        "mx-auto space-y-4 pb-28 pt-2",
+        viewMode === "list" ? "max-w-lg" : "max-w-2xl",
+      )}
+      data-testid="page-assignment-detail"
+    >
       <BackNav
         breadcrumbs={breadcrumbsFor(`/assignment/${assignment.id}`, {
           assignment: assignment.title || "Задание",
@@ -670,9 +957,18 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
           {assignment.dueDate ? (
             <p>
               <span className="text-muted-foreground">Срок: </span>
-              <span className={cn(isDueOverdue(assignment.dueDate) && assignment.status !== "verified" && assignment.status !== "closed" && "font-medium text-destructive")}>
+              <span
+                className={cn(
+                  isDueOverdue(assignment.dueDate) &&
+                    assignment.status !== "verified" &&
+                    assignment.status !== "closed" &&
+                    "font-medium text-destructive",
+                )}
+              >
                 {assignment.dueDate}
-                {isDueOverdue(assignment.dueDate) && assignment.status !== "verified" && assignment.status !== "closed"
+                {isDueOverdue(assignment.dueDate) &&
+                assignment.status !== "verified" &&
+                assignment.status !== "closed"
                   ? " · просрочено"
                   : ""}
               </span>
@@ -682,7 +978,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       </Card>
 
       <Card className="rounded-xl border border-border/80">
-        <CardContent className="grid grid-cols-2 gap-3 p-4 text-sm sm:grid-cols-4">
+        <CardContent className="grid grid-cols-2 gap-3 p-3 text-sm sm:grid-cols-4">
           <div>
             <p className="text-muted-foreground">Отгружено</p>
             <p className="text-lg font-semibold tabular-nums" data-testid="text-assignment-shipped-count">
@@ -691,13 +987,19 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
           </div>
           <div>
             <p className="text-muted-foreground">Проблемы</p>
-            <p className="text-lg font-semibold tabular-nums text-destructive" data-testid="text-assignment-problems-count">
+            <p
+              className="text-lg font-semibold tabular-nums text-destructive"
+              data-testid="text-assignment-problems-count"
+            >
               {summary.problems}
             </p>
           </div>
           <div>
             <p className="text-muted-foreground">На витрине</p>
-            <p className="text-lg font-semibold tabular-nums text-emerald-700" data-testid="text-assignment-installed-count">
+            <p
+              className="text-lg font-semibold tabular-nums text-emerald-700"
+              data-testid="text-assignment-installed-count"
+            >
               {summary.installed}
             </p>
           </div>
@@ -710,17 +1012,46 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold">Позиции</h2>
-        {assignment.items.map((item) => (
-          <AssignmentItemCard
-            key={item.id}
-            assignment={assignment}
-            item={item}
-            canEdit={canEdit}
-            onUpdated={onAssignmentUpdated}
-          />
-        ))}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Позиции</h2>
+          <div className="flex shrink-0 gap-1">
+            {(
+              [
+                ["list", List, "Список"],
+                ["m", Grid2x2, "Крупнее"],
+                ["s", Grid3x3, "Мельче"],
+              ] as const
+            ).map(([mode, Icon, label]) => (
+              <Button
+                key={mode}
+                type="button"
+                size="icon"
+                variant={viewMode === mode ? "default" : "outline"}
+                className="h-8 w-8"
+                onClick={() => setViewMode(mode)}
+                data-testid={`button-assignment-view-${mode}`}
+                aria-label={label}
+                title={label}
+              >
+                <Icon className="h-4 w-4" aria-hidden />
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className={itemsGridClass(viewMode)}>
+          {assignment.items.map((item) => (
+            <AssignmentItemCard
+              key={item.id}
+              assignment={assignment}
+              item={item}
+              canEdit={canEdit}
+              viewMode={viewMode}
+              modelImageSrc={item.targetId ? resolveModelImage(item.targetId) : null}
+              onUpdated={onAssignmentUpdated}
+            />
+          ))}
+        </div>
       </div>
 
       <Card className="rounded-xl border border-border/80">
@@ -740,17 +1071,22 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
               data-testid="input-assignment-shipped-date"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="assignment-comment">Комментарий</Label>
-            <Textarea
-              id="assignment-comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              disabled={!canEdit || submitting}
-              rows={3}
-              data-testid="textarea-assignment-comment"
-            />
-          </div>
+          {canEdit ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="assignment-comment">Комментарий</Label>
+              <ChatInputRow
+                value={comment}
+                onChange={setComment}
+                onSend={() => {}}
+                placeholder="Комментарий к завершению…"
+                disabled={!canEdit || submitting}
+                testIdInput="textarea-assignment-comment"
+                hideSendButton
+              />
+            </div>
+          ) : comment.trim() ? (
+            <p className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm">{comment}</p>
+          ) : null}
           {canEdit ? (
             <Button
               type="button"
@@ -765,7 +1101,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
           ) : null}
           {canEdit && summary.pending > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Отметьте все позиции (отгружено или проблема), чтобы завершить задание.
+              Отметьте все позиции, чтобы завершить задание.
             </p>
           ) : null}
         </CardContent>
@@ -822,25 +1158,15 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
                   <Label htmlFor="followup-comment" className="text-xs text-muted-foreground">
                     Комментарий к повторному заданию (необязательно)
                   </Label>
-                  <Textarea
-                    id="followup-comment"
+                  <ChatInputRow
                     value={followupComment}
-                    onChange={(e) => setFollowupComment(e.target.value)}
+                    onChange={setFollowupComment}
+                    onSend={() => void handleFollowup()}
+                    placeholder="Комментарий…"
                     disabled={followupBusy}
-                    rows={2}
-                    data-testid="textarea-assignment-followup-comment"
+                    testIdInput="textarea-assignment-followup-comment"
+                    testIdSend="button-assignment-followup"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-10 w-full"
-                    disabled={followupBusy}
-                    onClick={() => void handleFollowup()}
-                    data-testid="button-assignment-followup"
-                  >
-                    {followupBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-                    Создать повторное задание
-                  </Button>
                 </div>
               ) : null}
             </CardContent>

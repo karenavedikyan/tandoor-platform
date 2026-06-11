@@ -24,7 +24,7 @@ type PoolLike = {
 
 export type AssignmentStatus = "open" | "in_progress" | "submitted" | "verified" | "closed";
 export type AssignmentTargetKind = "model" | "variant";
-export type AssignmentItemStatus = "pending" | "shipped" | "installed" | "problem";
+export type AssignmentItemStatus = "pending" | "shipped" | "installed" | "problem" | "not_relevant";
 
 export type AssignmentSessionUser = {
   id: string;
@@ -166,7 +166,13 @@ function parseOptionalDate(raw: unknown): string | null {
   return s;
 }
 
-const ITEM_STATUS_VALUES = new Set<AssignmentItemStatus>(["pending", "shipped", "installed", "problem"]);
+const ITEM_STATUS_VALUES = new Set<AssignmentItemStatus>([
+  "pending",
+  "shipped",
+  "installed",
+  "problem",
+  "not_relevant",
+]);
 
 function parseItemStatus(r: Record<string, unknown>): AssignmentItemStatus {
   const raw = r.item_status;
@@ -706,9 +712,13 @@ export async function handleItemSetStatus(
   if (!assignmentId || !itemId || !itemStatusRaw) {
     throw new AssignmentValidationError("assignmentId, itemId и itemStatus обязательны.");
   }
-  if (!ITEM_STATUS_VALUES.has(itemStatusRaw as AssignmentItemStatus) || itemStatusRaw === "installed") {
+  if (
+    !ITEM_STATUS_VALUES.has(itemStatusRaw as AssignmentItemStatus) ||
+    itemStatusRaw === "installed"
+  ) {
     throw new AssignmentValidationError("Недопустимый itemStatus.");
   }
+  // pending допускается только для сброса позиции (ветка else ниже), не через меню галочки.
   const itemStatus = itemStatusRaw as AssignmentItemStatus;
 
   const head = await loadAssignment(pool, assignmentId);
@@ -763,6 +773,22 @@ export async function handleItemSetStatus(
            updated_at = NOW()
        WHERE id = $1 AND assignment_id = $2`,
       [itemId, assignmentId, problemReason, photoUrl, photoThumbUrl],
+    );
+  } else if (itemStatus === "not_relevant") {
+    const reason = problemReason ?? "Уже не актуально";
+    await pool.query(
+      `UPDATE showcase_install_assignment_items
+       SET item_status = 'not_relevant',
+           done = TRUE,
+           done_at = NOW(),
+           done_by = $3::uuid,
+           done_by_name = $4,
+           problem_reason = $5,
+           photo_url = COALESCE($6, photo_url),
+           photo_thumb_url = COALESCE($7, photo_thumb_url),
+           updated_at = NOW()
+       WHERE id = $1 AND assignment_id = $2`,
+      [itemId, assignmentId, me.id, me.fullName, reason, photoUrl, photoThumbUrl],
     );
   } else {
     await pool.query(

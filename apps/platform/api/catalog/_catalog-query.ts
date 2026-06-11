@@ -20,6 +20,7 @@ export const CATALOG_EFFECTIVE_PRICE_SQL = `COALESCE(
 )`;
 
 export type CatalogListFilters = {
+  ids?: string[];
   q?: string;
   categoryId?: string;
   groupId?: string;
@@ -95,7 +96,19 @@ export function propertyFilterMeta(key: string): { label: string; unit: string |
   };
 }
 
+function parseIdsParam(raw: unknown): string[] | undefined {
+  const s = Array.isArray(raw) ? raw.join(",") : typeof raw === "string" ? raw : "";
+  if (!s.trim()) return undefined;
+  const ids: string[] = [];
+  for (const part of s.split(",")) {
+    const id = part.trim();
+    if (UUID_RE.test(id) && !ids.includes(id)) ids.push(id);
+  }
+  return ids.length ? ids : undefined;
+}
+
 export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters {
+  const ids = parseIdsParam(req.query.ids);
   const q = sanitizeStr(String(req.query.q ?? ""), 500) ?? undefined;
   const categoryId = parseUuid(req.query.category_id);
   const groupId = parseUuid(req.query.group_id);
@@ -125,6 +138,7 @@ export function parseCatalogListFilters(req: VercelRequest): CatalogListFilters 
   }
 
   return {
+    ids,
     q: q || undefined,
     categoryId,
     groupId,
