@@ -116,7 +116,7 @@ export function BriefBlocksAddToolbar({
   return (
     <div
       className={cn(
-        "rounded-[7px] border border-[#E8EAEE] bg-white shadow-sm",
+        "rounded-[7px] border border-card-border bg-card shadow-sm",
         orientation === "vertical" ? "flex flex-col gap-1 p-2" : "flex flex-wrap gap-2 p-2",
       )}
       data-testid="brief-blocks-add-toolbar"
@@ -133,7 +133,7 @@ export function BriefBlocksAddToolbar({
           onClick={() => onAdd(type)}
           data-testid={`button-add-block-type-${type}`}
           className={cn(
-            "flex items-center justify-center rounded-[6px] text-[#8F96B0] transition-colors hover:bg-[#F9FAFF] hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-50",
+            "flex items-center justify-center rounded-[6px] text-muted-foreground transition-colors hover:bg-background hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-50",
             orientation === "vertical" ? "h-10 w-10" : "h-9 w-9",
           )}
         >
@@ -145,11 +145,11 @@ export function BriefBlocksAddToolbar({
 }
 
 const FIELD_CLASS =
-  "rounded-[6px] border border-[#E8EAEE] bg-[#F9FAFF] text-[#222631] focus-visible:ring-[#9ACA3C]/30";
-const LABEL_CLASS = "text-xs text-[#222631]";
-const HINT_CLASS = "text-[10px] leading-snug text-[#8F96B0]";
+  "rounded-[6px] border border-card-border bg-background text-foreground focus-visible:ring-ring/30";
+const LABEL_CLASS = "text-xs text-foreground";
+const HINT_CLASS = "text-[10px] leading-snug text-muted-foreground";
 const ACTION_BTN_CLASS =
-  "h-9 gap-1.5 rounded-[6px] border border-[#E8EAEE] bg-white px-3 text-sm text-[#343F5B] hover:bg-[#F9FAFF]";
+  "h-9 gap-1.5 rounded-[6px] border border-card-border bg-card px-3 text-sm text-foreground hover:bg-background";
 
 function blockCardTitle(type: MarketingBriefBlockType): string {
   switch (type) {
@@ -205,7 +205,7 @@ function TextFormatToolbar({
   disabled?: boolean;
 }) {
   const btnClass =
-    "flex h-8 w-8 items-center justify-center rounded-[6px] text-sm font-semibold text-[#8F96B0] transition-colors hover:bg-[#F9FAFF] hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-40";
+    "flex h-8 w-8 items-center justify-center rounded-[6px] text-sm font-semibold text-muted-foreground transition-colors hover:bg-background hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-40";
 
   function format(kind: BriefInlineWrapKind) {
     applyFormatToField(inputRef.current, value, onChange, kind);
@@ -429,7 +429,7 @@ function BlockFields({
     const p = asText(block.payload);
     return (
       <div className="space-y-4">
-        <p className="text-sm font-semibold text-[#222631]">Текст</p>
+        <p className="text-sm font-semibold text-foreground">Текст</p>
         <FormattedTextInput
           label="Заголовок текста"
           value={p.heading ?? ""}
@@ -549,7 +549,7 @@ function BlockFields({
   if (block.type === "price_table") {
     return (
       <div className="space-y-3">
-        <p className="text-sm font-semibold text-[#222631]">Таблица</p>
+        <p className="text-sm font-semibold text-foreground">Таблица</p>
         <PriceTableBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />
       </div>
     );
@@ -596,7 +596,7 @@ function SortableBlockCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white",
+        "flex overflow-hidden rounded-[7px] border border-card-border bg-card",
         isDragging && "z-10 opacity-90 shadow-lg",
       )}
       data-testid={`brief-block-card-${block.id}`}
@@ -608,7 +608,7 @@ function SortableBlockCard({
             {!readOnly ? (
               <button
                 type="button"
-                className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-[6px] text-[#8F96B0] hover:bg-[#F9FAFF] active:cursor-grabbing"
+                className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background active:cursor-grabbing"
                 aria-label="Перетащить блок"
                 data-testid={`brief-block-drag-${block.id}`}
                 {...attributes}
@@ -620,8 +620,8 @@ function SortableBlockCard({
             <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
               <CollapsibleTrigger asChild>
                 <button type="button" className="min-w-0 flex-1 text-left">
-                  <span className="text-xl font-semibold text-[#222631]">{blockCardTitle(block.type)}</span>
-                  <p className="mt-0.5 truncate text-xs text-[#8F96B0]">{summary}</p>
+                  <span className="text-xl font-semibold text-foreground">{blockCardTitle(block.type)}</span>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{summary}</p>
                 </button>
               </CollapsibleTrigger>
               <div className="flex shrink-0 items-center gap-2 pt-0.5">
@@ -633,7 +633,7 @@ function SortableBlockCard({
                         ? "text-destructive"
                         : saveState === "saved"
                           ? "text-[#9ACA3C]"
-                          : "text-[#8F96B0]",
+                          : "text-muted-foreground",
                     )}
                   >
                     {saveLabel}
@@ -642,7 +642,7 @@ function SortableBlockCard({
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#8F96B0] hover:bg-[#F9FAFF]"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-background"
                     aria-label={open ? "Свернуть блок" : "Развернуть блок"}
                   >
                     <ChevronDown
@@ -658,14 +658,14 @@ function SortableBlockCard({
             <div className="space-y-4 px-4 pb-4 sm:px-5">
               <BlockFields block={block} readOnly={readOnly} onPatch={onPatch} />
               {!readOnly ? (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[#E8EAEE] pt-4">
+                <div className="flex flex-wrap items-center gap-2 border-t border-card-border pt-4">
                   <Button
                     type="button"
                     variant="outline"
                     className={ACTION_BTN_CLASS}
                     onClick={() => setDeleteOpen(true)}
                   >
-                    <Trash2 className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden />
                     Удалить
                   </Button>
                   <Button
@@ -674,7 +674,7 @@ function SortableBlockCard({
                     className={ACTION_BTN_CLASS}
                     onClick={() => onAddBelow("text")}
                   >
-                    <Plus className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    <Plus className="h-4 w-4 text-muted-foreground" aria-hidden />
                     Добавить текст
                   </Button>
                   <Button
@@ -683,7 +683,7 @@ function SortableBlockCard({
                     className={ACTION_BTN_CLASS}
                     onClick={() => onAddBelow("price_table")}
                   >
-                    <Plus className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    <Plus className="h-4 w-4 text-muted-foreground" aria-hidden />
                     Добавить таблицу
                   </Button>
                 </div>
@@ -914,7 +914,7 @@ export function BriefBlocksEditor({
 
   return (
     <section className="space-y-4" data-testid="brief-blocks-editor">
-      <h2 className="text-sm font-semibold text-[#222631]">Блоки</h2>
+      <h2 className="text-sm font-semibold text-foreground">Блоки</h2>
 
       {blocks.length === 0 ? (
         <div
