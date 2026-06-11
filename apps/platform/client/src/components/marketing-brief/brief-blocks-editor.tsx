@@ -22,13 +22,16 @@ import {
   GripVertical,
   Hash,
   LayoutGrid,
+  ListOrdered,
   Loader2,
   MessageCircle,
   Package,
   Plus,
+  Table2,
   Tags,
   Trash2,
   Type,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -90,6 +93,59 @@ import {
 } from "@/lib/marketing-briefs-api";
 
 const BLOCKS_QUERY_KEY = "brief-blocks";
+
+export const BRIEF_TOOLBAR_BLOCK_TYPES: ReadonlyArray<{
+  type: MarketingBriefBlockType;
+  label: string;
+  Icon: LucideIcon;
+}> = [
+  { type: "section", label: "Добавить раздел", Icon: ListOrdered },
+  { type: "text", label: "Добавить текст", Icon: Type },
+  { type: "price_table", label: "Добавить таблицу", Icon: Table2 },
+  { type: "products", label: "Добавить товары", Icon: Package },
+  { type: "segments", label: "Добавить сегменты", Icon: Tags },
+  { type: "bonus", label: "Добавить бонус", Icon: Gift },
+];
+
+export function BriefBlocksAddToolbar({
+  onAdd,
+  disabled,
+  orientation = "vertical",
+}: {
+  onAdd: (type: MarketingBriefBlockType) => void;
+  disabled?: boolean;
+  orientation?: "vertical" | "horizontal";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[7px] border border-[#E8EAEE] bg-white shadow-sm",
+        orientation === "vertical" ? "flex flex-col gap-1 p-2" : "flex flex-wrap gap-2 p-2",
+      )}
+      data-testid="brief-blocks-add-toolbar"
+      role="toolbar"
+      aria-label="Добавление блоков"
+    >
+      {BRIEF_TOOLBAR_BLOCK_TYPES.map(({ type, label, Icon }) => (
+        <button
+          key={type}
+          type="button"
+          title={label}
+          aria-label={label}
+          disabled={disabled}
+          onClick={() => onAdd(type)}
+          data-testid={`button-add-block-type-${type}`}
+          className={cn(
+            "flex items-center justify-center rounded-[6px] text-[#8F96B0] transition-colors hover:bg-[#F9FAFF] hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-50",
+            orientation === "vertical" ? "h-10 w-10" : "h-9 w-9",
+          )}
+        >
+          <Icon className="h-5 w-5" aria-hidden />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function blockIcon(type: MarketingBriefBlockType) {
   switch (type) {
@@ -545,9 +601,15 @@ function SortableBlockCard({
 export function BriefBlocksEditor({
   briefId,
   canEdit,
+  externalAddToolbar = false,
+  registerAddBlock,
 }: {
   briefId: string;
   canEdit: boolean;
+  /** Скрыть встроенные кнопки добавления — используется внешний тулбар */
+  externalAddToolbar?: boolean;
+  /** Коллбэк для регистрации добавления блока в конец списка */
+  registerAddBlock?: (addBlock: (type: MarketingBriefBlockType) => void) => void;
 }) {
   const qc = useQueryClient();
   const readOnly = !canEdit;
@@ -636,25 +698,35 @@ export function BriefBlocksEditor({
     };
   }, []);
 
-  async function handleAdd(type: MarketingBriefBlockType, insertAfterId?: string) {
-    try {
-      const created = await createBlock({
-        brief_id: briefId,
-        type,
-        insert_after_id: insertAfterId,
-      });
-      await qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
-      const fresh = await listBlocks(briefId);
-      setBlocks((prev) => mergeBlocksFromServer(fresh, prev, dirtyBlockIdsRef.current));
-      setSaveById((s) => ({ ...s, [created.id]: "saved" }));
-    } catch (e) {
-      toast({
-        title: "Не удалось добавить блок",
-        description: e instanceof Error ? e.message : undefined,
-        variant: "destructive",
-      });
-    }
-  }
+  const handleAdd = useCallback(
+    async (type: MarketingBriefBlockType, insertAfterId?: string) => {
+      try {
+        const created = await createBlock({
+          brief_id: briefId,
+          type,
+          insert_after_id: insertAfterId,
+        });
+        await qc.invalidateQueries({ queryKey: [BLOCKS_QUERY_KEY, briefId] });
+        const fresh = await listBlocks(briefId);
+        setBlocks((prev) => mergeBlocksFromServer(fresh, prev, dirtyBlockIdsRef.current));
+        setSaveById((s) => ({ ...s, [created.id]: "saved" }));
+      } catch (e) {
+        toast({
+          title: "Не удалось добавить блок",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        });
+      }
+    },
+    [briefId, qc],
+  );
+
+  useEffect(() => {
+    if (!registerAddBlock) return;
+    registerAddBlock((type) => {
+      void handleAdd(type);
+    });
+  }, [registerAddBlock, handleAdd]);
 
   async function handleDelete(blockId: string) {
     try {
@@ -730,8 +802,10 @@ export function BriefBlocksEditor({
           className="rounded-2xl border border-dashed border-border/80 bg-muted/15 px-4 py-10 text-center"
           data-testid="brief-blocks-empty"
         >
-          <p className="mb-4 text-sm text-muted-foreground">Добавьте первый блок</p>
-          {!readOnly ? <AddBlockButtons variant="empty" onAdd={(t) => void handleAdd(t)} /> : null}
+          <p className="text-sm text-muted-foreground">Добавьте первый блок с помощью панели добавления</p>
+          {!readOnly && !externalAddToolbar ? (
+            <AddBlockButtons variant="empty" onAdd={(t) => void handleAdd(t)} />
+          ) : null}
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
@@ -753,7 +827,7 @@ export function BriefBlocksEditor({
         </DndContext>
       )}
 
-      {!readOnly && blocks.length > 0 ? (
+      {!readOnly && !externalAddToolbar && blocks.length > 0 ? (
         <div className="pt-2">
           <p className="mb-2 text-xs text-muted-foreground">Добавить в конец</p>
           <AddBlockButtons onAdd={(t) => void handleAdd(t)} />
