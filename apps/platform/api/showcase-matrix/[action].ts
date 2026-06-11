@@ -20,7 +20,9 @@ import {
   handleShowcaseMatrixHistory,
   handleShowcaseMatrixList,
   handleShowcaseMatrixScope,
+  handleShowcaseMatrixScopeAll,
   handleShowcaseMatrixUpsert,
+  resolveShowcaseVisibility,
   ShowcaseMatrixValidationError,
   type ShowcaseMatrixSessionUser,
 } from "../../shared/showcase-matrix-handlers.js";
@@ -96,6 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sessionUser = toSessionUser(me);
+    const vis = await resolveShowcaseVisibility(pool, { id: me.id, role: me.role });
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     if (action === "list" && req.method === "GET") {
@@ -118,22 +121,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (action === "upsert" && req.method === "POST") {
-      const payload = await handleShowcaseMatrixUpsert(pool, sessionUser, body);
+      const payload = await handleShowcaseMatrixUpsert(pool, sessionUser, body, vis);
       sendJson(res, 200, payload);
       return;
     }
 
     if (action === "batch-sync" && req.method === "POST") {
-      const payload = await handleShowcaseMatrixBatchSync(pool, sessionUser, body);
+      const payload = await handleShowcaseMatrixBatchSync(pool, sessionUser, body, vis);
+      sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "scope-all" && req.method === "POST") {
+      const payload = await handleShowcaseMatrixScopeAll(pool, vis, { statuses: body.statuses });
       sendJson(res, 200, payload);
       return;
     }
 
     if (action === "scope" && req.method === "POST") {
-      const payload = await handleShowcaseMatrixScope(pool, {
-        tradePointIds: body.tradePointIds,
-        statuses: body.statuses,
-      });
+      const payload = await handleShowcaseMatrixScope(
+        pool,
+        {
+          tradePointIds: body.tradePointIds,
+          statuses: body.statuses,
+        },
+        vis,
+      );
       sendJson(res, 200, payload);
       return;
     }

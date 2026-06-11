@@ -153,6 +153,32 @@ export async function fetchShowcaseMatrixList(opts: {
 
 const SCOPE_CHUNK_SIZE = 500;
 
+export async function fetchShowcaseMatrixScopeAll(
+  params?: { statuses?: ShowcaseMatrixStatus[] },
+): Promise<{ entries: ShowcaseMatrixEntryDto[]; tradePointIds: string[] } | null> {
+  try {
+    const res = await fetch("/api/showcase-matrix/scope-all", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statuses: params?.statuses }),
+      cache: "no-store",
+    });
+    const data = await parseJson<
+      ApiOk<{ entries: ShowcaseMatrixEntryDto[]; tradePointIds: string[] }> | ApiErr
+    >(res);
+    if (!res.ok || !data.success) return null;
+    return {
+      entries: data.entries.map((e) =>
+        mapShowcaseMatrixEntryDto(e as unknown as Record<string, unknown>),
+      ),
+      tradePointIds: data.tradePointIds ?? [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchShowcaseMatrixScope(opts: {
   tradePointIds: string[];
   statuses?: ShowcaseMatrixStatus[];

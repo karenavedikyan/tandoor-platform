@@ -7,7 +7,7 @@ import {
   collectScopeTradePointIds,
   type DistributionScope,
 } from "@/lib/distribution-tree-data";
-import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
+import { fetchShowcaseMatrixScope, fetchShowcaseMatrixScopeAll } from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrixDefs,
   refreshMatrixCatalogFromServer,
@@ -116,11 +116,16 @@ export async function ensureDistributionAnalyticsData(opts: {
   const run = (async (): Promise<{ ok: boolean; network: boolean }> => {
     patchSnapshot({ loading: true });
 
-    const tradePointIds = collectScopeTradePointIds(opts.scope);
+    const localIds = collectScopeTradePointIds(opts.scope);
     let network = true;
+    let allIds = localIds;
 
-    if (tradePointIds.length > 0) {
-      const remote = await fetchShowcaseMatrixScope({ tradePointIds });
+    const remoteAll = await fetchShowcaseMatrixScopeAll({});
+    if (remoteAll != null) {
+      applyScopeEntriesToMatrixCache(remoteAll.entries);
+      allIds = Array.from(new Set([...localIds, ...remoteAll.tradePointIds]));
+    } else if (localIds.length > 0) {
+      const remote = await fetchShowcaseMatrixScope({ tradePointIds: localIds });
       if (remote == null) {
         network = false;
       } else {
@@ -131,9 +136,9 @@ export async function ensureDistributionAnalyticsData(opts: {
     await loadMatrixCatalogIfNeeded(force);
 
     const ok =
-      tradePointIds.length === 0 ||
+      allIds.length === 0 ||
       network ||
-      tradePointIds.some((id) => loadCachedMatrix(id).length > 0);
+      allIds.some((id) => loadCachedMatrix(id).length > 0);
 
     lastCompletedAtByScopeKey.set(scopeKey, Date.now());
     lastNetworkByScopeKey.set(scopeKey, network);
