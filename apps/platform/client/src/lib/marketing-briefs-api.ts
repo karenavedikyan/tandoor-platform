@@ -6,7 +6,7 @@ export type MarketingBriefStatus = "draft" | "published" | "archived";
 
 export type MarketingBriefVisibility = "private" | "public";
 
-export type MarketingBriefCategory = "brief" | "promo" | "info";
+export type MarketingBriefCategory = "brief" | "promo" | "info" | "letter";
 
 export type MarketingBriefRow = {
   id: string;

@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Link, useLocation } from "wouter";
-import { Globe, Loader2, MoreHorizontal, Share2 } from "lucide-react";
+import { Loader2, MoreHorizontal, Share2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
 import { BriefVisibilityIcon } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
-import { Card, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -25,13 +24,13 @@ import { toast } from "@/hooks/use-toast";
 import {
   briefDisplayTitle,
   buildPublicBriefShareUrl,
-  DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
   formatMarketingBriefPeriodLabel,
   getBrief,
   listBlocks,
   updateBrief,
   type MarketingBriefBlockRow,
+  type MarketingBriefCategory,
   type MarketingBriefRow,
   type MarketingBriefVisibility,
 } from "@/lib/marketing-briefs-api";
@@ -52,6 +51,16 @@ function BriefNewBadge({ briefId }: { briefId: string }) {
 }
 
 export type BriefListViewMode = "cards" | "table" | "compact";
+
+export const MARKETING_BRIEF_CATEGORY_SECTIONS: ReadonlyArray<{
+  category: MarketingBriefCategory;
+  label: string;
+}> = [
+  { category: "brief", label: "Брифы" },
+  { category: "promo", label: "Акции" },
+  { category: "info", label: "Информация" },
+  { category: "letter", label: "Информационные письма" },
+];
 
 export const BRIEF_LIST_VIEW_MODE_KEY = "marketing-briefs:view-mode";
 
@@ -89,20 +98,6 @@ async function copyBriefLink(briefId: string) {
     toast({ description: "Ссылка скопирована" });
   } catch {
     toast({ variant: "destructive", description: "Не удалось скопировать ссылку" });
-  }
-}
-
-async function makeBriefPublicAndCopy(briefId: string, onMutate: () => void) {
-  try {
-    await updateBrief(briefId, { visibility: "public" });
-    await navigator.clipboard.writeText(buildPublicBriefShareUrl(briefId));
-    toast({ title: "Бриф теперь публичный, ссылка скопирована" });
-    onMutate();
-  } catch (e) {
-    toast({
-      variant: "destructive",
-      description: e instanceof Error ? e.message : "Не удалось сделать бриф публичным",
-    });
   }
 }
 
@@ -190,26 +185,34 @@ export function BriefCardsSelectAllLink({ selection }: { selection: BriefListSel
 export function BriefStatusBadge({
   status,
   className,
+  onAccent = false,
 }: {
   status: MarketingBriefRow["status"];
   className?: string;
+  /** Бейдж на зелёной опубликованной карточке */
+  onAccent?: boolean;
 }) {
   const map = {
     published: {
       label: "Опубликовано",
-      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+      cls: onAccent
+        ? "bg-white text-[#9ACA3C]"
+        : "bg-[#9ACA3C]/15 text-[#7a9e2f] border border-[#9ACA3C]/30",
     },
-    draft: { label: "Черновик", cls: "bg-muted text-foreground border border-border" },
+    draft: {
+      label: "Черновик",
+      cls: onAccent ? "bg-white text-[#343F5B]" : "bg-[#F9FAFF] text-[#343F5B] border border-[#E8EAEE]",
+    },
     archived: {
-      label: "В архиве",
-      cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+      label: "Архивировано",
+      cls: onAccent ? "bg-white text-[#8F96B0]" : "bg-[#F9FAFF] text-[#8F96B0] border border-[#E8EAEE]",
     },
   } as const;
   const m = map[status] ?? map.draft;
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide whitespace-nowrap",
+        "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap",
         m.cls,
         className,
       )}
@@ -221,6 +224,8 @@ export function BriefStatusBadge({
 
 export type BriefRowMenuHandlers = {
   onOpen: (brief: MarketingBriefRow) => void;
+  onPublish?: (id: string) => void;
+  onUnpublish?: (id: string) => void;
   onArchive: (id: string) => void;
   onRestore: (id: string) => void;
   onDelete: (id: string) => void;
@@ -241,9 +246,29 @@ function BriefRowActionsMenu({
 }) {
   if (!canManage) {
     return (
-      <Button asChild variant="outline" size="sm" className="min-h-8 h-8 px-2 text-xs">
-        <Link href={`/marketing-briefs/view/${brief.id}`}>Открыть</Link>
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 shrink-0",
+              compact && "h-9 w-9 bg-white/20 text-white hover:bg-white/30 hover:text-white",
+            )}
+            aria-label="Действия"
+            data-testid={`button-brief-actions-${brief.id}`}
+            data-no-print="true"
+          >
+            <MoreHorizontal className={cn("h-4 w-4", compact && "text-white")} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuItem className="cursor-pointer" asChild>
+            <Link href={`/marketing-briefs/view/${brief.id}`}>Открыть</Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 
@@ -319,6 +344,16 @@ function BriefRowActionsMenu({
             Поделиться ссылкой
           </DropdownMenuItem>
         ) : null}
+        {(brief.status === "draft" || brief.status === "archived") && handlers.onPublish ? (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onPublish!(brief.id)}>
+            Опубликовать
+          </DropdownMenuItem>
+        ) : null}
+        {brief.status === "published" && handlers.onUnpublish ? (
+          <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onUnpublish!(brief.id)}>
+            Снять с публикации
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         {brief.status !== "archived" ? (
           <DropdownMenuItem className="cursor-pointer" onClick={() => handlers.onArchive(brief.id)}>
@@ -338,45 +373,6 @@ function BriefRowActionsMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function CardShareButton({ brief, onMutate }: { brief: MarketingBriefRow; onMutate: () => void }) {
-  if (brief.status !== "published") return null;
-  const visibility = brief.visibility ?? "private";
-  if (visibility === "public") {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        className="min-h-9 gap-1"
-        onClick={(e) => {
-          e.stopPropagation();
-          void copyBriefLink(brief.id);
-        }}
-        data-testid={`button-card-share-${brief.id}`}
-      >
-        <Share2 className="h-3.5 w-3.5" aria-hidden />
-        Поделиться
-      </Button>
-    );
-  }
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="ghost"
-      className="min-h-9 gap-1"
-      onClick={(e) => {
-        e.stopPropagation();
-        void makeBriefPublicAndCopy(brief.id, onMutate);
-      }}
-      data-testid={`button-card-make-public-${brief.id}`}
-    >
-      <Globe className="h-3.5 w-3.5" aria-hidden />
-      Сделать публичным
-    </Button>
   );
 }
 
@@ -531,7 +527,6 @@ function MarketingBriefCard({
   selection,
   selectionActive,
   menuHandlers,
-  renderCardFooter,
   onPreview,
 }: {
   brief: MarketingBriefRow;
@@ -539,41 +534,21 @@ function MarketingBriefCard({
   selection: BriefListSelection | null;
   selectionActive: boolean;
   menuHandlers: BriefRowMenuHandlers;
-  renderCardFooter: (brief: MarketingBriefRow) => ReactNode;
   onPreview: (id: string) => void;
 }) {
   const selected = selection?.isSelected(b.id) ?? false;
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [draftTitle, setDraftTitle] = useState(b.title);
-
-  useEffect(() => {
-    if (!editingTitle) setDraftTitle(b.title);
-  }, [b.title, editingTitle]);
-
-  async function commitRename() {
-    const next = draftTitle.trim();
-    setEditingTitle(false);
-    if (!next || next === b.title.trim()) return;
-    try {
-      await updateBrief(b.id, { title: next });
-      toast({ description: "Название сохранено" });
-      menuHandlers.onMutate();
-    } catch {
-      toast({ variant: "destructive", description: "Не удалось сохранить название" });
-      setDraftTitle(b.title);
-    }
-  }
-
-  function cancelRename() {
-    setEditingTitle(false);
-    setDraftTitle(b.title);
-  }
-
+  const isPublished = b.status === "published";
+  const isArchived = b.status === "archived";
   const openPreview = () => onPreview(b.id);
+  const titleText = briefDisplayTitle(b.title).text;
 
   return (
-    <Card
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/80 shadow-sm"
+    <article
+      className={cn(
+        "group relative flex cursor-pointer flex-col rounded-[7px] border p-4 transition-shadow hover:shadow-sm",
+        isPublished ? "border-[#9ACA3C] bg-[#9ACA3C]" : "border-[#E8EAEE] bg-white",
+        isArchived && !isPublished && "opacity-80",
+      )}
       data-testid={`card-marketing-brief-${b.id}`}
       role="button"
       tabIndex={0}
@@ -585,98 +560,195 @@ function MarketingBriefCard({
         }
       }}
     >
-      {canManage && selection ? (
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div
-          className={cn(
-            "absolute left-2 top-2 z-10 rounded-md bg-background/90 p-0.5 shadow-sm backdrop-blur-sm transition-opacity",
-            selected || selectionActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-          )}
+          className="min-h-8 shrink-0"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          <Checkbox
-            checked={selected}
-            onCheckedChange={() => selection.onToggle(b.id)}
-            aria-label={`Выбрать ${b.title}`}
-            data-testid={`checkbox-brief-${b.id}`}
+          {canManage && selection ? (
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => selection.onToggle(b.id)}
+              aria-label={`Выбрать ${b.title}`}
+              data-testid={`checkbox-brief-${b.id}`}
+              className={cn(
+                "border-[#E8EAEE] data-[state=checked]:border-[#9ACA3C] data-[state=checked]:bg-[#9ACA3C]",
+                isPublished && "border-white/60 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-[#9ACA3C]",
+                !selected && !selectionActive && "opacity-0 group-hover:opacity-100",
+              )}
+            />
+          ) : null}
+        </div>
+        <div
+          data-no-print="true"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <BriefRowActionsMenu
+            brief={b}
+            canManage={canManage}
+            handlers={menuHandlers}
+            compact={isPublished}
           />
         </div>
-      ) : null}
-      <div
-        className="absolute right-3 top-3 z-10"
-        data-no-print="true"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        <BriefRowActionsMenu brief={b} canManage={canManage} handlers={menuHandlers} compact />
       </div>
-      <div
-        className="relative px-4 py-6 pr-12"
-        style={{ backgroundColor: b.accent_color || DEFAULT_MARKETING_BRIEF_ACCENT }}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
+
+      <h3
+        className={cn(
+          "text-xl font-semibold leading-snug",
+          isPublished ? "text-white" : isArchived ? "text-[#8F96B0]" : "text-[#222631]",
+        )}
+        data-testid={`title-${b.id}`}
       >
-        {canManage && editingTitle ? (
-          <input
-            autoFocus
-            value={draftTitle}
-            onChange={(e) => setDraftTitle(e.target.value)}
-            onBlur={() => void commitRename()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void commitRename();
-              if (e.key === "Escape") cancelRename();
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full rounded bg-white px-2 py-1 text-lg font-semibold text-slate-900 placeholder:text-slate-400 outline-none ring-2 ring-emerald-400"
-            data-testid={`input-rename-${b.id}`}
-          />
-        ) : canManage ? (
+        {titleText}
+      </h3>
+      <p
+        className={cn(
+          "mt-1 text-base font-normal",
+          isPublished ? "text-white/90" : "text-[#8F96B0]",
+        )}
+      >
+        {formatMarketingBriefPeriodLabel(b.period_label)}
+      </p>
+
+      <div
+        className={cn(
+          "mt-3 inline-flex w-fit flex-wrap items-center gap-1.5 rounded-md px-2 py-1",
+          isPublished ? "bg-white/95" : "bg-[#F9FAFF]",
+        )}
+      >
+        <CategoryBadge category={b.category ?? "brief"} />
+        <BriefStatusBadge status={b.status} onAccent={isPublished} />
+        {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
+      </div>
+
+      <p
+        className={cn(
+          "mt-auto pt-3 text-[10px]",
+          isPublished ? "text-white/80" : "text-[#8F96B0]",
+        )}
+      >
+        {b.author_name ? `${b.author_name} · ` : ""}
+        обновлено {formatBriefUpdatedAt(b.updated_at)}
+      </p>
+    </article>
+  );
+}
+
+function AddActivityTile({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="flex flex-col items-center justify-center gap-2 self-center py-4"
+      onClick={onClick}
+      data-testid="button-add-marketing-activity"
+    >
+      <span className="flex h-20 w-20 items-center justify-center rounded-full border border-[#E8EAEE] bg-white text-3xl font-light text-[#9ACA3C] transition-colors hover:border-[#9ACA3C]/50">
+        +
+      </span>
+      <span className="text-xs text-[#8F96B0]">Добавить активность</span>
+    </button>
+  );
+}
+
+function buildDefaultExpandedState(briefs: MarketingBriefRow[]): Record<MarketingBriefCategory, boolean> {
+  const counts = new Map<MarketingBriefCategory, number>();
+  for (const section of MARKETING_BRIEF_CATEGORY_SECTIONS) {
+    counts.set(section.category, 0);
+  }
+  for (const b of briefs) {
+    const cat = b.category ?? "brief";
+    counts.set(cat, (counts.get(cat) ?? 0) + 1);
+  }
+  let firstExpanded = false;
+  const state = {} as Record<MarketingBriefCategory, boolean>;
+  for (const section of MARKETING_BRIEF_CATEGORY_SECTIONS) {
+    const hasItems = (counts.get(section.category) ?? 0) > 0;
+    if (!firstExpanded && hasItems) {
+      state[section.category] = true;
+      firstExpanded = true;
+    } else {
+      state[section.category] = false;
+    }
+  }
+  return state;
+}
+
+function BriefCategorySection({
+  label,
+  category,
+  briefs,
+  expanded,
+  onToggleExpanded,
+  canManage,
+  selection,
+  selectionActive,
+  menuHandlers,
+  onPreview,
+  onSelectAllInSection,
+  onAddActivity,
+}: {
+  label: string;
+  category: MarketingBriefCategory;
+  briefs: MarketingBriefRow[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  canManage: boolean;
+  selection: BriefListSelection | null;
+  selectionActive: boolean;
+  menuHandlers: BriefRowMenuHandlers;
+  onPreview: (id: string) => void;
+  onSelectAllInSection: (category: MarketingBriefCategory) => void;
+  onAddActivity?: () => void;
+}) {
+  const sectionBriefs = briefs.filter((b) => (b.category ?? "brief") === category);
+  const sectionIds = sectionBriefs.map((b) => b.id);
+  const allSectionSelected =
+    sectionIds.length > 0 && sectionIds.every((id) => selection?.isSelected(id) ?? false);
+
+  return (
+    <section className="space-y-4" data-testid={`section-marketing-briefs-category-${category}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-2xl font-semibold text-[#222631]">{label}</h2>
+        {canManage && selection && sectionIds.length > 0 ? (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDraftTitle(b.title);
-              setEditingTitle(true);
-            }}
-            className="block w-full text-left text-lg font-semibold text-white hover:underline"
-            data-testid={`title-${b.id}`}
+            className="text-base text-[#9ACA3C] underline underline-offset-2 hover:text-[#7a9e2f]"
+            onClick={() => onSelectAllInSection(category)}
+            data-testid={`link-select-all-category-${category}`}
           >
-            {briefDisplayTitle(b.title).text}
+            {allSectionSelected ? "Снять выделение в разделе" : "Выбрать все в разделе"}
           </button>
-        ) : (
-          <p className="text-lg font-semibold leading-snug text-white">{briefDisplayTitle(b.title).text}</p>
-        )}
-        <p className="mt-1 text-sm font-medium text-white/80">
-          {formatMarketingBriefPeriodLabel(b.period_label)}
-        </p>
+        ) : null}
       </div>
-      <CardHeader className="flex-1 pb-2">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <CategoryBadge category={b.category ?? "brief"} />
-          <BriefStatusBadge status={b.status} />
-          {b.status === "published" && isBriefNew(b.published_at) ? <BriefNewBadge briefId={b.id} /> : null}
-          <BriefVisibilityIcon visibility={b.visibility ?? "private"} />
+
+      {expanded ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {sectionBriefs.map((b) => (
+            <MarketingBriefCard
+              key={b.id}
+              brief={b}
+              canManage={canManage}
+              selection={selection}
+              selectionActive={selectionActive}
+              menuHandlers={menuHandlers}
+              onPreview={onPreview}
+            />
+          ))}
+          {canManage && onAddActivity ? <AddActivityTile onClick={onAddActivity} /> : null}
         </div>
-        <CardTitle className="sr-only">{briefDisplayTitle(b.title).text}</CardTitle>
-        <p className="mt-2 text-xs text-muted-foreground">
-          {b.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(b.updated_at)}
-        </p>
-      </CardHeader>
-      <CardFooter
-        className="flex flex-wrap gap-2 border-t border-border/50 pt-3"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
+      ) : null}
+
+      <button
+        type="button"
+        className="text-sm text-[#8F96B0] hover:text-[#343F5B]"
+        onClick={onToggleExpanded}
+        data-testid={`button-toggle-category-${category}`}
       >
-        {canManage ? <CardShareButton brief={b} onMutate={menuHandlers.onMutate} /> : null}
-        <div
-          className="contents"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          {renderCardFooter(b)}
-        </div>
-      </CardFooter>
-    </Card>
+        {expanded && sectionBriefs.length > 0 ? "Свернуть ↑" : "Посмотреть ↓"}
+      </button>
+    </section>
   );
 }
 
@@ -686,7 +758,6 @@ type BriefListViewsProps = {
   selection: BriefListSelection | null;
   selectAllRef?: RefObject<HTMLInputElement>;
   menuHandlers: BriefRowMenuHandlers;
-  renderCardFooter: (brief: MarketingBriefRow) => ReactNode;
 };
 
 export function BriefCardsListView({
@@ -694,25 +765,68 @@ export function BriefCardsListView({
   canManage,
   selection,
   menuHandlers,
-  renderCardFooter,
-}: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "menuHandlers" | "renderCardFooter">) {
+  onAddActivity,
+  onSelectAllInSection,
+  listKey,
+}: Pick<BriefListViewsProps, "briefs" | "canManage" | "selection" | "menuHandlers"> & {
+  onAddActivity?: () => void;
+  onSelectAllInSection?: (category: MarketingBriefCategory) => void;
+  /** Сброс сворачивания секций при смене фильтров */
+  listKey?: string;
+}) {
   const selectionActive = selection?.selectionActive ?? false;
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [, setLocation] = useLocation();
+  const [expandedByCategory, setExpandedByCategory] = useState<Record<MarketingBriefCategory, boolean>>(() =>
+    buildDefaultExpandedState(briefs),
+  );
+
+  useEffect(() => {
+    setExpandedByCategory(buildDefaultExpandedState(briefs));
+  }, [listKey, briefs]);
+
+  function handleSelectAllInSection(category: MarketingBriefCategory) {
+    if (onSelectAllInSection) {
+      onSelectAllInSection(category);
+      return;
+    }
+    if (!selection) return;
+    const sectionIds = briefs.filter((b) => (b.category ?? "brief") === category).map((b) => b.id);
+    const allSelected = sectionIds.every((id) => selection.isSelected(id));
+    if (allSelected) {
+      for (const id of sectionIds) {
+        if (selection.isSelected(id)) selection.onToggle(id);
+      }
+    } else {
+      for (const id of sectionIds) {
+        if (!selection.isSelected(id)) selection.onToggle(id);
+      }
+    }
+  }
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="section-marketing-briefs-list-cards">
-        {briefs.map((b) => (
-          <MarketingBriefCard
-            key={b.id}
-            brief={b}
+      <div className="space-y-10" data-testid="section-marketing-briefs-list-cards">
+        {MARKETING_BRIEF_CATEGORY_SECTIONS.map((section) => (
+          <BriefCategorySection
+            key={section.category}
+            label={section.label}
+            category={section.category}
+            briefs={briefs}
+            expanded={expandedByCategory[section.category] ?? false}
+            onToggleExpanded={() =>
+              setExpandedByCategory((prev) => ({
+                ...prev,
+                [section.category]: !prev[section.category],
+              }))
+            }
             canManage={canManage}
             selection={selection}
             selectionActive={selectionActive}
             menuHandlers={menuHandlers}
-            renderCardFooter={renderCardFooter}
             onPreview={setPreviewId}
+            onSelectAllInSection={handleSelectAllInSection}
+            onAddActivity={onAddActivity}
           />
         ))}
       </div>
