@@ -230,7 +230,7 @@ export function ImpersonationQuickSwitch({
 
   const reloadMain = () => {
     qc.clear();
-    window.location.assign("/main");
+    window.location.assign("/");
   };
 
   const handleStart = async (targetUserId: string) => {
