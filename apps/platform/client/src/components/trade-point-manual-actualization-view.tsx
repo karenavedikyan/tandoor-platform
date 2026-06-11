@@ -160,6 +160,23 @@ function writeTpCleanOpenSections(tradePointId: string, ids: string[]): void {
   }
 }
 
+/** Состояние аккордеона → только то, что пользователь раскрыл сам (без временного авто-showcase из URL). */
+function accordionNextToUserSections(
+  accordionNext: string[],
+  prevUser: string[],
+  autoShowcaseActive: boolean,
+): string[] {
+  const showcaseInAccordion = accordionNext.includes("showcase");
+  let showcasePinned = prevUser.includes("showcase");
+  if (!showcaseInAccordion) {
+    showcasePinned = false;
+  } else if (!showcasePinned && !autoShowcaseActive) {
+    showcasePinned = true;
+  }
+  const withoutShowcase = accordionNext.filter((id) => id !== "showcase");
+  return showcasePinned ? [...withoutShowcase, "showcase"] : withoutShowcase;
+}
+
 type TpSectionStatusKind = "empty" | "partial" | "complete" | "attention" | "no_showcase" | "needs_fill";
 
 function TradePointSectionStatusBadge(props: { status: TpSectionStatusKind }): ReactElement {
@@ -405,32 +422,34 @@ export function TradePointManualActualizationView(props: {
     return [...head, ...(showTasksSection ? (["tasks"] as const) : []), ...tail] as string[];
   }, [showTasksSection]);
 
-  const [openSections, setOpenSections] = useState<string[]>([]);
+  const [userOpenSections, setUserOpenSections] = useState<string[]>([]);
   const [sectionsHydrated, setSectionsHydrated] = useState(false);
+  const [showcaseAutoOpen, setShowcaseAutoOpen] = useState(false);
 
   useEffect(() => {
     const saved = readTpCleanOpenSections(point.id, true);
-    setOpenSections(saved ?? []);
+    setUserOpenSections(saved ?? []);
+    setShowcaseAutoOpen(false);
     setSectionsHydrated(true);
   }, [point.id]);
 
   useEffect(() => {
     if (!sectionsHydrated) return;
-    writeTpCleanOpenSections(point.id, openSections);
-  }, [point.id, openSections, sectionsHydrated]);
+    writeTpCleanOpenSections(point.id, userOpenSections);
+  }, [point.id, userOpenSections, sectionsHydrated]);
 
   useEffect(() => {
-    if (!showTasksSection && openSections.includes("tasks")) {
-      setOpenSections((prev) => prev.filter((id) => id !== "tasks"));
+    if (!showTasksSection && userOpenSections.includes("tasks")) {
+      setUserOpenSections((prev) => prev.filter((id) => id !== "tasks"));
     }
-  }, [showTasksSection, openSections]);
+  }, [showTasksSection, userOpenSections]);
 
   const routeQs = useRouteSearchParams();
 
   useEffect(() => {
     if (!sectionsHydrated) return;
     if (routeQs.get("tradePointShowcase") !== "1") return;
-    setOpenSections((prev) => (prev.includes("showcase") ? prev : [...prev, "showcase"]));
+    setShowcaseAutoOpen(true);
     requestAnimationFrame(() => {
       document
         .querySelector('[data-testid="section-trade-point-showcase-portals"]')
@@ -438,23 +457,40 @@ export function TradePointManualActualizationView(props: {
     });
   }, [routeQs, sectionsHydrated, point.id]);
 
+  const openSections = useMemo(() => {
+    if (showcaseAutoOpen && !userOpenSections.includes("showcase")) {
+      return [...userOpenSections, "showcase"];
+    }
+    return userOpenSections;
+  }, [userOpenSections, showcaseAutoOpen]);
+
   const onAccordionValueChange = useCallback(
     (next: string[]) => {
       const allowed = new Set<string>([...TP_CLEAN_SECTION_BASE, ...(showTasksSection ? ["tasks"] : [])]);
-      setOpenSections(next.filter((id) => allowed.has(id)));
+      const filtered = next.filter((id) => allowed.has(id));
+      const showcaseWasAutoOnly = showcaseAutoOpen && !userOpenSections.includes("showcase");
+      const showcaseInNext = filtered.includes("showcase");
+      setUserOpenSections((prev) => accordionNextToUserSections(filtered, prev, showcaseAutoOpen));
+      if (showcaseWasAutoOnly && showcaseInNext) {
+        setShowcaseAutoOpen(true);
+      } else {
+        setShowcaseAutoOpen(false);
+      }
     },
-    [showTasksSection],
+    [showTasksSection, showcaseAutoOpen, userOpenSections],
   );
 
   const allSectionsExpanded =
     orderedSectionIds.length > 0 && orderedSectionIds.every((id) => openSections.includes(id));
 
   const toggleExpandAll = useCallback(() => {
-    setOpenSections(allSectionsExpanded ? [] : [...orderedSectionIds]);
+    setShowcaseAutoOpen(false);
+    setUserOpenSections(allSectionsExpanded ? [] : [...orderedSectionIds]);
   }, [allSectionsExpanded, orderedSectionIds]);
 
   const expandPassportAndAddress = useCallback(() => {
-    setOpenSections((prev) => Array.from(new Set([...prev, "passport", "address_format"])));
+    setShowcaseAutoOpen(false);
+    setUserOpenSections((prev) => Array.from(new Set([...prev, "passport", "address_format"])));
   }, []);
 
   const heroContact = useMemo(() => {
