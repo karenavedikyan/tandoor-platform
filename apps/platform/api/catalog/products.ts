@@ -77,6 +77,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const filters = parseCatalogListFilters(req);
+
+    if (filters.ids?.length) {
+      const r = await pool.query<{
+        id: string;
+        name: string;
+        image_path: string | null;
+        image_url: string | null;
+      }>(
+        `SELECT id, name, image_path, image_url
+         FROM catalog_products
+         WHERE active = TRUE AND id = ANY($1::uuid[])`,
+        [filters.ids],
+      );
+      sendJson(res, 200, {
+        success: true,
+        total: r.rows.length,
+        limit: r.rows.length,
+        offset: 0,
+        items: r.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          image_path: row.image_path,
+          image_url: row.image_url,
+        })),
+      });
+      return;
+    }
+
     const root = await resolveRootCategory(pool, filters.categoryId, filters.groupId);
     const filterGroupDefs = getFilterGroupsForRoot(root.id, root.name);
     const interiorGrouping = isInteriorDoorGrouping(root);

@@ -52,6 +52,7 @@ import type { ShowcaseTask } from "@/lib/showcase-distribution-data";
 import type { MatrixFilterId, TradePointMatrixSummary, TradePointProductMatrixItem } from "@/lib/trade-point-matrix-data";
 import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-task-data";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
+import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
@@ -293,66 +294,6 @@ function filterShowcaseModelsForDisplay(
     if (categoryFilter === "interior" && m.type !== "interior") return false;
     return modelPassesMatrixCatalogFilters(m, catalogFilters);
   });
-}
-
-type ShowcasePhotoPlaceholderDensity = "comfortable" | "compact" | "micro";
-
-/** Фото двери целиком: фиксированная рамка (frameClass задаёт размеры) + object-contain, без растягивания по высоте карточки. */
-function ModelDoorPhotoFrame({
-  src,
-  alt,
-  frameClass,
-  imgTestId,
-  imgPaddingClass = "p-2",
-  placeholderDensity = "comfortable",
-}: {
-  src: string;
-  alt?: string;
-  frameClass: string;
-  imgTestId?: string;
-  /** Отступ картинки от рамки (например p-1 в плотных миниатюрах). */
-  imgPaddingClass?: string;
-  /** Плотные режимы — компактный плейсхолдер без «высокой пустой карточки». */
-  placeholderDensity?: ShowcasePhotoPlaceholderDensity;
-}) {
-  const emptyClass =
-    placeholderDensity === "micro"
-      ? "text-[8px] font-medium text-muted-foreground/80"
-      : placeholderDensity === "compact"
-        ? "text-[8px] text-muted-foreground"
-        : "text-[9px] text-muted-foreground";
-  const emptyLabel = placeholderDensity === "micro" ? "—" : "Нет фото";
-
-  return (
-    <div
-      className={cn(
-        "relative shrink-0 overflow-hidden rounded-md border border-border/60 bg-muted/40",
-        frameClass,
-      )}
-    >
-      {src ? (
-        <img
-          src={src}
-          alt={alt ?? ""}
-          data-testid={imgTestId}
-          className={cn(
-            "absolute inset-0 box-border h-full w-full object-contain object-center",
-            imgPaddingClass,
-          )}
-          loading="lazy"
-        />
-      ) : (
-        <span
-          className={cn(
-            "absolute inset-0 flex items-center justify-center bg-muted/25 px-0.5 text-center leading-none",
-            emptyClass,
-          )}
-        >
-          {emptyLabel}
-        </span>
-      )}
-    </div>
-  );
 }
 
 export type TradePointShowcasePageBundle = {

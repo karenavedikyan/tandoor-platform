@@ -59,6 +59,7 @@ const ITEM_STATUS_LABEL: Record<AssignmentItemStatus, string> = {
   shipped: "Отгружено",
   installed: "На витрине",
   problem: "Проблема",
+  not_relevant: "Уже не актуально",
 };
 
 function assignmentStatusTone(status: AssignmentStatus): string {
@@ -72,6 +73,7 @@ function itemStatusTone(status: AssignmentItemStatus): string {
   if (status === "installed") return "border-emerald-200 bg-emerald-50 text-emerald-900";
   if (status === "shipped") return "border-sky-200 bg-sky-50 text-sky-950";
   if (status === "problem") return "border-red-200 bg-red-50 text-red-900";
+  if (status === "not_relevant") return "border-border bg-muted/60 text-muted-foreground";
   return "border-amber-200 bg-amber-50 text-amber-950";
 }
 
