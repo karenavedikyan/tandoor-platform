@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Eye, Loader2 } from "lucide-react";
+import { ArrowLeft, Calendar, Eye, Loader2 } from "lucide-react";
 import { BriefShareActions, BriefVisibilityToggle } from "@/components/marketing-brief/brief-visibility-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,18 +23,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BackNav } from "@/components/navigation/back-nav";
-import { FloatingBackButton } from "@/components/navigation/floating-back-button";
-import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canManageMarketingBriefs } from "@/lib/auth-access";
 import {
+  BriefBlocksAddToolbar,
+  BriefBlocksEditor,
+} from "@/components/marketing-brief/brief-blocks-editor";
+import {
   archiveBrief,
   briefDisplayTitle,
-  briefStatusLabel,
   DEFAULT_MARKETING_BRIEF_ACCENT,
   formatBriefUpdatedAt,
-  formatMarketingBriefPeriodLabel,
   getBrief,
   last12PeriodOptions,
   publishBrief,
@@ -43,16 +41,37 @@ import {
   revisionActionLabel,
   unpublishBrief,
   updateBrief,
+  type MarketingBriefBlockType,
   type MarketingBriefCategory,
   type MarketingBriefRevisionRow,
   type MarketingBriefRow,
   type MarketingBriefViewStats,
 } from "@/lib/marketing-briefs-api";
-import { CategoryBadge } from "@/components/marketing/CategoryBadge";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { BriefBlocksEditor } from "@/components/marketing-brief/brief-blocks-editor";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
+
+const FIELD_CLASS =
+  "rounded-[6px] border border-[#E8EAEE] bg-[#F9FAFF] text-[#222631] focus-visible:ring-[#9ACA3C]/30";
+
+function saveStatusText(
+  saveState: "idle" | "saving" | "saved" | "error",
+  readOnlyFields: boolean,
+): { text: string; className: string } {
+  if (readOnlyFields) {
+    return { text: "Только для просмотра", className: "text-[#8F96B0]" };
+  }
+  if (saveState === "saving") {
+    return { text: "Сохранение…", className: "text-[#8F96B0]" };
+  }
+  if (saveState === "saved") {
+    return { text: "Сохранено", className: "text-[#9ACA3C]" };
+  }
+  if (saveState === "error") {
+    return { text: "Ошибка сохранения", className: "text-destructive" };
+  }
+  return { text: "Изменения сохраняются автоматически", className: "text-[#8F96B0]" };
+}
 
 export default function MarketingBriefEditorPage() {
   const { profile } = useReleaseDemoProfile();
@@ -76,8 +95,13 @@ export default function MarketingBriefEditorPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const baselineRef = useRef<string>("");
   const dirtyMetaRef = useRef(false);
+  const addBlockRef = useRef<((type: MarketingBriefBlockType) => void) | null>(null);
 
   const periodOptions = useMemo(() => last12PeriodOptions().filter((o) => o.value !== "all"), []);
+
+  const registerAddBlock = useCallback((addBlock: (type: MarketingBriefBlockType) => void) => {
+    addBlockRef.current = addBlock;
+  }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -197,18 +221,17 @@ export default function MarketingBriefEditorPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center" data-testid="page-marketing-brief-editor">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
+      <div className="flex min-h-[40vh] items-center justify-center bg-[#EEEFF6]" data-testid="page-marketing-brief-editor">
+        <Loader2 className="h-8 w-8 animate-spin text-[#8F96B0]" aria-hidden />
       </div>
     );
   }
 
   if (!brief) {
     return (
-      <div className="mx-auto max-w-lg space-y-4 pb-24" data-testid="page-marketing-brief-editor">
-        <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-editor" />
-        <p className="text-sm text-muted-foreground">Бриф не найден.</p>
-        <Button asChild variant="outline">
+      <div className="mx-auto max-w-lg space-y-4 bg-[#EEEFF6] px-4 pb-24 pt-4" data-testid="page-marketing-brief-editor">
+        <p className="text-sm text-[#8F96B0]">Бриф не найден.</p>
+        <Button asChild variant="outline" className="rounded-[6px] border-[#E8EAEE] bg-white">
           <Link href="/marketing-briefs">К списку</Link>
         </Button>
       </div>
@@ -216,81 +239,90 @@ export default function MarketingBriefEditorPage() {
   }
 
   const readOnlyFields = brief.status === "archived";
+  const saveStatus = saveStatusText(saveState, readOnlyFields);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-24" data-testid="page-marketing-brief-editor">
-      <BackNav
-        breadcrumbs={breadcrumbsFor(`/marketing-briefs/${brief.id}`, {
-          brief: briefDisplayTitle(brief.title ?? "").text,
-        })}
-        fallbackHref="/marketing-briefs"
-      />
-      <FloatingBackButton href="/marketing-briefs" label="К брифам" testId="button-floating-back-marketing-brief-editor" />
-
-      <div
-        className="overflow-hidden rounded-2xl border border-border/80 shadow-sm"
-        style={{ borderTopWidth: 6, borderTopColor: accentColor }}
-      >
-        <div className="space-y-2 px-5 py-6 sm:px-8" style={{ backgroundColor: accentColor }}>
-          <p className="text-2xl font-semibold text-[#222631]">{formatMarketingBriefPeriodLabel(periodLabel)}</p>
+    <div className="min-h-screen bg-[#EEEFF6] pb-24" data-testid="page-marketing-brief-editor">
+      <div className="mx-auto max-w-6xl space-y-4 px-4 pt-4 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 rounded-[6px] border-[#E8EAEE] bg-white text-[#343F5B] hover:bg-[#F9FAFF]"
+            data-testid="button-marketing-brief-back"
+            onClick={() => setLocation("/marketing-briefs")}
+          >
+            <ArrowLeft className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+            Назад
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-1.5 rounded-[6px] border-[1.5px] border-[#9ACA3C] bg-white text-[#9ACA3C] hover:bg-[#9ACA3C]/5"
+            data-testid="button-marketing-brief-preview"
+            onClick={() => {
+              const url = buildBrowserHashAppHref(`/marketing-briefs/view/${brief.id}`, { preview: 1 });
+              window.open(url, "_blank", "noopener,noreferrer");
+            }}
+          >
+            <Eye className="h-4 w-4" aria-hidden />
+            Предпросмотр
+          </Button>
         </div>
-        <div className="space-y-3 border-t border-border/60 bg-card px-5 py-4 sm:px-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <CategoryBadge category={category} />
-            <Badge variant="secondary">{briefStatusLabel(brief.status)}</Badge>
-            <span className="text-xs text-muted-foreground">
-              {brief.author_name ?? "—"} · обновлено {formatBriefUpdatedAt(brief.updated_at)}
-            </span>
-          </div>
-          <p className={cn("text-xl font-semibold", !title.trim() && "text-muted-foreground")}>
-            {briefDisplayTitle(title).text}
-          </p>
-        </div>
-      </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-1.5"
-          data-testid="button-marketing-brief-preview"
-          onClick={() => {
-            const url = buildBrowserHashAppHref(`/marketing-briefs/view/${brief.id}`, { preview: 1 });
-            window.open(url, "_blank", "noopener,noreferrer");
-          }}
-        >
-          <Eye className="h-4 w-4" aria-hidden />
-          Предпросмотр
-        </Button>
-        {brief.status === "draft" || brief.status === "archived" ? (
-          <Button type="button" onClick={() => void runStatusAction(publishBrief, "Опубликовано")}>
-            Опубликовать
-          </Button>
-        ) : null}
-        {brief.status === "published" ? (
-          <Button type="button" variant="secondary" onClick={() => void runStatusAction(unpublishBrief, "Снято с публикации")}>
-            Снять с публикации
-          </Button>
-        ) : null}
-        {brief.status !== "archived" ? (
-          <Button type="button" variant="outline" onClick={() => setArchiveOpen(true)}>
-            В архив
-          </Button>
-        ) : (
-          <Button type="button" variant="outline" onClick={() => void runStatusAction(restoreBrief, "Восстановлено")}>
-            Восстановить
-          </Button>
-        )}
-        {brief.status === "published" ? (
-          <>
-            <BriefShareActions brief={brief} onBriefUpdated={setBrief} />
-            <Button asChild variant="ghost" size="sm">
-              <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {brief.status === "draft" || brief.status === "archived" ? (
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-[6px] bg-[#9ACA3C] text-white hover:bg-[#8ab835]"
+              onClick={() => void runStatusAction(publishBrief, "Опубликовано")}
+            >
+              Опубликовать
             </Button>
-          </>
-        ) : null}
+          ) : null}
+          {brief.status === "published" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="rounded-[6px]"
+              onClick={() => void runStatusAction(unpublishBrief, "Снято с публикации")}
+            >
+              Снять с публикации
+            </Button>
+          ) : null}
+          {brief.status !== "archived" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-[6px] border-[#E8EAEE] bg-white"
+              onClick={() => setArchiveOpen(true)}
+            >
+              В архив
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-[6px] border-[#E8EAEE] bg-white"
+              onClick={() => void runStatusAction(restoreBrief, "Восстановлено")}
+            >
+              Восстановить
+            </Button>
+          )}
+          {brief.status === "published" ? (
+            <>
+              <BriefShareActions brief={brief} onBriefUpdated={setBrief} />
+              <Button asChild variant="ghost" size="sm" className="text-[#8F96B0]">
+                <Link href={`/marketing-briefs/view/${brief.id}`}>Просмотр для команды</Link>
+              </Button>
+            </>
+          ) : null}
         </div>
+
         {brief.status !== "archived" ? (
           <BriefVisibilityToggle
             briefId={brief.id}
@@ -299,137 +331,144 @@ export default function MarketingBriefEditorPage() {
             onUpdated={setBrief}
           />
         ) : null}
-        <p className="text-[11px] text-muted-foreground">Предпросмотр откроется в новой вкладке</p>
-      </div>
 
-      <p
-        className={cn(
-          "text-xs",
-          saveState === "error" ? "text-destructive" : saveState === "saved" ? "text-emerald-700" : "text-muted-foreground",
-        )}
-        data-testid="text-marketing-brief-save-status"
-      >
-        {saveState === "saving"
-          ? "Сохранение…"
-          : saveState === "saved"
-            ? "Сохранено"
-            : saveState === "error"
-              ? "Ошибка сохранения"
-              : readOnlyFields
-                ? "Архивный бриф только для просмотра"
-                : "Изменения сохраняются автоматически"}
-      </p>
+        {viewStats ? (
+          <p className="text-sm text-[#8F96B0]" data-testid="text-marketing-brief-view-stats">
+            👁 Прочитали: {viewStats.viewed_count} из {viewStats.audience_count} менеджеров ({viewStats.percent}%)
+          </p>
+        ) : null}
 
-      {viewStats ? (
-        <p className="text-sm text-muted-foreground" data-testid="text-marketing-brief-view-stats">
-          👁 Прочитали: {viewStats.viewed_count} из {viewStats.audience_count} менеджеров ({viewStats.percent}%)
-        </p>
-      ) : null}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+          <div className="min-w-0 flex-1 space-y-6">
+            <section className="relative overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white">
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-[#9ACA3C]" aria-hidden />
+              <div className="flex items-start justify-between gap-3 px-5 pb-5 pt-6 sm:px-6">
+                <h2 className="text-xl font-semibold text-[#222631] sm:text-2xl">Метаданные</h2>
+                <p
+                  className={cn("shrink-0 text-sm", saveStatus.className)}
+                  data-testid="text-marketing-brief-save-status"
+                >
+                  {saveStatus.text}
+                </p>
+              </div>
+              <div className="space-y-4 px-5 pb-6 sm:px-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#8F96B0]">Категория</Label>
+                    <Select
+                      value={category}
+                      onValueChange={(v) => setCategory(v as MarketingBriefCategory)}
+                      disabled={readOnlyFields}
+                    >
+                      <SelectTrigger className={FIELD_CLASS} data-testid="select-marketing-brief-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="brief">Бриф</SelectItem>
+                        <SelectItem value="promo">Акция</SelectItem>
+                        <SelectItem value="info">Информация</SelectItem>
+                        <SelectItem value="letter">Информационные письма</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#8F96B0]">Период</Label>
+                    <div className="relative">
+                      <Select value={periodLabel} onValueChange={setPeriodLabel} disabled={readOnlyFields}>
+                        <SelectTrigger className={cn(FIELD_CLASS, "pr-9")}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {periodOptions.map((o) => (
+                            <SelectItem key={o.value} value={o.value}>
+                              {o.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Calendar
+                        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8F96B0]"
+                        aria-hidden
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-[#8F96B0]">Название</Label>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    disabled={readOnlyFields}
+                    placeholder={briefDisplayTitle("").text}
+                    className={FIELD_CLASS}
+                    data-testid="input-brief-title-inline"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-[#8F96B0]">Пояснительный текст</Label>
+                  <Textarea
+                    rows={4}
+                    value={coverText}
+                    onChange={(e) => setCoverText(e.target.value)}
+                    disabled={readOnlyFields}
+                    className={FIELD_CLASS}
+                  />
+                </div>
+              </div>
+            </section>
 
-      <section className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5">
-        <h2 className="text-sm font-semibold text-foreground">Метаданные</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Категория</Label>
-            <Select
-              value={category}
-              onValueChange={(v) => setCategory(v as MarketingBriefCategory)}
-              disabled={readOnlyFields}
-            >
-              <SelectTrigger data-testid="select-marketing-brief-category">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="brief">Бриф</SelectItem>
-                <SelectItem value="promo">Акция</SelectItem>
-                <SelectItem value="info">Информация</SelectItem>
-                <SelectItem value="letter">Информационные письма</SelectItem>
-              </SelectContent>
-            </Select>
+            {!readOnlyFields ? (
+              <div className="lg:hidden">
+                <BriefBlocksAddToolbar
+                  orientation="horizontal"
+                  onAdd={(type) => addBlockRef.current?.(type)}
+                />
+              </div>
+            ) : null}
+
+            <BriefBlocksEditor
+              briefId={brief.id}
+              canEdit={!readOnlyFields}
+              externalAddToolbar
+              registerAddBlock={registerAddBlock}
+            />
+
+            {revisions.length > 0 ? (
+              <section className="space-y-2 rounded-[7px] border border-[#E8EAEE] bg-white p-4 sm:p-5">
+                <h2 className="text-sm font-semibold text-[#222631]">История изменений</h2>
+                <ul className="space-y-2 text-xs text-[#8F96B0]">
+                  {revisions.slice(0, 10).map((r) => (
+                    <li key={r.id} className="flex flex-wrap gap-x-2 gap-y-0.5 border-b border-[#E8EAEE] pb-2 last:border-0">
+                      <span className="tabular-nums text-[#222631]">{formatBriefUpdatedAt(r.created_at)}</span>
+                      <span>{r.actor_name ?? "—"}</span>
+                      <span>{revisionActionLabel(r.action)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Период</Label>
-            <Select value={periodLabel} onValueChange={setPeriodLabel} disabled={readOnlyFields}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {periodOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs">Текст обложки</Label>
-            <Textarea rows={4} value={coverText} onChange={(e) => setCoverText(e.target.value)} disabled={readOnlyFields} />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs">Акцентный цвет</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                disabled={readOnlyFields}
-                className="h-10 w-14 cursor-pointer rounded border border-border"
-                aria-label="Акцентный цвет"
-              />
-              <Input
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                disabled={readOnlyFields}
-                className="font-mono text-sm"
-              />
-            </div>
-          </div>
+
+          {!readOnlyFields ? (
+            <aside className="hidden shrink-0 lg:block">
+              <div className="sticky top-4">
+                <BriefBlocksAddToolbar
+                  orientation="vertical"
+                  onAdd={(type) => addBlockRef.current?.(type)}
+                />
+              </div>
+            </aside>
+          ) : null}
         </div>
-      </section>
-
-      <section className="space-y-2">
-        <Label htmlFor="brief-inline-title" className="text-xs text-muted-foreground">
-          Название брифа
-        </Label>
-        <input
-          id="brief-inline-title"
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={readOnlyFields}
-          placeholder="Например: Май 2026, акции по входным дверям"
-          className={cn(
-            "w-full border-0 border-b border-transparent bg-transparent px-0 py-1 text-xl font-medium text-foreground outline-none transition-colors sm:text-2xl",
-            "placeholder:text-muted-foreground/70 focus:border-primary",
-            readOnlyFields && "cursor-not-allowed opacity-60",
-          )}
-          data-testid="input-brief-title-inline"
-        />
-      </section>
-
-      <BriefBlocksEditor briefId={brief.id} canEdit={!readOnlyFields} />
-
-      {revisions.length > 0 ? (
-        <section className="space-y-2 rounded-2xl border border-border/80 bg-muted/10 p-4">
-          <h2 className="text-sm font-semibold text-foreground">История изменений</h2>
-          <ul className="space-y-2 text-xs text-muted-foreground">
-            {revisions.slice(0, 10).map((r) => (
-              <li key={r.id} className="flex flex-wrap gap-x-2 gap-y-0.5 border-b border-border/40 pb-2 last:border-0">
-                <span className="tabular-nums text-foreground">{formatBriefUpdatedAt(r.created_at)}</span>
-                <span>{r.actor_name ?? "—"}</span>
-                <span>{revisionActionLabel(r.action)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      </div>
 
       <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Перенести бриф в архив?</AlertDialogTitle>
-            <AlertDialogDescription>Бриф скроется у команды продаж. Его можно восстановить из вкладки «Архив».</AlertDialogDescription>
+            <AlertDialogDescription>
+              Бриф скроется у команды продаж. Его можно восстановить из вкладки «Архив».
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
