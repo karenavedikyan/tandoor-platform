@@ -1,5 +1,5 @@
 import type { ComponentProps, ComponentType, ReactElement, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { Camera, ChevronDown, ChevronRight, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -223,28 +223,59 @@ function SurfaceCard({
   );
 }
 
-function useActiveSection() {
-  const [active, setActive] = useState<SectionId>("overview");
+const SCROLL_SPY_OFFSET = 140;
 
-  useEffect(() => {
-    const obs = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        const first = visible[0];
-        if (!first?.target.id) return;
-        const found = SECTION_IDS.find((sid) => SECTION_DOM_IDS[sid] === first.target.id);
-        if (found) setActive(found);
-      },
-      { root: null, rootMargin: "-20% 0px -55% 0px", threshold: 0 },
-    );
-    SECTION_IDS.forEach((sid) => {
+function useActiveSection(): {
+  active: SectionId;
+  setActiveManually: (id: SectionId) => void;
+} {
+  const [active, setActive] = useState<SectionId>("overview");
+  const lockUntilRef = useRef(0);
+
+  const computeActive = useCallback(() => {
+    if (Date.now() < lockUntilRef.current) return;
+    let bestId: SectionId | null = null;
+    let bestTop = Number.NEGATIVE_INFINITY;
+    for (const sid of SECTION_IDS) {
+      if (sid === "matrix") continue;
       const el = document.getElementById(SECTION_DOM_IDS[sid]);
-      if (el) obs.observe(el);
-    });
-    return () => obs.disconnect();
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top - SCROLL_SPY_OFFSET;
+      if (top <= 0 && top > bestTop) {
+        bestTop = top;
+        bestId = sid;
+      }
+    }
+    if (!bestId) bestId = "overview";
+    setActive((prev) => (prev === bestId ? prev : bestId));
   }, []);
 
-  return active;
+  useEffect(() => {
+    let raf = 0;
+    const onScrollOrResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        computeActive();
+      });
+    };
+    window.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    const t = window.setTimeout(computeActive, 0);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+      if (raf) cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [computeActive]);
+
+  const setActiveManually = useCallback((id: SectionId) => {
+    setActive(id);
+    lockUntilRef.current = Date.now() + 900;
+  }, []);
+
+  return { active, setActiveManually };
 }
 
 function TradePointSectionNav({
@@ -378,7 +409,7 @@ function TradePointDetailContent({
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
-  const activeSection = useActiveSection();
+  const { active: activeSection, setActiveManually } = useActiveSection();
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set());
   const toggleSection = useCallback((id: SectionId) => {
     setOpenSections((prev) => {
@@ -400,11 +431,12 @@ function TradePointDetailContent({
     (id: SectionId) => {
       const target: SectionId = id === "matrix" ? "showcase" : id;
       openSection(target);
+      setActiveManually(target);
       requestAnimationFrame(() => {
         document.getElementById(SECTION_DOM_IDS[id])?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     },
-    [openSection],
+    [openSection, setActiveManually],
   );
   const [commentsBump, setCommentsBump] = useState(0);
   const [contactsBump, setContactsBump] = useState(0);
@@ -507,13 +539,14 @@ function TradePointDetailContent({
   useEffect(() => {
     if (routeQs.get("tradePointShowcase") !== "1") return;
     openSection("showcase");
+    setActiveManually("showcase");
     requestAnimationFrame(() => {
       document.getElementById("section-trade-point-showcase-matrix")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  }, [routeQs, dealer.id, point.id, openSection]);
+  }, [routeQs, dealer.id, point.id, openSection, setActiveManually]);
   const mapSearch = useMemo(() => mapSearchTextForPoint(point), [point]);
   const yandexMapHref = useMemo(() => `https://yandex.ru/maps/?text=${encodeURIComponent(mapSearch || "Россия")}`, [mapSearch]);
   const clientMapHref = useMemo(() => {
