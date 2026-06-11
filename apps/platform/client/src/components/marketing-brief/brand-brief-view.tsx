@@ -30,6 +30,7 @@ import {
   type BrandBriefTheme,
   type BrandBriefThemeMode,
 } from "@/components/marketing-brief/brand-brief-theme";
+import { BriefInlineSpan, BriefInlineText } from "@/components/marketing-brief/marketing-brief-blocks-published";
 import { cn } from "@/lib/utils";
 
 function asSection(payload: Record<string, unknown>): SectionBlockPayload {
@@ -83,15 +84,7 @@ function formatSectionNumber(num: string | undefined, fallbackIndex: number): st
 }
 
 function Paragraphs({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
-  return (
-    <div className={cn("whitespace-pre-wrap text-sm leading-relaxed sm:text-base", className)} style={style}>
-      {text.split("\n").map((line, i) => (
-        <p key={i} className={line.trim() === "" ? "min-h-[0.75rem]" : undefined}>
-          {line || "\u00a0"}
-        </p>
-      ))}
-    </div>
-  );
+  return <BriefInlineText text={text} className={cn("text-sm leading-relaxed sm:text-base", className)} style={style} />;
 }
 
 function TriangleMarks({ side, theme }: { side: "left" | "right"; theme: BrandBriefTheme }) {
@@ -222,7 +215,7 @@ function renderBrandBlock(
         <section key={block.id} className="brief-block space-y-2" data-brief-block data-testid="brand-brief-text">
           {p.heading?.trim() ? (
             <h3 className="text-lg font-semibold" style={{ color: theme.text }}>
-              {p.heading}
+              <BriefInlineSpan text={p.heading} />
             </h3>
           ) : null}
           <Paragraphs text={p.body} style={{ color: theme.text }} />

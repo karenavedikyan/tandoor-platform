@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -18,13 +18,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  ChevronDown,
   Gift,
   GripVertical,
-  Hash,
-  LayoutGrid,
+  Link2,
   ListOrdered,
   Loader2,
-  MessageCircle,
   Package,
   Plus,
   Table2,
@@ -34,7 +33,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,11 +43,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Collapsible,
   CollapsibleContent,
@@ -69,6 +62,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { mergeBlocksFromServer } from "@/lib/brief-blocks-editor-state";
 import { BonusBlockEditor } from "@/components/marketing-brief/bonus-block-editor";
+import {
+  wrapBriefTextSelection,
+  type BriefInlineWrapKind,
+} from "@/components/marketing-brief/marketing-brief-blocks-published";
 import { PriceTableBlockEditor } from "@/components/marketing-brief/price-table-block-editor";
 import { ProductsBlockEditor } from "@/components/marketing-brief/products-block-editor";
 import {
@@ -147,25 +144,138 @@ export function BriefBlocksAddToolbar({
   );
 }
 
-function blockIcon(type: MarketingBriefBlockType) {
+const FIELD_CLASS =
+  "rounded-[6px] border border-[#E8EAEE] bg-[#F9FAFF] text-[#222631] focus-visible:ring-[#9ACA3C]/30";
+const LABEL_CLASS = "text-xs text-[#222631]";
+const HINT_CLASS = "text-[10px] leading-snug text-[#8F96B0]";
+const ACTION_BTN_CLASS =
+  "h-9 gap-1.5 rounded-[6px] border border-[#E8EAEE] bg-white px-3 text-sm text-[#343F5B] hover:bg-[#F9FAFF]";
+
+function blockCardTitle(type: MarketingBriefBlockType): string {
   switch (type) {
-    case "section":
-      return Hash;
-    case "text":
-      return Type;
-    case "segments":
-      return LayoutGrid;
-    case "callout":
-      return MessageCircle;
-    case "products":
-      return Package;
     case "price_table":
-      return Tags;
-    case "bonus":
-      return Gift;
+      return "Таблица";
+    case "callout":
+      return "Выноска";
     default:
-      return Hash;
+      return blockTypeLabel(type);
   }
+}
+
+function blockSaveStatusLabel(saveState: "idle" | "saving" | "saved" | "error"): string | null {
+  if (saveState === "saving") return "Сохраняется…";
+  if (saveState === "saved") return "Сохранено";
+  if (saveState === "error") return "Ошибка";
+  return null;
+}
+
+function applyFormatToField(
+  el: HTMLInputElement | HTMLTextAreaElement | null,
+  value: string,
+  onChange: (next: string) => void,
+  kind: BriefInlineWrapKind,
+) {
+  if (!el) return;
+  const start = el.selectionStart ?? 0;
+  const end = el.selectionEnd ?? 0;
+  let linkUrl: string | undefined;
+  if (kind === "link") {
+    const url = window.prompt("Адрес ссылки", "https://");
+    if (url == null) return;
+    linkUrl = url;
+  }
+  const next = wrapBriefTextSelection(value, start, end, kind, linkUrl);
+  onChange(next);
+  requestAnimationFrame(() => {
+    el.focus();
+    const cursor = start + (next.length - value.length);
+    el.setSelectionRange(cursor, cursor);
+  });
+}
+
+function TextFormatToolbar({
+  inputRef,
+  value,
+  onChange,
+  disabled,
+}: {
+  inputRef: RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const btnClass =
+    "flex h-8 w-8 items-center justify-center rounded-[6px] text-sm font-semibold text-[#8F96B0] transition-colors hover:bg-[#F9FAFF] hover:text-[#9ACA3C] disabled:pointer-events-none disabled:opacity-40";
+
+  function format(kind: BriefInlineWrapKind) {
+    applyFormatToField(inputRef.current, value, onChange, kind);
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1 pt-1" role="toolbar" aria-label="Форматирование текста">
+      <button type="button" className={btnClass} disabled={disabled} aria-label="Жирный" onClick={() => format("bold")}>
+        B
+      </button>
+      <button
+        type="button"
+        className={cn(btnClass, "italic font-normal")}
+        disabled={disabled}
+        aria-label="Курсив"
+        onClick={() => format("italic")}
+      >
+        I
+      </button>
+      <button type="button" className={btnClass} disabled={disabled} aria-label="Подчёркнутый" onClick={() => format("underline")}>
+        <span className="underline">U</span>
+      </button>
+      <button type="button" className={btnClass} disabled={disabled} aria-label="Ссылка" onClick={() => format("link")}>
+        <Link2 className="h-4 w-4" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+function FormattedTextInput({
+  label,
+  value,
+  onChange,
+  disabled,
+  multiline = false,
+  rows = 6,
+}: {
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+  multiline?: boolean;
+  rows?: number;
+}) {
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+
+  return (
+    <div className="space-y-1.5">
+      <Label className={LABEL_CLASS}>{label}</Label>
+      {multiline ? (
+        <Textarea
+          ref={inputRef as RefObject<HTMLTextAreaElement>}
+          rows={rows}
+          className={cn(FIELD_CLASS, "font-mono text-sm")}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <Input
+          ref={inputRef as RefObject<HTMLInputElement>}
+          className={FIELD_CLASS}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+      <TextFormatToolbar inputRef={inputRef} value={value} onChange={onChange} disabled={disabled} />
+    </div>
+  );
 }
 
 function blockSummary(block: MarketingBriefBlockRow): string {
@@ -280,41 +390,36 @@ function BlockFields({
   if (block.type === "section") {
     const p = asSection(block.payload);
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label className="text-xs">Номер раздела</Label>
+          <Label className={LABEL_CLASS}>Номер раздела</Label>
           <Input
             value={p.number ?? ""}
             disabled={readOnly}
             placeholder="01"
             maxLength={3}
+            className={FIELD_CLASS}
             onChange={(e) => onPatch({ number: e.target.value.slice(0, 3) })}
           />
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            До 3 символов: «01», «02», «А», «B». Полное название идёт в «Заголовок».
-          </p>
+          <p className={HINT_CLASS}>До 3 символов: «01», «02», «А», «В».</p>
         </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label className="text-xs">Заголовок</Label>
+        <div className="space-y-1.5">
+          <Label className={LABEL_CLASS}>Заголовок раздела</Label>
           <Input
             value={p.title}
             disabled={readOnly}
+            className={FIELD_CLASS}
             onChange={(e) => onPatch({ title: e.target.value })}
           />
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            Краткое название раздела заглавными буквами, например: «УСЛОВИЯ ВЫСТАВЛЕНИЯ», «МЕЖКОМНАТНЫЕ ДВЕРИ».
-          </p>
         </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <Label className="text-xs">Подзаголовок</Label>
+        <div className="space-y-1.5">
+          <Label className={LABEL_CLASS}>Подзаголовок раздела</Label>
           <Input
             value={p.subtitle ?? ""}
             disabled={readOnly}
+            className={FIELD_CLASS}
             onChange={(e) => onPatch({ subtitle: e.target.value })}
           />
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            Короткое уточнение под заголовком — необязательно. Например: «Для ТОП-350».
-          </p>
         </div>
       </div>
     );
@@ -323,31 +428,22 @@ function BlockFields({
   if (block.type === "text") {
     const p = asText(block.payload);
     return (
-      <div className="space-y-3">
-        <div className="space-y-1.5">
-          <Label className="text-xs">Заголовок</Label>
-          <Input
-            value={p.heading ?? ""}
-            disabled={readOnly}
-            onChange={(e) => onPatch({ heading: e.target.value })}
-          />
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            Необязательно. Если заполнено, идёт жирной строкой над текстом.
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">Текст</Label>
-          <Textarea
-            rows={6}
-            className="font-mono text-sm"
-            value={p.body}
-            disabled={readOnly}
-            onChange={(e) => onPatch({ body: e.target.value })}
-          />
-          <p className="text-[10px] leading-snug text-muted-foreground">
-            Основной абзац. Можно вставлять переносы строк — каждая новая строка становится отдельным абзацем.
-          </p>
-        </div>
+      <div className="space-y-4">
+        <p className="text-sm font-semibold text-[#222631]">Текст</p>
+        <FormattedTextInput
+          label="Заголовок текста"
+          value={p.heading ?? ""}
+          disabled={readOnly}
+          onChange={(heading) => onPatch({ heading })}
+        />
+        <FormattedTextInput
+          label="Текст"
+          value={p.body}
+          disabled={readOnly}
+          multiline
+          rows={6}
+          onChange={(body) => onPatch({ body })}
+        />
       </div>
     );
   }
@@ -451,7 +547,12 @@ function BlockFields({
     return <ProductsBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
   }
   if (block.type === "price_table") {
-    return <PriceTableBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
+    return (
+      <div className="space-y-3">
+        <p className="text-sm font-semibold text-[#222631]">Таблица</p>
+        <PriceTableBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />
+      </div>
+    );
   }
   if (block.type === "bonus") {
     return <BonusBlockEditor block={block} readOnly={readOnly} onPatch={onPatch} />;
@@ -476,15 +577,14 @@ function SortableBlockCard({
   onAddBelow: (type: MarketingBriefBlockType) => void;
 }) {
   const [open, setOpen] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: block.id,
     disabled: readOnly,
   });
 
-  const Icon = blockIcon(block.type);
   const summary = blockSummary(block);
+  const saveLabel = blockSaveStatusLabel(saveState);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -492,87 +592,106 @@ function SortableBlockCard({
   };
 
   return (
-    <Card
+    <div
       ref={setNodeRef}
       style={style}
-      className={cn("border-border/80", isDragging && "z-10 opacity-90 shadow-lg")}
+      className={cn(
+        "flex overflow-hidden rounded-[7px] border border-[#E8EAEE] bg-white",
+        isDragging && "z-10 opacity-90 shadow-lg",
+      )}
       data-testid={`brief-block-card-${block.id}`}
     >
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CardHeader className="flex flex-row items-start gap-2 space-y-0 p-3 pb-2">
-          {!readOnly ? (
-            <button
-              type="button"
-              className="mt-1 flex h-10 min-h-10 w-10 min-w-10 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted active:cursor-grabbing"
-              aria-label="Перетащить блок"
-              data-testid={`brief-block-drag-${block.id}`}
-              {...attributes}
-              {...listeners}
-            >
-              <GripVertical className="h-5 w-5" aria-hidden />
-            </button>
-          ) : null}
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="flex min-w-0 flex-1 items-center gap-2 text-left"
-            >
-              <Icon className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
-              <span className="truncate text-sm font-medium text-[#222631]">
-                {blockTypeLabel(block.type)}: «{summary}»
-              </span>
-            </button>
-          </CollapsibleTrigger>
-          <span
-            className={cn(
-              "shrink-0 text-[10px]",
-              saveState === "error"
-                ? "text-destructive"
-                : saveState === "saved"
-                  ? "text-emerald-700"
-                  : "text-muted-foreground",
-            )}
-          >
-            {saveState === "saving" ? "Сохраняется…" : saveState === "saved" ? "Сохранено" : null}
-          </span>
-        </CardHeader>
-        <CollapsibleContent>
-          <CardContent className="space-y-3 px-3 pb-3 pt-0">
-            <BlockFields block={block} readOnly={readOnly} onPatch={onPatch} />
+      <div className="w-1.5 shrink-0 bg-[#9ACA3C]" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <Collapsible open={open} onOpenChange={setOpen}>
+          <div className="flex items-start gap-2 px-4 pb-3 pt-4 sm:px-5">
             {!readOnly ? (
-              <div className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  <Trash2 className="mr-1 h-4 w-4" aria-hidden />
-                  Удалить
-                </Button>
-                <Popover open={addOpen} onOpenChange={setAddOpen}>
-                  <PopoverTrigger asChild>
-                    <Button type="button" variant="outline" size="sm" className="gap-1">
-                      <Plus className="h-4 w-4" aria-hidden />
-                      Добавить блок ниже
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-56 p-2" align="start">
-                    <p className="mb-2 px-1 text-xs text-muted-foreground">Тип блока</p>
-                    <AddBlockButtons
-                      onAdd={(t) => {
-                        setAddOpen(false);
-                        onAddBelow(t);
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
+              <button
+                type="button"
+                className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-[6px] text-[#8F96B0] hover:bg-[#F9FAFF] active:cursor-grabbing"
+                aria-label="Перетащить блок"
+                data-testid={`brief-block-drag-${block.id}`}
+                {...attributes}
+                {...listeners}
+              >
+                <GripVertical className="h-4 w-4" aria-hidden />
+              </button>
             ) : null}
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
+            <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+              <CollapsibleTrigger asChild>
+                <button type="button" className="min-w-0 flex-1 text-left">
+                  <span className="text-xl font-semibold text-[#222631]">{blockCardTitle(block.type)}</span>
+                  <p className="mt-0.5 truncate text-xs text-[#8F96B0]">{summary}</p>
+                </button>
+              </CollapsibleTrigger>
+              <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                {saveLabel ? (
+                  <span
+                    className={cn(
+                      "text-sm",
+                      saveState === "error"
+                        ? "text-destructive"
+                        : saveState === "saved"
+                          ? "text-[#9ACA3C]"
+                          : "text-[#8F96B0]",
+                    )}
+                  >
+                    {saveLabel}
+                  </span>
+                ) : null}
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] text-[#8F96B0] hover:bg-[#F9FAFF]"
+                    aria-label={open ? "Свернуть блок" : "Развернуть блок"}
+                  >
+                    <ChevronDown
+                      className={cn("h-4 w-4 transition-transform", open && "rotate-180")}
+                      aria-hidden
+                    />
+                  </button>
+                </CollapsibleTrigger>
+              </div>
+            </div>
+          </div>
+          <CollapsibleContent>
+            <div className="space-y-4 px-4 pb-4 sm:px-5">
+              <BlockFields block={block} readOnly={readOnly} onPatch={onPatch} />
+              {!readOnly ? (
+                <div className="flex flex-wrap items-center gap-2 border-t border-[#E8EAEE] pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={ACTION_BTN_CLASS}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    Удалить
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={ACTION_BTN_CLASS}
+                    onClick={() => onAddBelow("text")}
+                  >
+                    <Plus className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    Добавить текст
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className={ACTION_BTN_CLASS}
+                    onClick={() => onAddBelow("price_table")}
+                  >
+                    <Plus className="h-4 w-4 text-[#8F96B0]" aria-hidden />
+                    Добавить таблицу
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -594,7 +713,7 @@ function SortableBlockCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </div>
   );
 }
 
