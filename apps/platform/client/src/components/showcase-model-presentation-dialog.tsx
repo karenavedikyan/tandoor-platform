@@ -31,6 +31,24 @@ const PRESENTATION_PROPERTY_STOP_KEYS = new Set([
   "преимущества",
 ]);
 
+const KEY_SPEC_FIELDS: { keys: string[]; label: string }[] = [
+  { keys: ["Дизайн"], label: "Дизайн" },
+  { keys: ["МТ.Вид двери", "Вид двери"], label: "Тип двери" },
+  { keys: ["Размер,мм", "Размер мм", "Размер"], label: "Размер" },
+  { keys: ["Толщина стали,мм", "Толщина стали", "МТ. Толщина стали/полотна"], label: "Толщина стали" },
+  { keys: ["Толщина полотна,мм", "Толщина полотна"], label: "Толщина полотна" },
+  { keys: ["Замок основной"], label: "Основной замок" },
+  { keys: ["Замок дополнительный"], label: "Дополнительный замок" },
+  { keys: ["Вид утеплителя"], label: "Утеплитель" },
+  { keys: ["Тип коробки"], label: "Коробка" },
+  { keys: ["Контур уплотнения", "Контуры уплотнения"], label: "Контуры уплотнения" },
+  { keys: ["Покрытие"], label: "Покрытие" },
+  { keys: ["Цвет"], label: "Цвет" },
+  { keys: ["Петли"], label: "Петли" },
+  { keys: ["Производитель"], label: "Производитель" },
+  { keys: ["Страна"], label: "Страна" },
+];
+
 type Catalog1cProperty = { name: string; value: string };
 
 type Catalog1cProduct = {
@@ -42,6 +60,7 @@ type Catalog1cProduct = {
   price_retail_sale?: number | null;
   images: { path: string; sort_order: number | null; blob_url: string | null }[];
   properties: Catalog1cProperty[];
+  stocks?: { qty: number }[];
 };
 
 type Props = {
@@ -103,26 +122,121 @@ function findProperty(properties: Catalog1cProperty[], names: string[]): string 
   return null;
 }
 
-function buildCharacteristicsText(properties: Catalog1cProperty[]): string {
+function propIsYes(properties: Catalog1cProperty[], names: string[]): boolean {
+  const v = findProperty(properties, names);
+  if (!v) return false;
+  return /^(да|есть|true|1)$/i.test(v.trim());
+}
+
+function parseNumericMm(value: string | null): number | null {
+  if (!value) return null;
+  const m = value.replace(",", ".").match(/[\d.]+/);
+  if (!m) return null;
+  const n = parseFloat(m[0]);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bulletList(lines: string[]): string {
+  return lines.map((line) => `• ${line}`).join("\n");
+}
+
+function buildCharacteristicsTextFallback(properties: Catalog1cProperty[]): string {
   return properties
     .filter((p) => !isJunkProperty(p.name, p.value))
     .map((p) => `${p.name}: ${p.value.trim()}`)
     .join("\n");
 }
 
-function buildAdvantagesText(product: Catalog1cProduct): string {
+function buildCharacteristicsText(properties: Catalog1cProperty[]): string {
+  const lines: string[] = [];
+  for (const field of KEY_SPEC_FIELDS) {
+    const value = findProperty(properties, field.keys);
+    if (value) lines.push(`${field.label}: ${value}`);
+  }
+  if (lines.length > 0) return lines.join("\n");
+  return buildCharacteristicsTextFallback(properties);
+}
+
+function buildAdvantagesTextFallback(product: Catalog1cProduct): string {
   const props = product.properties ?? [];
   const fromProp = findProperty(props, ["Преимущества", "Описание"]);
   if (fromProp) return fromProp;
   if (product.description?.trim()) return product.description.trim();
-  const keys = ["Дизайн", "МТ.Вид двери", "МТ. Толщина стали/полотна", "Гарантийный срок"];
-  const lines = keys
-    .map((k) => {
-      const v = findProperty(props, [k]);
-      return v ? `${k}: ${v}` : null;
-    })
-    .filter((line): line is string => Boolean(line));
-  return lines.join("\n");
+  return "";
+}
+
+function buildAdvantagesText(product: Catalog1cProduct): string {
+  const props = product.properties ?? [];
+  const lines: string[] = [];
+
+  const mainLock = findProperty(props, ["Замок основной"]);
+  const addLock = findProperty(props, ["Замок дополнительный"]);
+  if (mainLock && addLock) {
+    lines.push(
+      "Два независимых замка — выше класс взломостойкости, чем у бюджетных аналогов с одним замком",
+    );
+  }
+
+  const steelThickness = findProperty(props, ["Толщина стали,мм", "Толщина стали", "МТ. Толщина стали/полотна"]);
+  const steelMm = parseNumericMm(steelThickness);
+  if (steelMm != null && steelMm >= 1.5) {
+    lines.push(`Усиленная сталь ${steelThickness} — прочнее типовых дверей этого ценового сегмента`);
+  }
+
+  const insulator = findProperty(props, ["Вид утеплителя"]);
+  if (insulator) {
+    lines.push(`Тепло- и шумоизоляция: ${insulator} в стандартной комплектации`);
+  }
+
+  if (propIsYes(props, ["Терморазрыв", "ВХ. Терморазрыв"])) {
+    lines.push("Терморазрыв — нет промерзания и конденсата, подходит для квартир и частных домов");
+  }
+
+  if (propIsYes(props, ["Стеклопакет", "ВХ. Стеклопакет"])) {
+    lines.push("Стеклопакет в комплектации — премиальный внешний вид без доплаты");
+  }
+
+  if (propIsYes(props, ["Ковка", "ВХ. Ковка"])) {
+    lines.push("Декоративная ковка — статусный внешний вид");
+  }
+
+  if (propIsYes(props, ["Ночная задвижка", "ВХ. Ночная задвижка"])) {
+    lines.push("Ночная задвижка — дополнительная защита изнутри");
+  }
+
+  const contourRaw = findProperty(props, ["Контур уплотнения", "Контуры уплотнения"]);
+  const contourN = parseNumericMm(contourRaw);
+  if (contourN != null && contourN >= 2) {
+    lines.push(`${contourRaw} контура уплотнения — лучшая герметичность против сквозняков и шума`);
+  }
+
+  const hinges = findProperty(props, ["Петли"]);
+  if (hinges && hinges.toLowerCase().includes("подшипник")) {
+    lines.push("Петли на подшипнике — плавный ход и долговечность даже у тяжёлого полотна");
+  }
+
+  const manufacturer = findProperty(props, ["Производитель"]);
+  const country = findProperty(props, ["Страна"]);
+  if (manufacturer && country) {
+    lines.push(`Производство ${manufacturer}, ${country} — гарантия и наличие запчастей`);
+  } else if (manufacturer) {
+    lines.push(`Производство ${manufacturer} — гарантия и наличие запчастей`);
+  }
+
+  if (lines.length > 0) return bulletList(lines);
+  return buildAdvantagesTextFallback(product);
+}
+
+function getStockQty(product: Catalog1cProduct): number {
+  const fromProp = findProperty(product.properties, ["Актуальный остаток"]);
+  if (fromProp) {
+    const n = parseNumericMm(fromProp);
+    if (n != null) return Math.floor(n);
+  }
+  if (product.stocks?.length) {
+    return product.stocks.reduce((sum, row) => sum + (row.qty > 0 ? row.qty : 0), 0);
+  }
+  return 0;
 }
 
 function fmtPrice(n: number | null | undefined): string {
@@ -130,39 +244,148 @@ function fmtPrice(n: number | null | undefined): string {
   return `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 }
 
-function buildMessageText(product: Catalog1cProduct): string {
-  const title = product.display_name?.trim() || product.name;
+function buildBenefitsBuyerFromProduct(product: Catalog1cProduct): string {
   const props = product.properties ?? [];
-  const keyNames = [
-    "Дизайн",
-    "МТ.Вид двери",
-    "МТ. Толщина стали/полотна",
-    "Гарантийный срок",
-    "Коллекция",
-  ];
-  const parts = keyNames
-    .map((k) => {
-      const v = findProperty(props, [k]);
-      return v ? `${k.toLowerCase()}: ${v}` : null;
-    })
-    .filter((p): p is string => Boolean(p))
-    .slice(0, 5);
-  const price = product.price_retail_sale ?? product.price_retail;
-  const pricePart = price != null ? `Цена: ${fmtPrice(price)}` : "";
-  return [title, ...parts, pricePart].filter(Boolean).join(". ");
+  const lines: string[] = [];
+
+  const mainLock = findProperty(props, ["Замок основной"]);
+  const addLock = findProperty(props, ["Замок дополнительный"]);
+  const hasTwoLocks = Boolean(mainLock && addLock);
+  const hasNightLatch = propIsYes(props, ["Ночная задвижка", "ВХ. Ночная задвижка"]);
+  if (hasTwoLocks || hasNightLatch) {
+    const parts: string[] = [];
+    if (hasTwoLocks) parts.push("два замка");
+    if (hasNightLatch) parts.push("ночная задвижка");
+    lines.push(`Спокойствие за безопасность семьи: ${parts.join(", ")}`);
+  }
+
+  const insulator = findProperty(props, ["Вид утеплителя"]);
+  const contourRaw = findProperty(props, ["Контур уплотнения", "Контуры уплотнения"]);
+  const hasThermalBreak = propIsYes(props, ["Терморазрыв", "ВХ. Терморазрыв"]);
+  const warmthParts: string[] = [];
+  if (insulator) warmthParts.push(insulator);
+  if (contourRaw) warmthParts.push(`${contourRaw} контура уплотнения`);
+  if (hasThermalBreak) warmthParts.push("терморазрыв");
+  if (warmthParts.length > 0) {
+    lines.push(`Тишина и тепло в доме: ${warmthParts.join(", ")}`);
+  }
+
+  const coating = findProperty(props, ["Покрытие"]);
+  const color = findProperty(props, ["Цвет"]);
+  const hasForging = propIsYes(props, ["Ковка", "ВХ. Ковка"]);
+  const hasGlazing = propIsYes(props, ["Стеклопакет", "ВХ. Стеклопакет"]);
+  const lookParts: string[] = [];
+  if (coating) lookParts.push(coating);
+  if (color) lookParts.push(color);
+  if (hasForging) lookParts.push("ковка");
+  if (hasGlazing) lookParts.push("стеклопакет");
+  if (lookParts.length > 0) {
+    lines.push(`Красивый вид, который не стыдно показать гостям: ${lookParts.join(" ")}`);
+  }
+
+  const leafThickness = findProperty(props, ["Толщина полотна,мм", "Толщина полотна"]);
+  const steelThickness = findProperty(props, ["Толщина стали,мм", "Толщина стали"]);
+  const reliability = leafThickness ?? steelThickness;
+  if (reliability) {
+    lines.push(`Надёжность на годы: усиленное полотно ${reliability}`);
+  }
+
+  if (findProperty(props, ["Гарантийный срок"])) {
+    lines.push("Заводская гарантия от производителя");
+  }
+
+  return lines.length > 0 ? bulletList(lines) : "";
 }
 
-function buildMessageTextFromModel(
-  model: ShowcaseMatrixModelDefinition,
-  product: Catalog1cProduct | null,
-): string {
-  const custom = model.copyMessage.trim();
-  if (custom) {
-    const price = product?.price_retail_sale ?? product?.price_retail;
-    const pricePart = price != null ? `Цена: ${fmtPrice(price)}` : "";
-    return [custom, pricePart].filter(Boolean).join(". ");
+function buildBenefitsDealerFromProduct(product: Catalog1cProduct): string {
+  const props = product.properties ?? [];
+  const lines: string[] = [];
+
+  if (propIsYes(props, ["Акция"])) {
+    lines.push("В акции — повышенная маржинальность и аргумент «выгодная цена» для клиента");
   }
-  return product ? buildMessageText(product) : "";
+
+  const stock = getStockQty(product);
+  if (stock > 0) {
+    lines.push(`В наличии (${stock} шт) — продаёте сразу, без ожидания поставки`);
+  }
+
+  const mainLock = findProperty(props, ["Замок основной"]);
+  const addLock = findProperty(props, ["Замок дополнительный"]);
+  const richKit =
+    Boolean(mainLock && addLock) ||
+    propIsYes(props, ["Стеклопакет", "ВХ. Стеклопакет"]) ||
+    propIsYes(props, ["Ковка", "ВХ. Ковка"]) ||
+    propIsYes(props, ["Терморазрыв", "ВХ. Терморазрыв"]);
+  if (richKit) {
+    lines.push("Высокая комплектация в базе — легко обосновать цену и допродать");
+  }
+
+  const manufacturer = findProperty(props, ["Производитель"]);
+  if (manufacturer) {
+    lines.push("Узнаваемый бренд-производитель — меньше возражений по доверию");
+  }
+
+  const side = findProperty(props, ["Сторона"]);
+  const nameLower = product.name.toLowerCase();
+  const hasSide =
+    Boolean(side) || nameLower.includes("левая") || nameLower.includes("правая");
+  if (hasSide) {
+    lines.push("Готовое решение под типовой проём — быстрый подбор");
+  }
+
+  const design = findProperty(props, ["Дизайн"]);
+  if (design && /модерн|классик/i.test(design)) {
+    lines.push("Подходит под разные интерьеры — шире целевая аудитория");
+  }
+
+  return lines.length > 0 ? bulletList(lines) : "";
+}
+
+function appendPresentationSection(parts: string[], title: string, body: string): void {
+  const trimmed = body.trim();
+  if (!trimmed) return;
+  parts.push(title, trimmed, "");
+}
+
+function buildPresentationText(
+  displayTitle: string,
+  product: Catalog1cProduct,
+  resolvedProductId: string | null,
+  characteristicsText: string,
+  advantagesText: string,
+  benefitsBuyerText: string,
+  benefitsDealerText: string,
+): string {
+  const parts: string[] = [displayTitle, ""];
+
+  const price = product.price_retail_sale ?? product.price_retail;
+  if (price != null) {
+    parts.push(`💰 Цена: ${fmtPrice(price)}`);
+  }
+
+  const stock = getStockQty(product);
+  if (stock > 0) {
+    parts.push(`📦 Наличие: ${stock} шт`);
+  }
+
+  const catalogHref = resolvedProductId ? catalog1cProductHref(resolvedProductId) : null;
+  if (catalogHref) {
+    const link =
+      typeof window !== "undefined" && window.location?.origin
+        ? `${window.location.origin}${catalogHref}`
+        : catalogHref;
+    parts.push(`🔗 Каталог: ${link}`);
+  }
+
+  if (parts[parts.length - 1] !== "") parts.push("");
+
+  appendPresentationSection(parts, "ХАРАКТЕРИСТИКИ", characteristicsText);
+  appendPresentationSection(parts, "ПРЕИМУЩЕСТВА", advantagesText);
+  appendPresentationSection(parts, "ВЫГОДЫ ДЛЯ ПОКУПАТЕЛЯ", benefitsBuyerText);
+  appendPresentationSection(parts, "ВЫГОДЫ ДЛЯ ДИЛЕРА", benefitsDealerText);
+
+  return parts.join("\n").trim();
 }
 
 function buildObjectionsHandlingText(model: ShowcaseMatrixModelDefinition): string {
@@ -265,29 +488,41 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
     if (model?.advantages.trim()) return model.advantages.trim();
     return product ? buildAdvantagesText(product) : "";
   }, [model?.advantages, product]);
-  const benefitsBuyerText = useMemo(() => model?.benefitsBuyer.trim() ?? "", [model?.benefitsBuyer]);
-  const benefitsDealerText = useMemo(() => model?.benefitsDealer.trim() ?? "", [model?.benefitsDealer]);
+  const benefitsBuyerText = useMemo(() => {
+    if (model?.benefitsBuyer.trim()) return model.benefitsBuyer.trim();
+    return product ? buildBenefitsBuyerFromProduct(product) : "";
+  }, [model?.benefitsBuyer, product]);
+  const benefitsDealerText = useMemo(() => {
+    if (model?.benefitsDealer.trim()) return model.benefitsDealer.trim();
+    return product ? buildBenefitsDealerFromProduct(product) : "";
+  }, [model?.benefitsDealer, product]);
   const objectionsText = useMemo(
     () => (model ? buildObjectionsHandlingText(model) : ""),
     [model],
   );
-  const messageText = useMemo(
-    () => (model ? buildMessageTextFromModel(model, product) : ""),
-    [model, product],
-  );
 
-  const descriptionText = useMemo(
-    () => findProperty(properties, ["Описание", "Описание для сайта"]) ?? product?.description?.trim() ?? "",
-    [product?.description, properties],
-  );
-  const warrantyText = useMemo(
-    () => findProperty(properties, ["Гарантийный срок"]) ?? "",
-    [properties],
-  );
-  const operationText = useMemo(
-    () => findProperty(properties, ["Условия эксплуатации"]) ?? "",
-    [properties],
-  );
+  const displayTitle = product?.display_name?.trim() || product?.name || model?.name || "";
+
+  const presentationText = useMemo(() => {
+    if (!product) return "";
+    return buildPresentationText(
+      displayTitle,
+      product,
+      resolvedProductId,
+      characteristicsText,
+      advantagesText,
+      benefitsBuyerText,
+      benefitsDealerText,
+    );
+  }, [
+    product,
+    displayTitle,
+    resolvedProductId,
+    characteristicsText,
+    advantagesText,
+    benefitsBuyerText,
+    benefitsDealerText,
+  ]);
 
   const lightboxImages = useMemo(
     () =>
@@ -316,6 +551,10 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
     });
   }, []);
 
+  const handleCopyPresentation = useCallback(() => {
+    void copyText("Презентация", presentationText, setFallbackText);
+  }, [presentationText]);
+
   const handleCopyChars = useCallback(() => {
     void copyText("Характеристики", characteristicsText, setFallbackText);
   }, [characteristicsText]);
@@ -324,13 +563,13 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
     void copyText("Преимущества", advantagesText, setFallbackText);
   }, [advantagesText]);
 
-  const handleCopyMsg = useCallback(() => {
-    void copyText("Сообщение клиенту", messageText, setFallbackText);
-  }, [messageText]);
-
   const handleCopyBenefitsBuyer = useCallback(() => {
     void copyText("Выгоды клиенту", benefitsBuyerText, setFallbackText);
   }, [benefitsBuyerText]);
+
+  const handleCopyBenefitsDealer = useCallback(() => {
+    void copyText("Выгоды дилеру", benefitsDealerText, setFallbackText);
+  }, [benefitsDealerText]);
 
   const handleCopyObjections = useCallback(() => {
     void copyText("Работа с возражениями", objectionsText, setFallbackText);
@@ -338,7 +577,6 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
 
   if (!model) return null;
 
-  const displayTitle = product?.display_name?.trim() || product?.name || model.name;
   const catalogHref = resolvedProductId ? catalog1cProductHref(resolvedProductId) : null;
 
   const currentImg = product?.images[activeImg];
@@ -476,17 +714,26 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
               ) : null}
 
               <Separator />
+              <Block title="Презентация" children={presentationText} />
               <Block title="Характеристики" children={characteristicsText} />
               <Block title="Преимущества" children={advantagesText} />
-              <Block title="Выгоды клиенту" children={benefitsBuyerText} />
-              <Block title="Выгоды дилеру" children={benefitsDealerText} />
+              <Block title="Выгоды для покупателя" children={benefitsBuyerText} />
+              <Block title="Выгоды для дилера" children={benefitsDealerText} />
               <Block title="Работа с возражениями" children={objectionsText} />
-              <Block title="Описание" children={descriptionText} />
-              <Block title="Гарантийный срок" children={warrantyText} />
-              <Block title="Условия эксплуатации" children={operationText} />
-              <Block title="Сообщение клиенту" children={messageText} />
 
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
+                  data-testid="button-showcase-copy-message"
+                  disabled={!presentationText.trim()}
+                  title={!presentationText.trim() ? "Нет данных" : undefined}
+                  onClick={handleCopyPresentation}
+                >
+                  Скопировать презентацию
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -513,28 +760,28 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
                 </Button>
                 <Button
                   type="button"
-                  variant="default"
+                  variant="outline"
                   size="sm"
                   className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
-                  data-testid="button-showcase-copy-message"
-                  disabled={!messageText.trim()}
-                  title={!messageText.trim() ? "Нет данных" : undefined}
-                  onClick={handleCopyMsg}
+                  data-testid="button-showcase-copy-benefits-buyer"
+                  disabled={!benefitsBuyerText.trim()}
+                  title={!benefitsBuyerText.trim() ? "Нет данных" : undefined}
+                  onClick={handleCopyBenefitsBuyer}
                 >
-                  Скопировать сообщение клиенту
+                  Скопировать выгоды клиенту
                 </Button>
-                {benefitsBuyerText ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
-                    data-testid="button-showcase-copy-benefits-buyer"
-                    onClick={handleCopyBenefitsBuyer}
-                  >
-                    Скопировать выгоды клиенту
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
+                  data-testid="button-showcase-copy-benefits-dealer"
+                  disabled={!benefitsDealerText.trim()}
+                  title={!benefitsDealerText.trim() ? "Нет данных" : undefined}
+                  onClick={handleCopyBenefitsDealer}
+                >
+                  Скопировать выгоды дилеру
+                </Button>
                 {objectionsText ? (
                   <Button
                     type="button"
