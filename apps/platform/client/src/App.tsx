@@ -205,6 +205,14 @@ function HashRedirect({ to }: { to: string }) {
   return <PageLoadingFallback />;
 }
 
+function HomeRedirect() {
+  const { user } = useCurrentUser();
+  if (!user) return <PageLoadingFallback />;
+  const to = defaultHomePathForUserRole(user.role);
+  const safeTo = to === "/" ? "/dealer-base" : to;
+  return <HashRedirect to={safeTo} />;
+}
+
 function normRoutePath(path: string): string {
   const p = path.split("?")[0] || "/";
   if (p.length > 1 && p.endsWith("/")) return p.slice(0, -1);
@@ -403,11 +411,11 @@ function AuthenticatedShell({
       {overridesBootstrap}
       <NavigationDepthTracker />
       <Switch>
-        <Route path="/" component={SalesManagerWorkspaceRoute} />
+        <Route path="/" component={HomeRedirect} />
         <Route path="/main/rop/:ropId" component={MainRopDetailRoute} />
         <Route path="/main/manager/:managerId" component={MainManagerDetailRoute} />
-        <Route path="/main" component={SalesManagerWorkspaceRoute} />
-        <Route path="/sales-manager" component={SalesManagerWorkspaceRoute} />
+        <Route path="/main" component={HomeRedirect} />
+        <Route path="/sales-manager" component={HomeRedirect} />
         <Route path="/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/embedded/bitrix24" component={Bitrix24PocRoute} />
         <Route path="/feature-in-development" component={FeatureInDevelopmentRoute} />

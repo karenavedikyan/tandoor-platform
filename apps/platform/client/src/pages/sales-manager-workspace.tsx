@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { MainRoleDashboard } from "@/components/main-role-dashboard";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { Badge } from "@/components/ui/badge";
@@ -218,18 +217,7 @@ export default function SalesManagerWorkspace() {
   const { user } = useCurrentUser();
   const [loc] = useLocation();
   const path = loc && loc.length > 0 ? loc : "/";
-  const pilotRole = user ? userRoleToSalesRole(user.role) : null;
-  const isSalesMainDash =
-    (path === "/main" || path === "/") &&
-    pilotRole &&
-    (pilotRole === "sales_manager" || pilotRole === "team_lead" || pilotRole === "sales_director");
 
-  // Промт 51 hotfix: все useMemo обязаны вызываться безусловно, в одинаковом
-  // порядке при каждом рендере. Раньше `if (isSalesMainDash) return …` стоял
-  // ДО useMemo. При асинхронной загрузке `user` сначала `isSalesMainDash=false`
-  // → 11 хуков; потом `user` приходит → `isSalesMainDash=true` → ранний return,
-  // 0 хуков → React error #310 «Rendered fewer hooks than expected» и белый
-  // экран у менеджеров/РОПов. Хуки переставлены ВЫШЕ условного return.
   const kpis = useMemo(() => getWorkspaceKpis(), []);
   const planMetrics = useMemo(() => getSalesPlanMetrics(), []);
   const mom = useMemo(() => getMonthOverMonthComparisons(), []);
@@ -243,12 +231,6 @@ export default function SalesManagerWorkspace() {
   const focusProducts = useMemo(() => getFocusProducts(8), []);
   const attentionPoints = useMemo(() => getTradePointsNeedingAttention(8), []);
 
-  if (isSalesMainDash) {
-    return <MainRoleDashboard />;
-  }
-
-  // Чистые вычисления (не хуки) — оставляем после early return, чтобы не делать
-  // лишний find() при `isSalesMainDash=true`.
   const mkMetric = planMetrics.find((m) => m.category === "mk")!;
   const vhMetric = planMetrics.find((m) => m.category === "vh")!;
   const hwMetric = planMetrics.find((m) => m.category === "hardware")!;
