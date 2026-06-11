@@ -106,8 +106,12 @@ function bumpSnapshotReference(): void {
   emit();
 }
 
+const EMPTY_BACKEND_PROVIDER = () => [] as string[];
+
 export function distributionAnalyticsScopeKey(scope: DistributionScope): string {
-  const ids = [...collectScopeTradePointIds(scope)].sort();
+  // Ключ кэша/throttle строится ТОЛЬКО от локального скоупа: явный пустой backend-провайдер,
+  // чтобы ключ не «прыгал» по мере наполнения реестра backend-ТТ из scope-all.
+  const ids = [...collectScopeTradePointIds(scope, EMPTY_BACKEND_PROVIDER)].sort();
   if (scope.kind === "trade-point") {
     return `tp:${scope.dealer.id}:${scope.point.id}`;
   }
