@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
+import { catalog1cProductHref } from "@/lib/catalog-1c-product-link";
 import { optimizedImage } from "@/lib/catalog-image";
 import { priorityLabelRu, type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import { cn } from "@/lib/utils";
@@ -151,6 +152,28 @@ function buildMessageText(product: Catalog1cProduct): string {
   return [title, ...parts, pricePart].filter(Boolean).join(". ");
 }
 
+function buildMessageTextFromModel(
+  model: ShowcaseMatrixModelDefinition,
+  product: Catalog1cProduct | null,
+): string {
+  const custom = model.copyMessage.trim();
+  if (custom) {
+    const price = product?.price_retail_sale ?? product?.price_retail;
+    const pricePart = price != null ? `Цена: ${fmtPrice(price)}` : "";
+    return [custom, pricePart].filter(Boolean).join(". ");
+  }
+  return product ? buildMessageText(product) : "";
+}
+
+function buildObjectionsHandlingText(model: ShowcaseMatrixModelDefinition): string {
+  const objections = model.objections.trim();
+  const answers = model.objectionAnswers.trim();
+  if (objections && answers) {
+    return `Возражения:\n${objections}\n\nОтветы:\n${answers}`;
+  }
+  return objections || answers;
+}
+
 function Block({ title, children }: { title: string; children: string }) {
   if (!children.trim()) return null;
   return (
@@ -238,8 +261,20 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
     () => (product ? buildCharacteristicsText(properties) : ""),
     [product, properties],
   );
-  const advantagesText = useMemo(() => (product ? buildAdvantagesText(product) : ""), [product]);
-  const messageText = useMemo(() => (product ? buildMessageText(product) : ""), [product]);
+  const advantagesText = useMemo(() => {
+    if (model?.advantages.trim()) return model.advantages.trim();
+    return product ? buildAdvantagesText(product) : "";
+  }, [model?.advantages, product]);
+  const benefitsBuyerText = useMemo(() => model?.benefitsBuyer.trim() ?? "", [model?.benefitsBuyer]);
+  const benefitsDealerText = useMemo(() => model?.benefitsDealer.trim() ?? "", [model?.benefitsDealer]);
+  const objectionsText = useMemo(
+    () => (model ? buildObjectionsHandlingText(model) : ""),
+    [model],
+  );
+  const messageText = useMemo(
+    () => (model ? buildMessageTextFromModel(model, product) : ""),
+    [model, product],
+  );
 
   const descriptionText = useMemo(
     () => findProperty(properties, ["Описание", "Описание для сайта"]) ?? product?.description?.trim() ?? "",
@@ -293,10 +328,18 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
     void copyText("Сообщение клиенту", messageText, setFallbackText);
   }, [messageText]);
 
+  const handleCopyBenefitsBuyer = useCallback(() => {
+    void copyText("Выгоды клиенту", benefitsBuyerText, setFallbackText);
+  }, [benefitsBuyerText]);
+
+  const handleCopyObjections = useCallback(() => {
+    void copyText("Работа с возражениями", objectionsText, setFallbackText);
+  }, [objectionsText]);
+
   if (!model) return null;
 
   const displayTitle = product?.display_name?.trim() || product?.name || model.name;
-  const catalogHref = resolvedProductId ? `/catalog/1c/${resolvedProductId}` : "/catalog";
+  const catalogHref = resolvedProductId ? catalog1cProductHref(resolvedProductId) : null;
 
   const currentImg = product?.images[activeImg];
   const mainImageUrl = currentImg?.blob_url?.trim();
@@ -426,13 +469,18 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
                 </p>
               </div>
 
-              <Button asChild variant="outline" size="sm" className="h-9 w-full sm:w-auto">
-                <Link href={catalogHref}>Открыть в каталоге</Link>
-              </Button>
+              {catalogHref ? (
+                <Button asChild variant="outline" size="sm" className="h-9 w-full sm:w-auto">
+                  <Link href={catalogHref}>Открыть полную карточку</Link>
+                </Button>
+              ) : null}
 
               <Separator />
               <Block title="Характеристики" children={characteristicsText} />
               <Block title="Преимущества" children={advantagesText} />
+              <Block title="Выгоды клиенту" children={benefitsBuyerText} />
+              <Block title="Выгоды дилеру" children={benefitsDealerText} />
+              <Block title="Работа с возражениями" children={objectionsText} />
               <Block title="Описание" children={descriptionText} />
               <Block title="Гарантийный срок" children={warrantyText} />
               <Block title="Условия эксплуатации" children={operationText} />
@@ -475,6 +523,30 @@ export function ShowcaseModelPresentationDialog({ open, onOpenChange, model }: P
                 >
                   Скопировать сообщение клиенту
                 </Button>
+                {benefitsBuyerText ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
+                    data-testid="button-showcase-copy-benefits-buyer"
+                    onClick={handleCopyBenefitsBuyer}
+                  >
+                    Скопировать выгоды клиенту
+                  </Button>
+                ) : null}
+                {objectionsText ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10 w-full font-semibold sm:min-h-9 sm:w-auto"
+                    data-testid="button-showcase-copy-objections"
+                    onClick={handleCopyObjections}
+                  >
+                    Скопировать работу с возражениями
+                  </Button>
+                ) : null}
               </div>
             </>
           ) : null}

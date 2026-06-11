@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackNav } from "@/components/navigation/back-nav";
@@ -34,8 +42,10 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { cn } from "@/lib/utils";
 import { prepareImageFileForUpload } from "@/lib/client-image-upload-pipeline";
 import { uploadClientBaseImagePair } from "@/lib/client-base-actualization-upload-api";
+import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import type { ModelDoorPhotoFrameSize } from "@/components/showcase/model-door-photo-frame";
+import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import {
   addAssignmentComment,
   createFollowup,
@@ -201,6 +211,33 @@ async function fetchAssignmentCatalogImages(items: AssignmentDto["items"]): Prom
   }
 
   return { byTargetId, byModelName };
+}
+
+function itemToPresentationModel(
+  item: AssignmentDto["items"][number],
+  imageUrl: string | null,
+): ShowcaseMatrixModelDefinition {
+  const targetId = item.targetId ?? item.id;
+  const isEntrance = !targetId.includes("tc-mk");
+  const type = isEntrance ? ("entrance" as const) : ("interior" as const);
+  return {
+    id: targetId,
+    catalog1cId: isCatalogProductUuid(targetId) ? targetId : undefined,
+    name: item.modelName,
+    type,
+    typeLabelRu: isEntrance ? "ВХ" : "МК",
+    imageUrl: imageUrl ?? "",
+    basePriority: "medium",
+    importanceReason: "",
+    characteristics: "",
+    advantages: "",
+    benefitsDealer: "",
+    benefitsBuyer: "",
+    objections: "",
+    objectionAnswers: "",
+    copyMessage: "",
+    categoryRules: [],
+  };
 }
 
 function resolveItemModelImage(item: AssignmentDto["items"][number], maps: AssignmentImageMaps): string | null {
@@ -419,7 +456,22 @@ type ItemCardProps = {
   viewMode: AssignmentViewMode;
   modelImageSrc: string | null;
   onUpdated: (assignment: AssignmentDto) => void;
+  onOpenPresentation: (item: AssignmentDto["items"][number], imageUrl: string | null) => void;
 };
+
+function stopCardClick(e: MouseEvent | KeyboardEvent) {
+  e.stopPropagation();
+}
+
+function openPresentationFromKey(
+  e: KeyboardEvent,
+  onOpen: () => void,
+) {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    onOpen();
+  }
+}
 
 function AssignmentItemCard({
   assignment,
@@ -428,6 +480,7 @@ function AssignmentItemCard({
   viewMode,
   modelImageSrc,
   onUpdated,
+  onOpenPresentation,
 }: ItemCardProps) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -722,37 +775,59 @@ function AssignmentItemCard({
       </div>
     ) : null;
 
+  const openPresentation = () => onOpenPresentation(item, modelImageSrc);
+
+  const presentationTrigger = (
+    <button
+      type="button"
+      className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={openPresentation}
+      onKeyDown={(e) => openPresentationFromKey(e, openPresentation)}
+      data-testid={`button-item-presentation-${item.id}`}
+      aria-label={`Презентация: ${item.modelName || item.targetId}`}
+    >
+      <ModelDoorPhotoFrame
+        src={modelImageSrc}
+        alt={item.modelName}
+        size={photoSize}
+        variant="assignment"
+        imgPaddingClass="p-1"
+        placeholderDensity="compact"
+      />
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "line-clamp-2 font-medium leading-snug",
+            isList ? "text-sm" : viewMode === "s" ? "text-xs" : "text-sm",
+            done && "text-muted-foreground line-through",
+          )}
+        >
+          {item.modelName || item.targetId}
+        </p>
+        {isList ? reasonNote : null}
+      </div>
+    </button>
+  );
+
   if (isList) {
     return (
       <div
         className={cn(
-          "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-border",
+          "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-primary/40",
           done && "opacity-60",
         )}
         data-testid={`assignment-item-${item.id}`}
       >
         <div className="flex items-center gap-3">
-          {checkboxControl}
-          <ModelDoorPhotoFrame
-            src={modelImageSrc}
-            alt={item.modelName}
-            size={photoSize}
-            variant="assignment"
-            imgPaddingClass="p-1"
-            placeholderDensity="compact"
-          />
-          <div className="min-w-0 flex-1">
-            <p
-              className={cn(
-                "line-clamp-2 text-sm font-medium leading-snug",
-                done && "text-muted-foreground line-through",
-              )}
-            >
-              {item.modelName || item.targetId}
-            </p>
-            {reasonNote}
+          <div onClick={stopCardClick} onKeyDown={stopCardClick}>
+            {checkboxControl}
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
+          {presentationTrigger}
+          <div
+            className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center"
+            onClick={stopCardClick}
+            onKeyDown={stopCardClick}
+          >
             {proofPhoto}
             {statusBadge}
             {actionButtons}
@@ -766,41 +841,67 @@ function AssignmentItemCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-border",
+        "rounded-xl border border-border/60 bg-card p-3 transition-colors hover:border-primary/40",
         done && "opacity-60",
       )}
       data-testid={`assignment-item-${item.id}`}
     >
       <div className="relative">
-        <ModelDoorPhotoFrame
-          src={modelImageSrc}
-          alt={item.modelName}
-          size={photoSize}
-          variant="assignment"
-          imgPaddingClass="p-1.5"
-          placeholderDensity="compact"
-        />
-        <div className="absolute left-2 top-2">{checkboxControl}</div>
+        <button
+          type="button"
+          className="block w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={openPresentation}
+          onKeyDown={(e) => openPresentationFromKey(e, openPresentation)}
+          data-testid={`button-item-presentation-${item.id}`}
+          aria-label={`Презентация: ${item.modelName || item.targetId}`}
+        >
+          <ModelDoorPhotoFrame
+            src={modelImageSrc}
+            alt={item.modelName}
+            size={photoSize}
+            variant="assignment"
+            imgPaddingClass="p-1.5"
+            placeholderDensity="compact"
+          />
+        </button>
+        <div className="absolute left-2 top-2" onClick={stopCardClick} onKeyDown={stopCardClick}>
+          {checkboxControl}
+        </div>
       </div>
       <div className="mt-2 space-y-1.5">
-        <p
-          className={cn(
-            "line-clamp-2 font-medium leading-snug",
-            viewMode === "s" ? "text-xs" : "text-sm",
-            done && "text-muted-foreground line-through",
-          )}
+        <button
+          type="button"
+          className="w-full cursor-pointer rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={openPresentation}
+          onKeyDown={(e) => openPresentationFromKey(e, openPresentation)}
         >
-          {item.modelName || item.targetId}
-        </p>
+          <p
+            className={cn(
+              "line-clamp-2 font-medium leading-snug",
+              viewMode === "s" ? "text-xs" : "text-sm",
+              done && "text-muted-foreground line-through",
+            )}
+          >
+            {item.modelName || item.targetId}
+          </p>
+        </button>
         {reasonNote}
-        <div className="flex items-center justify-between gap-2">
+        <div
+          className="flex items-center justify-between gap-2"
+          onClick={stopCardClick}
+          onKeyDown={stopCardClick}
+        >
           <div className="flex items-center gap-1.5">
             {statusBadge}
             {proofPhoto}
           </div>
           {viewMode === "s" ? null : actionButtons}
         </div>
-        {viewMode === "s" ? <div className="flex justify-end">{actionButtons}</div> : null}
+        {viewMode === "s" ? (
+          <div className="flex justify-end" onClick={stopCardClick} onKeyDown={stopCardClick}>
+            {actionButtons}
+          </div>
+        ) : null}
       </div>
       {problemForm}
     </div>
@@ -824,6 +925,8 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
   const [verifying, setVerifying] = useState(false);
   const [followupBusy, setFollowupBusy] = useState(false);
   const [followupComment, setFollowupComment] = useState("");
+  const [presentationModel, setPresentationModel] = useState<ShowcaseMatrixModelDefinition | null>(null);
+  const [presentationOpen, setPresentationOpen] = useState(false);
 
   const canEdit = canUserEditAssignment(assignment, user?.id, user?.role);
   const isViewOnly = !canEdit;
@@ -878,6 +981,14 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       void qc.setQueryData(["assignment", assignment.id], next);
     },
     [assignment.id, qc],
+  );
+
+  const openPresentation = useCallback(
+    (item: AssignmentDto["items"][number], imageUrl: string | null) => {
+      setPresentationModel(itemToPresentationModel(item, imageUrl));
+      setPresentationOpen(true);
+    },
+    [],
   );
 
   const handleSubmit = async () => {
@@ -1106,6 +1217,7 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
               viewMode={viewMode}
               modelImageSrc={resolveItemModelImage(item, imageMaps)}
               onUpdated={onAssignmentUpdated}
+              onOpenPresentation={openPresentation}
             />
           ))}
         </div>
@@ -1236,6 +1348,12 @@ function AssignmentDetailContent({ initial }: { initial: AssignmentDto }) {
       ) : null}
 
       <AssignmentCommentsBlock assignmentId={assignment.id} userId={user?.id} canComment={canComment} />
+
+      <ShowcaseModelPresentationDialog
+        open={presentationOpen}
+        onOpenChange={setPresentationOpen}
+        model={presentationModel}
+      />
     </div>
   );
 }
