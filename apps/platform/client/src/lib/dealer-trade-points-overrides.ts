@@ -321,6 +321,21 @@ export function buildVirtualDefaultTradePoint(dealer: DealerRow): DealerTradePoi
 }
 
 /**
+ * Синтетическая ТТ для аналитики дистрибуции: backend-ТТ, которой нет в локальном
+ * состоянии актуализации (создана другим пользователем). Используется ТОЛЬКО для
+ * подсчёта скоупа/покрытия, НЕ для справочника клиентов.
+ */
+export function buildSyntheticBackendTradePoint(dealer: DealerRow, tradePointId: string): DealerTradePoint {
+  const base = buildVirtualDefaultTradePoint(dealer);
+  return {
+    ...base,
+    id: tradePointId,
+    name: "Точка (синхронизирована)",
+    status: "Активна",
+  };
+}
+
+/**
  * Объединение реальных ТТ и виртуальной дефолтной: если активных точек нет — добавляется виртуальная.
  * Виртуальная исчезает, как только появляется хотя бы одна явная активная точка.
  */
