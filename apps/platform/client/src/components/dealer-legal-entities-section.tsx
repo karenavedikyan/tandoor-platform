@@ -1246,7 +1246,9 @@ export function DealerLegalEntitiesSection({
           hideCloseButton
           className={cn(
             "flex max-h-[100dvh] w-[calc(100vw-1rem)] max-w-[860px] min-w-0 flex-col gap-0 overflow-hidden rounded-none border p-0 sm:rounded-lg",
-            "max-sm:h-[100dvh] max-sm:max-h-[100dvh]",
+            "max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:right-0 max-sm:bottom-0",
+            "max-sm:translate-x-0 max-sm:translate-y-0",
+            "max-sm:w-screen max-sm:max-w-none max-sm:h-[100dvh] max-sm:max-h-[100dvh]",
             "sm:max-h-[85vh]",
           )}
         >
