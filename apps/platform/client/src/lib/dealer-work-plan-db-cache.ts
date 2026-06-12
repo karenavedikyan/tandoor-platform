@@ -9,7 +9,7 @@ import {
   loadDealerWorkPlanState,
   saveDealerWorkPlanState,
 } from "@/lib/dealer-work-plan";
-import { itemsToLocalSlice, type WorkPlanItemDto } from "@/lib/dealer-work-plan-api";
+import { fetchWorkPlan, itemsToLocalSlice, type WorkPlanItemDto } from "@/lib/dealer-work-plan-api";
 
 export type UserWorkPlanSlice = {
   hidden: Record<string, true>;
@@ -67,7 +67,6 @@ export function resolveWorkPlanState(state?: DealerWorkPlanState): DealerWorkPla
 }
 
 export async function refreshWorkPlanFromApi(localUserKey: string, authUserId?: string): Promise<boolean> {
-  const { fetchWorkPlan } = await import("@/lib/dealer-work-plan-api");
   const payload = await fetchWorkPlan(authUserId);
   if (!payload) return false;
   applyWorkPlanItemsToLocal(localUserKey, payload.items);
