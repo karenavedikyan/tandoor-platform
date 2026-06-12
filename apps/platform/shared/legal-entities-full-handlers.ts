@@ -45,6 +45,31 @@ function normInn(inn: string | null | undefined): string | null {
   return t || null;
 }
 
+/** Символы, заменяемые пробелом при дедупе по имени (длины from/to в translate должны совпадать). */
+export const LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_FROM = `"\'«»\u201C\u201D\u2018\u2019.,;:()[]{}/\\-`;
+const LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_TO = " ".repeat(LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_FROM.length);
+
+function pgQuoteSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+function sqlLegalEntityDedupNameExpr(columnRef: string): string {
+  const from = pgQuoteSqlLiteral(LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_FROM);
+  const to = pgQuoteSqlLiteral(LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_TO);
+  return `btrim(regexp_replace(lower(translate(${columnRef}, ${from}, ${to})), '\\s+', ' ', 'g'))`;
+}
+
+/** Зеркало SQL-нормализации имени для unit-тестов. */
+export function normalizeLegalEntityNameForDedup(name: string): string {
+  let s = name;
+  for (const ch of LEGAL_ENTITY_DEDUP_NAME_TRANSLATE_FROM) {
+    s = s.split(ch).join(" ");
+  }
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+const LEGAL_ENTITY_DEDUP_ORDER_BY = `(is_archived = false) DESC, (inn IS NOT NULL) DESC, (internal_code IS NOT NULL) DESC, created_at ASC`;
+
 function strOrNull(v: unknown): string | null {
   if (v == null) return null;
   const t = String(v).trim();
@@ -77,7 +102,10 @@ async function findByInn(
   inn: string,
 ): Promise<Record<string, unknown> | null> {
   const r = await pool.query<Record<string, unknown>>(
-    `SELECT * FROM legal_entities WHERE client_id = $1 AND inn IS NOT NULL AND TRIM(inn) = $2 LIMIT 1`,
+    `SELECT * FROM legal_entities
+     WHERE client_id = $1 AND inn IS NOT NULL AND TRIM(inn) = $2
+     ORDER BY ${LEGAL_ENTITY_DEDUP_ORDER_BY}
+     LIMIT 1`,
     [clientId, inn],
   );
   return r.rows[0] ?? null;
@@ -102,15 +130,60 @@ async function findByNormName(
   clientId: string,
   name: string,
 ): Promise<Record<string, unknown> | null> {
+  const normNameExpr = sqlLegalEntityDedupNameExpr("name");
+  const normParamExpr = sqlLegalEntityDedupNameExpr("$2::text");
   const r = await pool.query<Record<string, unknown>>(
     `SELECT * FROM legal_entities
-     WHERE client_id = $1 AND is_archived = false
-       AND lower(btrim(name)) = lower(btrim($2))
-     ORDER BY (inn IS NOT NULL) DESC, (internal_code IS NOT NULL) DESC, created_at ASC
+     WHERE client_id = $1
+       AND ${normNameExpr} = ${normParamExpr}
+     ORDER BY ${LEGAL_ENTITY_DEDUP_ORDER_BY}
      LIMIT 1`,
     [clientId, name],
   );
   return r.rows[0] ?? null;
+}
+
+function isArchivedLegalEntity(row: Record<string, unknown>): boolean {
+  if (row.is_archived === true) return true;
+  return String(row.status ?? "") === "archived";
+}
+
+async function deduplicateExistingEntity(
+  pool: PoolLike,
+  clientId: string,
+  existing: Record<string, unknown>,
+  fields: Record<string, unknown>,
+  name: string,
+  actorName: string | null,
+  actorUserIdVal: string | null,
+): Promise<{ item: LegalEntityFullRow; restoredFromArchive: boolean }> {
+  const wasArchived = isArchivedLegalEntity(existing);
+  const rowId = String(existing.id);
+
+  let item = await updateRowFromFields(pool, rowId, fields, true);
+  if (!wasArchived) {
+    return { item, restoredFromArchive: false };
+  }
+
+  const incomingStatus = typeof fields.status === "string" ? fields.status.trim() : "";
+  const restoreStatus =
+    incomingStatus && incomingStatus !== "archived" ? incomingStatus : "additional";
+  if (restoreStatus === "main") await clearMainStatus(pool, clientId, rowId);
+
+  const r = await pool.query<Record<string, unknown>>(
+    `UPDATE legal_entities SET is_archived = false, status = $2, updated_at = NOW() WHERE id = $1::uuid RETURNING *`,
+    [rowId, restoreStatus],
+  );
+  item = mapLegalEntityFullRow(r.rows[0]!);
+  await insertHistory(
+    pool,
+    clientId,
+    `Юрлицо восстановлено из архива при повторном добавлении: ${name}`,
+    actorName,
+    actorUserIdVal,
+    item.id,
+  );
+  return { item, restoredFromArchive: true };
 }
 
 async function findExistingForDedup(
@@ -407,17 +480,33 @@ export async function handleLegalEntitiesCreateFull(
     return;
   }
 
+  const actorName = strOrNull(body.updatedByName) ?? me.id;
+  const actorId =
+    actorUserId(typeof body.updatedByUserId === "string" ? body.updatedByUserId : undefined) ??
+    actorUserId(me.id);
+
   const existing = await findExistingForDedup(pool, clientId, fields, name);
   if (existing) {
-    const item = await updateRowFromFields(pool, String(existing.id), fields, true);
-    sendJson(res, 200, { success: true, item, deduplicated: true });
+    const { item, restoredFromArchive } = await deduplicateExistingEntity(
+      pool,
+      clientId,
+      existing,
+      fields,
+      name,
+      actorName,
+      actorId,
+    );
+    sendJson(res, 200, {
+      success: true,
+      item,
+      deduplicated: true,
+      ...(restoredFromArchive ? { restoredFromArchive: true } : {}),
+    });
     return;
   }
 
   const status = fields.status as string;
   if (status === "main") await clearMainStatus(pool, clientId);
-
-  const actorName = strOrNull(body.updatedByName) ?? me.id;
   let r: { rows: Record<string, unknown>[] };
   try {
     r = await pool.query<Record<string, unknown>>(
@@ -457,8 +546,21 @@ export async function handleLegalEntitiesCreateFull(
     if (isPgUniqueViolation(err)) {
       const raced = await findExistingForDedup(pool, clientId, fields, name);
       if (raced) {
-        const item = await updateRowFromFields(pool, String(raced.id), fields, true);
-        sendJson(res, 200, { success: true, item, deduplicated: true });
+        const { item, restoredFromArchive } = await deduplicateExistingEntity(
+          pool,
+          clientId,
+          raced,
+          fields,
+          name,
+          actorName,
+          actorId,
+        );
+        sendJson(res, 200, {
+          success: true,
+          item,
+          deduplicated: true,
+          ...(restoredFromArchive ? { restoredFromArchive: true } : {}),
+        });
         return;
       }
     }
