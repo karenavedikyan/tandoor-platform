@@ -739,10 +739,14 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto pb-24 sm:max-w-lg" data-testid="dialog-dealer-edit">
-        <DialogHeader>
+      <DialogContent
+        className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        data-testid="dialog-dealer-edit"
+      >
+        <DialogHeader className="shrink-0 border-b px-6 pt-6 pb-3">
           <DialogTitle className="text-base">Редактирование клиента</DialogTitle>
         </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-4">
         <Accordion type="multiple" defaultValue={["passport", "responsibles", "logistics", "contacts", "commercial"]} className="py-1">
           <AccordionItem value="passport">
             <AccordionTrigger className="text-left text-sm font-semibold">Паспорт клиента</AccordionTrigger>
@@ -1019,7 +1023,8 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
             </AccordionContent>
           </AccordionItem>
         </Accordion>
-        <DialogFooter className="sticky bottom-0 flex-col items-stretch gap-2 border-t border-border bg-background pt-3 sm:flex-row sm:justify-end">
+        </div>
+        <DialogFooter className="shrink-0 flex-col items-stretch gap-2 border-t border-border bg-background px-6 py-3 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" className="min-h-10 w-full sm:w-auto" onClick={() => onOpenChange(false)}>
             Закрыть без сохранения
           </Button>
@@ -1610,10 +1615,14 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
       </AlertDialog>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto pb-24 sm:max-w-xl" data-testid="dialog-dealer-create">
-          <DialogHeader>
+        <DialogContent
+          className="flex max-h-[90vh] max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-xl"
+          data-testid="dialog-dealer-create"
+        >
+          <DialogHeader className="shrink-0 border-b px-6 pt-6 pb-3">
             <DialogTitle className="text-base">Новый клиент</DialogTitle>
           </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-6 py-4">
           <div className="space-y-6 py-1">
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Основное</p>
@@ -1908,7 +1917,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               </div>
             </div>
           </div>
-          <DialogFooter className="sticky bottom-0 border-t border-border bg-background pt-3">
+          </div>
+          <DialogFooter className="shrink-0 border-t border-border bg-background px-6 py-3">
             <Button
               type="button"
               variant="outline"
