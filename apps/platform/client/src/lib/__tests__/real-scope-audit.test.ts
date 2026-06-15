@@ -93,7 +93,7 @@ describe("real-scope-audit", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/_diag/real-scope-audit");
+    expect(url).toBe("/api/diag/real-scope-audit");
     expect(init.keepalive).toBe(true);
   });
 

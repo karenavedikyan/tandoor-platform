@@ -1,5 +1,5 @@
 /**
- * POST /api/_diag/real-scope-audit — телеметрия demo-fallback (Промт 338).
+ * POST /api/diag/real-scope-audit — телеметрия demo-fallback (Промт 338).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     res.status(204).end();
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
-    console.error("[api/_diag/real-scope-audit]", m.slice(0, 200));
+    console.error("[api/diag/real-scope-audit]", m.slice(0, 200));
     res.status(204).end();
   }
 }
