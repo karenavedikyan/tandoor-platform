@@ -36,6 +36,8 @@
     "test:impersonation-quick-switch": "tsx client/src/lib/__tests__/impersonation-quick-switch.test.ts",
     "test:streak": "tsx client/src/lib/__tests__/actualization-streak.test.ts",
     "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts",
+    "test:actualization-merge": "tsx shared/__tests__/actualization-merge.test.ts",
+    "test:state-stale-merge": "tsx api/actualization/__tests__/state-stale-merge.test.ts",
     "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts",
     "test:city-shadow": "tsx api/actualization/__tests__/city-shadow.test.ts",
     "test:race-hooks-order": "tsx client/src/components/home/__tests__/actualization-race-hooks-order.test.ts",

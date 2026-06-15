@@ -109,6 +109,32 @@
 
 Индикатор: `client-base-actualization-sync-status.tsx` (`text-actualization-sync-status`, `text-actualization-offline-fallback`).
 
+### Защита от stale-state overwrite (Промт 331)
+
+**Инцидент 13.06.2026, 03:00:48 UTC.** У восьми менеджеров параллельно сброшены поля `archivedDealersById` (у части также `dealerOverridesById` и другие manager-only словари). В БД изменился `updated_at` строки, но внутренний `state.updatedAt` в JSONB остался от 06.06–12.06 — классический **stale-state overwrite**: фоновая вкладка/PWA отправила устаревший снапшот, сервер записал его поверх свежей версии.
+
+До Промта 331 от случайной потери защищены были только `trashedDealersById` / `trashedTradePointsById` (`applyTrashProtection` в `shared/actualization-trash.ts`). Остальные manager-only id-словари перезаписывались полным POST без проверки.
+
+**Механизм (только сервер, `api/actualization/state.ts`):**
+
+1. **Stale-POST detection.** После чтения `prevState` из Postgres (или memory store) сравнивается `prevState.updatedAt` с **входящим** `body.state.updatedAt` — тем, что клиент прислал **до** перезаписи сервером на `now`. Если оба значения — валидные ISO-строки и `incoming.updatedAt < prev.updatedAt`, запрос считается устаревшим.
+2. **Defensive merge** (`applyStaleStateMerge` в `shared/actualization-merge.ts`). Для каждого поля из `MANAGER_ID_DICT_FIELDS`: если ключ есть в `prevState`, но отсутствует в incoming — запись **восстанавливается** в итоговый state. Ключи, явно присутствующие во incoming, **не перезаписываются** (легитимное обновление или намеренное удаление при свежем снапшоте).
+3. Порядок в POST: `prevState` → stale merge (если нужно) → `applyTrashProtection` → `INSERT ... ON CONFLICT`.
+
+**Защищённые поля** (15 id-словарей): `archivedDealersById`, `archivedTradePointsById`, `archivedLegalEntitiesById`, `archivedDealerContactsById`, `dealerOverridesById`, `manuallyCreatedDealersById`, `tradePointOverridesById`, `manuallyCreatedTradePointsById`, `legalEntityOverridesByDealerId`, `dealerActualizationContactsById`, `dealerActualizationAuditByDealerId`, `unloadingOrderByDealerId`, `dealerPhotosByDealerId`, `tradePointPhotosByTradePointId`, `tradePointShowcaseActualizationById`.
+
+**Поведение для клиента:**
+
+| Ситуация | Результат |
+|----------|-----------|
+| Свежий POST (`incoming.updatedAt ≥ prev.updatedAt`) | Как раньше: удаления и правки применяются. |
+| Stale POST (`incoming.updatedAt < prev.updatedAt`) | Пропавшие ключи в id-словарях восстанавливаются из `prevState`; явные ключи во incoming сохраняются. |
+| POST без `updatedAt` | Merge **не** активируется (нет сигнала устаревания). |
+
+В логах сервера при срабатывании: `[actualization-api] STALE POST scope=... incoming=... prev=... recovered=...`.
+
+Клиентский код не меняется; защита работает для любых клиентов (веб, PWA, фоновые вкладки). Восстановление данных, уже потерянных в инциденте 13.06, — отдельная задача (PITR / ручное восстановление).
+
 ## Ручной клиент / ТТ без подмешивания release
 
 Идентификаторы: префиксы `manual-dealer-` и `manual-tp-` (см. `isManualActualizationDealerId` / `isManualActualizationTradePointId` в `client-base-actualization-stable-ids.ts`).

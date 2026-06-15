@@ -14,6 +14,7 @@
  * (объединение в одну serverless-функцию ради лимита Hobby 12 функций).
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { applyStaleStateMerge, isStaleActualizationSnapshot } from "../../shared/actualization-merge.js";
 import { applyTrashProtection, purgeExpiredTrash, type UnTrashDirective } from "../../shared/actualization-trash.js";
 import {
   sanitizeStateForNonManagerRole,
@@ -420,6 +421,32 @@ function rowUpdatedAtIso(v: unknown): string | null {
   if (v instanceof Date) return v.toISOString();
   if (typeof v === "string") return v;
   return null;
+}
+
+function extractIncomingUpdatedAt(incoming: unknown): string | null {
+  return isPlainObject(incoming) && typeof incoming.updatedAt === "string" ? incoming.updatedAt : null;
+}
+
+function applyStaleProtectionIfNeeded(
+  scopeKey: string,
+  prevState: Record<string, unknown> | null,
+  nextState: Record<string, unknown>,
+  incomingUpdatedAt: string | null,
+): void {
+  if (!isStaleActualizationSnapshot(prevState, incomingUpdatedAt)) return;
+  const mergeResult = applyStaleStateMerge(prevState, nextState);
+  console.warn(
+    "[actualization-api] STALE POST scope=" +
+      scopeKey +
+      " incoming=" +
+      incomingUpdatedAt +
+      " prev=" +
+      (typeof prevState?.updatedAt === "string" ? prevState.updatedAt : "") +
+      " recovered=" +
+      mergeResult.totalRecovered +
+      " by=" +
+      JSON.stringify(mergeResult.recoveredByField),
+  );
 }
 
 function isSalesPlanFactRequest(req: VercelRequest): boolean {
@@ -1029,6 +1056,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return;
       }
       const incoming = body.state ?? body.patch ?? body;
+      const incomingUpdatedAt = extractIncomingUpdatedAt(incoming);
       const next = coerceState(incoming);
 
       // Промт 50: 14 manager-only полей не должны попадать в state не-manager scope.
@@ -1069,6 +1097,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       if (!dbUrl) {
         const prev = memoryStore.get(userId)?.state;
         const prevState = isPlainObject(prev) ? coerceState(prev) : null;
+        applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
         const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
         if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
           console.warn(
@@ -1105,6 +1134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           `;
           const prevRaw = prevRows[0]?.state;
           prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
+          applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
           const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
           if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
             console.warn(
