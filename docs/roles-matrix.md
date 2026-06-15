@@ -13,6 +13,7 @@
 - `apps/platform/server/auth/handlers.ts` (visible-codes, org-snapshot),
 - `apps/platform/shared/my-client-codes-handlers.ts` (my-codes),
 - `apps/platform/shared/admin/actualization-dedupe.ts` (UUID→persona),
+- `apps/platform/client/src/lib/dealer-trash-scope.ts` (скоуп корзины, Промт 336),
 
 **обязан** обновить эту таблицу и обновить регресс-тесты в
 `apps/platform/client/src/lib/__tests__/role-smoke.test.ts`.
@@ -26,15 +27,16 @@
 | rop | team_lead | user-tl-&lt;UUID-маппинг&gt; или user-tl-kupiansky (fallback) | grouped: unifiedSalesNavigation | client_assignments where team.rop_user_id=me + rop_client_grants | то же (по кодам клиентов) | ~750–1300 (по команде) | drilldown менеджеров, /reset-requests | свой team scope | нет |
 | regional_manager | team_lead | user-tl-kupiansky (fallback, нет persona в SALES_USERS) | grouped: unifiedSalesNavigation | dealer_overrides where regional_manager_id=me | то же (по кодам из overrides) | свой scope (ownCodes) | — | свой scope | нет |
 | manager | sales_manager | mgr-&lt;UUID-маппинг&gt; или mgr-boyko-em (fallback) | grouped: unifiedSalesNavigation | client_assignments where responsible_user_id=me | то же | свой scope (ownCodes) | — | свой scope | нет |
-| marketer | marketer | user-mkt-morozova (default) | grouped: unifiedSalesNavigation + /listings | все клиенты (read-only, access=sales_director) | все ТТ (read-only) | все (актуализация выключена) | листовки, брифы | да | нет |
+| marketer | marketer | user-mkt-morozova (default) | grouped: unifiedSalesNavigation + /listings | все клиенты (read-only, access=sales_director) | все ТТ (read-only) | все (актуализация выключена) | листовки, брифы | nav-item есть, счётчик выключен (актуализация off) | нет |
 | analyst | analyst | user-anl-ivanets (default) | flat: аналитика, клиенты, ТТ, дистрибуция, задачи, карта, коммуникации, каталог, брифы | все клиенты (read-only) | все ТТ (read-only) | все (актуализация выключена) | analytics-workspace, /admin/sync-health, /admin/audit, /admin/counts-diag | нет (маршрут /trash недоступен) | нет |
-| category_manager | marketer (через role-mapping) | user-mkt-morozova (fallback, нет persona в SALES_USERS) | grouped: как marketer (unifiedSalesNavigation) | все клиенты (read-only, access=sales_director) | все ТТ (read-only) | все (актуализация выключена) | матрицы витрин (/distribution/matrix-catalog) | да | нет |
+| category_manager | marketer (через role-mapping) | user-mkt-morozova (fallback, нет persona в SALES_USERS) | grouped: как marketer (unifiedSalesNavigation) | все клиенты (read-only, access=sales_director) | все ТТ (read-only) | все (актуализация выключена) | матрицы витрин (/distribution/matrix-catalog) | вся корзина (full view, как director) | нет |
 
 ### Примечания к колонкам
 
 - **Sidebar items** — `getPilotNavigation(salesRole, …, platformUserRole)` в `auth-access.ts`. Роли sales_* используют grouped layout (`unifiedSalesNavigation`); analyst — flat layout.
 - **Dealer scope (real-режим)** — `roleScopedDealerRowsForReal` + `assignmentsScope` из `/api/clients/my-codes`. Для admin/director/marketer/analyst/category_manager my-codes возвращает пустые списки → видны все строки release-сидa (read-only для marketer/analyst/category_manager).
 - **KPI клиентской базы** — счётчик сайдбара `resolveSidebarWorkingDealerClientCount` == KPI «Всего» на /dealer-base (промт 332). Для scoped-ролей зависит от `assignmentsScope` и `defaultDealerBasePickerArgsForCount` (в real-режиме `ropTeam: "all"`, промт 334).
+- **Корзина: видит** — Промт 336: `buildTrashScopeFilter` + `dealer_overrides.trashed_at` / runtime store. Скоуп симметричен рабочей базе (`roleScopedDealerRowsForReal` + `assignmentsScope`). Источник данных глобальный (один `dealer_id` — одна запись), фильтрация на клиенте. Full view: `admin`, `director`, `category_manager`. Демо без real-scope — без сужения (совместимость).
 - **Корзина: удалить навсегда** — `canForceDelete` в `trash-bin.tsx`: только `admin` и `director`. `canRunPurge` (cron purge) — только `admin`.
 
 ## Известные ловушки

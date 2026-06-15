@@ -303,6 +303,7 @@ function AuthenticatedShell({
       managementDisplayState: teamPlane.mergedState,
       managementTeamFetchLoading: teamPlane.teamFetchLoading,
       realScope: sidebarRealScope,
+      role: user.role,
     }),
     [
       actx.enabled,
@@ -311,6 +312,7 @@ function AuthenticatedShell({
       teamPlane.mergedState,
       teamPlane.teamFetchLoading,
       sidebarRealScope,
+      user.role,
     ],
   );
   const dealerNavCount = useMemo(

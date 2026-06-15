@@ -32,6 +32,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import {
@@ -69,6 +71,7 @@ import {
   patchTradePointTrashRuntime,
 } from "@/lib/dealer-overrides-runtime";
 import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
+import { buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
 
 type ConfirmKind =
   | { kind: "force-delete-dealer"; dealerId: string; name: string }
@@ -95,6 +98,8 @@ function useArchivePagination(total: number, page: number): { pageIndex: number;
 export function TrashBinPage(): ReactElement {
   useDealerTpOverridesHydration(true);
   const { user } = useAuthUser();
+  const { profile } = useReleaseDemoProfile();
+  const realScope = useSidebarNavRealScope(true);
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const [trashTab, setTrashTab] = useState<"clients" | "tps">("clients");
@@ -124,14 +129,27 @@ export function TrashBinPage(): ReactElement {
     [user?.id, user?.fullName, user?.email],
   );
 
+  const trashScopeFilter = useMemo(
+    () => buildTrashScopeFilter({ role: user?.role ?? null, profile, realScope }),
+    [user?.role, profile, realScope],
+  );
+
   const trashedDealers = useMemo(() => {
     const map = mergeTrashedDealersForUi(stateForRead);
-    return Object.values(map).sort(compareByExpires);
-  }, [stateForRead]);
+    return Object.values(map)
+      .filter((d) => trashScopeFilter.fullView || trashScopeFilter.isDealerInScope(d.dealerId))
+      .sort(compareByExpires);
+  }, [stateForRead, trashScopeFilter]);
   const trashedTps = useMemo(() => {
     const map = mergeTrashedTradePointsForUi(stateForRead);
-    return Object.values(map).sort(compareByExpires);
-  }, [stateForRead]);
+    return Object.values(map)
+      .filter(
+        (t) =>
+          trashScopeFilter.fullView ||
+          trashScopeFilter.isTradePointInScope(t.tradePointId, t.dealerId ?? null),
+      )
+      .sort(compareByExpires);
+  }, [stateForRead, trashScopeFilter]);
 
   const archivedDealerDisplays = useMemo(() => {
     const map = stateForRead.archivedDealersById ?? {};
