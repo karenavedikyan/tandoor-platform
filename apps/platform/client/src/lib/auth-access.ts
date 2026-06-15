@@ -109,6 +109,8 @@ export function defaultHomePathForUserRole(role: UserRole): string {
       return "/marketing-briefs";
     case "analyst":
       return "/analytics-workspace";
+    case "category_manager":
+      return "/dealer-base";
     default:
       return "/";
   }
@@ -270,6 +272,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
 
   if (role === "marketer") {
     return any([
+      (x) => x === "/",
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
       (x) => isUnder(x, "/trade-points"),
       (x) => isUnder(x, "/client-map"),
