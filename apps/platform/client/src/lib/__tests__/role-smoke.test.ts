@@ -27,6 +27,13 @@ import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
 import { getReleaseClients } from "../release-client-data";
 import { mapUserRoleToDealerBaseAccess } from "../auth-user-dealer-access";
 import type { OrgSnapshot } from "../use-org-snapshot";
+import { buildTeamSummaries } from "../team-summary";
+import {
+  initialRopManagerForProfile,
+  roleScopedDealerRows,
+} from "../dealer-base-role-views";
+import { clearRealScopeAuditBufferForTests } from "../real-scope-audit";
+import type { ReleaseDemoProfile } from "../release-demo-profile";
 
 type RoleExpectation = {
   role: UserRole;
@@ -266,6 +273,51 @@ for (const c of CASES) {
     );
   });
 }
+
+// ============ 5. Промт 338: audit demo-fallback call-sites ============
+test("Промт 338: team_lead demo-path → audit buffer", () => {
+  clearRealScopeAuditBufferForTests();
+  const teamLeadProfile = {
+    role: "team_lead",
+    personaUserId: "user-tl-kupiansky",
+  } as ReleaseDemoProfile;
+  buildTeamSummaries(teamLeadProfile);
+  initialRopManagerForProfile(teamLeadProfile, "team_lead");
+  roleScopedDealerRows(allRows.slice(0, 3), teamLeadProfile);
+  const buf = globalThis.__REAL_SCOPE_AUDIT_BUFFER__ ?? [];
+  assert.ok(buf.length >= 3, "team_lead: logRealScopeAudit должен сработать на demo-путях");
+  assert.ok(
+    buf.some((e) => e.callSite.includes("buildTeamSummaries@team-summary")),
+    "team_lead: buildTeamSummaries маркер",
+  );
+});
+
+for (const role of ["admin", "director"] as const) {
+  test(`Промт 338: ${role} (sales_director) — нет demo-fallback audit`, () => {
+    clearRealScopeAuditBufferForTests();
+    const profile = loadReleaseDemoProfile(role, null);
+    buildTeamSummaries(profile);
+    roleScopedDealerRows(allRows.slice(0, 3), profile);
+    const buf = globalThis.__REAL_SCOPE_AUDIT_BUFFER__ ?? [];
+    const demoFallback = buf.filter((e) => e.reason === "demo-fallback-for-real-user");
+    assert.equal(
+      demoFallback.length,
+      0,
+      `${role}: sales_director не должен триггерить team_lead demo-маркеры`,
+    );
+  });
+}
+
+test("Промт 338: manager (sales_manager) — нет team_lead demo-fallback audit", () => {
+  clearRealScopeAuditBufferForTests();
+  const mgrProfile = {
+    role: "sales_manager",
+    personaUserId: "mgr-boyko-em",
+  } as ReleaseDemoProfile;
+  roleScopedDealerRows(allRows.slice(0, 3), mgrProfile);
+  const buf = globalThis.__REAL_SCOPE_AUDIT_BUFFER__ ?? [];
+  assert.equal(buf.length, 0, "manager: sales_manager path без team_lead маркеров");
+});
 
 // ============ Сводка ============
 console.log(`\n[role-smoke] passed: ${pass}, failed: ${fail}`);

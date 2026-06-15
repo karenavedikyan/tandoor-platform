@@ -3,6 +3,7 @@ import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import { logRealScopeAudit } from "./real-scope-audit";
 import { getRopOptions } from "@/lib/rop-manager-filters";
 import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
 import { getTeamLeadForTeam, getTeamManagers, SALES_TEAMS } from "@/lib/sales-control-data";
@@ -165,6 +166,12 @@ export function buildTeamSummaries(profile: ReleaseDemoProfile): TeamSummary[] {
     return getRopOptions().map((o) => buildTeamSummary(o.teamId));
   }
   if (profile.role === "team_lead") {
+    logRealScopeAudit({
+      callSite: "buildTeamSummaries@team-summary",
+      profileRole: profile.role,
+      personaUserId: profile.personaUserId,
+      reason: "demo-fallback-for-real-user",
+    });
     return [buildTeamSummary(getEffectiveTeamLeadTeamId(profile))];
   }
   return [];

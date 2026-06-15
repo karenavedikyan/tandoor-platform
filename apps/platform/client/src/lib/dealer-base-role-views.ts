@@ -8,6 +8,7 @@ import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
 import { getAllSalesManagers, getSalesUserById, getTeamManagers } from "@/lib/sales-control-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import { logRealScopeAudit } from "./real-scope-audit";
 import {
   getRopOptions,
   isRopOrManagerAllFilter,
@@ -232,6 +233,12 @@ export function roleScopedDealerRows(rows: DealerRow[], profile: ReleaseDemoProf
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
   if (access === "sales_director") return rows;
   if (access === "team_lead") {
+    logRealScopeAudit({
+      callSite: "roleScopedDealerRows@dealer-base-role-views",
+      profileRole: profile.role,
+      personaUserId: profile.personaUserId,
+      reason: "demo-fallback-for-real-user",
+    });
     const tid = getEffectiveTeamLeadTeamId(profile);
     return rows.filter((r) => r.releaseTeamId === tid);
   }
@@ -255,6 +262,12 @@ export function initialRopManagerForProfile(
     return { ropTeam: "all", manager: "all" };
   }
   if (access === "team_lead") {
+    logRealScopeAudit({
+      callSite: "initialRopManagerForProfile@dealer-base-role-views",
+      profileRole: profile.role,
+      personaUserId: profile.personaUserId,
+      reason: "demo-fallback-for-real-user",
+    });
     const tid = getEffectiveTeamLeadTeamId(profile);
     return { ropTeam: tid, manager: "all" };
   }
