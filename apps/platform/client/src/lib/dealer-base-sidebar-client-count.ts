@@ -3,18 +3,11 @@
  * на /dealer-base при фильтрах по умолчанию (без архива, с учётом актуализации).
  */
 
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { applyDealerBasePickerFilters, type DealerBasePickerArgs } from "@/lib/dealer-base-picker-filters";
-import {
-  initialRopManagerForProfile,
-  mapSalesRoleToDealerBaseAccess,
-  roleScopedDealerRows,
-  type DealerBaseAccessRole,
-} from "@/lib/dealer-base-role-views";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
-import { getManagersForRopTeam } from "@/lib/rop-manager-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { countDealerBaseHeaderTotal } from "@/lib/dealer-base-working-rows";
+import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "@/lib/dealer-overrides-runtime";
+import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
 export type SidebarDealerClientCountContext = {
   /** Как в ClientBaseActualizationProvider: false для маркетолога/аналитика и при выключенной фиче. */
@@ -29,23 +22,9 @@ export type SidebarDealerClientCountContext = {
   managementDisplayState?: ActualizationState;
   /** Пока тянем state менеджеров команды — не показываем частичный счётчик в навигации. */
   managementTeamFetchLoading?: boolean;
+  /** Real-режим: релиз-сид + org scope (как на /dealer-base). */
+  realScope?: SidebarNavRealScope;
 };
-
-function defaultPickerArgsForNav(profile: ReleaseDemoProfile, access: DealerBaseAccessRole): DealerBasePickerArgs {
-  const init = initialRopManagerForProfile(profile, access);
-  return {
-    search: "",
-    quick: "all",
-    cities: [],
-    categories: [],
-    ropTeam: init.ropTeam,
-    manager: init.manager,
-    managerCatalogForRop: getManagersForRopTeam(init.ropTeam),
-    geoRegion: "",
-    geoDistrict: "",
-    geoLocality: "",
-  };
-}
 
 /**
  * @returns количество клиентов в рабочей базе или `null`, пока актуализация загружается (enabled && loading).
@@ -56,14 +35,13 @@ export function resolveSidebarWorkingDealerClientCount(
 ): number | null {
   if (ctx.enabled && ctx.loading) return null;
   if (ctx.enabled && ctx.managementTeamFetchLoading) return null;
-  const actForRows = ctx.managementDisplayState ?? ctx.state;
-  const merged = !ctx.enabled
-    ? DEALER_BASE_ROWS
-    : buildDealerBaseRowsWithActualization(actForRows, profile, { includeArchivedDealers: false });
-  const access = mapSalesRoleToDealerBaseAccess(profile.role);
-  const scoped = roleScopedDealerRows(merged, profile);
-  const pickerArgs = defaultPickerArgsForNav(profile, access);
-  return applyDealerBasePickerFilters(scoped, pickerArgs).length;
+
+  return countDealerBaseHeaderTotal({
+    profile,
+    actEnabled: ctx.enabled,
+    actState: ctx.managementDisplayState ?? ctx.state,
+    realScope: ctx.realScope,
+  });
 }
 
 /**
@@ -82,7 +60,7 @@ export function resolveSidebarTrashCount(
   if (ctx.loading) return null;
   if (ctx.managementTeamFetchLoading) return null;
   const act = ctx.managementDisplayState ?? ctx.state;
-  const dealers = act.trashedDealersById ?? {};
-  const tps = act.trashedTradePointsById ?? {};
+  const dealers = mergeTrashedDealersForUi(act);
+  const tps = mergeTrashedTradePointsForUi(act);
   return Object.keys(dealers).length + Object.keys(tps).length;
 }

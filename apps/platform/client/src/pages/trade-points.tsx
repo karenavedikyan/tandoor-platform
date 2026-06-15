@@ -78,6 +78,8 @@ import {
   canActualizeClientBase,
   canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
+import { buildTradePointsWorkingRowsForCount } from "@/lib/trade-points-working-rows";
+import { buildSidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import {
   buildTradePointListForActualization,
   type TradePointListRow,
@@ -390,38 +392,61 @@ export default function TradePointsPage(): ReactElement {
     } as const;
   }, [useReal, snap, visPayload, access]);
 
-  const baseRows = useMemo(() => {
-    if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
-      return [];
-    }
-    return buildTradePointListForActualization(actState, profile, {
-      includeArchivedTradePoints: showArchived,
-      archivedTradePointsOnly: showArchived,
-      ...(tpListRealOpts ?? {}),
-    });
-  }, [
-    isRealUser,
-    authLoading,
-    authError,
-    snap,
-    visPayload,
-    orgSnapQ.isError,
-    visCodesQ.isError,
-    actState,
-    profile,
-    showArchived,
-    tpListRealOpts,
-  ]);
+  const sidebarRealScope = useMemo(
+    () =>
+      buildSidebarNavRealScope({
+        isRealUser,
+        authLoading,
+        authError,
+        role: me?.role,
+        snap,
+        visPayload,
+        orgSnapError: orgSnapQ.isError,
+        visCodesError: visCodesQ.isError,
+        orgSnapLoading: orgSnapQ.isLoading,
+        visCodesLoading: visCodesQ.isLoading,
+        assignmentsScope,
+      }),
+    [
+      isRealUser,
+      authLoading,
+      authError,
+      me?.role,
+      snap,
+      visPayload,
+      orgSnapQ.isError,
+      visCodesQ.isError,
+      orgSnapQ.isLoading,
+      visCodesQ.isLoading,
+      assignmentsScope,
+    ],
+  );
 
   const workingRows = useMemo(() => {
-    if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
-      return [];
+    return (
+      buildTradePointsWorkingRowsForCount({
+        profile,
+        actEnabled: actx.enabled,
+        actState,
+        realScope: sidebarRealScope,
+      }) ?? []
+    );
+  }, [profile, actx.enabled, actState, sidebarRealScope]);
+
+  const baseRows = useMemo(() => {
+    if (showArchived) {
+      if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
+        return [];
+      }
+      return buildTradePointListForActualization(actState, profile, {
+        includeArchivedTradePoints: true,
+        archivedTradePointsOnly: true,
+        ...(tpListRealOpts ?? {}),
+      });
     }
-    return buildTradePointListForActualization(actState, profile, {
-      includeArchivedTradePoints: false,
-      ...(tpListRealOpts ?? {}),
-    });
+    return workingRows;
   }, [
+    showArchived,
     isRealUser,
     authLoading,
     authError,
@@ -432,6 +457,7 @@ export default function TradePointsPage(): ReactElement {
     actState,
     profile,
     tpListRealOpts,
+    workingRows,
   ]);
 
   const summary = useMemo(() => {
