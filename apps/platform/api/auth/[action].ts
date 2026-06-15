@@ -25,6 +25,7 @@ type UserRole =
   | "manager"
   | "marketer"
   | "analyst"
+  | "category_manager"
   | "admin";
 
 type UserStatus = "invited" | "active" | "disabled";
@@ -100,6 +101,12 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
   manager: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
   marketer: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
   analyst: new Set<Permission>(["profile.read_self", "profile.update_self", "sessions.read_self", "sessions.revoke_self"]),
+  category_manager: new Set<Permission>([
+    "profile.read_self",
+    "profile.update_self",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
 };
 
 function roleHasPermission(role: UserRole, perm: Permission): boolean {
