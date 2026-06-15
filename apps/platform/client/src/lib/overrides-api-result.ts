@@ -15,6 +15,13 @@ export type OverridesApiFail = {
 };
 export type OverridesApiResult<T> = OverridesApiOk<T> | OverridesApiFail;
 
+export const OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE = "FORBIDDEN_OUT_OF_SCOPE";
+export const OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE = "Этот клиент вне вашей зоны ответственности";
+
+export function isForbiddenOutOfScopeResult(result: OverridesApiFail): boolean {
+  return result.code === OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE;
+}
+
 export const OVERRIDES_ERROR_LOG_KEY = "tandoor:overrides:error-log";
 const ERROR_LOG_MAX = 50;
 

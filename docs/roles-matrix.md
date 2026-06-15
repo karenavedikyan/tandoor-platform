@@ -14,6 +14,7 @@
 - `apps/platform/shared/my-client-codes-handlers.ts` (my-codes),
 - `apps/platform/shared/admin/actualization-dedupe.ts` (UUID→persona),
 - `apps/platform/client/src/lib/dealer-trash-scope.ts` (скоуп корзины, Промт 336),
+- `apps/platform/shared/dealer-trash-scope-server.ts` (серверный гард trash/untrash, Промт 337),
 
 **обязан** обновить эту таблицу и обновить регресс-тесты в
 `apps/platform/client/src/lib/__tests__/role-smoke.test.ts`.
@@ -37,6 +38,7 @@
 - **Dealer scope (real-режим)** — `roleScopedDealerRowsForReal` + `assignmentsScope` из `/api/clients/my-codes`. Для admin/director/marketer/analyst/category_manager my-codes возвращает пустые списки → видны все строки release-сидa (read-only для marketer/analyst/category_manager).
 - **KPI клиентской базы** — счётчик сайдбара `resolveSidebarWorkingDealerClientCount` == KPI «Всего» на /dealer-base (промт 332). Для scoped-ролей зависит от `assignmentsScope` и `defaultDealerBasePickerArgsForCount` (в real-режиме `ropTeam: "all"`, промт 334).
 - **Корзина: видит** — Промт 336: `buildTrashScopeFilter` + `dealer_overrides.trashed_at` / runtime store. Скоуп симметричен рабочей базе (`roleScopedDealerRowsForReal` + `assignmentsScope`). Источник данных глобальный (один `dealer_id` — одна запись), фильтрация на клиенте. Full view: `admin`, `director`, `category_manager`. Демо без real-scope — без сужения (совместимость).
+- **Корзина: trash/untrash (сервер)** — Промт 337: `canUserTrashDealer` / `canUserTrashTradePoint` в `dealer-trash-scope-server.ts`. POST `/api/dealer-overrides/trash|untrash` и trade-point аналоги возвращают `403 FORBIDDEN_OUT_OF_SCOPE` вне scope. Read-only list/get без изменений.
 - **Корзина: удалить навсегда** — `canForceDelete` в `trash-bin.tsx`: только `admin` и `director`. `canRunPurge` (cron purge) — только `admin`.
 
 ## Известные ловушки

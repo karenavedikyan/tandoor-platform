@@ -14,6 +14,7 @@ import {
 } from "./trade-point-overrides-types.js";
 import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { OverridesValidationError, sanitizeTradePointOverrideUuidFields } from "./overrides-uuid-validation.js";
+import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -296,6 +297,15 @@ async function setTrash(
   sendJson(res, 200, { success: true, data: { override } });
 }
 
+function denyTrashOutOfScope(res: VercelResponse, reason?: string): void {
+  sendJson(res, 403, {
+    success: false,
+    code: "FORBIDDEN_OUT_OF_SCOPE",
+    message: "Этот клиент вне вашей зоны ответственности.",
+    reason,
+  });
+}
+
 export async function handleTradePointOverridesTrash(
   req: VercelRequest,
   res: VercelResponse,
@@ -308,6 +318,11 @@ export async function handleTradePointOverridesTrash(
     : "";
   if (!tpId) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
+    return;
+  }
+  const check = await canUserTrashTradePoint(pool, me.id, me.role, tpId);
+  if (!check.allowed) {
+    denyTrashOutOfScope(res, check.reason);
     return;
   }
   await setTrash(pool, me, tpId, true, res);
@@ -325,6 +340,11 @@ export async function handleTradePointOverridesUntrash(
     : "";
   if (!tpId) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
+    return;
+  }
+  const check = await canUserTrashTradePoint(pool, me.id, me.role, tpId);
+  if (!check.allowed) {
+    denyTrashOutOfScope(res, check.reason);
     return;
   }
   await setTrash(pool, me, tpId, false, res);
