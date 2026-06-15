@@ -11,7 +11,7 @@ import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization 
 import { getManualDealerDisplayCode, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { roleScopedDealerRows, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { assignmentsScopeIsActive, roleScopedDealerRowsForReal, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
@@ -74,6 +74,11 @@ export type BuildTradePointListOptions = {
   includeArchivedTradePoints?: boolean;
   /** Режим «только архив»: в списке исключительно архивные ТТ (рабочие скрыты). */
   archivedTradePointsOnly?: boolean;
+  /** Подмена статического `DEALER_BASE_ROWS` (релиз-сид после фильтра видимых кодов). */
+  releaseDealerRows?: DealerRow[];
+  /** Real-режим: scope по org snapshot вместо demo `roleScopedDealerRows`. */
+  orgScope?: { snap: OrgSnapshot; access: DealerBaseAccessRole };
+  assignmentsScope?: AssignmentsScope;
 };
 
 function dealerMergedFields(dealerId: string, act: ActualizationState): Record<string, unknown> {
@@ -256,8 +261,20 @@ export function buildTradePointListForActualization(
     });
   };
 
+  const dealerBuildOpts = {
+    releaseDealerRows: options?.releaseDealerRows,
+  };
+
   const collectForDealers = (dealers: DealerRow[], keepEntry: (e: MergedTradePointEntry) => boolean): void => {
-    const scoped = roleScopedDealerRows(dealers, profile);
+    const scoped = options?.orgScope
+      ? roleScopedDealerRowsForReal(
+          dealers,
+          options.orgScope.snap,
+          options.orgScope.access,
+          undefined,
+          assignmentsScopeIsActive(options.assignmentsScope) ? options.assignmentsScope : undefined,
+        )
+      : roleScopedDealerRows(dealers, profile);
     for (const dealer of scoped) {
       // Корзинных клиентов не показываем нигде (в рабочем и архивном списке).
       if (act.trashedDealersById?.[dealer.id]) continue;
@@ -271,9 +288,15 @@ export function buildTradePointListForActualization(
   };
 
   if (archivedOnly && !IGNORE_CLIENT_ARCHIVE_IN_UI) {
-    const activeDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+    const activeDealers = buildDealerBaseRowsWithActualization(act, profile, {
+      includeArchivedDealers: false,
+      ...dealerBuildOpts,
+    });
     collectForDealers(activeDealers, (e) => e.isArchived);
-    const archivedDealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true });
+    const archivedDealers = buildDealerBaseRowsWithActualization(act, profile, {
+      includeArchivedDealers: true,
+      ...dealerBuildOpts,
+    });
     collectForDealers(archivedDealers, () => true);
     return Array.from(byTradePointId.values());
   }
@@ -281,7 +304,10 @@ export function buildTradePointListForActualization(
     return [];
   }
 
-  const dealers = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+  const dealers = buildDealerBaseRowsWithActualization(act, profile, {
+    includeArchivedDealers: false,
+    ...dealerBuildOpts,
+  });
   collectForDealers(dealers, (e) => includeArchivedTp || !e.isArchived);
   return Array.from(byTradePointId.values());
 }

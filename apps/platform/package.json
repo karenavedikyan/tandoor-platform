@@ -36,6 +36,8 @@
     "test:impersonation-quick-switch": "tsx client/src/lib/__tests__/impersonation-quick-switch.test.ts",
     "test:streak": "tsx client/src/lib/__tests__/actualization-streak.test.ts",
     "test:scope-isolation": "tsx api/actualization/__tests__/scope-isolation.test.ts",
+    "test:sidebar-trade-points-count": "tsx client/src/lib/__tests__/sidebar-trade-points-count.test.ts",
+    "test:sidebar-dealer-count-vs-page": "tsx client/src/lib/__tests__/sidebar-dealer-count-vs-page.test.ts",
     "test:actualization-merge": "tsx shared/__tests__/actualization-merge.test.ts",
     "test:state-stale-merge": "tsx api/actualization/__tests__/state-stale-merge.test.ts",
     "test:manager-only-state": "tsx api/actualization/__tests__/manager-only-state.test.ts",

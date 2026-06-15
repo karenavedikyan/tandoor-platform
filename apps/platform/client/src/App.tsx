@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExotic
 import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { OnboardingUiProvider } from "@/context/onboarding-ui-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +39,8 @@ import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
-import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
+import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
+import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -287,64 +288,42 @@ function AuthenticatedShell({
   );
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
-  const dealerNavCount = useMemo(
-    () =>
-      resolveSidebarWorkingDealerClientCount(profile, {
-        enabled: actx.enabled,
-        loading: actx.loading,
-        state: actx.state,
-        managementDisplayState: teamPlane.mergedState,
-        managementTeamFetchLoading: teamPlane.teamFetchLoading,
-      }),
+  const showTradePointsNav =
+    salesRole === "sales_director" ||
+    salesRole === "team_lead" ||
+    salesRole === "sales_manager" ||
+    salesRole === "marketer" ||
+    salesRole === "analyst";
+  const sidebarRealScope = useSidebarNavRealScope(showTradePointsNav || actx.enabled);
+  const sidebarCountCtx = useMemo(
+    () => ({
+      enabled: actx.enabled,
+      loading: actx.loading,
+      state: actx.state,
+      managementDisplayState: teamPlane.mergedState,
+      managementTeamFetchLoading: teamPlane.teamFetchLoading,
+      realScope: sidebarRealScope,
+    }),
     [
-      profile,
       actx.enabled,
       actx.loading,
       actx.state,
       teamPlane.mergedState,
       teamPlane.teamFetchLoading,
+      sidebarRealScope,
     ],
   );
-  const showTradePointsNav =
-    salesRole === "sales_director" || salesRole === "team_lead" || salesRole === "sales_manager";
-
-  const tradePointsOverviewQ = useQuery({
-    queryKey: ["trade-points-overview"],
-    queryFn: fetchTradePointsOverview,
-    enabled: showTradePointsNav,
-    staleTime: 30_000,
-  });
-
-  const tradePointNavCount = useMemo<number | null | undefined>(() => {
+  const dealerNavCount = useMemo(
+    () => resolveSidebarWorkingDealerClientCount(profile, sidebarCountCtx),
+    [profile, sidebarCountCtx],
+  );
+  const tradePointNavCount = useMemo(() => {
     if (!showTradePointsNav) return undefined;
-    if (tradePointsOverviewQ.isError) return undefined;
-    const data = tradePointsOverviewQ.data;
-    if (data) return data.structure.activeTradePoints;
-    if (tradePointsOverviewQ.isLoading) return null;
-    return null;
-  }, [
-    showTradePointsNav,
-    tradePointsOverviewQ.isError,
-    tradePointsOverviewQ.isLoading,
-    tradePointsOverviewQ.data,
-  ]);
+    return resolveSidebarTradePointsCount(profile, sidebarCountCtx);
+  }, [showTradePointsNav, profile, sidebarCountCtx]);
   const trashNavCount = useMemo(
-    () =>
-      resolveSidebarTrashCount(profile, {
-        enabled: actx.enabled,
-        loading: actx.loading,
-        state: actx.state,
-        managementDisplayState: teamPlane.mergedState,
-        managementTeamFetchLoading: teamPlane.teamFetchLoading,
-      }),
-    [
-      profile,
-      actx.enabled,
-      actx.loading,
-      actx.state,
-      teamPlane.mergedState,
-      teamPlane.teamFetchLoading,
-    ],
+    () => resolveSidebarTrashCount(profile, sidebarCountCtx),
+    [profile, sidebarCountCtx],
   );
   const navigation = useMemo(
     () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount),
