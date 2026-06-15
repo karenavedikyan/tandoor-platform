@@ -27,7 +27,27 @@ export type BuildDealerBaseWorkingRowsInput = {
 export function defaultDealerBasePickerArgsForCount(
   profile: ReleaseDemoProfile,
   access: DealerBaseAccessRole,
+  isRealScopeReady = false,
 ): DealerBasePickerArgs {
+  // В real-режиме строки уже отфильтрованы roleScopedDealerRowsForReal
+  // (по DB-кодам из client_assignments + assignmentsScope). Дополнительный
+  // profile-based ropTeam/manager фильтр применять НЕ нужно — он опирается
+  // на demo-persona, которая для реальных руководителей может не совпадать
+  // с реальной командой (см. промт 334).
+  if (isRealScopeReady) {
+    return {
+      search: "",
+      quick: "all",
+      cities: [],
+      categories: [],
+      ropTeam: "all",
+      manager: "all",
+      managerCatalogForRop: [],
+      geoRegion: "",
+      geoDistrict: "",
+      geoLocality: "",
+    };
+  }
   const init = initialRopManagerForProfile(profile, access);
   return {
     search: "",
@@ -83,7 +103,8 @@ export function countDealerBaseHeaderTotal(input: BuildDealerBaseWorkingRowsInpu
       ? input.realScope.orgScope.access
       : mapSalesRoleToDealerBaseAccess(input.profile.role);
 
-  const pickerArgs = defaultDealerBasePickerArgsForCount(input.profile, access);
+  const isRealScopeReady = Boolean(input.realScope?.ready && input.realScope.orgScope);
+  const pickerArgs = defaultDealerBasePickerArgsForCount(input.profile, access, isRealScopeReady);
   return applyDealerBasePickerFilters(scoped, pickerArgs).length;
 }
 

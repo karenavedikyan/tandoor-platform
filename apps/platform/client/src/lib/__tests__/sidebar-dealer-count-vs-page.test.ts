@@ -13,7 +13,11 @@ import {
   resolveSidebarTrashCount,
   resolveSidebarWorkingDealerClientCount,
 } from "../dealer-base-sidebar-client-count";
-import { countDealerBaseHeaderTotal } from "../dealer-base-working-rows";
+import {
+  countDealerBaseHeaderTotal,
+  defaultDealerBasePickerArgsForCount,
+} from "../dealer-base-working-rows";
+import { loadReleaseDemoProfile } from "../release-demo-profile";
 import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "../dealer-overrides-runtime";
 import type { SidebarNavRealScope } from "../sidebar-nav-real-scope";
 
@@ -152,6 +156,117 @@ for (const { label, profile, scope } of roles) {
     state: act,
   });
   assert.equal(navTrash, trashPageTotal(act));
+}
+
+// --- Промт 334: real-РОП не должен резаться profile-based ropTeam ---
+
+const ROP_KUPIANSKY = "ccffcf6e-2505-4eee-b257-ac65b60bb779";
+const ROP_SKALABAN = "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa";
+const ROP_SAPOZHKOV = "c36f625f-730e-4ae3-b118-bdb005d10b81";
+
+const WRONG_ROP_PERSONA_PROFILE = {
+  personaUserId: "user-tl-kupiansky",
+  role: "team_lead",
+} as ReleaseDemoProfile;
+
+function ropSnapFor(ropUserId: string, teamUuid: string): OrgSnapshot {
+  return {
+    me: { id: ropUserId, role: "rop", fullName: "РОП", teamId: teamUuid },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: teamUuid, name: "Команда", ropUserId, ropName: "РОП" }],
+    users: [],
+  } as unknown as OrgSnapshot;
+}
+
+function rowsForCatalogTeam(catalogTeamId: string) {
+  const clients = getReleaseClients().filter((c) => c.teamId === catalogTeamId);
+  return buildDealerRowsFromReleaseClients(clients);
+}
+
+function countRealRopWithWrongPersona(
+  ropUserId: string,
+  teamUuid: string,
+  catalogTeamId: string,
+): number | null {
+  const teamRows = rowsForCatalogTeam(catalogTeamId);
+  assert.ok(teamRows.length > 0, `fixture: rows for ${catalogTeamId}`);
+  const scope: SidebarNavRealScope = {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    releaseDealerRows: allRows,
+    orgScope: { snap: ropSnapFor(ropUserId, teamUuid), access: "team_lead" },
+  };
+  return countDealerBaseHeaderTotal({
+    profile: WRONG_ROP_PERSONA_PROFILE,
+    actEnabled: true,
+    actState: createEmptyActualizationState(),
+    realScope: scope,
+  });
+}
+
+{
+  const n = countRealRopWithWrongPersona(ROP_SAPOZHKOV, "team-uuid-sapozhkov", "team-sapozhkov");
+  assert.ok(n != null && n > 0, "Сапожков (real): счётчик > 0 при persona user-tl-kupiansky");
+}
+
+{
+  const n = countRealRopWithWrongPersona(ROP_SKALABAN, "team-uuid-skalaban", "team-skalaban");
+  assert.ok(n != null && n > 0, "Скалабан (real): счётчик > 0");
+}
+
+{
+  const n = countRealRopWithWrongPersona(ROP_KUPIANSKY, "e5387f40-c693-44e6-ab17-e61a3ed0bd95", "team-kupiansky");
+  assert.ok(n != null && n > 0, "Купянский (real): счётчик > 0");
+}
+
+// demo-режим: profile-based ropTeam применяется.
+{
+  const picker = defaultDealerBasePickerArgsForCount(WRONG_ROP_PERSONA_PROFILE, "team_lead", false);
+  assert.equal(picker.ropTeam, "team-kupiansky", "demo: ropTeam из persona");
+  const pickerReal = defaultDealerBasePickerArgsForCount(WRONG_ROP_PERSONA_PROFILE, "team_lead", true);
+  assert.equal(pickerReal.ropTeam, "all", "real: ropTeam all");
+  const demoCount = countDealerBaseHeaderTotal({
+    profile: WRONG_ROP_PERSONA_PROFILE,
+    actEnabled: true,
+    actState: createEmptyActualizationState(),
+  });
+  assert.ok(demoCount != null && demoCount > 0, "demo team_lead: count > 0");
+}
+
+// --- Промт 334: подбор persona для реальных руководителей ---
+
+function withBrowserWindow<T>(fn: () => T): T {
+  const g = globalThis as { window?: unknown };
+  const prev = g.window;
+  g.window = {};
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete g.window;
+    else g.window = prev;
+  }
+}
+
+{
+  const p = withBrowserWindow(() => loadReleaseDemoProfile("rop", ROP_SAPOZHKOV));
+  assert.equal(p.personaUserId, "user-tl-sapozhkov");
+  assert.equal(p.role, "team_lead");
+}
+
+{
+  const p = withBrowserWindow(() => loadReleaseDemoProfile("rop", ROP_SKALABAN));
+  assert.equal(p.personaUserId, "user-tl-skalaban");
+}
+
+{
+  const p = withBrowserWindow(() => loadReleaseDemoProfile("rop", ROP_KUPIANSKY));
+  assert.equal(p.personaUserId, "user-tl-kupiansky");
+}
+
+{
+  const p = withBrowserWindow(() => loadReleaseDemoProfile("rop", "00000000-0000-0000-0000-000000000000"));
+  assert.equal(p.personaUserId, "user-tl-kupiansky", "неизвестный UUID РОПа → fallback");
 }
 
 console.log("sidebar-dealer-count-vs-page: ok");
