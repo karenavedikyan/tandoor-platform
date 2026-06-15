@@ -523,7 +523,7 @@ type ClientAssignmentRowHttp = {
 
 async function buildVisibleClientsPayloadHttp(db: NonNullable<ReturnType<typeof getAuthDb>>, row: AuthUserSnapshot): Promise<VisibleClientsPayloadHttp> {
   const role = row.role;
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer" || role === "category_manager") {
     return { all: true, codes: null, assignments: null };
   }
   const uid = row.userId;

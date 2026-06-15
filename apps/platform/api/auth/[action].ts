@@ -1106,7 +1106,7 @@ type ClientAssignmentRow = {
 
 async function buildVisibleClientsPayload(pool: PoolLike, row: DbUserRow): Promise<VisibleClientsPayload> {
   const role = row.role as UserRole;
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer" || role === "category_manager") {
     return { all: true, codes: null, assignments: null };
   }
   if (role === "rop") {
