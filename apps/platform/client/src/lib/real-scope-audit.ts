@@ -21,7 +21,7 @@ declare global {
 }
 
 const FLUSH_INTERVAL_MS = 5000;
-const AUDIT_ENDPOINT = "/api/_diag/real-scope-audit";
+const AUDIT_ENDPOINT = "/api/diag/real-scope-audit";
 
 const aggregateMap = new Map<string, RealScopeAuditAggregatedEvent>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;

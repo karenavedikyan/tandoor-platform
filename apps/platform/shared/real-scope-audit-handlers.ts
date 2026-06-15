@@ -1,5 +1,5 @@
 /**
- * POST /api/_diag/real-scope-audit — append-only телеметрия Промта 338.
+ * POST /api/diag/real-scope-audit — append-only телеметрия Промта 338.
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
