@@ -10,6 +10,11 @@ import {
   type PendingSyncKind,
 } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+export {
+  OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE,
+  OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE,
+  isForbiddenOutOfScopeResult,
+} from "@/lib/overrides-api-result";
 import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 

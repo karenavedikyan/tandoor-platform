@@ -15,6 +15,7 @@ import {
 } from "./dealer-overrides-types.js";
 import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { OverridesValidationError, sanitizeDealerOverrideUuidFields } from "./overrides-uuid-validation.js";
+import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -102,7 +103,7 @@ async function logEvents(
   }
 }
 
-// TODO(prompt-113): scope write access via client_assignments / team memberships.
+// TODO(prompt-113): scope write access via client_assignments / team memberships for non-trash upserts.
 function assertCanWrite(_me: SessionUser, res: VercelResponse): boolean {
   if (_me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
@@ -366,6 +367,15 @@ async function setTrash(
   sendJson(res, 200, { success: true, data: { override } });
 }
 
+function denyTrashOutOfScope(res: VercelResponse, reason?: string): void {
+  sendJson(res, 403, {
+    success: false,
+    code: "FORBIDDEN_OUT_OF_SCOPE",
+    message: "Этот клиент вне вашей зоны ответственности.",
+    reason,
+  });
+}
+
 export async function handleDealerOverridesTrash(
   req: VercelRequest,
   res: VercelResponse,
@@ -378,6 +388,11 @@ export async function handleDealerOverridesTrash(
     : "";
   if (!dealerId) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const check = await canUserTrashDealer(pool, me.id, me.role, dealerId);
+  if (!check.allowed) {
+    denyTrashOutOfScope(res, check.reason);
     return;
   }
   await setTrash(pool, me, dealerId, true, res);
@@ -395,6 +410,11 @@ export async function handleDealerOverridesUntrash(
     : "";
   if (!dealerId) {
     sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
+    return;
+  }
+  const check = await canUserTrashDealer(pool, me.id, me.role, dealerId);
+  if (!check.allowed) {
+    denyTrashOutOfScope(res, check.reason);
     return;
   }
   await setTrash(pool, me, dealerId, false, res);

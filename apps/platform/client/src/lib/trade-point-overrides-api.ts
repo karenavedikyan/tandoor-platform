@@ -6,6 +6,11 @@ import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shar
 import type { TradePointOverrideField } from "../../../shared/trade-point-overrides-types";
 import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
 import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+export {
+  OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE,
+  OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE,
+  isForbiddenOutOfScopeResult,
+} from "@/lib/overrides-api-result";
 import { sanitizeTradePointOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
 import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
 
