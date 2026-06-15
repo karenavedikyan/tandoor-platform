@@ -89,14 +89,13 @@ import { TradePointPhotoBlock } from "@/components/trade-point-photo-block";
 import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
-import { DistributionTree } from "@/components/distribution/distribution-tree";
 import {
   getShowcaseMatrixTpHistoryEvents,
   loadShowcaseMatrixStorage,
   SHOWCASE_MATRIX_CHANGED_EVENT,
 } from "@/lib/trade-point-showcase-matrix-storage";
 
-const SECTION_IDS = ["overview", "responsibles", "training", "matrix", "showcase", "distribution", "tasks", "comments", "history", "photos"] as const;
+const SECTION_IDS = ["overview", "responsibles", "training", "matrix", "showcase", "tasks", "comments", "history", "photos"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 const SECTION_DOM_IDS: Record<SectionId, string> = {
@@ -105,7 +104,6 @@ const SECTION_DOM_IDS: Record<SectionId, string> = {
   training: "section-trade-point-training-attention",
   matrix: "section-trade-point-matrix",
   showcase: "section-trade-point-showcase-matrix",
-  distribution: "section-trade-point-showcase-distribution",
   tasks: "section-trade-point-showcase-open-tasks",
   comments: "section-trade-point-comments",
   history: "trade-point-section-history",
@@ -118,7 +116,6 @@ const SECTION_LABELS: Record<SectionId, string> = {
   training: "Обучение",
   matrix: "Матрица",
   showcase: "Витрина",
-  distribution: "Дистрибуция",
   tasks: "Задачи по витрине",
   comments: "Комментарии",
   history: "История",
@@ -131,7 +128,6 @@ const NAV_TEST_IDS: Record<SectionId, string> = {
   training: "trade-point-section-nav-training",
   matrix: "trade-point-section-nav-matrix",
   showcase: "trade-point-section-nav-showcase",
-  distribution: "trade-point-section-nav-distribution",
   tasks: "trade-point-section-nav-tasks",
   comments: "trade-point-section-nav-comments",
   history: "trade-point-section-nav-history",
@@ -1192,23 +1188,6 @@ function TradePointDetailContent({
               actorUserId={user?.id ?? profile.personaUserId}
               actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
             />
-          </CollapsibleSection>
-
-          <CollapsibleSection
-            id="distribution"
-            domId={SECTION_DOM_IDS.distribution}
-            title={SECTION_LABELS.distribution}
-            subtitle="Сквозной просмотр позиций витрины в реальном времени."
-            open={openSections.has("distribution")}
-            onToggle={toggleSection}
-            testId="section-trade-point-distribution-live"
-          >
-            <SurfaceCard>
-              <DistributionTree
-                scope={{ kind: "trade-point", dealer, point }}
-                profile={profile}
-              />
-            </SurfaceCard>
           </CollapsibleSection>
 
           <CollapsibleSection

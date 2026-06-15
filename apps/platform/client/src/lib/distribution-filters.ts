@@ -6,20 +6,9 @@ import type { ClientCategoryId } from "@/lib/client-category";
 import { CLIENT_CATEGORY_META, getClientCategoryLabel } from "@/lib/client-category";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import {
-  defaultDistributionMetricsContext,
-  planPositionFromShowcaseModel,
-  type AnalyticsPlanPosition,
-  type DistributionMetricsContext,
-} from "@/lib/distribution-analytics";
-import type { ScopeTradePointRef } from "@/lib/distribution-tree-data";
 import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
-import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
 import { PLACEMENT_TYPE_LABEL_RU } from "@/lib/showcase-placement-labels";
-import {
-  getShowcaseMatrixModelsForTradePoint,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import { statusLabelRu } from "@/lib/trade-point-showcase-matrix-storage";
 
 export type DistributionPeriodKind = "all" | "last7" | "last30" | "last90" | "custom";
@@ -203,57 +192,6 @@ export function filterMatrixEntries(
     }
     return true;
   });
-}
-
-export function buildPlanModelsForRef(
-  ref: ScopeTradePointRef,
-  segment: DistributionSegmentFilter,
-): AnalyticsPlanPosition[] {
-  if (segment === "furniture") return [];
-  const models = getShowcaseMatrixModelsForTradePoint(
-    ref.dealer.id,
-    ref.point.id,
-    ref.dealer.clientCategory,
-  );
-  return models.filter((m) => modelMatchesSegment(m, segment)).map((m) => planPositionFromShowcaseModel(m));
-}
-
-export function applyMetricsFiltersToContext(
-  raw: DistributionMetricsContext,
-  ref: ScopeTradePointRef,
-  filter: DistributionAnalyticsFilterContext,
-): DistributionMetricsContext {
-  const planModels =
-    filter.segment === "furniture"
-      ? []
-      : raw.planModels.filter((m) => {
-          const models = getShowcaseMatrixModelsForTradePoint(
-            ref.dealer.id,
-            ref.point.id,
-            ref.dealer.clientCategory,
-          );
-          const def = models.find((x) => x.id === m.targetId);
-          return def ? modelMatchesSegment(def, filter.segment) : true;
-        });
-
-  const planTargetIds = new Set(planModels.map((m) => m.targetId));
-  const entries = filterMatrixEntries(raw.entries, filter, planTargetIds);
-  return { planModels, entries };
-}
-
-/** TODO: проброс segment/status/period в сигнатуры distribution-analytics при унификации API. */
-export function createFilteredMetricsContextBuilder(
-  filter: DistributionFilterState,
-  now?: number,
-): (ref: ScopeTradePointRef) => DistributionMetricsContext {
-  const analyticsFilter = buildAnalyticsFilterContext(filter, now);
-  return (ref: ScopeTradePointRef) => {
-    const raw = defaultDistributionMetricsContext(ref);
-    const planModels = buildPlanModelsForRef(ref, filter.segment);
-    const planTargetIds = new Set(planModels.map((m) => m.targetId));
-    const entries = filterMatrixEntries(loadCachedMatrix(ref.point.id), analyticsFilter, planTargetIds);
-    return { planModels, entries };
-  };
 }
 
 export const DISTRIBUTION_PERIOD_OPTIONS: { value: DistributionPeriodKind; label: string }[] = [
