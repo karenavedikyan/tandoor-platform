@@ -4,7 +4,10 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
+import {
+  LEADERS_UUID_TO_PERSONA,
+  UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE,
+} from "@shared/admin/actualization-dedupe";
 import type { SalesRole } from "@/lib/sales-control-data";
 import {
   getAllSalesManagers,
@@ -56,6 +59,12 @@ export function loadReleaseDemoProfile(
       const mgrId = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[serverUserId.trim()];
       if (mgrId && getSalesUserById(mgrId)?.role === sr) {
         personaUserId = mgrId;
+      }
+      // Промт 334: РОП/директор — отдельный маппинг (UUID → persona в SALES_USERS),
+      // иначе getEffectiveTeamLeadTeamId() возвращает team-kupiansky для всех РОПов.
+      const leaderPersona = LEADERS_UUID_TO_PERSONA[serverUserId.trim()];
+      if (leaderPersona && getSalesUserById(leaderPersona)?.role === sr) {
+        personaUserId = leaderPersona;
       }
     }
     return { role: sr, personaUserId };

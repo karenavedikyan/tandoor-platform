@@ -34,6 +34,18 @@ export const UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE: Record<string, string> = Obje
   Object.entries(MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE).map(([mgrId, uuid]) => [uuid, mgrId]),
 );
 
+/**
+ * Маппинг UUID реальных пользователей-руководителей (РОП, директор) к persona id из SALES_USERS.
+ * Нужен, чтобы при impersonation реального РОПа `release-demo-profile.ts` подбирал корректную
+ * persona — иначе `getEffectiveTeamLeadTeamId(profile)` всегда возвращает `team-kupiansky`
+ * (defaultPersonaForRole("team_lead")), что ломает picker-фильтры счётчиков (промт 332/334).
+ */
+export const LEADERS_UUID_TO_PERSONA: Record<string, string> = {
+  "ccffcf6e-2505-4eee-b257-ac65b60bb779": "user-tl-kupiansky",
+  "c36f625f-730e-4ae3-b118-bdb005d10b81": "user-tl-sapozhkov",
+  "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa": "user-tl-skalaban",
+};
+
 export type ManualMergePlanRow = {
   managerUserId: string;
   managerScopeUserId: string;
