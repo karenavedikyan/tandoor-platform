@@ -3,3 +3,4 @@ Trigger deploy after #710 — server trash scope guard
 2026-06-15T19:00:39Z enable DIAG_AUDIT_ENABLED=1 (prompt 338 telemetry)
 2026-06-15T19:08:29Z deploy after #712 (prompt 339 diag endpoint rename)
 2026-06-15T19:28:44Z deploy after #713 (prompt 340 diag body parsing)
+2026-06-15T19:34:53Z re-apply DIAG_AUDIT_ENABLED=1 (without trailing newline)
