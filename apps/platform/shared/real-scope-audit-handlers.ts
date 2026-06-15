@@ -23,14 +23,30 @@ export function isDiagAuditEnabled(): boolean {
   return process.env.DIAG_AUDIT_ENABLED === "1";
 }
 
+export function parseAuditBody(raw: unknown): RealScopeAuditPayload {
+  if (raw == null) return { events: [] };
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as RealScopeAuditPayload;
+    } catch {
+      return { events: [] };
+    }
+  }
+  if (typeof raw === "object") {
+    return raw as RealScopeAuditPayload;
+  }
+  return { events: [] };
+}
+
 export async function persistRealScopeAuditBatch(
   pool: PoolLike,
   payload: RealScopeAuditPayload,
-): Promise<void> {
+): Promise<number> {
   const events = Array.isArray(payload.events) ? payload.events : [];
-  if (events.length === 0) return;
+  if (events.length === 0) return 0;
 
   const userId = payload.userId?.trim() || null;
+  let written = 0;
 
   for (const e of events) {
     const callSite = String(e.callSite ?? "").trim();
@@ -48,5 +64,8 @@ export async function persistRealScopeAuditBatch(
        ) VALUES ($1::uuid, $2, $3, $4, $5::uuid, $6, $7)`,
       [userId, callSite, profileRole, personaUserId, realUserId, reason, eventCount],
     );
+    written++;
   }
+
+  return written;
 }

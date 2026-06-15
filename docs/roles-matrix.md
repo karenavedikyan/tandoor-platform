@@ -91,6 +91,10 @@ Endpoint: `POST /api/diag/real-scope-audit` (клиент — `sendBeacon` из 
 потому что Vercel автодискавери игнорирует папки с префиксом подчёркивания.
 URL стал `/api/diag/real-scope-audit`. БД-таблица и поведение не изменились.
 
+**Промт 340 (15.06.2026):** добавлен парсинг `req.body` для string/object форм
+и query-параметр `?debug=1` для visible smoke-acknowledgement. Поведение клиента
+не изменилось (sendBeacon шлёт object → пишется в БД).
+
 ## Процесс изменения матрицы
 
 1. Открываешь PR с изменением одного из перечисленных файлов.
