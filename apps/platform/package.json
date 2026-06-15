@@ -25,6 +25,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "test:auth-access": "tsx client/src/lib/__tests__/auth-access.test.ts",
+    "test:role-smoke": "tsx client/src/lib/__tests__/role-smoke.test.ts",
+    "test:ci-smoke": "npm run test:auth-access && npm run test:role-smoke && npm run test:sidebar-dealer-count-vs-page && npm run test:sidebar-trade-points-count",
     "test:auth-e2e": "tsx scripts/auth-e2e-smoke.ts",
     "test:trash-protection": "tsx client/src/lib/__tests__/trash-protection.test.ts",
     "test:trash-purge": "tsx client/src/lib/__tests__/trash-purge.test.ts",
