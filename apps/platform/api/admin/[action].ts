@@ -2393,7 +2393,7 @@ async function handleActualizationStatsOverview(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -2671,7 +2671,7 @@ async function handleClientBaseOverview(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -2903,7 +2903,7 @@ async function handleClientBaseManagerDetail(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -3153,7 +3153,7 @@ async function handleManagerActivityDetail(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -3406,7 +3406,7 @@ async function handleTradePointsOverview(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager", "regional_manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "regional_manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
@@ -3820,7 +3820,7 @@ async function handleTradePointsManagerDetail(
     sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
     return;
   }
-  if (!["admin", "director", "rop", "manager"].includes(me.role) || me.status !== "active") {
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
