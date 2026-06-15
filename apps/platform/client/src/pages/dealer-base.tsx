@@ -108,7 +108,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { buildDealerBaseRowsWithActualization, excludeTrashedDealersFromWorkingRows } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cockpit";
 import {
@@ -1531,6 +1531,11 @@ export default function DealerBase() {
   /** Real-режим: список только архивных клиентов (toggle «Режим архива»). */
   const dealerBaseArchiveListMode = useReal && actx.enabled && showArchivedDealers;
 
+  const applyWorkingBaseTrashInvariant = useCallback(
+    (rows: DealerRow[]) => excludeTrashedDealersFromWorkingRows(rows, teamActualizationPlane),
+    [teamActualizationPlane],
+  );
+
   const mergedRowsForDealerBase = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const clients = getVisibleReleaseClients(
@@ -1546,15 +1551,15 @@ export default function DealerBase() {
         includeArchivedDealers: includeArchived,
         releaseDealerRows: releaseRows,
       });
-      if (!includeArchived) return merged;
-      const archivedMap = teamActualizationPlane.archivedDealersById ?? {};
-      return merged.filter((r) => Boolean(archivedMap[r.id]));
+      const listed = !includeArchived ? merged : merged.filter((r) => Boolean((teamActualizationPlane.archivedDealersById ?? {})[r.id]));
+      return !showArchivedDealers ? applyWorkingBaseTrashInvariant(listed) : listed;
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return DEALER_BASE_ROWS;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+    const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
     });
+    return !showArchivedDealers ? applyWorkingBaseTrashInvariant(merged) : merged;
   }, [
     isRealUser,
     authLoading,
@@ -1568,6 +1573,7 @@ export default function DealerBase() {
     profile,
     showArchivedDealers,
     hydrationVersion,
+    applyWorkingBaseTrashInvariant,
   ]);
 
   useEffect(() => {
@@ -1621,14 +1627,18 @@ export default function DealerBase() {
       );
       const releaseRows = buildDealerRowsFromReleaseClients(clients);
       if (!actx.enabled) return releaseRows;
-      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-        includeArchivedDealers: false,
-        releaseDealerRows: releaseRows,
-      });
+      return applyWorkingBaseTrashInvariant(
+        buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+          includeArchivedDealers: false,
+          releaseDealerRows: releaseRows,
+        }),
+      );
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return DEALER_BASE_ROWS;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false });
+    return applyWorkingBaseTrashInvariant(
+      buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }),
+    );
   }, [
     isRealUser,
     authLoading,
@@ -1640,6 +1650,7 @@ export default function DealerBase() {
     actx.enabled,
     teamActualizationPlane,
     profile,
+    applyWorkingBaseTrashInvariant,
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
@@ -2863,9 +2874,52 @@ export default function DealerBase() {
   }, [profile.role, defaultRopManager]);
 
   const rowsFinalForList = useMemo(() => {
-    if (stockListFilter === "all") return rowsAfterCityFilter;
-    return rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-  }, [rowsAfterCityFilter, stockListFilter]);
+    const base =
+      stockListFilter === "all"
+        ? rowsAfterCityFilter
+        : rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+    return !showArchivedDealers ? applyWorkingBaseTrashInvariant(base) : base;
+  }, [rowsAfterCityFilter, stockListFilter, showArchivedDealers, applyWorkingBaseTrashInvariant]);
+
+  const trashInWorkingBaseDiagLoggedRef = useRef(false);
+  useEffect(() => {
+    const DIAG_TRASH_LEAK_KEY = "tandoor-diag-trash-in-working-base-v1";
+    try {
+      if (trashInWorkingBaseDiagLoggedRef.current) return;
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(DIAG_TRASH_LEAK_KEY)) return;
+      if (!actx.enabled || showArchivedDealers) return;
+
+      const trashedDealersById = teamActualizationPlane.trashedDealersById ?? {};
+      const leakedIds = rowsFinalForList.filter((r) => trashedDealersById[r.id]).map((r) => r.id);
+      if (leakedIds.length === 0) return;
+
+      trashInWorkingBaseDiagLoggedRef.current = true;
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(DIAG_TRASH_LEAK_KEY, "1");
+      }
+      console.warn("[dealer-base scope] trashed dealers leaked into rowsFinalForList", {
+        leakedIds,
+        isRealUser,
+        useReal,
+        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
+        access,
+        workView,
+        rowsFinalForListLen: rowsFinalForList.length,
+      });
+    } catch (e) {
+      console.warn("[dealer-base scope] trash leak diag failed", e);
+    }
+  }, [
+    actx.enabled,
+    showArchivedDealers,
+    teamActualizationPlane.trashedDealersById,
+    rowsFinalForList,
+    isRealUser,
+    useReal,
+    assignmentsScope,
+    access,
+    workView,
+  ]);
 
   const isFocusView = useMemo(() => isDealerBaseFocusViewParams(routeQs), [routeQs, routeKey]);
 

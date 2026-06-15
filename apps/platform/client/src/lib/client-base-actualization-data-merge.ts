@@ -704,9 +704,11 @@ export function buildDealerBaseRowsWithActualization(
     return [];
   }
   const archivedListMode = !IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true;
+  const isTrashedForList = (id: string) =>
+    Boolean(act.trashedDealersById?.[id]) || isDealerTrashedInRuntime(id, act);
   const includeId = (id: string) => {
     const isArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[id]);
-    const isTrashed = isDealerTrashedInRuntime(id, act);
+    const isTrashed = isTrashedForList(id);
     if (trashedListMode) return isTrashed;
     if (archivedListMode) return isArchived && !isTrashed;
     return !isArchived && !isTrashed;
@@ -723,6 +725,20 @@ export function buildDealerBaseRowsWithActualization(
   const sourceRows = opts?.releaseDealerRows ?? DEALER_BASE_ROWS;
   const rest = sourceRows.filter((r) => includeId(r.id)).map((r) => mapBuilt(r));
   return [...manuals, ...rest];
+}
+
+/**
+ * Промт 333: безусловный invariant рабочей базы — trashed-клиенты не должны
+ * попадать в списки активной базы даже при обходном пути сборки строк.
+ */
+export function excludeTrashedDealersFromWorkingRows(
+  rows: DealerRow[],
+  act: ActualizationState | null | undefined,
+): DealerRow[] {
+  if (!act) return rows;
+  return rows.filter(
+    (r) => !Boolean(act.trashedDealersById?.[r.id]) && !isDealerTrashedInRuntime(r.id, act),
+  );
 }
 
 /**
