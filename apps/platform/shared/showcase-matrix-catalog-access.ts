@@ -4,7 +4,7 @@
  */
 
 /** Роли с правом редактирования справочника на 1 этапе (явный дефолтный доступ). */
-const MANAGE_MATRIX_CATALOG_ROLES = new Set(["admin", "marketer", "analyst"]);
+const MANAGE_MATRIX_CATALOG_ROLES = new Set(["admin", "marketer", "analyst", "category_manager"]);
 
 /**
  * Редактирование справочника матриц: admin или роли из разрешённого списка.

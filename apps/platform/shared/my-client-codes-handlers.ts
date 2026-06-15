@@ -41,7 +41,13 @@ export async function fetchMyClientCodes(pool: PoolLike, user: SessionUser): Pro
   const uid = user.id;
   const meta = buildMeta(uid, role);
 
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+  if (
+    role === "admin" ||
+    role === "director" ||
+    role === "analyst" ||
+    role === "marketer" ||
+    role === "category_manager"
+  ) {
     return { success: true, ownCodes: [], teamCodes: [], responsibleByCode: {}, grantedCodes: [], meta };
   }
 

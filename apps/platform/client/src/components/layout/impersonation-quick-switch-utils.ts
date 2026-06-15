@@ -9,6 +9,7 @@ export const IMPERSONATION_ROLE_LABELS_RU: Record<UserRole, string> = {
   manager: "Менеджер",
   marketer: "Маркетолог",
   analyst: "Аналитик",
+  category_manager: "Категорийный менеджер",
   admin: "Администратор",
 };
 
@@ -19,7 +20,7 @@ export const IMPERSONATION_ROLE_GROUPS: { key: ImpersonationRoleGroupKey; label:
   { key: "rop", label: "РОП", roles: ["rop"] },
   { key: "managers", label: "Менеджеры", roles: ["manager", "regional_manager"] },
   { key: "marketers", label: "Маркетологи", roles: ["marketer"] },
-  { key: "other", label: "Прочие", roles: ["analyst", "admin"] },
+  { key: "other", label: "Прочие", roles: ["analyst", "category_manager", "admin"] },
 ];
 
 export function canShowImpersonationQuickSwitch(role: UserRole | null | undefined): boolean {

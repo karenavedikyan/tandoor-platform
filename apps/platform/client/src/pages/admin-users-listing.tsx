@@ -21,6 +21,7 @@ const rolesRu: Record<UserRole, string> = {
   manager: "Менеджер",
   marketer: "Маркетолог",
   analyst: "Аналитик",
+  category_manager: "Категорийный менеджер",
   admin: "Администратор",
 };
 

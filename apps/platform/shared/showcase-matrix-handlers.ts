@@ -150,7 +150,13 @@ export async function resolveShowcaseVisibility(
   user: { id: string; role: string },
 ): Promise<ShowcaseVisibility> {
   const role = user.role;
-  if (role === "admin" || role === "director" || role === "analyst" || role === "marketer") {
+  if (
+    role === "admin" ||
+    role === "director" ||
+    role === "analyst" ||
+    role === "marketer" ||
+    role === "category_manager"
+  ) {
     return { unrestricted: true };
   }
   const codes = await fetchMyClientCodes(pool, { id: user.id, role });

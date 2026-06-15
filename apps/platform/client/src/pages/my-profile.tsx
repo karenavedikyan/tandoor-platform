@@ -42,6 +42,7 @@ function rolesRuLabel(role: string): string {
     manager: "Менеджер",
     marketer: "Маркетолог",
     analyst: "Аналитик",
+    category_manager: "Категорийный менеджер",
     admin: "Администратор",
   };
   return m[role] ?? role;
