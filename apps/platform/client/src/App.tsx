@@ -41,6 +41,7 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
+import { attachRealScopeAuditUnloadFlush, setRealScopeAuditUserId } from "@/lib/real-scope-audit";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -282,6 +283,10 @@ function AuthenticatedShell({
 }) {
   const salesRole = useMemo(() => userRoleToSalesRole(user.role), [user.role]);
   const { profile } = useReleaseDemoProfile();
+  useEffect(() => {
+    setRealScopeAuditUserId(user.id);
+    attachRealScopeAuditUnloadFlush();
+  }, [user.id]);
   useDealerWorkPlanHydration(user.id, profile.personaUserId);
   const overridesBootstrap = (
     <OverridesSessionBootstrap userId={user.id} localUserId={profile.personaUserId} />

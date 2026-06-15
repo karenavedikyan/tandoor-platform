@@ -40,6 +40,7 @@ import {
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import { logRealScopeAudit } from "@/lib/real-scope-audit";
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 
 export type ClientBaseTeamActualizationContextValue = {
@@ -142,6 +143,12 @@ export function ClientBaseTeamActualizationProvider({ children }: { children: Re
     (ropTeamId: string) => {
       let next = normalizeManagementDashboardRopTeamId(ropTeamId);
       if (profile.role === "team_lead") {
+        logRealScopeAudit({
+          callSite: "publishDashboardRopTeamId@team-actualization-context",
+          profileRole: profile.role,
+          personaUserId: profile.personaUserId,
+          reason: "demo-fallback-for-real-user",
+        });
         next = getEffectiveTeamLeadTeamId(profile);
       }
       setDashboardRopTeamId(next);

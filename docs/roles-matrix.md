@@ -15,6 +15,7 @@
 - `apps/platform/shared/admin/actualization-dedupe.ts` (UUID→persona),
 - `apps/platform/client/src/lib/dealer-trash-scope.ts` (скоуп корзины, Промт 336),
 - `apps/platform/shared/dealer-trash-scope-server.ts` (серверный гард trash/untrash, Промт 337),
+- `apps/platform/client/src/lib/real-scope-audit.ts` (телеметрия demo-fallback, Промт 338),
 
 **обязан** обновить эту таблицу и обновить регресс-тесты в
 `apps/platform/client/src/lib/__tests__/role-smoke.test.ts`.
@@ -65,6 +66,24 @@
 5. **`category_manager`** — нет persona в `SALES_USERS`. Через `role-mapping` трактуется как marketer. Все попытки дать ему «права директора + матрицы витрин» через расширение marketer-логики неизбежно ломают остальных marketer-ов. Правильный путь — отдельная ветка в `auth-access.ts` для category_manager и явные проверки `user.role === "category_manager"` в server-handlers. Управление справочником матриц: `canManageShowcaseMatrixCatalog` проверяет `platformUserRole === "category_manager"` отдельно.
 
 6. **`regional_manager` vs `rop`** — оба маппятся в `team_lead` (SalesRole), но `mapUserRoleToDealerBaseAccess` даёт `sales_manager` для regional_manager и `team_lead` только для rop. Scope regional_manager — через `dealer_overrides.regional_manager_id`, не через `teams.rop_user_id`.
+
+## Промт 338: аудит demo-fallback
+
+После Промта 338 в логах `real_scope_audit_log` (если `DIAG_AUDIT_ENABLED=1`) собираются
+случаи, когда demo-функции (`getEffectiveTeamLeadTeamId`, `initialRopManagerForProfile`,
+`roleScopedDealerRows`) срабатывают на путях, доступных real-юзерам.
+
+Источник звонка → `callSite`:
+
+- `publishDashboardRopTeamId@team-actualization-context` — публикация ropTeam в sidebar.
+- `buildTeamSummaries@team-summary` — карточки команд на `/dealer-base`.
+- `roleScopedDealerRows@dealer-base-role-views` — фильтр строк (старый путь).
+- `initialRopManagerForProfile@dealer-base-role-views` — пресет фильтров `/dealer-base`.
+
+Цель аудита: после ~7 дней работы определить, какие call-sites критичны для real-юзеров
+и переписать их на `roleScopedDealerRowsForReal` / `realEffectiveTeamLeadTeamIdFromSnap`.
+
+Промт 338 НЕ меняет поведение — только собирает телеметрию.
 
 ## Процесс изменения матрицы
 
