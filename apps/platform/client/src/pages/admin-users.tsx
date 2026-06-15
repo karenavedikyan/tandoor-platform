@@ -67,6 +67,7 @@ const rolesRu: Record<UserRole, string> = {
   manager: "Менеджер",
   marketer: "Маркетолог",
   analyst: "Аналитик",
+  category_manager: "Категорийный менеджер",
   admin: "Администратор",
 };
 
@@ -75,7 +76,8 @@ function roleBadgeClass(role: UserRole): string {
   if (role === "director") return "border-primary/30 bg-primary/10 text-primary";
   if (role === "rop") return "border-blue-200 bg-blue-100 text-blue-700";
   if (role === "manager" || role === "regional_manager") return "border-secondary-border bg-secondary text-secondary-foreground";
-  if (role === "marketer" || role === "analyst") return "border-border bg-muted text-muted-foreground";
+  if (role === "marketer" || role === "analyst" || role === "category_manager")
+    return "border-border bg-muted text-muted-foreground";
   return "border-border bg-muted text-muted-foreground";
 }
 

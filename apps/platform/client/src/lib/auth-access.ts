@@ -322,7 +322,7 @@ export function canManageShowcaseMatrixCatalog(
 ): boolean {
   if (platformUserRole === "admin") return true;
   if ((role as string) === "admin") return true;
-  return role === "marketer" || role === "analyst";
+  return role === "marketer" || role === "analyst" || (role as string) === "category_manager";
 }
 
 export function userHasRole(role: SalesRole, allowed: SalesRole[]): boolean {

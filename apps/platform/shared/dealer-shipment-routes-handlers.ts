@@ -108,7 +108,7 @@ function assertShipmentRoutesWriteAccess(ctx: SessionContext, targetUserId: stri
   if (me.status !== "active") return false;
   if (targetUserId !== me.id) return me.role === "admin" || me.role === "director";
   if (impersonatorUserId) {
-    return me.role !== "marketer" && me.role !== "analyst";
+    return me.role !== "marketer" && me.role !== "analyst" && me.role !== "category_manager";
   }
   return true;
 }

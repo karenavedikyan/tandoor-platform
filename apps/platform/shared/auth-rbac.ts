@@ -47,7 +47,8 @@ export const INVITER_CAN_INVITE: Record<UserRole, UserRole[]> = {
   manager: [],
   marketer: [],
   analyst: [],
-  admin: ["director", "rop", "regional_manager", "manager", "marketer", "analyst"],
+  category_manager: [],
+  admin: ["director", "rop", "regional_manager", "manager", "marketer", "analyst", "category_manager"],
 };
 
 /**
@@ -110,6 +111,12 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "profile.read_self",
     "profile.update_self",
     "audit.read",
+    "sessions.read_self",
+    "sessions.revoke_self",
+  ]),
+  category_manager: new Set<Permission>([
+    "profile.read_self",
+    "profile.update_self",
     "sessions.read_self",
     "sessions.revoke_self",
   ]),

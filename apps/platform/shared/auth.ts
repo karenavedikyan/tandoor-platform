@@ -10,6 +10,7 @@ export type UserRole =
   | "manager"
   | "marketer"
   | "analyst"
+  | "category_manager"
   | "admin";
 
 export type UserStatus = "invited" | "active" | "disabled";
@@ -44,6 +45,7 @@ export const BUSINESS_ROLES: UserRole[] = [
   "manager",
   "marketer",
   "analyst",
+  "category_manager",
 ];
 
 /**
@@ -59,6 +61,7 @@ export const INVITABLE_BY: Record<UserRole, UserRole[]> = {
   manager: ["director", "rop"],
   marketer: ["director"],
   analyst: ["director"],
+  category_manager: ["admin"],
   admin: [],
 };
 
@@ -110,5 +113,6 @@ export const PROFILE_REQUIREMENTS: ProfileRequirement = {
   ],
   marketer: ["fullName", "email", "phone", "role", "status"],
   analyst: ["fullName", "email", "phone", "role", "status"],
+  category_manager: ["fullName", "email", "phone", "role", "status"],
   admin: ["fullName", "email", "phone", "role", "status"],
 };

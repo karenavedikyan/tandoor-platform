@@ -19,6 +19,8 @@ export function userRoleToSalesRole(role: UserRole): SalesRole {
       return "marketer";
     case "analyst":
       return "analyst";
+    case "category_manager":
+      return "marketer";
     case "admin":
     default:
       return "sales_director";

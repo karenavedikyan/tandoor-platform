@@ -20,7 +20,16 @@ import {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT_ID_RE = /^[a-zA-Z0-9._:-]{1,128}$/;
 
-const READ_ROLES = new Set(["admin", "director", "rop", "regional_manager", "manager", "marketer", "analyst"]);
+const READ_ROLES = new Set([
+  "admin",
+  "director",
+  "rop",
+  "regional_manager",
+  "manager",
+  "marketer",
+  "analyst",
+  "category_manager",
+]);
 const WRITE_ROLES = new Set(["admin", "director", "rop", "regional_manager", "manager"]);
 
 function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
@@ -49,7 +58,14 @@ async function resolveRopTeamId(pool: PoolLike, ropUserId: string): Promise<stri
 
 export async function assertClientReadAccess(pool: PoolLike, me: SessionUser, clientId: string): Promise<boolean> {
   if (!READ_ROLES.has(me.role)) return false;
-  if (me.role === "admin" || me.role === "director" || me.role === "marketer" || me.role === "analyst") return true;
+  if (
+    me.role === "admin" ||
+    me.role === "director" ||
+    me.role === "marketer" ||
+    me.role === "analyst" ||
+    me.role === "category_manager"
+  )
+    return true;
 
   const code = dealerIdToAssignmentClientCode(clientId);
   if (!code) {

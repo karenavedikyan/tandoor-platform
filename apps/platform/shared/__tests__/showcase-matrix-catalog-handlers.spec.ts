@@ -265,6 +265,24 @@ describe("parseMatrixDefUpsertInput", () => {
   });
 });
 
+describe("upsertMatrixDef access", () => {
+  it("allows category_manager to upsert matrix defs", async () => {
+    const pool = new InMemoryMatrixCatalogDb();
+    const actor: ShowcaseMatrixCatalogActor = {
+      id: "00000000-0000-4000-8000-000000000002",
+      role: "category_manager",
+      status: "active",
+      fullName: "Категорийный менеджер",
+    };
+    const { def } = await upsertMatrixDef(pool, actor, {
+      clientCategory: "top150",
+      scopeKind: "global",
+    });
+    expect(def.id).toBeTruthy();
+    expect(def.clientCategory).toBe("top150");
+  });
+});
+
 describe("pickResolvedMatrixDef", () => {
   const globalDef = makeDef({ id: "g1", scopeKind: "global" });
   const regionDef = makeDef({

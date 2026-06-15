@@ -95,7 +95,7 @@ function assertWorkPlanWriteAccess(ctx: SessionContext): boolean {
   const { me, impersonatorUserId } = ctx;
   if (me.status !== "active") return false;
   if (impersonatorUserId) {
-    return me.role !== "marketer" && me.role !== "analyst";
+    return me.role !== "marketer" && me.role !== "analyst" && me.role !== "category_manager";
   }
   return true;
 }

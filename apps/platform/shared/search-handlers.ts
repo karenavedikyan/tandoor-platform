@@ -42,6 +42,7 @@ const SEARCH_ROLES = new Set([
   "manager",
   "analyst",
   "marketer",
+  "category_manager",
 ]);
 
 const MIN_QUERY_LEN = 2;
@@ -86,7 +87,8 @@ async function resolveClientScope(pool: PoolLike, user: GlobalSearchSessionUser)
     user.role === "admin" ||
     user.role === "director" ||
     user.role === "analyst" ||
-    user.role === "marketer"
+    user.role === "marketer" ||
+    user.role === "category_manager"
   ) {
     return { kind: "all" };
   }
@@ -386,7 +388,10 @@ export async function handleGlobalSearch(
     searchClients(pool, scope, tokens, limit),
     searchTradePoints(pool, scope, tokens, limit),
     searchProducts(pool, query, limit),
-    SEARCH_ROLES.has(user.role) && user.role !== "analyst" && user.role !== "marketer"
+    SEARCH_ROLES.has(user.role) &&
+      user.role !== "analyst" &&
+      user.role !== "marketer" &&
+      user.role !== "category_manager"
       ? searchAssignments(pool, user, tokens, limit)
       : Promise.resolve([]),
   ]);

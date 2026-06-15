@@ -55,6 +55,7 @@ function platformRoleLabel(role: string): string {
     manager: "Менеджер",
     marketer: "Маркетолог",
     analyst: "Аналитик",
+    category_manager: "Категорийный менеджер",
   };
   return labels[role] ?? role;
 }
