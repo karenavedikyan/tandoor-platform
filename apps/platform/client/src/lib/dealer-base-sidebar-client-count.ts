@@ -3,10 +3,12 @@
  * на /dealer-base при фильтрах по умолчанию (без архива, с учётом актуализации).
  */
 
+import type { UserRole } from "@shared/auth";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { countDealerBaseHeaderTotal } from "@/lib/dealer-base-working-rows";
 import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "@/lib/dealer-overrides-runtime";
+import { buildTrashScopeFilter, countScopedTrashItems } from "@/lib/dealer-trash-scope";
 import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
 export type SidebarDealerClientCountContext = {
@@ -24,6 +26,8 @@ export type SidebarDealerClientCountContext = {
   managementTeamFetchLoading?: boolean;
   /** Real-режим: релиз-сид + org scope (как на /dealer-base). */
   realScope?: SidebarNavRealScope;
+  /** Платформенная роль — для скоупа корзины (Промт 336). */
+  role?: UserRole | null;
 };
 
 /**
@@ -53,7 +57,7 @@ export function resolveSidebarWorkingDealerClientCount(
  * Возвращает `null` пока актуализация / team merge ещё грузятся (как и обычный счётчик).
  */
 export function resolveSidebarTrashCount(
-  _profile: ReleaseDemoProfile,
+  profile: ReleaseDemoProfile,
   ctx: SidebarDealerClientCountContext,
 ): number | null {
   if (!ctx.enabled) return null;
@@ -62,5 +66,10 @@ export function resolveSidebarTrashCount(
   const act = ctx.managementDisplayState ?? ctx.state;
   const dealers = mergeTrashedDealersForUi(act);
   const tps = mergeTrashedTradePointsForUi(act);
-  return Object.keys(dealers).length + Object.keys(tps).length;
+  const filter = buildTrashScopeFilter({
+    role: ctx.role ?? null,
+    profile,
+    realScope: ctx.realScope,
+  });
+  return countScopedTrashItems(dealers, tps, filter);
 }
