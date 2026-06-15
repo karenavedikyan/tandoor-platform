@@ -1,2 +1,3 @@
 Trigger deploy after #710 — server trash scope guard
 2026-06-15T18:56:36Z deploy after #711 (prompt 338 real-scope audit)
+2026-06-15T19:00:39Z enable DIAG_AUDIT_ENABLED=1 (prompt 338 telemetry)
