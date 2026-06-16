@@ -1,7 +1,9 @@
 import type { ClientCategoryId } from "@/lib/client-category";
 import { TANDOOR_REAL_CATALOG_SEED } from "@/lib/tandoor-real-catalog-seed.generated";
 
-export type ShowcaseMatrixModelType = "entrance" | "interior";
+export type ShowcaseMatrixModelType = "entrance" | "interior" | "hardware";
+
+export type ShowcaseMatrixTypeLabelRu = "ВХ" | "МК" | "Фурнитура";
 
 export type ShowcaseMatrixPriorityRank = "high" | "medium" | "low";
 
@@ -13,7 +15,7 @@ export type ShowcaseMatrixModelDefinition = {
   catalog1cId?: string;
   name: string;
   type: ShowcaseMatrixModelType;
-  typeLabelRu: "ВХ" | "МК";
+  typeLabelRu: ShowcaseMatrixTypeLabelRu;
   imageUrl: string;
   basePriority: ShowcaseMatrixPriorityRank;
   importanceReason: string;
@@ -102,11 +104,18 @@ const MATRIX_META: Record<
 
 function catalogTypeToModelType(cat: "entrance" | "interior" | "hardware" | "other"): ShowcaseMatrixModelType {
   if (cat === "entrance") return "entrance";
+  if (cat === "hardware") return "hardware";
   return "interior";
 }
 
-function typeLabel(type: ShowcaseMatrixModelType): "ВХ" | "МК" {
-  return type === "entrance" ? "ВХ" : "МК";
+export function showcaseMatrixTypeLabelRu(type: ShowcaseMatrixModelType): ShowcaseMatrixTypeLabelRu {
+  if (type === "entrance") return "ВХ";
+  if (type === "hardware") return "Фурнитура";
+  return "МК";
+}
+
+function typeLabel(type: ShowcaseMatrixModelType): ShowcaseMatrixTypeLabelRu {
+  return showcaseMatrixTypeLabelRu(type);
 }
 
 function buildDefinitions(): ShowcaseMatrixModelDefinition[] {
@@ -200,7 +209,7 @@ export function buildPresentationModelFromCatalogProduct(input: {
     catalog1cId: input.id,
     name: input.name,
     type,
-    typeLabelRu: type === "entrance" ? "ВХ" : "МК",
+    typeLabelRu: showcaseMatrixTypeLabelRu(type),
     imageUrl: input.imageUrl ?? "",
     basePriority: "medium",
     importanceReason: "",
