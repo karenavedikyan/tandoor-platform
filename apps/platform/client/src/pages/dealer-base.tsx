@@ -40,12 +40,12 @@ import {
 } from "@/lib/client-category";
 import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
 import {
-  buildDealerRowsFromReleaseClients,
   DEALER_BASE_ROWS,
   type DealerRow,
   type DealerStatus,
   type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
+import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -1399,6 +1399,8 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 }
 
 export default function DealerBase() {
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
@@ -1538,13 +1540,7 @@ export default function DealerBase() {
 
   const mergedRowsForDealerBase = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const clients = getVisibleReleaseClients(
-        snap,
-        visPayload.all,
-        visPayload.codes,
-        buildAssignmentsMap(visPayload.assignments),
-      );
-      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       if (!actx.enabled) return releaseRows;
       const includeArchived = showArchivedDealers;
       const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1555,7 +1551,7 @@ export default function DealerBase() {
       return !showArchivedDealers ? applyWorkingBaseTrashInvariant(listed) : listed;
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
-    if (!actx.enabled) return DEALER_BASE_ROWS;
+    if (!actx.enabled) return catalogRows;
     const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
     });
@@ -1573,6 +1569,7 @@ export default function DealerBase() {
     profile,
     showArchivedDealers,
     hydrationVersion,
+    catalogRows,
     applyWorkingBaseTrashInvariant,
   ]);
 
@@ -1619,13 +1616,7 @@ export default function DealerBase() {
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const clients = getVisibleReleaseClients(
-        snap,
-        visPayload.all,
-        visPayload.codes,
-        buildAssignmentsMap(visPayload.assignments),
-      );
-      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       if (!actx.enabled) return releaseRows;
       return applyWorkingBaseTrashInvariant(
         buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1635,7 +1626,7 @@ export default function DealerBase() {
       );
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
-    if (!actx.enabled) return DEALER_BASE_ROWS;
+    if (!actx.enabled) return catalogRows;
     return applyWorkingBaseTrashInvariant(
       buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }),
     );
@@ -1650,6 +1641,7 @@ export default function DealerBase() {
     actx.enabled,
     teamActualizationPlane,
     profile,
+    catalogRows,
     applyWorkingBaseTrashInvariant,
   ]);
 
@@ -1683,7 +1675,7 @@ export default function DealerBase() {
         buildAssignmentsMap(visPayload.assignments),
       );
       const releaseRowsFromVisibleLen = visibleClients.length;
-      const dealerRowsBeforeActualization = buildDealerRowsFromReleaseClients(visibleClients);
+      const dealerRowsBeforeActualization = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       const dealerRowsBeforeActualizationLen = dealerRowsBeforeActualization.length;
 
       const act = teamActualizationPlane;
@@ -3381,7 +3373,7 @@ export default function DealerBase() {
     return out;
   }, [profile.personaUserId, routePlanState]);
 
-  const dealerById = useMemo(() => new Map(DEALER_BASE_ROWS.map((r) => [r.id, r])), []);
+  const dealerById = useMemo(() => new Map(catalogRows.map((r) => [r.id, r])), [catalogRows]);
 
   const routeRowsBySlot = useMemo((): Record<ShipmentRouteSlotId, DealerRow[]> => {
     if (!activeShipmentDayId) return { slot1: [], slot2: [] };
@@ -3694,7 +3686,7 @@ export default function DealerBase() {
         mergedDealerRows={
           actx.enabled
             ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false })
-            : DEALER_BASE_ROWS
+            : catalogRows
         }
         onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
       />

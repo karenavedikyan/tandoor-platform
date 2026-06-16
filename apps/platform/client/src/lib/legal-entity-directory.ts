@@ -2,7 +2,8 @@
  * Локальный справочник юрлиц / клиентов для подсказок и поиска по ИНН (без внешних API).
  */
 
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
+import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerLegalEntities, loadDealerLegalEntitiesState } from "@/lib/dealer-legal-entities";
 import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
 
@@ -37,6 +38,7 @@ export type LegalEntityInnLookupResult = {
  */
 export function lookupLegalEntityByInn(
   innRaw: string,
+  rows: DealerRow[] = getCatalogDealerRows(),
 ): { ok: true; results: LegalEntityInnLookupResult[] } | { ok: false; error: string } {
   const inn = innRaw.replace(/\D/g, "");
   if (!inn) return { ok: false, error: "Введите ИНН." };
@@ -47,7 +49,7 @@ export function lookupLegalEntityByInn(
   const results: LegalEntityInnLookupResult[] = [];
   const seen = new Set<string>();
 
-  for (const row of DEALER_BASE_ROWS) {
+  for (const row of rows) {
     const merged = getMergedDealerLegalEntities(row, state);
     for (const e of merged) {
       const eInn = (e.inn ?? "").replace(/\D/g, "");
@@ -77,14 +79,18 @@ function pushSuggestion(out: LegalEntitySuggestion[], seen: Set<string>, s: Lega
 }
 
 /** Подсказки по названию (≥2 символа). */
-export function buildLegalEntityNameSuggestions(query: string, currentDealerId: string): LegalEntitySuggestion[] {
+export function buildLegalEntityNameSuggestions(
+  query: string,
+  currentDealerId: string,
+  rows: DealerRow[] = getCatalogDealerRows(),
+): LegalEntitySuggestion[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
   const state = loadDealerLegalEntitiesState();
   const out: LegalEntitySuggestion[] = [];
   const seen = new Set<string>();
 
-  for (const row of DEALER_BASE_ROWS) {
+  for (const row of rows) {
     if (row.name.trim().toLowerCase().includes(q)) {
       pushSuggestion(out, seen, {
         id: `dealer:${row.id}`,

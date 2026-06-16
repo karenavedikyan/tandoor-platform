@@ -14,7 +14,8 @@ import { BackNav } from "@/components/navigation/back-nav";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
-import { getDealerById, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerById } from "@/lib/dealer-base-source";
 import { invalidateMatrixTasksCache } from "@/lib/trade-point-task-data";
 import {
   getTradePointTrainingAttentionSignal,
@@ -345,7 +346,7 @@ function TradePointSectionNav({
 }
 
 function TradePointNotFound({ dealerId }: { dealerId?: string }) {
-  const dealer = dealerId ? getDealerById(dealerId) : undefined;
+  const dealer = dealerId ? getCatalogDealerById(dealerId) : undefined;
   const showDealerBack = Boolean(dealer);
 
   return (
@@ -498,7 +499,7 @@ function TradePointDetailContent({
     return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
   }, []);
 
-  const dealerForRbac = useMemo(() => getDealerById(dealer.id) ?? dealer, [dealer]);
+  const dealerForRbac = useMemo(() => getCatalogDealerById(dealer.id) ?? dealer, [dealer]);
   const isVirtualDefaultPoint = useMemo(
     () => isVirtualDefaultTradePointId(dealer.id, point.id),
     [dealer.id, point.id],

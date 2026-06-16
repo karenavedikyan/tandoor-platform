@@ -40,12 +40,12 @@ import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-h
 import { useDealerUnloadingOrder, useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
   DEALER_BASE_ROWS,
-  getDealerById,
   getDealerManagerDisplay,
   normalizeDealerId,
   type DealerRow,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerById, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
 import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
 import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
@@ -2588,7 +2588,7 @@ export function DealerCardPage() {
   const id = normalizeDealerId(rawId);
   if (!id) return <DealerNotFound />;
 
-  const baseRow = actx.enabled ? resolveDealerRowForCard(id, actx.state, profile) : getDealerById(id);
+  const baseRow = actx.enabled ? resolveDealerRowForCard(id, actx.state, profile) : getCatalogDealerById(id);
 
   if (!baseRow) {
     if (actx.enabled && actx.loading && id.startsWith("manual-dealer")) {
@@ -2645,7 +2645,8 @@ function TrashedDealerCardBanner(): React.ReactElement {
 
 /** Маршрут `/dealer-card-foundation` — превью карточки первого клиента из базы. */
 export default function DealerCardFoundation() {
-  const first = DEALER_BASE_ROWS[0];
+  const catalogQ = useDealerBaseRows();
+  const first = catalogQ.data?.[0] ?? DEALER_BASE_ROWS[0];
   if (!first) return <DealerNotFound />;
   return <DealerCardContent baseRow={first} />;
 }

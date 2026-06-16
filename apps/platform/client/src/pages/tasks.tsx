@@ -24,7 +24,8 @@ import {
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import { fetchShowcaseMatrixDeficitTasksForDealers } from "@/lib/showcase-matrix-deficit-tasks";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -226,7 +227,7 @@ function sortTasks(tasks: MatrixTaskWithContext[]) {
   });
 }
 
-function managerLabelForDealer(dealerId: string, dealerById: Map<string, (typeof DEALER_BASE_ROWS)[number]>): string {
+function managerLabelForDealer(dealerId: string, dealerById: Map<string, DealerRow>): string {
   const d = dealerById.get(dealerId);
   if (!d) return "—";
   const u = d.releaseManagerId ? getSalesUserById(d.releaseManagerId) : undefined;
@@ -261,7 +262,7 @@ function findCatalogImageByProductNameHint(productName: string): string {
 
 function resolveShowcaseTaskDoorImage(
   task: MatrixTaskWithContext,
-  dealer: (typeof DEALER_BASE_ROWS)[number] | undefined,
+  dealer: DealerRow | undefined,
 ): string {
   const direct = getProductById(task.productId)?.image?.trim() ?? "";
   if (direct) return direct;
@@ -444,7 +445,7 @@ function ShowcaseTaskCard({
   presetClock,
 }: {
   task: MatrixTaskWithContext;
-  dealerById: Map<string, (typeof DEALER_BASE_ROWS)[number]>;
+  dealerById: Map<string, DealerRow>;
   presetClock: Date;
 }) {
   const catMeta = getTaskCategoryMeta("showcase");
@@ -592,7 +593,7 @@ function ShowcaseTaskListRow({
   presetClock,
 }: {
   task: MatrixTaskWithContext;
-  dealerById: Map<string, (typeof DEALER_BASE_ROWS)[number]>;
+  dealerById: Map<string, DealerRow>;
   presetClock: Date;
 }) {
   const catMeta = getTaskCategoryMeta("showcase");
@@ -700,6 +701,8 @@ function ShowcaseTaskListRow({
 }
 
 export default function TasksPage() {
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const { profile } = useReleaseDemoProfile();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
   const actx = useClientBaseActualization();
@@ -731,9 +734,9 @@ export default function TasksPage() {
   const dealerById = useMemo(() => {
     const rows = actx.enabled
       ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
-      : DEALER_BASE_ROWS;
+      : catalogRows;
     return new Map(rows.map((d) => [d.id, d]));
-  }, [actx.enabled, managementPlane.mergedState, profile]);
+  }, [actx.enabled, managementPlane.mergedState, profile, catalogRows]);
   const [ropTeam, setRopTeam] = useState<string>("all");
   const [mgrFilter, setMgrFilter] = useState<string>("all");
 
@@ -810,8 +813,8 @@ export default function TasksPage() {
     () =>
       actx.enabled
         ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
-        : DEALER_BASE_ROWS,
-    [actx.enabled, managementPlane.mergedState, profile],
+        : catalogRows,
+    [actx.enabled, managementPlane.mergedState, profile, catalogRows],
   );
 
   const scopedDealerRows = useRoleScopedDealerRowsAuto(workingDealerRows, profile);

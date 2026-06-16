@@ -20,6 +20,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
@@ -102,6 +103,8 @@ function roleSubtitle(role: SalesRole, profile: ReleaseDemoProfile): string {
 }
 
 export default function ClientMapPage() {
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const [, setLoc] = useHashLocation();
@@ -130,8 +133,8 @@ export default function ClientMapPage() {
 
   const baseRowsForMap = useMemo(
     () =>
-      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
-    [actx.enabled, teamActualizationPlane, profile],
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : catalogRows,
+    [actx.enabled, teamActualizationPlane, profile, catalogRows],
   );
 
   const scopedRows = useRoleScopedDealerRowsAuto(baseRowsForMap, profile);
@@ -157,7 +160,7 @@ export default function ClientMapPage() {
     let cityV: string[] = [];
     let searchV = "";
     const scoped = getRoleScopedDealerRowsAuto(
-      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : catalogRows,
       profile,
       realScope,
     );

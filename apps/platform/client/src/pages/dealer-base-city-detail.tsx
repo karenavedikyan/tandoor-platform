@@ -29,8 +29,8 @@ import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { assignmentsScopeIsActive, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
-import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
-import { buildDealerRowsFromReleaseClients, DEALER_BASE_ROWS, getDealerManagerDisplay } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import {
@@ -63,6 +63,8 @@ function segmentBadgeClass(tone: string): string {
 }
 
 export default function DealerBaseCityDetailPage() {
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const [, params] = useRoute("/dealer-base/city/:cityKey");
   const cityKey = decodeURIComponent(params?.cityKey ?? "");
 
@@ -99,15 +101,9 @@ export default function DealerBaseCityDetailPage() {
   }, [myCodesQ.data]);
 
   const scopedRows = useMemo(() => {
-    let merged: typeof DEALER_BASE_ROWS;
+    let merged: DealerRow[];
     if (useReal && snap && visPayload) {
-      const clients = getVisibleReleaseClients(
-        snap,
-        visPayload.all,
-        visPayload.codes,
-        buildAssignmentsMap(visPayload.assignments),
-      );
-      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       merged = actx.enabled
         ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, {
             includeArchivedDealers: false,
@@ -123,7 +119,7 @@ export default function DealerBaseCityDetailPage() {
       );
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
-    if (!actx.enabled) return roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    if (!actx.enabled) return roleScopedDealerRows(catalogRows, profile);
     return roleScopedDealerRows(
       buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false }),
       profile,
@@ -140,6 +136,7 @@ export default function DealerBaseCityDetailPage() {
     isRealUser,
     authLoading,
     authError,
+    catalogRows,
   ]);
 
   const detail = useMemo(

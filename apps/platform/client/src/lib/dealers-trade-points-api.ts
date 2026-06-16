@@ -1,15 +1,19 @@
 /**
- * Server-source for dealers and trade points. NOT in use yet.
- * Promt 349 will switch UI to this api via feature flag.
- * See: tandoor-audit-mock-vs-server-347.md
+ * Client API for dealers and trade points (Промт 348, 376).
  */
 
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseClientSearchFilters, ReleaseClientSummary } from "@/lib/release-client-data";
 
+export type DealersSourceMeta = {
+  source: "seed" | "db";
+  shadowDiffEnabled?: boolean;
+};
+
 export type DealersTradePointsListResponse = {
   success: true;
   dealers: DealerRow[];
+  meta?: DealersSourceMeta;
 };
 
 export type DealersTradePointsGetResponse = {
@@ -51,6 +55,11 @@ function buildQuery(filters: ReleaseClientSearchFilters): string {
 
 async function parseJson<T>(res: Response): Promise<T | ApiError> {
   return (await res.json()) as T | ApiError;
+}
+
+/** Полный каталог дилеров с вложенными ТТ. */
+export async function fetchAllDealers(): Promise<DealersTradePointsListResponse | ApiError> {
+  return fetchDealersTradePointsList();
 }
 
 /** Список дилеров с вложенными ТТ (форма `DealerRow[]`). */
