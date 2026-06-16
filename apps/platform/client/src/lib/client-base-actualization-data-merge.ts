@@ -40,6 +40,7 @@ import {
 } from "@/lib/client-base-actualization-stable-ids";
 import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
 import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
+import { dealerStatusFromPassportLifecycle } from "@/lib/client-base-actualization-visibility";
 import {
   clientCategoryFromPassportTier,
   getClientCategoryLabel,
@@ -214,6 +215,14 @@ export function mergeDealerRowWithActualization(row: DealerRow, act: Actualizati
   const stRaw = str(f.status);
   if (stRaw && ["активный", "потенциальный", "приостановлен", "требует внимания"].includes(stRaw)) {
     r = { ...r, status: stRaw as DealerStatus };
+  }
+
+  const lifecycle = str(f.passportLifecycleStatus);
+  if (lifecycle) {
+    r = { ...r, status: dealerStatusFromPassportLifecycle(lifecycle) };
+    if (lifecycle === "active") {
+      r = { ...r, hasProblem: false };
+    }
   }
 
   const contactPerson = str(f.contactPerson) ?? str(f.lpr);
@@ -599,6 +608,8 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
       ? clientCategoryFromPassportTier(rawTier)
       : normalizeClientCategory(undefined);
   const status = parseDealerStatus(f.status);
+  const lifecycle = str(f.passportLifecycleStatus);
+  const resolvedStatus = lifecycle ? dealerStatusFromPassportLifecycle(lifecycle) : status;
   const typeLabel = str(f.clientTypeLabel) ?? getClientCategoryLabel(clientCategory);
 
   const row: DealerRow = {
@@ -622,7 +633,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
     clientTypeLabel: typeLabel,
     clientCategory,
     importanceTier: "baseline",
-    status,
+    status: resolvedStatus,
     format: "одиночный",
     outlets: 0,
     manager: managerName || mgrUser?.name || "—",
@@ -719,10 +730,11 @@ export function buildDealerBaseRowsWithActualization(
     return applyDealerRowTradePointOutletProjection(mergedFields, act, archivedListMode);
   };
 
+  const sourceRows = opts?.releaseDealerRows ?? DEALER_BASE_ROWS;
+
   const manuals = Object.values(act.manuallyCreatedDealersById)
     .filter((m) => includeId(m.id))
     .map((m) => mapBuilt(manualDealerToRow(m, profile)));
-  const sourceRows = opts?.releaseDealerRows ?? DEALER_BASE_ROWS;
   const rest = sourceRows.filter((r) => includeId(r.id)).map((r) => mapBuilt(r));
   return [...manuals, ...rest];
 }

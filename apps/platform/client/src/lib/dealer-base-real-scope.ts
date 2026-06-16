@@ -34,14 +34,19 @@ export function assignmentsScopeIsActive(scope: AssignmentsScope | undefined): b
 function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
   const catalog = r.releaseCode?.trim();
   if (catalog && codes.has(catalog)) return true;
+  const external = r.external1cCode?.trim();
+  if (external && codes.has(external)) return true;
   return codes.has(r.id);
 }
 
 export function rowInAssignmentsScope(r: DealerRow, scope: AssignmentsScope | undefined): boolean {
   if (!assignmentsScopeIsActive(scope)) return false;
   const catalog = r.releaseCode?.trim();
+  const external = r.external1cCode?.trim();
   const granted = scope!.grantedCodes;
   if (catalog && (scope!.ownCodes.has(catalog) || scope!.teamCodes.has(catalog) || (granted?.has(catalog) ?? false)))
+    return true;
+  if (external && (scope!.ownCodes.has(external) || scope!.teamCodes.has(external) || (granted?.has(external) ?? false)))
     return true;
   return (
     scope!.ownCodes.has(r.id) ||

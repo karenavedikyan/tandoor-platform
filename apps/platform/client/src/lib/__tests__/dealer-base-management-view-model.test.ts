@@ -4,6 +4,13 @@
 import assert from "node:assert/strict";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import type { DealerRow } from "../dealer-base-mock-data";
+import { createEmptyActualizationState } from "../client-base-actualization-state";
+import { mergeDealerRowWithActualization, buildDealerBaseRowsWithActualization } from "../client-base-actualization-data-merge";
+import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
+import { getReleaseClients } from "../release-client-data";
+import { applyQuickFilter } from "../dealer-base-picker-filters";
+import { hasManagerActualization } from "../client-base-actualization-visibility";
+import type { ReleaseDemoProfile } from "../release-demo-profile";
 import {
   aggregateManagersForTeam,
   buildDbAwareManagerMatcher,
@@ -170,6 +177,40 @@ const teamRows = [
   const boyko = groups[0]!.managers.find((m) => m.managerId === MGR_BOYKO);
   assert.ok(boyko);
   assert.equal(boyko!.active, 1, "responsibleByCode assigns client to Boyko");
+}
+
+// Промт 349A: закрытый seed + override passportLifecycleStatus active → виден в quick filter «all».
+{
+  const closed = getReleaseClients().find((c) => c.id === "client-ma-ma072982");
+  assert.ok(closed?.isClosed, "fixture: Кишлянов закрыт в seed");
+
+  const act = createEmptyActualizationState();
+  act.dealerOverridesById["client-ma-ma072982"] = {
+    dealerId: "client-ma-ma072982",
+    fields: {
+      passportLifecycleStatus: "active",
+      clientCategory: "top500plus",
+      inn: "123456789012",
+      phone: "+79990000000",
+    },
+    updatedAt: new Date().toISOString(),
+    updatedBy: "u1",
+    updatedByName: "Test",
+    source: "manual_actualization",
+  };
+  assert.equal(hasManagerActualization("client-ma-ma072982", act), true);
+
+  const baseRow = buildDealerRowsFromReleaseClients([closed!])[0]!;
+  const merged = mergeDealerRowWithActualization(baseRow, act);
+  assert.equal(merged.status, "активный");
+  assert.ok(applyQuickFilter(merged, "all"), "closed+override: проходит quick filter all");
+
+  const patchProfile = { personaUserId: "u1", role: "sales_manager" } as ReleaseDemoProfile;
+  const rows = buildDealerBaseRowsWithActualization(act, patchProfile, {
+    releaseDealerRows: buildDealerRowsFromReleaseClients([closed!]),
+  });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.status, "активный");
 }
 
 console.log("dealer-base-management-view-model.test.ts: OK");

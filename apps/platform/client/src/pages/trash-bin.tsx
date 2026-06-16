@@ -60,6 +60,7 @@ import {
   type ArchivedDealerDisplay,
   type ArchivedTpDisplay,
 } from "@/lib/trash-archive-helpers";
+import { resolveTrashedDealerDisplayName } from "@/lib/client-base-actualization-visibility";
 import type { TrashActor } from "@/lib/trash-dealer-helper";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { untrashDealer } from "@/lib/dealer-overrides-api";
@@ -134,12 +135,14 @@ export function TrashBinPage(): ReactElement {
     [user?.role, profile, realScope],
   );
 
-  const trashedDealers = useMemo(() => {
+  const trashedDealerDisplays = useMemo(() => {
     const map = mergeTrashedDealersForUi(stateForRead);
     return Object.values(map)
       .filter((d) => trashScopeFilter.fullView || trashScopeFilter.isDealerInScope(d.dealerId))
-      .sort(compareByExpires);
-  }, [stateForRead, trashScopeFilter]);
+      .map((info) => resolveTrashedDealerDisplayName(info, stateForRead, releaseByDealerId))
+      .sort((a, b) => compareByExpires(a.info, b.info));
+  }, [stateForRead, trashScopeFilter, releaseByDealerId]);
+  const trashedDealers = useMemo(() => trashedDealerDisplays.map((d) => d.info), [trashedDealerDisplays]);
   const trashedTps = useMemo(() => {
     const map = mergeTrashedTradePointsForUi(stateForRead);
     return Object.values(map)
@@ -1062,7 +1065,9 @@ export function TrashBinPage(): ReactElement {
                 В корзине пусто. Удалённые клиенты будут появляться здесь.
               </p>
             ) : (
-              trashedDealers.map((t) => (
+              trashedDealerDisplays.map((display) => {
+                const t = display.info;
+                return (
                 <Card
                   key={t.dealerId}
                   className="rounded-xl border border-border bg-card text-card-foreground"
@@ -1070,11 +1075,11 @@ export function TrashBinPage(): ReactElement {
                 >
                   <CardContent className="flex items-start justify-between gap-2 p-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <ClientAvatar size={36} shape="circle" name={t.snapshot.fullName ?? "—"} seed={t.dealerId} />
+                      <ClientAvatar size={36} shape="circle" name={display.name} seed={t.dealerId} />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{t.snapshot.fullName ?? "—"}</p>
+                        <p className="truncate text-sm font-semibold text-foreground">{display.name}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {t.snapshot.city ?? "—"} · ИНН {t.snapshot.inn ?? "—"} · код {t.snapshot.dealerCode ?? "—"}
+                          {display.city} · ИНН {display.inn} · код {display.dealerCode}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                           удалил {t.trashedByName} · {formatDisplayDateTime(t.trashedAt)} · истекает{" "}
@@ -1101,7 +1106,7 @@ export function TrashBinPage(): ReactElement {
                             setConfirmFD({
                               kind: "force-delete-dealer",
                               dealerId: t.dealerId,
-                              name: t.snapshot.fullName ?? t.dealerId,
+                              name: display.name,
                             })
                           }
                           data-testid={`button-trash-dealer-force-delete-${t.dealerId}`}
@@ -1112,7 +1117,8 @@ export function TrashBinPage(): ReactElement {
                     </div>
                   </CardContent>
                 </Card>
-              ))
+                );
+              })
             )}
           </TabsContent>
           <TabsContent value="tps" className="mt-3 space-y-2">
