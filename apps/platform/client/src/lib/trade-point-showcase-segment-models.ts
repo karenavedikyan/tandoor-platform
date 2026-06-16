@@ -163,29 +163,48 @@ export function buildSegmentDetail(
     a.name.localeCompare(b.name, "ru"),
   );
 
-  if (blocks.length === 0 && (segment === "vh" || segment === "mk")) {
-    ourModels = buildOurModelsFromInstalledEntries(entries, segment);
-    if (ourModels.length > 0) {
-      const modelOurs = ourModels.reduce((sum, m) => sum + m.count, 0);
-      return {
-        segment,
-        source: "models",
-        blockCount: 0,
-        totalCapacity: 0,
-        totalOurs: modelOurs,
-        totalCompetitors: 0,
-        free: 0,
-        distributionPercent: 0,
-        byPlacementType: [],
-        ourModels,
-        competitorRows: [],
-      };
+  // [prompt-353] всегда учитываем модели со статусом "installed" — даже при наличии placement-блоков
+  if (segment === "vh" || segment === "mk") {
+    const installedCards = buildOurModelsFromInstalledEntries(entries, segment);
+    if (installedCards.length > 0) {
+      const merged = new Map<string, SegmentOurModelCard>();
+      for (const card of ourModels) merged.set(card.modelId, card);
+      for (const card of installedCards) {
+        const prev = merged.get(card.modelId);
+        if (!prev || card.count > prev.count) {
+          merged.set(card.modelId, card);
+        }
+      }
+      ourModels = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
+
+      if (blocks.length === 0) {
+        const modelOurs = ourModels.reduce((sum, m) => sum + m.count, 0);
+        return {
+          segment,
+          source: "models",
+          blockCount: 0,
+          totalCapacity: 0,
+          totalOurs: modelOurs,
+          totalCompetitors: 0,
+          free: 0,
+          distributionPercent: 0,
+          byPlacementType: [],
+          ourModels,
+          competitorRows: [],
+        };
+      }
     }
   }
 
-  const free = Math.max(0, totalCapacity - totalOurs - totalCompetitors);
+  const installedOursFromModels =
+    segment === "vh" || segment === "mk" ? ourModels.reduce((sum, m) => sum + m.count, 0) : 0;
+  const effectiveTotalOurs = Math.max(totalOurs, installedOursFromModels);
+
+  const free = Math.max(0, totalCapacity - effectiveTotalOurs - totalCompetitors);
   const distributionPercent =
-    totalCapacity > 0 ? Math.min(100, Math.max(0, Math.floor((totalOurs / totalCapacity) * 100))) : 0;
+    totalCapacity > 0
+      ? Math.min(100, Math.max(0, Math.floor((effectiveTotalOurs / totalCapacity) * 100)))
+      : 0;
 
   const source: SegmentDetailSource =
     blocks.length > 0 ? "blocks" : ourModels.length > 0 ? "models" : "empty";
@@ -195,7 +214,7 @@ export function buildSegmentDetail(
     source,
     blockCount: blocks.length,
     totalCapacity,
-    totalOurs,
+    totalOurs: effectiveTotalOurs,
     totalCompetitors,
     free,
     distributionPercent,

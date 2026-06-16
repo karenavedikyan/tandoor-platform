@@ -182,9 +182,9 @@ test("fallback по моделям МК: installed interior без placement-б�
   assert.equal(mk.totalCapacity, 0);
 });
 
-test("placement приоритетнее fallback: метрики только из блока", () => {
+test("placement + installed: totalOurs учитывает max(блоки, installed модели)", () => {
   const entries = [
-    makeBlock({ segment: "vh", capacity: 4, actual: 2 }),
+    makeBlock({ segment: "vh", capacity: 4, actual: 0 }),
     makeModelEntry(VH_MODEL),
     makeModelEntry("tc-vh-midas-orekh-pekan-shokolad-emalit-belyy-860kh2050-levaya"),
   ];
@@ -193,6 +193,7 @@ test("placement приоритетнее fallback: метрики только �
   assert.equal(vh.blockCount, 1);
   assert.equal(vh.totalCapacity, 4);
   assert.equal(vh.totalOurs, 2);
+  assert.equal(vh.ourModels.length, 2);
 });
 
 test("hardware без fallback: model-entries не попадают в сегмент", () => {

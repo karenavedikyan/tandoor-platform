@@ -3,9 +3,12 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
 import { getEffectiveDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import { type ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import {
+  SHOWCASE_MATRIX_MODEL_DEFINITIONS,
+  type ShowcaseMatrixModelDefinition,
+} from "@/lib/trade-point-showcase-matrix-models";
 import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
-import { normalizeShowcaseMatrixModelId } from "@/lib/showcase-matrix-store";
+import { normalizeShowcaseMatrixModelId, setMatrixStatus } from "@/lib/showcase-matrix-store";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 
 export const SHOWCASE_MATRIX_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-v1";
@@ -388,5 +391,35 @@ export function upsertShowcaseMatrixModelState(payload: {
   }
 
   saveShowcaseMatrixStorage(storage);
+
+  // [prompt-353] mirror status to cache-v1 (used by segment-summary and other consumers)
+  try {
+    const def = SHOWCASE_MATRIX_MODEL_DEFINITIONS.find((d) => d.id === payload.model.id);
+    const modelType = def?.type ?? payload.model.type;
+    const placementSegment =
+      modelType === "entrance"
+        ? "vh"
+        : modelType === "interior"
+          ? "mk"
+          : modelType === "hardware"
+            ? "hardware"
+            : null;
+    setMatrixStatus({
+      dealerId: payload.dealerId,
+      tradePointId: payload.tradePointId,
+      targetKind: "model",
+      targetId: payload.model.id,
+      status: payload.status,
+      comment: payload.comment.trim() || null,
+      updatedBy: payload.actorUserId,
+      updatedByName: payload.actorName,
+      placementSegment,
+    });
+  } catch (e) {
+    if (typeof console !== "undefined") {
+      console.warn("[prompt-353] mirror to cache-v1 failed", e);
+    }
+  }
+
   return storage;
 }
