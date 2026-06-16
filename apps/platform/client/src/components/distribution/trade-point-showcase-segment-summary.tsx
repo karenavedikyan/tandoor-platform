@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Package } from "lucide-react";
+import { ChevronDown, Grid3x3, LayoutGrid, List, Package, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
+import {
+  type CatalogCardSize,
+  catalogCardGridClass,
+  readCatalogCardSizeFromStorage,
+  writeCatalogCardSizeToStorage,
+} from "@/lib/catalog-card-grid";
 import type { ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
 import {
   PLACEMENT_SEGMENT_LABEL_RU,
@@ -14,7 +21,11 @@ import {
   loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
 } from "@/lib/showcase-matrix-store";
-import { buildSegmentDetail, type SegmentDetail } from "@/lib/trade-point-showcase-segment-models";
+import {
+  buildSegmentDetail,
+  type SegmentDetail,
+  type SegmentOurModelCard,
+} from "@/lib/trade-point-showcase-segment-models";
 import { cn } from "@/lib/utils";
 
 type TradePointShowcaseSegmentSummaryProps = {
@@ -23,6 +34,15 @@ type TradePointShowcaseSegmentSummaryProps = {
 };
 
 const SEGMENTS: ShowcasePlacementSegment[] = ["vh", "mk", "hardware"];
+
+const SHOWCASE_SEGMENT_CARD_SIZE_KEY = "showcase-segment-summary:card-size";
+
+const CARD_SIZE_OPTIONS = [
+  { id: "xl" as const, label: "Крупный", icon: Square, hideNarrow: true },
+  { id: "m" as const, label: "Средний", icon: LayoutGrid, hideNarrow: false },
+  { id: "s" as const, label: "Мелкий", icon: Grid3x3, hideNarrow: true },
+  { id: "list" as const, label: "Список", icon: List, hideNarrow: false },
+] as const;
 
 function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; compact: boolean }) {
   if (detail.source === "models") {
@@ -48,7 +68,7 @@ function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; comp
         compact && "gap-x-2 text-[11px]",
       )}
     >
-      <span>всего витрин: {detail.blockCount}</span>
+      <span>всего блоков: {detail.blockCount}</span>
       <span>ёмкость: {detail.totalCapacity}</span>
       <span>наши: {detail.totalOurs}</span>
       <DistributionPercentBadge percent={detail.distributionPercent} />
@@ -75,7 +95,7 @@ function SegmentTypeBreakdownTable({
           <thead>
             <tr className="border-b border-border/70 bg-muted/30">
               <th className="px-2 py-2 font-medium">Тип</th>
-              <th className="px-2 py-2 font-medium">Витр.</th>
+              <th className="px-2 py-2 font-medium">Блоков</th>
               <th className="px-2 py-2 font-medium">Ёмкость</th>
               <th className="px-2 py-2 font-medium">Наши</th>
               <th className="px-2 py-2 font-medium">Конкур.</th>
@@ -100,12 +120,116 @@ function SegmentTypeBreakdownTable({
   );
 }
 
+function SegmentModelPhoto({
+  model,
+  cardSize,
+  className,
+}: {
+  model: SegmentOurModelCard;
+  cardSize: CatalogCardSize;
+  className?: string;
+}) {
+  if (model.imageUrl) {
+    return (
+      <img
+        src={model.imageUrl}
+        alt=""
+        className={className}
+        loading="lazy"
+      />
+    );
+  }
+
+  return (
+    <div className={cn("flex items-center justify-center rounded-lg bg-muted text-muted-foreground", className)}>
+      <Package className={cardSize === "list" ? "h-5 w-5" : cardSize === "s" ? "h-6 w-6" : "h-8 w-8"} aria-hidden />
+    </div>
+  );
+}
+
+function SegmentModelListRow({
+  model,
+  segment,
+}: {
+  model: SegmentOurModelCard;
+  segment: ShowcasePlacementSegment;
+}) {
+  return (
+    <div
+      className="flex min-w-0 items-center gap-3 rounded-lg border border-border/70 bg-card p-2 shadow-xs"
+      data-testid={`segment-model-card-${segment}-${model.modelId}`}
+    >
+      <SegmentModelPhoto
+        model={model}
+        cardSize="list"
+        className="aspect-[3/4] h-14 w-14 shrink-0 rounded-md object-cover"
+      />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{model.name}</p>
+        {model.series ? (
+          <p className="truncate text-xs text-muted-foreground">{model.series}</p>
+        ) : null}
+      </div>
+      <Badge variant="secondary" className="shrink-0 tabular-nums">
+        × {model.count}
+      </Badge>
+    </div>
+  );
+}
+
+function SegmentModelGridCard({
+  model,
+  segment,
+  cardSize,
+}: {
+  model: SegmentOurModelCard;
+  segment: ShowcasePlacementSegment;
+  cardSize: Exclude<CatalogCardSize, "list">;
+}) {
+  const photoClass =
+    cardSize === "xl"
+      ? "aspect-[3/4] w-full rounded-lg object-cover"
+      : cardSize === "m"
+        ? "aspect-[3/4] h-32 w-full rounded-lg object-cover"
+        : "aspect-[3/4] h-20 w-full rounded-lg object-cover";
+
+  const nameClass =
+    cardSize === "xl"
+      ? "truncate text-base font-semibold"
+      : cardSize === "m"
+        ? "truncate text-sm font-medium"
+        : "truncate text-xs font-medium";
+
+  const seriesClass =
+    cardSize === "xl" ? "truncate text-sm text-muted-foreground" : "truncate text-xs text-muted-foreground";
+
+  const badgeClass = cardSize === "xl" ? "mt-1.5 text-sm tabular-nums" : "mt-1.5 tabular-nums";
+
+  return (
+    <div
+      className="min-w-0 rounded-lg border border-border/70 bg-card p-2 shadow-xs"
+      data-testid={`segment-model-card-${segment}-${model.modelId}`}
+    >
+      <div className="mb-2">
+        <SegmentModelPhoto model={model} cardSize={cardSize} className={photoClass} />
+      </div>
+      <p className={nameClass}>{model.name}</p>
+      {model.series ? <p className={seriesClass}>{model.series}</p> : null}
+      <Badge variant="secondary" className={badgeClass}>
+        × {model.count}
+      </Badge>
+    </div>
+  );
+}
+
 function SegmentOurModelsGrid({
   detail,
   compact,
+  cardSize,
 }: {
   detail: SegmentDetail;
   compact: boolean;
+  cardSize: CatalogCardSize;
 }) {
   return (
     <div className="space-y-2">
@@ -116,41 +240,21 @@ function SegmentOurModelsGrid({
         <p className="text-sm text-muted-foreground">
           В витринах этого сегмента наших моделей пока нет
         </p>
-      ) : (
-        <div
-          className={cn(
-            "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
-            compact && "gap-2 sm:grid-cols-2",
-          )}
-        >
+      ) : cardSize === "list" ? (
+        <div className="flex flex-col gap-2">
           {detail.ourModels.map((model) => (
-            <div
+            <SegmentModelListRow key={model.modelId} model={model} segment={detail.segment} />
+          ))}
+        </div>
+      ) : (
+        <div className={cn(catalogCardGridClass(cardSize), compact && cardSize === "s" && "gap-1.5")}>
+          {detail.ourModels.map((model) => (
+            <SegmentModelGridCard
               key={model.modelId}
-              className="min-w-0 rounded-lg border border-border/70 bg-card p-2 shadow-xs"
-              data-testid={`segment-model-card-${detail.segment}-${model.modelId}`}
-            >
-              <div className="mb-2 flex justify-center">
-                {model.imageUrl ? (
-                  <img
-                    src={model.imageUrl}
-                    alt=""
-                    className="h-24 w-24 rounded-lg object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <Package className="h-8 w-8" aria-hidden />
-                  </div>
-                )}
-              </div>
-              <p className="truncate text-sm font-medium">{model.name}</p>
-              {model.series ? (
-                <p className="truncate text-xs text-muted-foreground">{model.series}</p>
-              ) : null}
-              <Badge variant="secondary" className="mt-1.5 tabular-nums">
-                × {model.count}
-              </Badge>
-            </div>
+              model={model}
+              segment={detail.segment}
+              cardSize={cardSize}
+            />
           ))}
         </div>
       )}
@@ -180,9 +284,11 @@ function SegmentCompetitorsList({ detail }: { detail: SegmentDetail }) {
 function SegmentExpandedContent({
   detail,
   compact,
+  cardSize,
 }: {
   detail: SegmentDetail;
   compact: boolean;
+  cardSize: CatalogCardSize;
 }) {
   if (detail.source === "models") {
     return (
@@ -191,7 +297,7 @@ function SegmentExpandedContent({
           Витрины как блоки в этом сегменте не заведены. Показаны модели, отмеченные на витрине ТТ по
           статусу.
         </p>
-        <SegmentOurModelsGrid detail={detail} compact={compact} />
+        <SegmentOurModelsGrid detail={detail} compact={compact} cardSize={cardSize} />
       </div>
     );
   }
@@ -207,7 +313,7 @@ function SegmentExpandedContent({
       </div>
 
       <SegmentTypeBreakdownTable detail={detail} compact={compact} />
-      <SegmentOurModelsGrid detail={detail} compact={compact} />
+      <SegmentOurModelsGrid detail={detail} compact={compact} cardSize={cardSize} />
       <SegmentCompetitorsList detail={detail} />
     </div>
   );
@@ -216,9 +322,11 @@ function SegmentExpandedContent({
 function SegmentRow({
   detail,
   compact,
+  cardSize,
 }: {
   detail: SegmentDetail;
   compact: boolean;
+  cardSize: CatalogCardSize;
 }) {
   const label = PLACEMENT_SEGMENT_LABEL_RU[detail.segment];
   const isEmpty = detail.source === "empty";
@@ -257,7 +365,7 @@ function SegmentRow({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className={cn("px-3 pb-3", compact && "px-2.5 pb-2.5")}>
-            <SegmentExpandedContent detail={detail} compact={compact} />
+            <SegmentExpandedContent detail={detail} compact={compact} cardSize={cardSize} />
           </div>
         </CollapsibleContent>
       </div>
@@ -271,8 +379,15 @@ export function TradePointShowcaseSegmentSummary({
 }: TradePointShowcaseSegmentSummaryProps) {
   const compact = density === "compact";
   const [cacheBump, setCacheBump] = useState(0);
+  const [cardSize, setCardSize] = useState<CatalogCardSize>(() =>
+    readCatalogCardSizeFromStorage(SHOWCASE_SEGMENT_CARD_SIZE_KEY, "m"),
+  );
 
   const bumpCache = useCallback(() => setCacheBump((n) => n + 1), []);
+
+  useEffect(() => {
+    writeCatalogCardSizeToStorage(SHOWCASE_SEGMENT_CARD_SIZE_KEY, cardSize);
+  }, [cardSize]);
 
   useEffect(() => {
     const onChange = () => bumpCache();
@@ -290,18 +405,55 @@ export function TradePointShowcaseSegmentSummary({
     [placements],
   );
 
+  const iconBtnSize = compact ? "h-8 w-8" : "h-9 w-9";
+
   return (
     <Card
       className="rounded-xl border border-border bg-card shadow-xs"
       data-testid="trade-point-showcase-segment-summary"
     >
       <CardContent className={cn("space-y-2 px-3 py-3 sm:px-4", compact && "space-y-1.5 px-2.5 py-2.5")}>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Витрина в ТТ
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Витрина в ТТ
+          </h3>
+          <div
+            className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-card p-0.5"
+            role="radiogroup"
+            aria-label="Размер карточек моделей сегмента"
+            data-testid="showcase-segment-card-size-toggle"
+          >
+            {CARD_SIZE_OPTIONS.map((opt) => {
+              const Icon = opt.icon;
+              const active = cardSize === opt.id;
+              return (
+                <Button
+                  key={opt.id}
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className={cn(
+                    iconBtnSize,
+                    "shrink-0 rounded-md border",
+                    opt.hideNarrow && "max-[865px]:hidden",
+                    active
+                      ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                      : "border-transparent bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                  aria-label={opt.label}
+                  aria-pressed={active}
+                  onClick={() => setCardSize(opt.id)}
+                  data-testid={`showcase-segment-card-size-${opt.id}`}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                </Button>
+              );
+            })}
+          </div>
+        </div>
         <div className="space-y-2">
           {segmentDetails.map((detail) => (
-            <SegmentRow key={detail.segment} detail={detail} compact={compact} />
+            <SegmentRow key={detail.segment} detail={detail} compact={compact} cardSize={cardSize} />
           ))}
         </div>
       </CardContent>
