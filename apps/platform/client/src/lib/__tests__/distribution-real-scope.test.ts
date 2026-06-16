@@ -3,16 +3,43 @@
  */
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
-import { DEALER_BASE_ROWS } from "../dealer-base-mock-data";
+import { buildDealerRowsFromReleaseClients, DEALER_BASE_ROWS } from "../dealer-base-mock-data";
 import {
   distributionEntryScopedDealerRows,
   filterDealersForEntryLeadershipScope,
 } from "../distribution-entry-dealer-scope";
-import { buildDistributionScopedDealerRows } from "../distribution-entry-scoped-rows";
+import { buildDistributionScopedDealerRows, buildDistributionWorkingDealerRows } from "../distribution-entry-scoped-rows";
 import { mapSalesRoleToDealerBaseAccess } from "../dealer-base-role-views";
+import { getRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import { loadReleaseDemoProfile, type ReleaseDemoProfile } from "../release-demo-profile";
+import { getReleaseClients } from "../release-client-data";
 import type { OrgSnapshot } from "../use-org-snapshot";
 import type { SidebarNavRealScope } from "../sidebar-nav-real-scope";
+
+const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
+const skalabanRows = allRows.filter((r) => r.releaseTeamId === "team-skalaban");
+const sapozhkovRows = allRows.filter((r) => r.releaseTeamId === "team-sapozhkov");
+
+const TEAM_SKALABAN = "cfa2ab87-9fe9-4068-a0e4-347ddad7a5fa";
+const TEAM_SAPOZHKOV = "3d48d79a-38f3-49c1-ba7d-75bb5ba187dc";
+const ROP_SKALABAN = "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa";
+const ROP_SAPOZHKOV = "c36f625f-730e-4ae3-b118-bdb005d10b81";
+const BOGACHEV = "10d1abcd-ee9b-42ff-916f-e9d4c43c9bd2";
+const DROGOZHITSKY = "6fe22f7f-d8bb-4a16-92bb-5382034de831";
+const NETKACHEVA = "2f85e5b1-0633-45d9-9672-72417cd1daa2";
+
+function regionalSnap(rmId: string, teamUuid: string, ropId: string): OrgSnapshot {
+  return {
+    me: { id: rmId, role: "regional_manager", fullName: "Регионал", teamId: teamUuid },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: teamUuid, name: "Команда", ropUserId: ropId, ropName: "РОП" }],
+    users: [{ id: rmId, fullName: "Регионал", role: "regional_manager", teamId: teamUuid, status: "active" }],
+  } as unknown as OrgSnapshot;
+}
+
+function seedCountByTeam(catalogTeamId: string): number {
+  return getReleaseClients().filter((c) => c.teamId === catalogTeamId).length;
+}
 
 const DEMO_BASELINES: Record<string, number> = {};
 
@@ -135,6 +162,129 @@ let rmScopedCount = 0;
   assert.ok(
     realScoped.length >= withLeadership.length,
     "в real-режиме leadership-фильтр не сужает результат distributionEntryScopedDealerRows",
+  );
+}
+
+// Patch A: без актуализации, но с releaseDealerRows — не mock DEALER_BASE_ROWS
+{
+  const working = buildDistributionWorkingDealerRows(
+    { role: "team_lead", personaUserId: "user-tl-skalaban" },
+    {
+      actualizationEnabled: false,
+      mergedState: createEmptyActualizationState(),
+      releaseDealerRows: skalabanRows,
+    },
+  );
+  assert.equal(working.length, skalabanRows.length);
+}
+
+// Богачёв (Скалабан): не видит клиентов Сапожкова
+{
+  const snap = regionalSnap(BOGACHEV, TEAM_SKALABAN, ROP_SKALABAN);
+  const scope: SidebarNavRealScope = {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    releaseDealerRows: allRows,
+    orgScope: { snap, access: "team_lead" },
+  };
+  const scoped = buildDistributionScopedDealerRows(
+    { role: "team_lead", personaUserId: "user-tl-skalaban" },
+    {
+      actualizationEnabled: false,
+      mergedState: createEmptyActualizationState(),
+      realScope: scope,
+      releaseDealerRows: allRows,
+    },
+  );
+  assert.ok(scoped.length > 0);
+  assert.equal(scoped.length, seedCountByTeam("team-skalaban"));
+  assert.ok(scoped.every((r) => r.releaseTeamId === "team-skalaban"));
+  const sapozhkovIds = new Set(sapozhkovRows.map((r) => r.id));
+  assert.ok(!scoped.some((r) => sapozhkovIds.has(r.id)), "Богачёв не должен видеть клиентов Сапожкова");
+}
+
+// Дрогобицкий (Сапожков): только команда Сапожкова
+{
+  const snap = regionalSnap(DROGOZHITSKY, TEAM_SAPOZHKOV, ROP_SAPOZHKOV);
+  const scoped = distributionEntryScopedDealerRows(allRows, { role: "team_lead", personaUserId: "user-tl-sapozhkov" }, {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    releaseDealerRows: allRows,
+    orgScope: { snap, access: "team_lead" },
+  });
+  assert.equal(scoped.length, seedCountByTeam("team-sapozhkov"));
+  assert.ok(scoped.every((r) => r.releaseTeamId === "team-sapozhkov"));
+}
+
+// regional_manager без teamId → []
+{
+  const snap = {
+    me: { id: BOGACHEV, role: "regional_manager", fullName: "Богачёв", teamId: null },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [],
+    users: [],
+  } as unknown as OrgSnapshot;
+  const scoped = distributionEntryScopedDealerRows(allRows, { role: "team_lead", personaUserId: "user-tl-skalaban" }, {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    orgScope: { snap, access: "team_lead" },
+  });
+  assert.deepEqual(scoped, []);
+}
+
+// Менеджер Неткачева (Сапожков): только свои
+{
+  const ownCodes = new Set(
+    allRows.filter((r) => r.releaseManagerId === "mgr-netkacheva-ia").map((r) => r.releaseCode ?? r.id),
+  );
+  const snap = {
+    me: { id: NETKACHEVA, role: "manager", fullName: "Неткачева", teamId: TEAM_SAPOZHKOV },
+    visibility: { all: false, clientCodes: [], teamIds: [], visibleUserIds: [] },
+    teams: [{ id: TEAM_SAPOZHKOV, name: "Сапожков", ropUserId: ROP_SAPOZHKOV, ropName: "Сапожков" }],
+    users: [{ id: NETKACHEVA, fullName: "Неткачева", role: "manager", teamId: TEAM_SAPOZHKOV }],
+  } as unknown as OrgSnapshot;
+  const scoped = buildDistributionScopedDealerRows(loadReleaseDemoProfile("manager", NETKACHEVA), {
+    actualizationEnabled: false,
+    mergedState: createEmptyActualizationState(),
+    realScope: {
+      isRealUser: true,
+      loading: false,
+      ready: true,
+      releaseDealerRows: allRows,
+      orgScope: { snap, access: "sales_manager" },
+      assignmentsScope: { ownCodes, teamCodes: new Set(), grantedCodes: new Set() },
+    },
+    releaseDealerRows: allRows,
+  });
+  assert.ok(scoped.length > 0);
+  assert.ok(scoped.length <= ownCodes.size);
+}
+
+// РОП Скалабан: вся команда
+{
+  const snap = {
+    me: { id: ROP_SKALABAN, role: "rop", fullName: "Скалабан", teamId: TEAM_SKALABAN },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: TEAM_SKALABAN, name: "Скалабан", ropUserId: ROP_SKALABAN, ropName: "Скалабан" }],
+    users: [],
+  } as unknown as OrgSnapshot;
+  const scoped = distributionEntryScopedDealerRows(
+    allRows,
+    loadReleaseDemoProfile("rop", ROP_SKALABAN),
+    { isRealUser: true, loading: false, ready: true, orgScope: { snap, access: "team_lead" } },
+  );
+  assert.equal(scoped.length, seedCountByTeam("team-skalaban"));
+}
+
+// Patch C: real-user loading → [] (не mock)
+{
+  const loadingScope: SidebarNavRealScope = { isRealUser: true, loading: true, ready: false };
+  assert.deepEqual(
+    getRoleScopedDealerRowsAuto(DEALER_BASE_ROWS, { role: "team_lead", personaUserId: "user-tl-skalaban" }, loadingScope),
+    [],
   );
 }
 

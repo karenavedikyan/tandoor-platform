@@ -75,8 +75,14 @@ const realScope: SidebarNavRealScope = {
 {
   const loadingScope: SidebarNavRealScope = { isRealUser: true, loading: true, ready: false };
   const viaAuto = getRoleScopedDealerRowsAuto(DEALER_BASE_ROWS, teamLeadProfile, loadingScope);
-  const viaDemo = roleScopedDealerRows(DEALER_BASE_ROWS, teamLeadProfile);
-  assert.equal(viaAuto.length, viaDemo.length);
+  assert.deepEqual(viaAuto, []);
+}
+
+// real-user not ready (не loading) → [] (не mock)
+{
+  const pendingScope: SidebarNavRealScope = { isRealUser: true, loading: false, ready: false };
+  const viaAuto = getRoleScopedDealerRowsAuto(DEALER_BASE_ROWS, teamLeadProfile, pendingScope);
+  assert.deepEqual(viaAuto, []);
 }
 
 console.log("role-scoped-rows-auto: ok");

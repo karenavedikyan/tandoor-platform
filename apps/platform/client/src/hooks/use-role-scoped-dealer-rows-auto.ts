@@ -20,6 +20,9 @@ export function getRoleScopedDealerRowsAuto(
       realScope.assignmentsScope,
     );
   }
+  if (realScope?.isRealUser && (realScope.loading || !realScope.ready)) {
+    return [];
+  }
   return roleScopedDealerRows(rows, profile);
 }
 

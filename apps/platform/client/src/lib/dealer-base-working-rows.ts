@@ -73,6 +73,18 @@ export function buildDealerBaseWorkingRowsForCount(input: BuildDealerBaseWorking
   }
 
   if (!actEnabled) {
+    if (realScope?.ready && realScope.releaseDealerRows && realScope.orgScope) {
+      return roleScopedDealerRowsForReal(
+        realScope.releaseDealerRows,
+        realScope.orgScope.snap,
+        realScope.orgScope.access,
+        undefined,
+        realScope.assignmentsScope,
+      );
+    }
+    if (realScope?.isRealUser) {
+      return [];
+    }
     return DEALER_BASE_ROWS;
   }
 
