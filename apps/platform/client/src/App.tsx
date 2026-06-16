@@ -88,6 +88,7 @@ const LazyBitrix24Poc = lazy(() => import("@/pages/bitrix24-poc"));
 const LazyCommunications = lazy(() => import("@/pages/communications"));
 const LazyClientBaseActivityDashboard = lazy(() => import("@/pages/client-base-activity-dashboard"));
 const LazyTrashBin = lazy(() => import("@/pages/trash-bin"));
+const LazyTeamActivity = lazy(() => import("@/pages/team-activity"));
 const LazyUsersAndAccess = lazy(() => import("@/pages/users-and-access"));
 const LazyMyProfile = lazy(() => import("@/pages/my-profile"));
 const LazyChangePassword = lazy(() => import("@/pages/change-password"));
@@ -162,6 +163,7 @@ const Bitrix24PocRoute = suspensePage(LazyBitrix24Poc);
 const CommunicationsRoute = suspensePage(LazyCommunications);
 const ClientBaseActivityDashboardRoute = suspensePage(LazyClientBaseActivityDashboard);
 const TrashBinRoute = suspensePage(LazyTrashBin);
+const TeamActivityRoute = suspensePage(LazyTeamActivity);
 const UsersAndAccessRoute = suspensePage(LazyUsersAndAccess);
 // Промт 47: страницы профиля и админки оборачиваем в общий ProfileShell.
 const wrapProfileShell = (Comp: ComponentType<unknown>): ComponentType<unknown> => {
@@ -407,6 +409,7 @@ function AuthenticatedShell({
         <Route path="/communications" component={CommunicationsRoute} />
         <Route path="/client-base-activity" component={ClientBaseActivityDashboardRoute} />
         <Route path="/trash" component={TrashBinRoute} />
+        <Route path="/team-activity" component={TeamActivityRoute} />
         <Route path="/admin/users" component={AdminUsersRoute} />
         <Route path="/admin/invitations" component={AdminInvitationsRoute} />
         <Route path="/admin/audit" component={AdminAuditRoute} />

@@ -53,6 +53,10 @@
     {
       "path": "/api/cron/sync-catalog-1c-photos",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-activity-summary",
+      "schedule": "0 0 * * *"
     }
   ]
 }

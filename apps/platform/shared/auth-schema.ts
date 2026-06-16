@@ -44,6 +44,9 @@ export const authUsers = pgTable("users", {
   telegramUserId: bigint("telegram_user_id", { mode: "number" }).unique(),
   /** Первичный онбординг (смена пароля, профиль, Telegram) завершён. */
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true, mode: "string" }),
+  /** Денормализованная сводка активности (Промт 378). */
+  activitySummary: jsonb("activity_summary"),
+  activitySummaryUpdatedAt: timestamp("activity_summary_updated_at", { withTimezone: true, mode: "string" }),
 });
 
 /** Одноразовые токены deep-link привязки Telegram из ЛК (см. migrations-run). */
