@@ -1373,6 +1373,21 @@ async function handleMyOrgSnapshot(headers: Record<string, string | string[] | u
       teamId: u.teamIds.size > 0 ? Array.from(u.teamIds)[0]! : ledTeamByRop.get(u.id) ?? null,
     }));
 
+  if (role === "regional_manager" || role === "manager") {
+    const meInList = usersOut.find((u) => u.id === meId);
+    if (meInList) {
+      if (meTeamId) meInList.teamId = meTeamId;
+    } else {
+      usersOut.push({
+        id: meId,
+        fullName: meFullName,
+        role,
+        status: "active",
+        teamId: meTeamId,
+      });
+    }
+  }
+
   return {
     status: 200,
     cacheControl: "no-store",

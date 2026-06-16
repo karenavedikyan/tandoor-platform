@@ -19,6 +19,9 @@ export function buildDistributionWorkingDealerRows(
       releaseDealerRows: options.releaseDealerRows,
     });
   }
+  if (options.releaseDealerRows && options.releaseDealerRows.length > 0) {
+    return options.releaseDealerRows;
+  }
   return DEALER_BASE_ROWS;
 }
 
@@ -31,6 +34,10 @@ export function buildDistributionScopedDealerRows(
     releaseDealerRows?: DealerRow[];
   },
 ): DealerRow[] {
-  const working = buildDistributionWorkingDealerRows(profile, options);
+  const working = buildDistributionWorkingDealerRows(profile, {
+    actualizationEnabled: options.actualizationEnabled,
+    mergedState: options.mergedState,
+    releaseDealerRows: options.releaseDealerRows,
+  });
   return distributionEntryScopedDealerRows(working, profile, options.realScope);
 }

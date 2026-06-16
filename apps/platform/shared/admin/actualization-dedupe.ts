@@ -44,6 +44,12 @@ export const LEADERS_UUID_TO_PERSONA: Record<string, string> = {
   "ccffcf6e-2505-4eee-b257-ac65b60bb779": "user-tl-kupiansky",
   "c36f625f-730e-4ae3-b118-bdb005d10b81": "user-tl-sapozhkov",
   "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa": "user-tl-skalaban",
+  // regional_manager → persona команды из user_team_memberships (fallback demo-path)
+  "6fe22f7f-d8bb-4a16-92bb-5382034de831": "user-tl-sapozhkov",
+  "10d1abcd-ee9b-42ff-916f-e9d4c43c9bd2": "user-tl-skalaban",
+  "88169427-6062-46a1-b292-85eecb109777": "user-tl-skalaban",
+  "bb0e6231-8c1e-46ae-9e0f-a1d9003d9b81": "user-tl-kupiansky",
+  "bc407508-0bf3-407b-9dcf-6b42de9924ee": "user-tl-kupiansky",
 };
 
 export type ManualMergePlanRow = {

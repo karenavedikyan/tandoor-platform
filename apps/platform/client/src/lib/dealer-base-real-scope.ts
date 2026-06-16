@@ -79,7 +79,17 @@ export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
 /** UUID команды для team-scope: РОП — через teams.rop_user_id, регионал — через user_team_memberships.teamId. */
 export function realEffectiveTeamUuidFromSnap(snap: OrgSnapshot): string {
   if (snap.me.role === "regional_manager") {
-    return snap.users.find((u) => u.id === snap.me.id)?.teamId ?? snap.me.teamId ?? "";
+    const fromUsers = snap.users.find((u) => u.id === snap.me.id)?.teamId;
+    const fromMe = snap.me.teamId;
+    if (typeof console !== "undefined" && console.debug) {
+      console.debug("[rm-scope]", {
+        meId: snap.me.id,
+        fromUsers,
+        fromMe,
+        snapUsersCount: snap.users.length,
+      });
+    }
+    return fromUsers ?? fromMe ?? "";
   }
   return realEffectiveTeamLeadTeamIdFromSnap(snap);
 }
@@ -209,7 +219,10 @@ export function roleScopedDealerRowsForReal(
   }
   if (snap.me.role === "regional_manager") {
     const teamUuid = realEffectiveTeamUuidFromSnap(snap);
-    if (!teamUuid) return [];
+    if (!teamUuid) {
+      console.warn("[rm-scope] regional_manager без teamId — возвращаем []", { meId: snap.me.id });
+      return [];
+    }
     const catalogTeam = catalogTeamIdForTeamUuid(snap, teamUuid);
     return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
   }

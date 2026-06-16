@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -21,7 +21,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
     };
   }, [myCodesQ.data]);
 
-  return useMemo(
+  const scope = useMemo(
     () =>
       buildSidebarNavRealScope({
         isRealUser,
@@ -50,4 +50,18 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       assignmentsScope,
     ],
   );
+
+  useEffect(() => {
+    if (me?.role !== "regional_manager") return;
+    console.debug("[rm-scope] useSidebarNavRealScope", {
+      ready: scope.ready,
+      loading: scope.loading,
+      isRealUser: scope.isRealUser,
+      access: scope.orgScope?.access,
+      meTeamId: scope.orgScope?.snap.me.teamId,
+      releaseDealerRows: scope.releaseDealerRows?.length ?? 0,
+    });
+  }, [me?.role, scope]);
+
+  return scope;
 }
