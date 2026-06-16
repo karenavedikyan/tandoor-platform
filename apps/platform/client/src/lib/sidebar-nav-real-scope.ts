@@ -4,11 +4,10 @@
 
 import type { UserRole } from "@shared/auth";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows, getVisibleDealerRows } from "@/lib/dealer-base-source";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { assignmentsScopeIsActive, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
-import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { MyVisibleCodesResult } from "@/lib/use-my-visible-client-codes";
 
@@ -33,6 +32,8 @@ export type BuildSidebarNavRealScopeInput = {
   orgSnapLoading: boolean;
   visCodesLoading: boolean;
   assignmentsScope: AssignmentsScope | undefined;
+  /** Каталог из API или seed (Промт 376). */
+  catalogRows?: DealerRow[];
 };
 
 export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): SidebarNavRealScope {
@@ -49,6 +50,8 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
     visCodesLoading,
     assignmentsScope,
   } = input;
+
+  const catalog = input.catalogRows?.length ? input.catalogRows : getCatalogDealerRows();
 
   if (!isRealUser) {
     return { isRealUser: false, loading: false, ready: false };
@@ -68,13 +71,7 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
     return { isRealUser: true, loading, ready: false };
   }
 
-  const clients = getVisibleReleaseClients(
-    snap!,
-    visPayload!.all,
-    visPayload!.codes,
-    buildAssignmentsMap(visPayload!.assignments),
-  );
-  const releaseDealerRows = buildDealerRowsFromReleaseClients(clients);
+  const releaseDealerRows = getVisibleDealerRows(catalog, visPayload!.all, visPayload!.codes);
   const access = role ? mapUserRoleToDealerBaseAccess(role) : ("sales_manager" as DealerBaseAccessRole);
 
   return {

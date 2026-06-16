@@ -3,7 +3,8 @@
  */
 
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getDealerById, getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
+import { getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerById } from "@/lib/dealer-base-source";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { canEditClientNextStep } from "@/lib/client-next-step-data";
 import { saveTradePointFields } from "@/lib/use-dealer-field-saver";
@@ -367,7 +368,7 @@ export function getResolvedTradePointByIds(
   rawPointId: string,
   state: DealerTradePointsState = loadDealerTradePointsState(),
 ): { dealer: DealerRow; point: DealerTradePoint; entry: MergedTradePointEntry } | undefined {
-  const dealer = getDealerById(rawDealerId);
+  const dealer = getCatalogDealerById(rawDealerId);
   if (!dealer) return undefined;
   const trimmedRaw = rawPointId.trim();
   if (trimmedRaw === virtualDefaultTradePointId(dealer.id)) {
@@ -443,7 +444,7 @@ export function addManualTradePoint(
 }
 
 function resolveTradePointDisplayName(dealerId: string, tradePointId: string, state: DealerTradePointsState): string {
-  const dealer = getDealerById(dealerId);
+  const dealer = getCatalogDealerById(dealerId);
   if (!dealer) return tradePointId;
   const merged = getMergedDealerTradePoints(dealer, { includeArchived: true }, state);
   return merged.find((m) => m.point.id === tradePointId)?.point.name ?? tradePointId;

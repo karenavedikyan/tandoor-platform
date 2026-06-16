@@ -1,5 +1,5 @@
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
@@ -29,8 +29,8 @@ export type TeamSummary = {
   riskManagerName: string;
 };
 
-function rowsForTeam(teamId: string): DealerRow[] {
-  return DEALER_BASE_ROWS.filter((r) => r.releaseTeamId === teamId);
+function rowsForTeam(teamId: string, rows: DealerRow[] = getCatalogDealerRows()): DealerRow[] {
+  return rows.filter((r) => r.releaseTeamId === teamId);
 }
 
 /** Уровень «светофора» по доле клиентов с вниманием. */

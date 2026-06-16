@@ -10,12 +10,11 @@ import {
   type DealerShowcaseDetail,
   type DealerCompetitorsDetail,
   type DealerIssueDetail,
-  DEALER_BASE_ROWS,
-  getDealerById,
   getDealerRegionalManagerDisplay,
   normalizeDealerId,
   normalizeTradePointId,
 } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerById, getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { getDealerRowWithProfileOverrides } from "@/lib/dealer-profile-overrides";
 import {
@@ -681,7 +680,7 @@ export function manualDealerToRow(m: ManualDealer, profile: ReleaseDemoProfile):
 
 export function resolveDealerRowForCard(dealerIdRaw: string, act: ActualizationState, profile: ReleaseDemoProfile): DealerRow | undefined {
   const id = normalizeDealerId(dealerIdRaw);
-  const base = getDealerById(id);
+  const base = getCatalogDealerById(id);
   if (base) return mergeDealerRowWithActualization(base, act);
   const manual = act.manuallyCreatedDealersById[id];
   if (manual) return mergeDealerRowWithActualization(manualDealerToRow(manual, profile), act);
@@ -730,7 +729,7 @@ export function buildDealerBaseRowsWithActualization(
     return applyDealerRowTradePointOutletProjection(mergedFields, act, archivedListMode);
   };
 
-  const sourceRows = opts?.releaseDealerRows ?? DEALER_BASE_ROWS;
+  const sourceRows = opts?.releaseDealerRows ?? getCatalogDealerRows();
 
   const manuals = Object.values(act.manuallyCreatedDealersById)
     .filter((m) => includeId(m.id))

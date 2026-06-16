@@ -1,5 +1,6 @@
 import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { getAllMatrixTasks, type MatrixTaskWithContext } from "@/lib/trade-point-task-data";
 
 /** Имя менеджера продаж для привязки «моих» клиентов в публичном сценарии (Release 1 / Excel). */
@@ -36,9 +37,10 @@ export function getSalesManagerMatrixTasks(): MatrixTaskWithContext[] {
 }
 
 export function getMyDealers(): DealerRow[] {
-  const mine = DEALER_BASE_ROWS.filter((r) => r.manager === SALES_MANAGER_PUBLIC_NAME);
+  const rows = getCatalogDealerRows();
+  const mine = rows.filter((r) => r.manager === SALES_MANAGER_PUBLIC_NAME);
   if (mine.length >= 6) return mine.slice(0, 10);
-  return DEALER_BASE_ROWS.slice(0, 8);
+  return rows.slice(0, 8);
 }
 
 export function matrixCompletionPercent(tp: DealerTradePoint): number {
@@ -59,7 +61,7 @@ export function getTradePointsNeedingAttention(max = 8): TradePointAttentionRow[
   const zones = ["Юг · портал", "Юг · розница", "Регион · ключевые"];
   const allTasks = getAllMatrixTasks();
 
-  for (const dealer of DEALER_BASE_ROWS) {
+  for (const dealer of getCatalogDealerRows()) {
     for (const tp of dealer.tradePoints) {
       const pct = matrixCompletionPercent(tp);
       const pointTasks = allTasks.filter((t) => t.tradePointId === tp.id && t.status !== "done");

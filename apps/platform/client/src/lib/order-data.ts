@@ -12,7 +12,8 @@
  * Все значения — обезличенные, но в структуре и стиле, идентичных рабочему контуру дилера.
  */
 
-import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 
 export type DealerWarehouseType = "региональный" | "точечный" | "транзитный";
 export type DealerWarehouseStatus = "активен" | "ограничен" | "на инвентаризации";
@@ -423,30 +424,34 @@ function buildOrdersForDealer(dealer: DealerRow, warehouses: DealerWarehouse[]):
   return out;
 }
 
-const WAREHOUSES: DealerWarehouse[] = DEALER_BASE_ROWS.flatMap((d) => buildWarehousesForDealer(d));
-const ORDERS: OrderRow[] = DEALER_BASE_ROWS.flatMap((d) => {
-  const wh = WAREHOUSES.filter((w) => w.dealerId === d.id);
-  return buildOrdersForDealer(d, wh);
-});
+function buildWarehousesAndOrders(): { warehouses: DealerWarehouse[]; orders: OrderRow[] } {
+  const dealers = getCatalogDealerRows();
+  const warehouses = dealers.flatMap((d) => buildWarehousesForDealer(d));
+  const orders = dealers.flatMap((d) => {
+    const wh = warehouses.filter((w) => w.dealerId === d.id);
+    return buildOrdersForDealer(d, wh);
+  });
+  return { warehouses, orders };
+}
 
 export function getAllOrders(): OrderRow[] {
-  return ORDERS;
+  return buildWarehousesAndOrders().orders;
 }
 
 export function getOrderById(id: string): OrderRow | undefined {
-  return ORDERS.find((o) => o.id === id);
+  return getAllOrders().find((o) => o.id === id);
 }
 
 export function getDealerWarehouses(dealerId: string): DealerWarehouse[] {
-  return WAREHOUSES.filter((w) => w.dealerId === dealerId);
+  return buildWarehousesAndOrders().warehouses.filter((w) => w.dealerId === dealerId);
 }
 
 export function getOrdersForDealer(dealerId: string): OrderRow[] {
-  return ORDERS.filter((o) => o.dealerId === dealerId);
+  return getAllOrders().filter((o) => o.dealerId === dealerId);
 }
 
 export function getOrdersForTradePoint(dealerId: string, tradePointId: string): OrderRow[] {
-  return ORDERS.filter((o) => o.dealerId === dealerId && o.tradePointId === tradePointId);
+  return getAllOrders().filter((o) => o.dealerId === dealerId && o.tradePointId === tradePointId);
 }
 
 const ATTENTION_PRIORITY: OrderAttentionFlag[] = [
@@ -485,8 +490,9 @@ function attentionScore(order: OrderRow): number {
 }
 
 export function getOrdersForSalesManager(managerName: string, limit = 8): OrderRow[] {
-  const mine = ORDERS.filter((o) => o.manager === managerName && orderNeedsManagerAttention(o));
-  const fallback = ORDERS.filter(orderNeedsManagerAttention);
+  const orders = getAllOrders();
+  const mine = orders.filter((o) => o.manager === managerName && orderNeedsManagerAttention(o));
+  const fallback = orders.filter(orderNeedsManagerAttention);
   const pool = mine.length > 0 ? mine : fallback;
   return [...pool].sort((a, b) => attentionScore(b) - attentionScore(a)).slice(0, limit);
 }

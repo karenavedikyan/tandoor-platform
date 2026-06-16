@@ -4,7 +4,7 @@
 
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { applyDealerBasePickerFilters, type DealerBasePickerArgs } from "@/lib/dealer-base-picker-filters";
 import {
   initialRopManagerForProfile,
@@ -85,7 +85,7 @@ export function buildDealerBaseWorkingRowsForCount(input: BuildDealerBaseWorking
     if (realScope?.isRealUser) {
       return [];
     }
-    return DEALER_BASE_ROWS;
+    return getCatalogDealerRows();
   }
 
   const merged = buildDealerBaseRowsWithActualization(actState, profile, {
