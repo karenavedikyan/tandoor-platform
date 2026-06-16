@@ -11,6 +11,8 @@ export function mapUserRoleToDealerBaseAccess(role: UserRole): DealerBaseAccessR
     role === "category_manager"
   )
     return "sales_director";
-  if (role === "rop" || role === "regional_manager") return "team_lead";
+  if (role === "rop") return "team_lead";
+  // [prompt-354] RM — личный scope по dealer_overrides.regional_manager_id, без команды
+  if (role === "regional_manager") return "sales_manager";
   return "sales_manager";
 }

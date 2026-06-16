@@ -218,13 +218,22 @@ export function roleScopedDealerRowsForReal(
     return realRowsForRopTeam(rows, snap, options.ropUserId);
   }
   if (snap.me.role === "regional_manager") {
-    const teamUuid = realEffectiveTeamUuidFromSnap(snap);
-    if (!teamUuid) {
-      console.warn("[rm-scope] regional_manager без teamId — возвращаем []", { meId: snap.me.id });
-      return [];
+    // [prompt-354] личный scope по dealer_overrides.regional_manager_id (выдаётся сервером в assignmentsScope.ownCodes)
+    if (assignmentsScopeIsActive(assignmentsScope)) {
+      const ownCodesUpper = new Set(
+        Array.from(assignmentsScope!.ownCodes).map((c) => c.toUpperCase().trim()),
+      );
+      if (ownCodesUpper.size === 0) {
+        console.warn("[rm-scope] regional_manager: ownCodes пуст — возвращаем []", { meId: snap.me.id });
+        return [];
+      }
+      return rows.filter((r) => {
+        const code = (r.releaseCode ?? "").toUpperCase().trim();
+        return code.length > 0 && ownCodesUpper.has(code);
+      });
     }
-    const catalogTeam = catalogTeamIdForTeamUuid(snap, teamUuid);
-    return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
+    console.warn("[rm-scope] regional_manager: assignmentsScope не готов — []", { meId: snap.me.id });
+    return [];
   }
   if (assignmentsScopeIsActive(assignmentsScope)) {
     return rowsForAssignmentsScope(rows, access, assignmentsScope!);
