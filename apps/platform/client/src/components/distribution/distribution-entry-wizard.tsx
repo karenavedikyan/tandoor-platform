@@ -10,11 +10,8 @@ import { DistributionEntryCityPanel } from "@/components/distribution/distributi
 import { DistributionEntryProductPanel } from "@/components/distribution/distribution-entry-product-panel";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
-import { distributionEntryScopedDealerRows } from "@/lib/distribution-entry-dealer-scope";
 import {
   defaultDistributionFilterState,
   extractCityOptions,
@@ -25,8 +22,6 @@ import {
   type DistributionFilterState,
 } from "@/lib/distribution-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 
 type DistributionEntryWizardProps = {
   profile: ReleaseDemoProfile;
@@ -34,30 +29,14 @@ type DistributionEntryWizardProps = {
 };
 
 export function DistributionEntryWizard({ profile, onAxisChange }: DistributionEntryWizardProps) {
-  const actx = useClientBaseActualization();
-  const managementPlane = useClientBaseTeamActualization();
   const [axis, setAxis] = useState<DistributionEntryAxis | null>(null);
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
+  const scoped = useDistributionScopedDealers(profile);
 
   useEffect(() => {
     onAxisChange?.(axis !== null);
     return () => onAxisChange?.(false);
   }, [axis, onAxisChange]);
-
-  const workingDealerRows = useMemo(
-    () =>
-      actx.enabled
-        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-            includeArchivedDealers: false,
-          })
-        : DEALER_BASE_ROWS,
-    [actx.enabled, managementPlane.mergedState, profile],
-  );
-
-  const scoped = useMemo(
-    () => distributionEntryScopedDealerRows(workingDealerRows, profile),
-    [workingDealerRows, profile],
-  );
 
   const filterScope = useMemo(() => {
     const access = mapSalesRoleToDealerBaseAccess(profile.role);
