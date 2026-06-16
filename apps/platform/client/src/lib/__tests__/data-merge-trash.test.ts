@@ -8,6 +8,9 @@
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "../client-base-actualization-data-merge";
+import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
+import { roleScopedDealerRowsForReal } from "../dealer-base-real-scope";
+import { getReleaseClients } from "../release-client-data";
 import { makeTrashedDealerInfo, snapshotDealerFromRow } from "../trash-dealer-helper";
 
 const profile = {
@@ -124,3 +127,61 @@ state.archivedDealersById = {
 }
 
 console.log("data-merge-trash: ok (4 cases)");
+
+// Промт 349B: manual с external1cCode на trashed seed виден в scope по MA-коду.
+const seedKishchik = getReleaseClients().find((c) => c.code === "MA-MA078665");
+assert.ok(seedKishchik, "fixture: seed Кищик");
+
+const manualState = createEmptyActualizationState();
+const manualId = "manual-dealer-20260616112924-xfiqga";
+const nowManual = new Date().toISOString();
+manualState.manuallyCreatedDealersById[manualId] = {
+  id: manualId,
+  internalCode: "TND-CL-000001",
+  fields: {
+    name: "Кищик Владимир Алексеевич ИП",
+    city: "Краснодар",
+    external1cCode: "MA-MA078665",
+    managerUserId: "mgr-avetisyan-rs",
+  },
+  createdAt: nowManual,
+  createdBy: "u1",
+  createdByName: "U",
+  source: "manual_actualization",
+};
+manualState.trashedDealersById[seedKishchik!.id] = makeTrashedDealerInfo({
+  dealerId: seedKishchik!.id,
+  by: { userId: "u1", userName: "U" },
+  snapshot: snapshotDealerFromRow({ fullName: null }),
+  source: "client_card_delete",
+  nowIso: nowManual,
+});
+
+const manualRows = buildDealerBaseRowsWithActualization(manualState, profile, {
+  releaseDealerRows: buildDealerRowsFromReleaseClients([seedKishchik!]),
+});
+assert.ok(
+  manualRows.some((r) => r.id === manualId),
+  "manual Кищик в рабочем списке при trashed seed",
+);
+assert.ok(
+  !manualRows.some((r) => r.id === seedKishchik!.id),
+  "trashed seed не в рабочем списке",
+);
+
+const manualRow = manualRows.find((r) => r.id === manualId)!;
+assert.equal(manualRow.releaseCode, "TND-CL-000001");
+assert.equal(manualRow.external1cCode, "MA-MA078665");
+
+const scopeSnap = {
+  me: { id: "mgr-uuid", role: "manager", fullName: "Аветисян", teamId: "team-uuid" },
+  visibility: { all: false, clientCodes: [], teamIds: [], visibleUserIds: [] },
+  teams: [],
+  users: [],
+} as import("../use-org-snapshot").OrgSnapshot;
+const assignmentScope = { ownCodes: new Set(["MA-MA078665"]), teamCodes: new Set<string>() };
+const scoped = roleScopedDealerRowsForReal(manualRows, scopeSnap, "sales_manager", undefined, assignmentScope);
+assert.equal(scoped.length, 1, "manual матчится по external1cCode в assignments scope");
+assert.equal(scoped[0]!.id, manualId);
+
+console.log("data-merge-trash: ok (5 cases incl. prompt 349B)");

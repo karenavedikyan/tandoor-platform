@@ -1,4 +1,6 @@
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { hasManagerActualization } from "@/lib/client-base-actualization-visibility";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { deriveReleaseClientCategory, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import { getSalesUserById } from "@/lib/sales-control-data";
 import {
@@ -35,6 +37,8 @@ export type ReleaseClientSearchFilters = {
   priorityOnly?: boolean;
   activeOnly?: boolean;
   includeClosed?: boolean;
+  /** Промт 349: закрытые seed-клиенты с актуализацией менеджера остаются в выдаче. */
+  actualization?: ActualizationState | null;
 };
 
 export type ReleaseClientSummary = {
@@ -104,7 +108,7 @@ export function searchReleaseClients(filters: ReleaseClientSearchFilters, source
     if (!clientCategory && !clientCategories && clientType && c.normalizedClientType !== clientType) return false;
     if (priorityOnly && !c.isPriority) return false;
     if (activeOnly && !c.isActive) return false;
-    if (!includeClosed && c.isClosed) return false;
+    if (!includeClosed && c.isClosed && !hasManagerActualization(c.id, filters.actualization)) return false;
     return true;
   });
 }

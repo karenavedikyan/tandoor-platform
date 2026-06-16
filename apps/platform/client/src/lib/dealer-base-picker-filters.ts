@@ -93,6 +93,7 @@ export function applyDealerBasePickerFilters(rows: DealerRow[], args: DealerBase
       getDealerRegionalManagerEffectiveDisplay(row),
       getDealerRopDisplay(row),
       row.releaseCode ?? "",
+      row.external1cCode ?? "",
       row.releaseAddress ?? "",
       row.clientTypeLabel ?? "",
       row.id,
