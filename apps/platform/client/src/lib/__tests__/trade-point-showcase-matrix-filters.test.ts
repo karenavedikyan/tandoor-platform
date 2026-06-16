@@ -34,7 +34,6 @@ function model(
     objections: "",
     objectionAnswers: "",
     copyMessage: "",
-    categoryRules: [],
     __status: status,
   } as ShowcaseMatrixModelDefinition & { __status: ShowcaseMatrixStatusId };
 }

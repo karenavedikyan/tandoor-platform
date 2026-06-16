@@ -56,12 +56,11 @@ function typeLabelFor(type: ShowcaseMatrixModelType): ShowcaseMatrixTypeLabelRu 
   return showcaseMatrixTypeLabelRu(type);
 }
 
-function emptyPresentation(clientCategory: ClientCategoryId): Omit<
+function emptyPresentation(): Omit<
   ShowcaseMatrixModelDefinition,
   "id" | "name" | "type" | "typeLabelRu" | "imageUrl" | "basePriority"
 > {
   return {
-    categoryRules: [clientCategory],
     importanceReason: "Позиция управляемой матрицы витрины.",
     characteristics: "",
     advantages: "",
@@ -90,7 +89,6 @@ function modelRowToDefinition(
       typeLabelRu: hardcoded.typeLabelRu,
       imageUrl: hardcoded.imageUrl,
       basePriority: row.priority as ShowcaseMatrixPriorityRank,
-      categoryRules: hardcoded.categoryRules,
       importanceReason: hardcoded.importanceReason,
       characteristics: hardcoded.characteristics,
       advantages: hardcoded.advantages,
@@ -112,7 +110,7 @@ function modelRowToDefinition(
       typeLabelRu: typeLabelFor(type),
       imageUrl: "",
       basePriority: row.priority as ShowcaseMatrixPriorityRank,
-      ...emptyPresentation(clientCategory),
+      ...emptyPresentation(),
     };
   }
 
@@ -171,11 +169,9 @@ export function resolveRequiredTradePointMatrixModels(
   params: ResolveTradePointMatrixParams,
 ): ShowcaseMatrixModelDefinition[] {
   const managed = resolveActiveManagedMatrix(params);
-  if (managed) {
-    const high = managed.models.filter((m) => m.basePriority === "high");
-    return high.length > 0 ? high : managed.models;
-  }
-  return SHOWCASE_MATRIX_MODEL_DEFINITIONS.filter((m) => m.categoryRules.includes(params.clientCategory));
+  if (!managed) return [];
+  const high = managed.models.filter((m) => m.basePriority === "high");
+  return high.length > 0 ? high : managed.models;
 }
 
 export type MatrixPositionWeight = {

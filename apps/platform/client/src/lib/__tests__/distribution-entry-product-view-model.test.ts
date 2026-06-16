@@ -8,7 +8,6 @@ import {
   buildEntryProductModelRows,
   matrixModelToCatalogListProduct,
   isModelInstalledInEntries,
-  isModelRecommendedForCategory,
   modelMatchesSegment,
   resolveEntryProductTpPresence,
 } from "../distribution-entry-product-view-model";
@@ -20,7 +19,6 @@ const modelVh: ShowcaseMatrixModelDefinition = {
   typeLabelRu: "ВХ",
   imageUrl: "",
   basePriority: "high",
-  categoryRules: ["top350", "top500"],
   importanceReason: "",
   characteristics: "",
   advantages: "",
@@ -37,16 +35,12 @@ const modelMk: ShowcaseMatrixModelDefinition = {
   name: "МК Grand",
   type: "interior",
   typeLabelRu: "МК",
-  categoryRules: ["top150"],
 };
 
 assert.equal(modelMatchesSegment(modelVh, "vh"), true);
 assert.equal(modelMatchesSegment(modelVh, "mk"), false);
 assert.equal(modelMatchesSegment(modelVh, "furniture"), false);
 assert.equal(modelMatchesSegment(modelMk, "mk"), true);
-
-assert.equal(isModelRecommendedForCategory(modelVh, "top350"), true);
-assert.equal(isModelRecommendedForCategory(modelVh, "top150"), false);
 
 const installedEntry: ShowcaseMatrixEntryDto = {
   id: "e1",

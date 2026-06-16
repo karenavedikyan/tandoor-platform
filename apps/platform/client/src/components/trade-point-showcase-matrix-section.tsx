@@ -265,7 +265,6 @@ function buildManualModelFromEntry(
     typeLabelRu: showcaseMatrixTypeLabelRu(type),
     imageUrl: resolved.showcaseMatrixImageSrc ?? product?.image?.trim() ?? "",
     basePriority: "medium",
-    categoryRules: [],
     ...MANUAL_MODEL_PRESENTATION_DEFAULTS,
   };
 }

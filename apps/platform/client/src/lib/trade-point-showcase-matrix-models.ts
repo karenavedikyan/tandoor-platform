@@ -26,8 +26,6 @@ export type ShowcaseMatrixModelDefinition = {
   objections: string;
   objectionAnswers: string;
   copyMessage: string;
-  /** Для каких категорий клиента позиция обязательна в плане (подсказка в карточке). */
-  categoryRules: ClientCategoryId[];
 };
 
 const SEED_BY_ID = new Map(TANDOOR_REAL_CATALOG_SEED.map((p) => [p.id, p]));
@@ -58,46 +56,38 @@ const EMPTY_LEGACY_PRESENTATION = {
 
 const MATRIX_META: Record<
   string,
-  Pick<ShowcaseMatrixModelDefinition, "basePriority" | "categoryRules" | "importanceReason">
+  Pick<ShowcaseMatrixModelDefinition, "basePriority" | "importanceReason">
 > = {
   "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus", "new_client"],
     importanceReason: "Ходовая входная группа: узнаваемая отделка, хорошо смотрится на витрине рядом с конкурентами.",
   },
   "tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus"],
     importanceReason: "Текстурная входная модель — помогает показать премиальный сегмент без перегруза витрины.",
   },
   "tc-vh-midas-orekh-pekan-shokolad-emalit-belyy-860kh2050-levaya": {
     basePriority: "medium",
-    categoryRules: ["top150", "top350", "top500", "top500plus"],
     importanceReason: "Тёплое дерево + белый внутри — универсальный запрос на входную группу.",
   },
   "tc-vh-ultra-pikhtovyy-emalit-belyy-860kh2050-levaya": {
     basePriority: "medium",
-    categoryRules: ["top150", "top350", "top500", "top500plus"],
     importanceReason: "Натуралистичная фактура «пихта» — отличает витрину от однотипных гладких решений.",
   },
   "tc-mk-baget-12-mokko-pet-dg-2000-800-94": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus", "new_client"],
     importanceReason: "Межкомнатная серия с узнаваемым профилем — быстрый старт разговора про МК.",
   },
   "tc-mk-grand-13-medzhik-pet-dg-2000-800": {
     basePriority: "high",
-    categoryRules: ["top150", "top350", "top500", "top500plus"],
     importanceReason: "Широкая линейка «Гранд» — помогает показать шаг вверх по дизайну МК.",
   },
   "tc-mk-baget-13-makiato-pet-dg-2000-800-91": {
     basePriority: "medium",
-    categoryRules: ["top150", "top350"],
     importanceReason: "Расширение линейки «Багет» — показывает вариативность цвета в одной системе профилей.",
   },
   "tc-mk-m-36-emal-belaya-dg-2000-800": {
     basePriority: "low",
-    categoryRules: ["top150", "top350"],
     importanceReason: "Классическая белая эмаль — must-have для витрины МК в любом сегменте клиента.",
   },
 };
@@ -214,7 +204,6 @@ export function buildPresentationModelFromCatalogProduct(input: {
     imageUrl: input.imageUrl ?? "",
     basePriority: "medium",
     importanceReason: "",
-    categoryRules: [],
     characteristics: EMPTY_LEGACY_PRESENTATION.characteristics,
     advantages: EMPTY_LEGACY_PRESENTATION.advantages,
     benefitsDealer: EMPTY_LEGACY_PRESENTATION.benefitsDealer,

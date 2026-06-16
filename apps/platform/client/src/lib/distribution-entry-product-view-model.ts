@@ -3,7 +3,6 @@
  */
 
 import type { CatalogListProduct } from "@/components/catalog/ProductListRow";
-import type { ClientCategoryId } from "@/lib/client-category";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import type { DistributionSegmentFilter } from "@/lib/distribution-filters";
@@ -46,13 +45,6 @@ export function modelMatchesSegment(
   return true;
 }
 
-export function isModelRecommendedForCategory(
-  model: ShowcaseMatrixModelDefinition,
-  clientCategory: ClientCategoryId,
-): boolean {
-  return model.categoryRules.includes(clientCategory);
-}
-
 export function isModelInstalledInEntries(
   entries: readonly ShowcaseMatrixEntryDto[],
   modelId: string,
@@ -87,11 +79,7 @@ export function resolveEntryProductTpPresence(
   entries: readonly ShowcaseMatrixEntryDto[],
 ): EntryProductTpPresence {
   if (isModelInstalledInEntries(entries, model.id)) return "installed";
-  const inTemplate = isModelInTradePointTemplate(dealer, point, model.id);
-  if (inTemplate && isModelRecommendedForCategory(model, dealer.clientCategory)) {
-    return "recommended";
-  }
-  if (inTemplate) return "recommended";
+  if (isModelInTradePointTemplate(dealer, point, model.id)) return "recommended";
   return "not_in_plan";
 }
 
