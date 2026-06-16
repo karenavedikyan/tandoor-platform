@@ -13,11 +13,11 @@ import {
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
 import {
-  handleDealersTradePointsGet,
-  handleDealersTradePointsList,
-  handleDealersTradePointsSummary,
+  resolveDealersTradePointsGet,
+  resolveDealersTradePointsList,
+  resolveDealersTradePointsSummary,
   type DealersTradePointsSearchFilters,
-} from "../../shared/dealers-trade-points-handlers.js";
+} from "../../server/dealers/dealers-trade-points-source.js";
 
 const READ_ROLES = new Set([
   "admin",
@@ -102,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (action === "list") {
-      const payload = await handleDealersTradePointsList(pool, filtersFromQuery(req));
+      const payload = await resolveDealersTradePointsList(pool, filtersFromQuery(req));
       sendJson(res, 200, payload);
       return;
     }
@@ -117,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         });
         return;
       }
-      const payload = await handleDealersTradePointsGet(pool, externalKey);
+      const payload = await resolveDealersTradePointsGet(pool, externalKey);
       if (!payload.success) {
         sendJson(res, 404, payload);
         return;
@@ -127,7 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (action === "summary") {
-      const payload = await handleDealersTradePointsSummary(pool, filtersFromQuery(req));
+      const payload = await resolveDealersTradePointsSummary(pool, filtersFromQuery(req));
       sendJson(res, 200, payload);
       return;
     }
