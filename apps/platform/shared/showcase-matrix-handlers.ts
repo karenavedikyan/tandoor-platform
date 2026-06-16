@@ -620,6 +620,7 @@ export async function upsertShowcaseMatrixEntry(
 export async function handleShowcaseMatrixList(
   pool: PoolLike,
   params: { dealerId?: string; tradePointId?: string },
+  vis?: ShowcaseVisibility,
 ): Promise<{ success: true; entries: ShowcaseMatrixEntryDto[] }> {
   const tradePointId = typeof params.tradePointId === "string" ? params.tradePointId.trim() : "";
   const dealerId = typeof params.dealerId === "string" ? params.dealerId.trim() : "";
@@ -637,7 +638,11 @@ export async function handleShowcaseMatrixList(
   sql += ` ORDER BY updated_at DESC`;
 
   const r = await pool.query<Record<string, unknown>>(sql, queryParams);
-  return { success: true, entries: r.rows.map(mapEntryRow) };
+  let entries = r.rows.map(mapEntryRow);
+  if (vis && !vis.unrestricted) {
+    entries = entries.filter((e) => isDealerVisible(vis, e.dealerId));
+  }
+  return { success: true, entries };
 }
 
 function parseScopeTradePointIds(raw: unknown): string[] {
@@ -787,6 +792,7 @@ export async function handleShowcaseMatrixBatchSync(
 export async function handleShowcaseMatrixHistory(
   pool: PoolLike,
   params: { tradePointId?: string; dealerId?: string; limit?: number },
+  vis?: ShowcaseVisibility,
 ): Promise<{ success: true; events: ShowcaseMatrixEventDto[] }> {
   const tradePointId = typeof params.tradePointId === "string" ? params.tradePointId.trim() : "";
   const dealerId = typeof params.dealerId === "string" ? params.dealerId.trim() : "";
@@ -822,5 +828,13 @@ export async function handleShowcaseMatrixHistory(
     ` ORDER BY changed_at DESC LIMIT $${queryParams.length}`;
 
   const r = await pool.query<Record<string, unknown>>(sql, queryParams);
-  return { success: true, events: r.rows.map(mapEventRow) };
+  let events = r.rows.map(mapEventRow);
+  if (vis && !vis.unrestricted) {
+    events = events.filter((e) => {
+      const did = e.dealerId?.trim();
+      if (!did || did === "null" || did === "undefined") return false;
+      return isDealerVisible(vis, did);
+    });
+  }
+  return { success: true, events };
 }

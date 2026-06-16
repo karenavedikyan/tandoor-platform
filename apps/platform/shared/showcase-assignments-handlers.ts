@@ -14,6 +14,8 @@
 
 import {
   upsertShowcaseMatrixEntry,
+  isDealerVisible,
+  resolveShowcaseVisibility,
   type ShowcaseMatrixSessionUser,
 } from "./showcase-matrix-handlers.js";
 import { resolveResponsiblesForTradePoint } from "./responsibility-resolver.js";
@@ -130,6 +132,41 @@ function parseAssignmentIds(body: Record<string, unknown>): string[] {
 
 function assertActive(me: AssignmentSessionUser): void {
   if (me.status !== "active") throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
+}
+
+async function assertDealerInShowcaseScope(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  dealerId: string,
+): Promise<void> {
+  const did = dealerId?.trim();
+  if (!did) {
+    throw new AssignmentValidationError("Задание вне вашей зоны видимости.", "FORBIDDEN");
+  }
+  const vis = await resolveShowcaseVisibility(pool, { id: me.id, role: me.role });
+  if (!vis.unrestricted && !isDealerVisible(vis, did)) {
+    throw new AssignmentValidationError("Задание вне вашей зоны видимости.", "FORBIDDEN");
+  }
+}
+
+async function assertAssignmentInShowcaseScope(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  head: AssignmentDto,
+): Promise<void> {
+  await assertDealerInShowcaseScope(pool, me, head.dealerId);
+}
+
+async function dealerInShowcaseScope(
+  pool: PoolLike,
+  me: AssignmentSessionUser,
+  dealerId: string,
+): Promise<boolean> {
+  const did = dealerId?.trim();
+  if (!did) return false;
+  const vis = await resolveShowcaseVisibility(pool, { id: me.id, role: me.role });
+  if (vis.unrestricted) return true;
+  return isDealerVisible(vis, did);
 }
 
 function str(raw: unknown): string | undefined {
@@ -459,6 +496,7 @@ export async function handleCreate(
   assertActive(me);
   if (!CREATE_ROLES.has(me.role)) throw new AssignmentValidationError("Недостаточно прав для создания задания.", "FORBIDDEN");
   const input = parseCreateInput(body);
+  await assertDealerInShowcaseScope(pool, me, input.dealerId);
   const assignment = await insertAssignmentFromInput(pool, me, input);
   return { success: true, assignment };
 }
@@ -531,6 +569,10 @@ export async function handleCreateBatch(
 
   for (const target of input.targets) {
     try {
+      if (!(await dealerInShowcaseScope(pool, me, target.dealerId))) {
+        skippedCount += 1;
+        continue;
+      }
       const allowed = await canUserCreateForTradePoint(pool, me, target.dealerId, target.tradePointId);
       if (!allowed) {
         skippedCount += 1;
@@ -585,6 +627,7 @@ export async function handleGet(
   if (!id) throw new AssignmentValidationError("id обязателен.");
   const dto = await loadAssignment(pool, id);
   if (!dto) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, dto);
   return { success: true, assignment: dto };
 }
 
@@ -636,10 +679,14 @@ export async function handleList(
     `SELECT * FROM showcase_install_assignments ${where} ORDER BY created_at DESC LIMIT 200`,
     params,
   );
-  const assignments: AssignmentDto[] = [];
+  let assignments: AssignmentDto[] = [];
   for (const row of r.rows) {
     const items = await loadItems(pool, String(row.id));
     assignments.push(mapAssignmentRow(row, items));
+  }
+  const vis = await resolveShowcaseVisibility(pool, { id: me.id, role: me.role });
+  if (!vis.unrestricted) {
+    assignments = assignments.filter((a) => isDealerVisible(vis, a.dealerId));
   }
   return { success: true, assignments };
 }
@@ -659,6 +706,7 @@ export async function handleItemToggle(
 
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   assertCanExecuteAssignment(me, head);
   if (head.status === "submitted") {
     throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
@@ -723,6 +771,7 @@ export async function handleItemSetStatus(
 
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   assertCanExecuteAssignment(me, head);
   if (head.status === "submitted") {
     throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
@@ -838,6 +887,7 @@ export async function handleSubmit(
   if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   assertCanExecuteAssignment(me, head);
   if (head.status === "submitted" || head.status === "verified" || head.status === "closed") {
     throw new AssignmentValidationError("Задание уже отправлено.", "CONFLICT");
@@ -890,6 +940,7 @@ export async function handleVerify(
 
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
 
   const toVerify = head.items.filter((i) => {
     if (rawIds) return rawIds.includes(i.id);
@@ -991,6 +1042,7 @@ export async function handleFollowup(
   if (!sourceId) throw new AssignmentValidationError("assignmentId обязателен.");
   const source = await loadAssignment(pool, sourceId);
   if (!source) throw new AssignmentValidationError("Исходное задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, source);
 
   // Берём позиции, которые НЕ подтверждены (не стоят на витрине).
   const pending = source.items.filter((i) => !i.verified);
@@ -1028,6 +1080,9 @@ export async function handleClose(
   if (!CREATE_ROLES.has(me.role)) throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
   const assignmentId = str(body.assignmentId);
   if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
+  const head = await loadAssignment(pool, assignmentId);
+  if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   await pool.query(`UPDATE showcase_install_assignments SET status = 'closed', updated_at = NOW() WHERE id = $1`, [assignmentId]);
   await insertEvent(pool, { assignmentId, kind: "closed", actorId: me.id, actorName: me.fullName });
   const dto = await loadAssignment(pool, assignmentId);
@@ -1045,6 +1100,7 @@ export async function handleUpdate(
   if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   if (!canManageAssignment(me, head)) {
     throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
   }
@@ -1121,7 +1177,7 @@ export async function handleArchive(
   let skipped = 0;
   for (const id of ids) {
     const head = await loadAssignment(pool, id);
-    if (!head || !canManageAssignment(me, head)) {
+    if (!head || !canManageAssignment(me, head) || !(await dealerInShowcaseScope(pool, me, head.dealerId))) {
       skipped++;
       continue;
     }
@@ -1147,7 +1203,7 @@ export async function handleUnarchive(
   let skipped = 0;
   for (const id of ids) {
     const head = await loadAssignment(pool, id);
-    if (!head || !canManageAssignment(me, head)) {
+    if (!head || !canManageAssignment(me, head) || !(await dealerInShowcaseScope(pool, me, head.dealerId))) {
       skipped++;
       continue;
     }
@@ -1174,7 +1230,7 @@ export async function handleDelete(
   let skipped = 0;
   for (const id of ids) {
     const head = await loadAssignment(pool, id);
-    if (!head || !canManageAssignment(me, head)) {
+    if (!head || !canManageAssignment(me, head) || !(await dealerInShowcaseScope(pool, me, head.dealerId))) {
       skipped++;
       continue;
     }
@@ -1202,7 +1258,7 @@ export async function handleRemind(
   let skipped = 0;
   for (const id of ids) {
     const head = await loadAssignment(pool, id);
-    if (!head || !canManageAssignment(me, head)) {
+    if (!head || !canManageAssignment(me, head) || !(await dealerInShowcaseScope(pool, me, head.dealerId))) {
       skipped++;
       continue;
     }
@@ -1235,6 +1291,7 @@ export async function handleListComments(
   if (!assignmentId) throw new AssignmentValidationError("assignmentId обязателен.");
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   if (!canAccessAssignmentComments(me, head)) {
     throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
   }
@@ -1257,6 +1314,7 @@ export async function handleAddComment(
   if (!text) throw new AssignmentValidationError("Укажите текст комментария.");
   const head = await loadAssignment(pool, assignmentId);
   if (!head) throw new AssignmentValidationError("Задание не найдено.", "NOT_FOUND");
+  await assertAssignmentInShowcaseScope(pool, me, head);
   if (!canAccessAssignmentComments(me, head)) {
     throw new AssignmentValidationError("Недостаточно прав.", "FORBIDDEN");
   }
