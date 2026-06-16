@@ -153,6 +153,21 @@ export function resetActualizationAuthCache(): void {
   authUserCache = null;
 }
 
+let bootstrapActualizationPrefetch: ActualizationApiMeta | null = null;
+
+/** Prefetch из /api/bootstrap до первого loadActualizationState (Промт 380). */
+export function setBootstrapActualizationPrefetch(meta: ActualizationApiMeta | null): void {
+  bootstrapActualizationPrefetch = meta;
+}
+
+export function consumeBootstrapActualizationPrefetch(userId: string): ActualizationLoadResult | null {
+  const pref = bootstrapActualizationPrefetch;
+  if (!pref) return null;
+  bootstrapActualizationPrefetch = null;
+  if (!pref.success) return null;
+  return { meta: pref, syncStatus: "api_ok" };
+}
+
 function readLocalCache(userId: string): CacheRow | null {
   if (typeof window === "undefined" || !window.localStorage) return null;
   try {
@@ -463,6 +478,13 @@ export async function loadActualizationState(profile: ReleaseDemoProfile): Promi
   const auth = await getCachedAuthUser();
   const userId = auth?.id ?? profile.personaUserId.trim();
   const role = auth?.role;
+
+  const prefetched = consumeBootstrapActualizationPrefetch(userId);
+  if (prefetched) {
+    writeLocalCache({ userId, state: prefetched.meta.state, updatedAt: prefetched.meta.updatedAt });
+    return prefetched;
+  }
+
   const r = await fetchActualizationStateByUserIdWithRole(userId, role);
   if (r.syncStatus === "api_ok" && r.meta.success) {
     writeLocalCache({ userId, state: r.meta.state, updatedAt: r.meta.updatedAt });

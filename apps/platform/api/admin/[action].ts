@@ -10,6 +10,7 @@ import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { handleTeamsList } from "../../shared/admin/client-assignments-handlers.js";
+import { invalidateAllBootstrapCaches } from "../../shared/api-cache-invalidation.js";
 import {
   MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE,
   UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE,
@@ -5137,14 +5138,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "users-update" && req.method === "POST") {
       await handleUsersUpdate(req, res, pool, headers);
+      invalidateAllBootstrapCaches();
       return;
     }
     if (action === "users-update-role" && req.method === "POST") {
       await handleUsersUpdateRole(req, res, pool, headers);
+      invalidateAllBootstrapCaches();
       return;
     }
     if (action === "users-update-status" && req.method === "POST") {
       await handleUsersUpdateStatus(req, res, pool, headers);
+      invalidateAllBootstrapCaches();
       return;
     }
     if (action === "users-reset-password" && req.method === "POST") {
