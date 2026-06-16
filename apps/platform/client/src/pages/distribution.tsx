@@ -6,7 +6,7 @@ import { DistributionScopeSummary } from "@/components/distribution/distribution
 import { DistributionAnalyticsPage, type DistributionAnalyticsTab } from "@/pages/distribution-analytics";
 import { useDistributionScopedTradePoints } from "@/hooks/use-distribution-scoped-dealers";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
 import {
   deserializeFilters,
   serializeFilters,
@@ -29,7 +29,7 @@ function parseAnalyticsTab(qs: URLSearchParams): DistributionAnalyticsTab {
 export default function DistributionPage() {
   const { profile } = useReleaseDemoProfile();
   const [, navigate] = useLocation();
-  const routeQs = useRouteSearchParams();
+  const routeQs = useHashRouteSearchParams();
   const [entryAxisActive, setEntryAxisActive] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const tradePoints = useDistributionScopedTradePoints(profile);
@@ -97,46 +97,71 @@ export default function DistributionPage() {
     );
   }
 
+  const headerCompact = entryAxisActive && mode === "entry";
+
   return (
     <div
       className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-3 overflow-x-hidden sm:space-y-6"
       data-testid="page-distribution"
     >
-      {!entryAxisActive || mode === "analytics" ? (
-        <header className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-lg sm:p-6">
-          <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
-          <div className="relative space-y-3 pl-3 sm:pl-4">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Дистрибуция</h1>
+      <header
+        className={cn(
+          "relative overflow-hidden rounded-2xl border border-border bg-card shadow-lg",
+          headerCompact ? "p-3 sm:p-4" : "p-4 sm:p-6",
+        )}
+      >
+        <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
+        <div className={cn("relative space-y-2", headerCompact ? "pl-2 sm:pl-3" : "space-y-3 pl-3 sm:pl-4")}>
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <div className="min-w-0">
+              <h1 className={cn("font-semibold tracking-tight text-foreground", headerCompact ? "text-lg sm:text-xl" : "text-xl sm:text-2xl")}>
+                Дистрибуция
+              </h1>
+              {!headerCompact ? (
                 <p className="mt-1 text-sm text-muted-foreground">
                   {mode === "analytics" ? "Аналитический снимок дистрибуции по срезам." : "Внесение данных по витринам торговых точек."}
                 </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                {mode === "entry" ? (
-                  <>
-                    <Button type="button" variant="outline" size="sm" data-testid="button-distribution-summary" onClick={() => setSummaryOpen(true)}>
-                      Свод
-                    </Button>
-                    <Button asChild variant="outline" size="sm" data-testid="link-distribution-matrix-catalog">
-                      <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
-                    </Button>
-                  </>
-                ) : null}
-              </div>
+              ) : null}
             </div>
-            <div className="flex flex-wrap gap-1 rounded-full border border-border/70 bg-muted/30 p-1" data-testid="distribution-mode-toggle">
-              <ModePill active={mode === "entry"} onClick={() => setMode("entry")} testId="button-distribution-mode-entry">
-                Внесение
-              </ModePill>
-              <ModePill active={mode === "analytics"} onClick={() => setMode("analytics")} testId="button-distribution-mode-analytics">
-                Аналитика
-              </ModePill>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {mode === "entry" ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    data-testid="button-distribution-go-analytics"
+                    onClick={() => setMode("analytics")}
+                  >
+                    Аналитика дистрибуции
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" data-testid="button-distribution-summary" onClick={() => setSummaryOpen(true)}>
+                    Свод
+                  </Button>
+                  <Button asChild variant="outline" size="sm" data-testid="link-distribution-matrix-catalog">
+                    <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
+                  </Button>
+                </>
+              ) : (
+                <Button type="button" variant="outline" size="sm" data-testid="button-distribution-back-to-entry" onClick={() => setMode("entry")}>
+                  Назад к внесению
+                </Button>
+              )}
             </div>
           </div>
-        </header>
-      ) : null}
+          <div
+            className="inline-flex flex-wrap gap-1 rounded-full border border-primary/30 bg-background p-1 shadow-sm"
+            data-testid="distribution-mode-toggle"
+          >
+            <ModePill active={mode === "entry"} onClick={() => setMode("entry")} testId="button-distribution-mode-entry">
+              Внесение
+            </ModePill>
+            <ModePill active={mode === "analytics"} onClick={() => setMode("analytics")} testId="button-distribution-mode-analytics">
+              Аналитика
+            </ModePill>
+          </div>
+        </div>
+      </header>
 
       {mode === "analytics" ? (
         <DistributionAnalyticsPage
@@ -170,8 +195,8 @@ function ModePill({
       type="button"
       data-testid={testId}
       className={cn(
-        "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-        active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+        "rounded-full px-4 py-1.5 text-sm font-semibold transition-colors",
+        active ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground/80 hover:bg-primary/10 hover:text-foreground",
       )}
       onClick={onClick}
     >
