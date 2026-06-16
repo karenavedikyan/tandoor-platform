@@ -11,6 +11,6 @@ export function mapUserRoleToDealerBaseAccess(role: UserRole): DealerBaseAccessR
     role === "category_manager"
   )
     return "sales_director";
-  if (role === "rop") return "team_lead";
+  if (role === "rop" || role === "regional_manager") return "team_lead";
   return "sales_manager";
 }

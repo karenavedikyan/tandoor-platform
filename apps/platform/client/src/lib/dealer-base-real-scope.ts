@@ -76,6 +76,25 @@ export function realEffectiveTeamLeadTeamIdFromSnap(snap: OrgSnapshot): string {
   return t?.id ?? "";
 }
 
+/** UUID команды для team-scope: РОП — через teams.rop_user_id, регионал — через user_team_memberships.teamId. */
+export function realEffectiveTeamUuidFromSnap(snap: OrgSnapshot): string {
+  if (snap.me.role === "regional_manager") {
+    return snap.users.find((u) => u.id === snap.me.id)?.teamId ?? snap.me.teamId ?? "";
+  }
+  return realEffectiveTeamLeadTeamIdFromSnap(snap);
+}
+
+/** Catalog teamId (`team-kupiansky`) для команды по UUID. */
+export function catalogTeamIdForTeamUuid(snap: OrgSnapshot, teamUuid: string): string | null {
+  const team = snap.teams.find((t) => t.id === teamUuid);
+  if (team?.ropUserId) {
+    const mapped = ROP_UUID_TO_CATALOG_TEAM[team.ropUserId];
+    if (mapped) return mapped;
+  }
+  if (teamUuid.startsWith("team-")) return teamUuid;
+  return null;
+}
+
 /** UUID команды по UUID РОПа (для drilldown директора). */
 export function teamUuidForRopUserId(snap: OrgSnapshot, ropUserId: string): string | null {
   const team = snap.teams.find((t) => t.ropUserId === ropUserId);
@@ -188,14 +207,20 @@ export function roleScopedDealerRowsForReal(
   if (options?.ropUserId) {
     return realRowsForRopTeam(rows, snap, options.ropUserId);
   }
+  if (snap.me.role === "regional_manager") {
+    const teamUuid = realEffectiveTeamUuidFromSnap(snap);
+    if (!teamUuid) return [];
+    const catalogTeam = catalogTeamIdForTeamUuid(snap, teamUuid);
+    return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
+  }
   if (assignmentsScopeIsActive(assignmentsScope)) {
     return rowsForAssignmentsScope(rows, access, assignmentsScope!);
   }
   if (access === "sales_director") return rows;
   if (access === "team_lead") {
-    const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
+    const teamUuid = realEffectiveTeamUuidFromSnap(snap);
     if (!teamUuid) return [];
-    const catalogTeam = catalogTeamIdForRealTeamLead(snap);
+    const catalogTeam = catalogTeamIdForRealTeamLead(snap) ?? catalogTeamIdForTeamUuid(snap, teamUuid);
     return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
   }
   const selfName = snap.users.find((u) => u.id === snap.me.id)?.fullName?.trim() ?? "";

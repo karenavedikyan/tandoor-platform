@@ -23,11 +23,12 @@ import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
-  roleScopedDealerRows,
   managerOptionsForProfile,
   ropOptionsForProfile,
   type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
+import { getRoleScopedDealerRowsAuto, useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
+import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import {
   CLIENT_MAP_LIST_LIMIT,
   CLIENT_MAP_MAX_MARKERS,
@@ -125,6 +126,15 @@ export default function ClientMapPage() {
   const teamCtx = useClientBaseTeamActualization();
   const teamActualizationPlane = teamCtx.mergedState;
   const { publishDashboardRopTeamId } = teamCtx;
+  const realScope = useSidebarNavRealScope();
+
+  const baseRowsForMap = useMemo(
+    () =>
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
+    [actx.enabled, teamActualizationPlane, profile],
+  );
+
+  const scopedRows = useRoleScopedDealerRowsAuto(baseRowsForMap, profile);
 
   useEffect(() => {
     if (access !== "sales_director" && access !== "team_lead") return;
@@ -146,9 +156,10 @@ export default function ClientMapPage() {
     let qv: ClientMapQuickFilter = "all";
     let cityV: string[] = [];
     let searchV = "";
-    const scoped = roleScopedDealerRows(
+    const scoped = getRoleScopedDealerRowsAuto(
       actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
       profile,
+      realScope,
     );
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
     const managerRaw = routeQs.get("manager")?.trim() ?? "";
@@ -180,19 +191,11 @@ export default function ClientMapPage() {
     setQuick(qv);
     setSelectedCities(cityV);
     setSearch(searchV);
-  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, teamActualizationPlane]);
+  }, [profile.personaUserId, profile.role, access, routeKey, routeQs, actx.enabled, teamActualizationPlane, realScope]);
 
   const managerCatalogForRop = useMemo(() => getManagersForRopTeam(ropTeam), [ropTeam]);
   const managerOptions = useMemo(() => managerOptionsForProfile(profile, access, ropTeam), [profile, access, ropTeam]);
   const ropSelectOptions = useMemo(() => ropOptionsForProfile(profile, access), [profile, access]);
-
-  const baseRowsForMap = useMemo(
-    () =>
-      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : DEALER_BASE_ROWS,
-    [actx.enabled, teamActualizationPlane, profile],
-  );
-
-  const scopedRows = useMemo(() => roleScopedDealerRows(baseRowsForMap, profile), [baseRowsForMap, profile]);
 
   const pickerArgs = useMemo(
     () => ({ search, quick, cities: selectedCities, ropTeam, manager, managerCatalogForRop }),
