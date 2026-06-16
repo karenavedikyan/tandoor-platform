@@ -254,6 +254,9 @@ export function DistributionTradePointMatrixEntry({
     ],
   );
 
+  const showFullscreenButton =
+    canEdit && templateModelsCount > 0 && !showcaseFullscreenOpen;
+
   return (
     <div className="space-y-3">
       <Collapsible open={paramsOpen} onOpenChange={setParamsOpen} className="space-y-2">
@@ -276,6 +279,18 @@ export function DistributionTradePointMatrixEntry({
           <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
         </CollapsibleContent>
       </Collapsible>
+      {showFullscreenButton ? (
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          className="h-9 w-full font-semibold"
+          data-testid="button-open-showcase-fullscreen"
+          onClick={() => setShowcaseFullscreenOpen(true)}
+        >
+          Открыть витрину на весь экран
+        </Button>
+      ) : null}
       <TradePointShowcaseCatalogSlot
         dealer={dealer}
         point={point}
@@ -294,46 +309,22 @@ export function DistributionTradePointMatrixEntry({
             </p>
           </CardContent>
         </Card>
-      ) : canEdit ? (
-        showcaseFullscreenOpen ? (
-          <DistributionFullscreenEntry
-            dealer={dealer}
-            point={point}
-            profile={profile}
-            actorUserId={actorUserId}
-            actorName={actorName}
-            onClose={() => {
-              setShowcaseFullscreenOpen(false);
-              onBackToList?.();
-            }}
-            onBackToList={() => {
-              setShowcaseFullscreenOpen(false);
-              onBackToList?.();
-            }}
-          />
-        ) : (
-          <div className="space-y-3">
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              className="h-9 w-full font-semibold"
-              data-testid="button-open-showcase-fullscreen"
-              onClick={() => setShowcaseFullscreenOpen(true)}
-            >
-              Открыть витрину на весь экран
-            </Button>
-            <TradePointShowcaseMatrixSection
-              dealer={dealer}
-              point={point}
-              profile={profile}
-              actorUserId={actorUserId}
-              actorName={actorName}
-              page={showcasePage}
-              density="compact"
-            />
-          </div>
-        )
+      ) : canEdit && showcaseFullscreenOpen ? (
+        <DistributionFullscreenEntry
+          dealer={dealer}
+          point={point}
+          profile={profile}
+          actorUserId={actorUserId}
+          actorName={actorName}
+          onClose={() => {
+            setShowcaseFullscreenOpen(false);
+            onBackToList?.();
+          }}
+          onBackToList={() => {
+            setShowcaseFullscreenOpen(false);
+            onBackToList?.();
+          }}
+        />
       ) : (
         <TradePointShowcaseMatrixSection
           dealer={dealer}
