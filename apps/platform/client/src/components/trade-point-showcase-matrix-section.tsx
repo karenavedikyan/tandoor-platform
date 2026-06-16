@@ -55,6 +55,7 @@ import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-pre
 import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
+import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
@@ -1497,6 +1498,8 @@ export function TradePointShowcaseMatrixSection({
           </div>
         )}
           </div>
+
+          <TradePointShowcaseSegmentSummary tradePointId={point.id} density={density} />
 
           <TradePointPlacementBlocksSection
             dealerId={dealer.id}
