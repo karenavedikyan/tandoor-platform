@@ -3,18 +3,23 @@ import { Fragment, useMemo, useState } from "react";
 import type { TerritoryRegionRow } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { DistributionAnalyticsKpiTiles, DistributionPercentBadge } from "./distribution-analytics-kpi-tiles";
+import { DistributionEmptyDataNotice } from "./distribution-empty-data-notice";
 import { cn } from "@/lib/utils";
 
 type Props = {
   territoryRows: TerritoryRegionRow[];
   aggregate: DistributionGroupMetrics;
   activeEquipmentTypes?: EquipmentTypeKey[];
+  totalRowsInScope: number;
+  hasAnyEligible: boolean;
 };
 
 export function DistributionAnalyticsTabTerritory({
   territoryRows,
   aggregate,
   activeEquipmentTypes = [],
+  totalRowsInScope,
+  hasAnyEligible,
 }: Props): ReactElement {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -31,6 +36,8 @@ export function DistributionAnalyticsTabTerritory({
         tradePointsCount={aggregate.tradePointsCount}
         activeEquipmentTypes={activeEquipmentTypes}
       />
+
+      <DistributionEmptyDataNotice hasAnyEligible={hasAnyEligible} totalRowsInScope={totalRowsInScope} />
 
       <div className="overflow-x-auto rounded-xl border border-border/70">
         <table className="min-w-[880px] w-full text-left text-xs">
