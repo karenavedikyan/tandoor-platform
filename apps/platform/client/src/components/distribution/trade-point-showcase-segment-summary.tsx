@@ -9,6 +9,7 @@ import {
   PLACEMENT_SEGMENT_LABEL_RU,
   PLACEMENT_TYPE_LABEL_RU,
 } from "@/lib/showcase-placement-labels";
+import { DistributionPercentBadge } from "@/lib/showcase-distribution-segment-badges";
 import {
   loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
@@ -22,22 +23,6 @@ type TradePointShowcaseSegmentSummaryProps = {
 };
 
 const SEGMENTS: ShowcasePlacementSegment[] = ["vh", "mk", "hardware"];
-
-function percentBadgeVariant(percent: number): "destructive" | "secondary" | "default" {
-  if (percent < 30) return "destructive";
-  if (percent < 70) return "secondary";
-  return "default";
-}
-
-function percentBadgeClass(percent: number): string {
-  if (percent >= 70) {
-    return "border-emerald-500/30 bg-emerald-500/15 text-emerald-800 dark:text-emerald-300";
-  }
-  if (percent >= 30) {
-    return "border-amber-500/30 bg-amber-500/15 text-amber-900 dark:text-amber-200";
-  }
-  return "";
-}
 
 function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; compact: boolean }) {
   if (detail.source === "models") {
@@ -66,12 +51,7 @@ function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; comp
       <span>всего витрин: {detail.blockCount}</span>
       <span>ёмкость: {detail.totalCapacity}</span>
       <span>наши: {detail.totalOurs}</span>
-      <Badge
-        variant={percentBadgeVariant(detail.distributionPercent)}
-        className={cn("font-semibold tabular-nums", percentBadgeClass(detail.distributionPercent))}
-      >
-        {detail.distributionPercent}%
-      </Badge>
+      <DistributionPercentBadge percent={detail.distributionPercent} />
     </div>
   );
 }

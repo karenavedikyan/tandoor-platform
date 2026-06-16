@@ -1,13 +1,30 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-
 import { DistributionEntryWizard } from "@/components/distribution/distribution-entry-wizard";
+import { DistributionScopeSummary } from "@/components/distribution/distribution-scope-summary";
+import { useDistributionScopedTradePoints } from "@/hooks/use-distribution-scoped-dealers";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 
 export default function DistributionPage() {
   const { profile } = useReleaseDemoProfile();
   const [entryAxisActive, setEntryAxisActive] = useState(false);
+  const [view, setView] = useState<"wizard" | "summary">("wizard");
+  const tradePoints = useDistributionScopedTradePoints(profile);
+
+  if (view === "summary") {
+    return (
+      <div
+        className="max-md:pb-[calc(5.5rem+env(safe-area-inset-bottom))] min-w-0 max-w-full space-y-3 overflow-x-hidden sm:space-y-6"
+        data-testid="page-distribution"
+      >
+        <DistributionScopeSummary
+          tradePoints={tradePoints}
+          onClose={() => setView("wizard")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -27,9 +44,20 @@ export default function DistributionPage() {
                 Внесение данных по витринам торговых точек.
               </p>
             </div>
-            <Button asChild variant="outline" size="sm" className="shrink-0" data-testid="link-distribution-matrix-catalog">
-              <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
-            </Button>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="button-distribution-summary"
+                onClick={() => setView("summary")}
+              >
+                Свод
+              </Button>
+              <Button asChild variant="outline" size="sm" data-testid="link-distribution-matrix-catalog">
+                <Link href="/distribution/matrix-catalog">Справочник матриц</Link>
+              </Button>
+            </div>
           </div>
         </header>
       ) : null}
