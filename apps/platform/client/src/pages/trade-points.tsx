@@ -120,6 +120,13 @@ type PortalFilter = "all" | "has_portals" | "no_portals" | "unfilled" | "free" |
 
 type QuickPreset = "all" | "unfilled_showcase" | "deficit" | "no_address" | "no_responsible";
 
+const SHOWCASE_FILTER_KEYS: Exclude<ShowcaseStatusFilter, "all">[] = [
+  "needs_attention",
+  "partial",
+  "no_showcase",
+  "has_showcase",
+];
+
 const SHOWCASE_FILTER_LABELS: Record<Exclude<ShowcaseStatusFilter, "all">, string> = {
   not_filled: "Не заполнена",
   no_showcase: "Нет витрины",
@@ -143,7 +150,7 @@ const TASKS_FILTER_LABELS: Record<Exclude<TasksFilter, "all">, string> = {
   no_tasks: "Нет задач",
 };
 
-const UNFILLED_SHOWCASE_BUCKETS: TradePointShowcaseBucket[] = ["not_filled", "partial", "needs_attention"];
+const UNFILLED_SHOWCASE_BUCKETS: TradePointShowcaseBucket[] = ["partial", "needs_attention"];
 
 const LS_TRADE_POINTS_DENSITY = "tandoor-trade-points-density-v1";
 /** Legacy: «карточки / список / компактно» → мигрируем в {@link LS_TRADE_POINTS_DENSITY}. */
@@ -228,7 +235,7 @@ function searchMatches(haystack: string, query: string): boolean {
 }
 
 function showcaseRank(b: TradePointShowcaseBucket): number {
-  const order: TradePointShowcaseBucket[] = ["not_filled", "needs_attention", "partial", "no_showcase", "has_showcase"];
+  const order: TradePointShowcaseBucket[] = ["needs_attention", "partial", "no_showcase", "has_showcase"];
   const i = order.indexOf(b);
   return i === -1 ? 99 : i;
 }
@@ -469,7 +476,7 @@ export default function TradePointsPage(): ReactElement {
     for (const r of workingRows) {
       if (r.showcaseBucket === "has_showcase") filled += 1;
       if (r.showcaseBucket === "no_showcase") noShow += 1;
-      if (r.showcaseBucket === "not_filled" || r.showcaseBucket === "partial" || r.showcaseBucket === "needs_attention") {
+      if (r.showcaseBucket === "partial" || r.showcaseBucket === "needs_attention") {
         missing += 1;
       }
       if (r.matrixDeficitCount > 0) deficit += 1;
@@ -1176,7 +1183,7 @@ export default function TradePointsPage(): ReactElement {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Все</SelectItem>
-            {(Object.keys(SHOWCASE_FILTER_LABELS) as Exclude<ShowcaseStatusFilter, "all">[]).map((k) => (
+            {SHOWCASE_FILTER_KEYS.map((k) => (
               <SelectItem key={k} value={k}>
                 {SHOWCASE_FILTER_LABELS[k]}
               </SelectItem>

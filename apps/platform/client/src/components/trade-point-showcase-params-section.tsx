@@ -17,6 +17,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import {
   mergeActualizationState,
+  normalizeHasShowcase,
   type TradePointShowcaseActualization,
 } from "@/lib/client-base-actualization-state";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
@@ -38,7 +39,7 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
   return {
     tradePointId,
     dealerId,
-    hasShowcase: null,
+    hasShowcase: true,
     totalPortals: null,
     entrancePortals: null,
     interiorPortals: null,
@@ -80,7 +81,7 @@ export function TradePointShowcaseParamsSection({
   const isInitialLoading = actx.loading && rec === undefined;
   const save = useSectionSaveFeedback();
 
-  const [hasShowcase, setHasShowcase] = useState<boolean | null>(rec?.hasShowcase ?? null);
+  const [hasShowcase, setHasShowcase] = useState<boolean>(() => normalizeHasShowcase(rec?.hasShowcase));
   const [area, setArea] = useState(rec?.showcaseAreaSqm != null ? String(rec.showcaseAreaSqm) : "");
   const [showcaseComment, setShowcaseComment] = useState(rec?.showcaseComment ?? "");
   const [expPot, setExpPot] = useState<boolean | null>(rec?.hasExpansionPotential ?? null);
@@ -98,7 +99,7 @@ export function TradePointShowcaseParamsSection({
   useEffect(() => {
     if (save.isDirty || save.phase === "saving") return;
     const sh = rec ?? emptyShowcase(dealer.id, point.id);
-    setHasShowcase(sh.hasShowcase);
+    setHasShowcase(normalizeHasShowcase(sh.hasShowcase));
     setArea(sh.showcaseAreaSqm != null ? String(sh.showcaseAreaSqm) : "");
     setShowcaseComment(sh.showcaseComment ?? "");
     setExpPot(sh.hasExpansionPotential);
@@ -209,51 +210,6 @@ export function TradePointShowcaseParamsSection({
       </div>
 
       <div className="mt-2 space-y-2">
-        {hasShowcase === null && !canEdit ? (
-          <p className="text-sm text-muted-foreground">Состояние витрины не заполнено.</p>
-        ) : null}
-
-        {hasShowcase === null && canEdit ? (
-          <div className="grid gap-1.5 sm:grid-cols-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="h-8 w-full bg-primary text-xs font-semibold text-primary-foreground hover:bg-[#86B832]"
-              onClick={() => {
-                setHasShowcase(true);
-                markDirty();
-              }}
-            >
-              Есть витрина
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 w-full text-xs font-medium"
-              onClick={() => {
-                setHasShowcase(false);
-                markDirty();
-              }}
-            >
-              Нет витрины / порталов
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 w-full text-xs font-medium"
-              onClick={() => {
-                setHasShowcase(null);
-                markDirty();
-              }}
-            >
-              Заполнить позже
-            </Button>
-          </div>
-        ) : null}
-
         {hasShowcase === false ? (
           <div className="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-3 text-center">
             <p className="text-sm font-semibold text-foreground">Витрины нет</p>
@@ -271,26 +227,12 @@ export function TradePointShowcaseParamsSection({
                 >
                   Есть витрина
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs font-medium"
-                  onClick={() => {
-                    setHasShowcase(null);
-                    markDirty();
-                  }}
-                >
-                  Заполнить позже
-                </Button>
               </div>
             ) : (
               <p className="mt-1 text-xs text-muted-foreground">Отмечено: витрины нет.</p>
             )}
           </div>
-        ) : null}
-
-        {hasShowcase === true ? (
+        ) : (
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -452,9 +394,7 @@ export function TradePointShowcaseParamsSection({
 
             {saveFooter ? <div className="sm:col-span-2">{saveFooter}</div> : null}
           </div>
-        ) : null}
-
-        {hasShowcase !== true ? saveFooter : null}
+        )}
       </div>
     </div>
   );

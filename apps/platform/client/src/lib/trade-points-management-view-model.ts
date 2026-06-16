@@ -30,7 +30,7 @@ export function tradePointHasPhoto(r: TradePointListRow): boolean {
 }
 
 export function tradePointShowcaseUnfilled(r: TradePointListRow): boolean {
-  return r.showcaseBucket === "not_filled" || r.showcaseBucket === "partial" || r.showcaseBucket === "needs_attention";
+  return r.showcaseBucket === "partial" || r.showcaseBucket === "needs_attention";
 }
 
 export type TradePointDetailFilter = "all" | "no_photo" | "unfilled" | "with_photo";

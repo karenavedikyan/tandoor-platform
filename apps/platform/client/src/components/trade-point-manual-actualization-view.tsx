@@ -23,7 +23,11 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useTradePointReadOnly } from "@/lib/trade-point-read-only-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { mergeActualizationState, type TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
+import {
+  mergeActualizationState,
+  normalizeHasShowcase,
+  type TradePointShowcaseActualization,
+} from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
 import {
@@ -69,7 +73,7 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
   return {
     tradePointId,
     dealerId,
-    hasShowcase: null,
+    hasShowcase: true,
     totalPortals: null,
     entrancePortals: null,
     interiorPortals: null,
@@ -252,7 +256,7 @@ export function TradePointManualActualizationView(props: {
   const readField = (k: string) => (typeof fields[k] === "string" ? (fields[k] as string).trim() : "");
 
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
-  const hasShowcase = showcaseRec?.hasShowcase ?? null;
+  const hasShowcase = normalizeHasShowcase(showcaseRec?.hasShowcase);
 
   const [name, setName] = useState(point.name);
   const [formatKind, setFormatKind] = useState(readField("formatKind") || "store");
@@ -503,7 +507,6 @@ export function TradePointManualActualizationView(props: {
   }, [contactName, contactPhone]);
 
   const showcaseTriggerSummary = useMemo(() => {
-    if (hasShowcase === null) return "Состояние витрины не выбрано";
     if (hasShowcase === false) return "Без витрины";
     const deficit = templateModelsCount > 0 ? String(matrixStats.missing) : "Не указано";
     return [
@@ -552,9 +555,8 @@ export function TradePointManualActualizationView(props: {
     const photosSummary = tpPhotoCount === 0 ? "Фото не добавлены" : `${tpPhotoCount} фото`;
     const photosStatus: TpSectionStatusKind = tpPhotoCount === 0 ? "empty" : "partial";
 
-    let showcaseStatusMeta: TpSectionStatusKind = "needs_fill";
+    let showcaseStatusMeta: TpSectionStatusKind = "partial";
     if (hasShowcase === false) showcaseStatusMeta = "no_showcase";
-    else if (hasShowcase === null) showcaseStatusMeta = "needs_fill";
     else if (summary.needsPrimaryInstall || (templateModelsCount > 0 && matrixStats.missing > 0)) {
       showcaseStatusMeta = "attention";
     } else if (
@@ -734,14 +736,7 @@ export function TradePointManualActualizationView(props: {
 
               <div className="flex flex-wrap gap-1.5 border-t border-border/40 pt-2.5">
                 {isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-status-${point.id}`} /> : null}
-                {hasShowcase === null ? (
-                  <Badge
-                    variant="outline"
-                    className="h-[1.125rem] border-border bg-muted/50 px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground"
-                  >
-                    Витрина не заполнена
-                  </Badge>
-                ) : hasShowcase === false ? (
+                {hasShowcase === false ? (
                   <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
                     Нет витрины
                   </Badge>
