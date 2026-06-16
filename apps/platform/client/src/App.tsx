@@ -62,6 +62,7 @@ const LazyCatalogLegacyRedirect = lazy(() =>
 const LazyTasksPage = lazy(() => import("@/pages/tasks"));
 const LazyDistributionPage = lazy(() => import("@/pages/distribution"));
 const LazyDistributionMatrixCatalogPage = lazy(() => import("@/pages/distribution-matrix-catalog"));
+const LazyModelCardPage = lazy(() => import("@/pages/model-card"));
 const LazyOrdersPage = lazy(() => import("@/pages/orders"));
 const LazyOrderDetailPage = lazy(() => import("@/pages/order-detail"));
 const LazyAnalyticsPage = lazy(() => import("@/pages/analytics"));
@@ -140,6 +141,7 @@ const CatalogLegacyRedirectRoute = suspensePage(LazyCatalogLegacyRedirect);
 const TasksPageRoute = suspensePage(LazyTasksPage);
 const DistributionPageRoute = suspensePage(LazyDistributionPage);
 const DistributionMatrixCatalogPageRoute = suspensePage(LazyDistributionMatrixCatalogPage);
+const ModelCardPageRoute = suspensePage(LazyModelCardPage);
 const OrdersPageRoute = suspensePage(LazyOrdersPage);
 const OrderDetailPageRoute = suspensePage(LazyOrderDetailPage);
 const AnalyticsPageRoute = suspensePage(LazyAnalyticsPage);
@@ -436,6 +438,7 @@ function AuthenticatedShell({
         <Route path="/catalog" component={CatalogPageRoute} />
         <Route path="/tasks" component={TasksPageRoute} />
         <Route path="/distribution/matrix-catalog" component={DistributionMatrixCatalogPageRoute} />
+        <Route path="/model/:modelId" component={ModelCardPageRoute} />
         <Route path="/distribution" component={DistributionPageRoute} />
         <Route path="/training/programs/:programId" component={TrainingProgramPageRoute} />
         <Route path="/training/:articleId" component={TrainingArticlePageRoute} />
