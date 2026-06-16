@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { BookOpen, ChevronRight, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { TrainingSkeleton } from "@/components/skeletons/training-skeleton";
 import {
   countTrainingMaterialsForProductQuickTrack,
   getAllTrainingMaterials,
@@ -112,6 +113,12 @@ export default function TrainingPage() {
   const programs = useMemo(() => getTrainingPrograms(), []);
   const assignments = useMemo(() => getTrainingAssignments(), []);
   const materialsRef = useRef<HTMLElement>(null);
+  const [pageReady, setPageReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const [search, setSearch] = useState("");
   const [section, setSection] = useState<typeof ALL | TrainingSection>(ALL);
@@ -189,6 +196,10 @@ export default function TrainingPage() {
       }),
     [pilotCatalogItems, pilotCategory, search],
   );
+
+  if (!pageReady) {
+    return <TrainingSkeleton />;
+  }
 
   return (
     <div className="space-y-8 pb-10 sm:space-y-10" data-testid="page-training">

@@ -30,6 +30,18 @@ const virtualizedPages = [
     markers: ["shouldVirtualizeLargeList", "management-cockpit-client-list", "row-management-client-"],
   },
   {
+    file: "pages/trade-points.tsx",
+    markers: ["VirtualizedStackList", "trade-points-virtual-list", "TRADE_POINT_DENSITY_ESTIMATE"],
+  },
+  {
+    file: "pages/tasks.tsx",
+    markers: ["VirtualizedStackList", "section-showcase-tasks-visual-list", "row-showcase-task"],
+  },
+  {
+    file: "pages/catalog.tsx",
+    markers: ["VirtualizedStackList", "catalog-products-virtual-list", "row-catalog-product"],
+  },
+  {
     file: "lib/window-list-virtualizer.tsx",
     markers: ["useWindowVirtualizer", "LARGE_LIST_VIRTUAL_THRESHOLD"],
   },

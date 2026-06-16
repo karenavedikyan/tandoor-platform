@@ -1,10 +1,10 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
-import { PageLoadingFallback } from "@/components/navigation/page-loading";
+import { AnalyticsSkeleton } from "@/components/skeletons/analytics-skeleton";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -80,6 +80,12 @@ export default function AnalyticsPage() {
     );
   }
 
+  const [pageReady, setPageReady] = useState(false);
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const [view, setView] = useState<"summary" | "infographics">("summary");
   const [filters, setFilters] = useState<AnalyticsFilterState>({
     periodKey: "month",
@@ -100,6 +106,10 @@ export default function AnalyticsPage() {
   const topPartners = useMemo(() => getTopPartners(), []);
   const planSummary = useMemo(() => getAnalyticsPlanSummary(), []);
   const periodNote = analyticsPeriodSuffix(filters.periodKey);
+
+  if (!pageReady) {
+    return <AnalyticsSkeleton />;
+  }
 
   return (
     <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-analytics">
@@ -559,7 +569,7 @@ export default function AnalyticsPage() {
           data-testid="section-analytics-infographics-view"
         >
           {view === "infographics" ? (
-            <Suspense fallback={<PageLoadingFallback />}>
+            <Suspense fallback={<AnalyticsSkeleton />}>
               <LazyAnalyticsInfographicsPanel />
             </Suspense>
           ) : null}

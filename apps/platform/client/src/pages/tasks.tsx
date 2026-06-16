@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { LayoutGrid, List, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { TasksSkeleton } from "@/components/skeletons/tasks-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
 import { cn } from "@/lib/utils";
 import {
   getAllMatrixTasks,
@@ -65,7 +68,7 @@ import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver
 
 type ViewMode = "cards" | "list";
 
-/** Максимум карточек/строк задач в DOM; фильтры и поиск по полному списку. */
+/** Максимум карточек без виртуализации (при < 100 строк). */
 const TASKS_DISPLAY_LIMIT = 300;
 
 type ShowcaseTasksViewId = "all" | "urgent" | "overdue" | "in_progress" | "done" | "needs_rop";
@@ -929,9 +932,17 @@ export default function TasksPage() {
     [dealerScoped, showcaseViewId, presetClock],
   );
 
-  const visibleTasks = useMemo(() => filtered.slice(0, TASKS_DISPLAY_LIMIT), [filtered]);
+  const tasksListRef = useRef<HTMLDivElement>(null);
+  const taskListEstimateSize = view === "cards" ? 200 : 88;
+
+  const visibleTasks = useMemo(() => {
+    if (filtered.length >= 100) return filtered;
+    return filtered.slice(0, TASKS_DISPLAY_LIMIT);
+  }, [filtered]);
 
   const taskRowKey = (t: MatrixTaskWithContext) => `${t.dealerId}|${t.tradePointId}|${t.taskId}`;
+
+  useScrollRestoration({ enabled: !actualizationLoading });
 
   const selectShowcaseView = useCallback((id: ShowcaseTasksViewId) => {
     setShowcaseViewId(id);
@@ -941,6 +952,10 @@ export default function TasksPage() {
     !directorRopFactualShowcaseTasks || (!actualizationLoading && hasAnyShowcaseTasksInScope);
   const showFactualShowcaseEmpty =
     directorRopFactualShowcaseTasks && !actualizationLoading && !hasAnyShowcaseTasksInScope;
+
+  if (actualizationLoading) {
+    return <TasksSkeleton />;
+  }
 
   return (
     <div
@@ -965,10 +980,6 @@ export default function TasksPage() {
             </p>
           </div>
         </header>
-
-        {directorRopFactualShowcaseTasks && actualizationLoading ? (
-          <p className="text-sm text-muted-foreground">Загрузка актуализации команды…</p>
-        ) : null}
 
         {showFactualShowcaseEmpty ? (
           <Card
@@ -1127,7 +1138,7 @@ export default function TasksPage() {
           <span className="font-semibold tabular-nums text-foreground">{filtered.length}</span>
           {dealerFilterActive ? " по выбранному клиенту и фильтрам" : " по фильтру витрины, команде и поиску"}
         </p>
-        {filtered.length > TASKS_DISPLAY_LIMIT ? (
+        {filtered.length > TASKS_DISPLAY_LIMIT && filtered.length < 100 ? (
           <p className="text-sm text-muted-foreground" data-testid="text-tasks-display-cap">
             Уточните фильтр или поиск — в интерфейсе не более {TASKS_DISPLAY_LIMIT} карточек одновременно.
           </p>
@@ -1140,30 +1151,31 @@ export default function TasksPage() {
             </CardContent>
           </Card>
         ) : view === "cards" ? (
-          <div
-            data-testid="section-showcase-tasks-visual-list"
+          <VirtualizedStackList
+            listRef={tasksListRef}
+            items={visibleTasks}
+            estimateSize={taskListEstimateSize}
             className="grid min-w-0 grid-cols-1 gap-3 overflow-x-hidden sm:grid-cols-2 lg:grid-cols-2"
-          >
-            {visibleTasks.map((t) => (
-              <ShowcaseTaskCard
-                key={taskRowKey(t)}
-                task={t}
-                dealerById={dealerById}
-                presetClock={presetClock}
-              />
-            ))}
-          </div>
+            data-testid="section-showcase-tasks-visual-list"
+            getKey={taskRowKey}
+            rowTestIdPrefix="row-showcase-task"
+            renderItem={(t) => (
+              <ShowcaseTaskCard task={t} dealerById={dealerById} presetClock={presetClock} />
+            )}
+          />
         ) : (
-          <div data-testid="section-showcase-tasks-visual-list" className="min-w-0 space-y-2 overflow-x-hidden sm:space-y-2.5">
-            {visibleTasks.map((t) => (
-              <ShowcaseTaskListRow
-                key={taskRowKey(t)}
-                task={t}
-                dealerById={dealerById}
-                presetClock={presetClock}
-              />
-            ))}
-          </div>
+          <VirtualizedStackList
+            listRef={tasksListRef}
+            items={visibleTasks}
+            estimateSize={taskListEstimateSize}
+            className="min-w-0 space-y-2 overflow-x-hidden sm:space-y-2.5"
+            data-testid="section-showcase-tasks-visual-list"
+            getKey={taskRowKey}
+            rowTestIdPrefix="row-showcase-task"
+            renderItem={(t) => (
+              <ShowcaseTaskListRow task={t} dealerById={dealerById} presetClock={presetClock} />
+            )}
+          />
         )}
           </>
         ) : null}

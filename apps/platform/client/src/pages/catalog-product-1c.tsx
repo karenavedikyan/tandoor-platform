@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { optimizedImage } from "@/lib/catalog-image";
 import { LightboxModal } from "@/components/catalog/LightboxModal";
+import { CatalogProduct1cSkeleton } from "@/components/skeletons/catalog-product-1c-skeleton";
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import {
   buildPresentationModelFromCatalogProduct,
@@ -348,7 +349,7 @@ export default function CatalogProduct1cPage() {
   };
 
   if (loading) {
-    return <div className="grid place-items-center py-16 text-sm text-muted-foreground">Загружаю карточку…</div>;
+    return <CatalogProduct1cSkeleton />;
   }
   if (!product) {
     return (

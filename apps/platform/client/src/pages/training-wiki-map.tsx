@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Check, ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { TrainingWikiMapSkeleton } from "@/components/skeletons/training-wiki-map-skeleton";
 import {
   getWikiTrainingAvailableProgramIds,
   getWikiTrainingContentGaps,
@@ -68,6 +69,12 @@ export default function TrainingWikiMapPage() {
   const programIds = useMemo(() => getWikiTrainingAvailableProgramIds(), []);
   const audienceRolesCovered = useMemo(() => getWikiTrainingMapAudienceRolesCoveredCount(), []);
 
+  const [pageReady, setPageReady] = useState(false);
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const [decisionOverrides, setDecisionOverrides] = useState<Record<string, WikiTrainingReviewDecision>>({});
   const [waveOverrides, setWaveOverrides] = useState<Record<string, WikiTrainingPublishWave>>({});
 
@@ -125,6 +132,10 @@ export default function TrainingWikiMapPage() {
       return true;
     });
   }, [baseMap, search, priority, audience, section, productScope, reviewStatus, program]);
+
+  if (!pageReady) {
+    return <TrainingWikiMapSkeleton />;
+  }
 
   return (
     <div className="min-w-0 space-y-8 pb-28 sm:space-y-10" data-testid="page-training-wiki-map">

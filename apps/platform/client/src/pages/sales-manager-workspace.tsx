@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useLayoutEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { BackNav } from "@/components/navigation/back-nav";
+import { SalesManagerWorkspaceSkeleton } from "@/components/skeletons/sales-manager-workspace-skeleton";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
@@ -230,6 +231,16 @@ export default function SalesManagerWorkspace() {
   const mkMetric = planMetrics.find((m) => m.category === "mk")!;
   const vhMetric = planMetrics.find((m) => m.category === "vh")!;
   const hwMetric = planMetrics.find((m) => m.category === "hardware")!;
+
+  const [pageReady, setPageReady] = useState(false);
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  if (!pageReady) {
+    return <SalesManagerWorkspaceSkeleton />;
+  }
 
   return (
     <div className="space-y-8 pb-24 sm:space-y-10" data-testid="page-sales-manager-workspace">

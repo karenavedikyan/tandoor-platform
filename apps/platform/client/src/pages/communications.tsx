@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { useLocation } from "wouter";
 import { Info } from "lucide-react";
 import { BackNav } from "@/components/navigation/back-nav";
+import { CommunicationsSkeleton } from "@/components/skeletons/communications-skeleton";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -332,14 +333,7 @@ export default function CommunicationsPage() {
   const emptyMessagesHint = isMobile ? "Выберите чат в списке." : "Выберите чат в списке слева.";
 
   if (uiMode === "loading") {
-    return (
-      <CommunicationsPageShell>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Коммуникации</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Загрузка…</p>
-        </div>
-      </CommunicationsPageShell>
-    );
+    return <CommunicationsSkeleton />;
   }
 
   if (uiMode === "error") {

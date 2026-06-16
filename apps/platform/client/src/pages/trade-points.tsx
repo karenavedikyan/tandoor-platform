@@ -3,7 +3,7 @@
  */
 
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import {
   ChevronDown,
@@ -101,6 +101,10 @@ import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { TradePointsSkeleton } from "@/components/skeletons/trade-points-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import {
+  shouldVirtualizeLargeList,
+  VirtualizedStackList,
+} from "@/lib/window-list-virtualizer";
 import { TradePointsWorkspaceSummary } from "@/components/trade-points/trade-points-workspace-summary";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
@@ -158,6 +162,13 @@ const LS_TRADE_POINTS_DENSITY = "tandoor-trade-points-density-v1";
 /** Legacy: «карточки / список / компактно» → мигрируем в {@link LS_TRADE_POINTS_DENSITY}. */
 const LS_TRADE_POINTS_VIEW_MODE_LEGACY = "tandoor-trade-points-view-mode-v1";
 const LS_TRADE_POINTS_FILTERS_COLLAPSED = "tandoor-trade-points-filters-collapsed-v1";
+
+const TRADE_POINT_DENSITY_ESTIMATE: Record<TradePointShowcaseDensity, number> = {
+  table: 52,
+  list: 96,
+  grid: 220,
+  large: 320,
+};
 
 function parseTradePointDensity(raw: string | null): TradePointShowcaseDensity | null {
   if (raw === "large" || raw === "grid" || raw === "list" || raw === "table") return raw;
@@ -362,6 +373,7 @@ export default function TradePointsPage(): ReactElement {
   const [selectedBulkTpKeys, setSelectedBulkTpKeys] = useState<Set<string>>(() => new Set());
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
   const [bulkSoftArchiveDialogOpen, setBulkSoftArchiveDialogOpen] = useState(false);
+  const tradePointsListRef = useRef<HTMLDivElement>(null);
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
   const mergedRowsActivePortfolioForManagement = useMemo(() => {
@@ -682,6 +694,16 @@ export default function TradePointsPage(): ReactElement {
     if (showIneligibleInBulkMode) return filteredSorted;
     return filteredSorted.filter((r) => canArchiveRow(r));
   }, [bulkDeleteMode, canShowBulkTradePointControls, showIneligibleInBulkMode, filteredSorted, canArchiveRow]);
+
+  const tradePointsGridCols = isMobile ? 2 : 5;
+  const tradePointsGridRows = useMemo(() => {
+    const cols = Math.max(1, tradePointsGridCols);
+    const rows: (typeof tradePointsRowsForList)[] = [];
+    for (let i = 0; i < tradePointsRowsForList.length; i += cols) {
+      rows.push(tradePointsRowsForList.slice(i, i + cols));
+    }
+    return rows;
+  }, [tradePointsRowsForList, tradePointsGridCols]);
 
   /** Ключи ТТ, доступных для выбора на экране (совпадают с отображаемым списком при скрытых недоступных). */
   const archivableTpKeysInView = useMemo(() => {
@@ -1897,6 +1919,7 @@ export default function TradePointsPage(): ReactElement {
       ) : null}
 
       {effectiveDensity === "table" ? (
+        /* 381C: нативная виртуализация <tbody> при table density — отдельный промт */
         <div className="w-full min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <table className="w-full table-fixed border-collapse text-left text-sm">
             <thead>
@@ -1983,14 +2006,20 @@ export default function TradePointsPage(): ReactElement {
         </div>
       ) : effectiveDensity === "list" ? (
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <ul className="divide-y divide-border/70">
-            {tradePointsRowsForList.map((r) => {
+          <VirtualizedStackList
+            listRef={tradePointsListRef}
+            items={tradePointsRowsForList}
+            estimateSize={TRADE_POINT_DENSITY_ESTIMATE.list}
+            data-testid="trade-points-virtual-list"
+            className="divide-y divide-border/70"
+            getKey={(r) => rowKey(r)}
+            rowTestIdPrefix="row-trade-point-list"
+            renderItem={(r) => {
               const k = rowKey(r);
               const bulkRowSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
               const addrShort = [r.city, r.address].filter((x) => x && x !== "—").join(" · ");
               return (
-                <li
-                  key={k}
+                <div
                   data-testid={`row-trade-point-list-${r.tradePointId}`}
                   className={cn(
                     "flex min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3",
@@ -2028,7 +2057,7 @@ export default function TradePointsPage(): ReactElement {
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
-{r.isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} /> : null}
+                      {r.isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} /> : null}
                     </div>
                     {cleanContactDisplay(r.point.contactName) ? (
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
@@ -2044,67 +2073,132 @@ export default function TradePointsPage(): ReactElement {
                     </Button>
                     {renderTrashActionSlot(r)}
                   </div>
-                </li>
+                </div>
               );
-            })}
-          </ul>
+            }}
+          />
         </div>
       ) : effectiveDensity === "grid" ? (
-        <div className="grid grid-cols-2 gap-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {tradePointsRowsForList.map((r) => {
-            const k = rowKey(r);
-            const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
-            return (
-              <Card
-                key={k}
-                data-testid={`card-trade-point-grid-${r.tradePointId}`}
-                className={cn(
-                  "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
-                  archivedEntityRowClassName(r.isArchived),
-                  bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
-                )}
-              >
-                <div className="relative">
-                  {bulkDeleteMode && canShowBulkTradePointControls ? (
-                    <div className="absolute left-1 top-1 z-10 rounded-md bg-card/90 p-0.5 shadow-sm">{renderBulkRowControl(r, { dense: true })}</div>
-                  ) : null}
-                  <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="grid" rounded="lg" className="w-full" />
-                </div>
-                <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:p-2.5">
-                  <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{r.tradePointName}</p>
-                  <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
-                  <p className="line-clamp-1 text-xs font-medium text-foreground">{r.dealerName}</p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="outline" className={cn("max-w-full truncate px-1.5 py-0 text-[10px]", tpBadgeOutline)}>
-                      {r.showcaseBucketLabel}
-                    </Badge>
-                    {r.matrixDeficitCount > 0 ? (
-                      <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", tpBadgeSoft)}>
-                        Деф. {r.matrixDeficitCount}
-                      </Badge>
+        shouldVirtualizeLargeList(tradePointsRowsForList.length) ? (
+          <VirtualizedStackList
+            listRef={tradePointsListRef}
+            items={tradePointsGridRows}
+            estimateSize={TRADE_POINT_DENSITY_ESTIMATE.grid}
+            data-testid="trade-points-virtual-list"
+            className="space-y-2"
+            getKey={(row) => row.map((r) => rowKey(r)).join("|")}
+            renderItem={(row) => (
+              <div className="grid grid-cols-2 gap-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {row.map((r) => {
+                  const k = rowKey(r);
+                  const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
+                  return (
+                    <Card
+                      key={k}
+                      data-testid={`card-trade-point-grid-${r.tradePointId}`}
+                      className={cn(
+                        "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+                        archivedEntityRowClassName(r.isArchived),
+                        bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
+                      )}
+                    >
+                      <div className="relative">
+                        {bulkDeleteMode && canShowBulkTradePointControls ? (
+                          <div className="absolute left-1 top-1 z-10 rounded-md bg-card/90 p-0.5 shadow-sm">{renderBulkRowControl(r, { dense: true })}</div>
+                        ) : null}
+                        <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="grid" rounded="lg" className="w-full" />
+                      </div>
+                      <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:p-2.5">
+                        <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{r.tradePointName}</p>
+                        <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
+                        <p className="line-clamp-1 text-xs font-medium text-foreground">{r.dealerName}</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className={cn("max-w-full truncate px-1.5 py-0 text-[10px]", tpBadgeOutline)}>
+                            {r.showcaseBucketLabel}
+                          </Badge>
+                          {r.matrixDeficitCount > 0 ? (
+                            <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", tpBadgeSoft)}>
+                              Деф. {r.matrixDeficitCount}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
+                          {renderTpContactIcons(r, "compact")}
+                          <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
+                            <Link href={tpHref(r)}>Открыть</Link>
+                          </Button>
+                          {renderTrashActionSlot(r, "trade-point-grid")}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {tradePointsRowsForList.map((r) => {
+              const k = rowKey(r);
+              const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
+              return (
+                <Card
+                  key={k}
+                  data-testid={`card-trade-point-grid-${r.tradePointId}`}
+                  className={cn(
+                    "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+                    archivedEntityRowClassName(r.isArchived),
+                    bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
+                  )}
+                >
+                  <div className="relative">
+                    {bulkDeleteMode && canShowBulkTradePointControls ? (
+                      <div className="absolute left-1 top-1 z-10 rounded-md bg-card/90 p-0.5 shadow-sm">{renderBulkRowControl(r, { dense: true })}</div>
                     ) : null}
+                    <ShowcaseCoverPhotoSlot kind="trade_point" dealer={r.dealer} tradePoint={r.point} profile={profile} size="grid" rounded="lg" className="w-full" />
                   </div>
-                  <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
-                    {renderTpContactIcons(r, "compact")}
-                    <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
-                      <Link href={tpHref(r)}>Открыть</Link>
-                    </Button>
-                    {renderTrashActionSlot(r, "trade-point-grid")}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  <CardContent className="flex min-h-0 flex-1 flex-col gap-1.5 p-2 sm:p-2.5">
+                    <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground">{r.tradePointName}</p>
+                    <p className="line-clamp-1 text-xs text-muted-foreground">{r.city}</p>
+                    <p className="line-clamp-1 text-xs font-medium text-foreground">{r.dealerName}</p>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="outline" className={cn("max-w-full truncate px-1.5 py-0 text-[10px]", tpBadgeOutline)}>
+                        {r.showcaseBucketLabel}
+                      </Badge>
+                      {r.matrixDeficitCount > 0 ? (
+                        <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", tpBadgeSoft)}>
+                          Деф. {r.matrixDeficitCount}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
+                      {renderTpContactIcons(r, "compact")}
+                      <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-2 text-xs font-semibold">
+                        <Link href={tpHref(r)}>Открыть</Link>
+                      </Button>
+                      {renderTrashActionSlot(r, "trade-point-grid")}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
       ) : (
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
-          {tradePointsRowsForList.map((r) => {
+        <VirtualizedStackList
+          listRef={tradePointsListRef}
+          items={tradePointsRowsForList}
+          estimateSize={TRADE_POINT_DENSITY_ESTIMATE.large}
+          data-testid="trade-points-virtual-list"
+          className="mx-auto flex w-full max-w-4xl flex-col gap-3"
+          getKey={(r) => rowKey(r)}
+          rowTestIdPrefix="card-trade-point-large"
+          renderItem={(r) => {
             const k = rowKey(r);
             const bulkCardSelected = bulkDeleteMode && selectedBulkTpKeys.has(k) && canArchiveRow(r);
             const cname = cleanContactDisplay(r.point.contactName);
             return (
               <Card
-                key={k}
                 data-testid={`card-trade-point-large-${r.tradePointId}`}
                 className={cn(
                   "overflow-hidden rounded-2xl border border-border/80 border-l-4 border-l-primary/55 bg-card shadow-md",
@@ -2193,8 +2287,8 @@ export default function TradePointsPage(): ReactElement {
                 </CardContent>
               </Card>
             );
-          })}
-        </div>
+          }}
+        />
       )}
 
       {filteredSorted.length === 0 ? <p className="text-sm text-muted-foreground">Нет торговых точек по выбранным фильтрам.</p> : null}

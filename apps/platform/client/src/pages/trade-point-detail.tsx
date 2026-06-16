@@ -1,5 +1,5 @@
 import type { ComponentProps, ComponentType, ReactElement, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { Camera, ChevronDown, ChevronRight, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { BackNav } from "@/components/navigation/back-nav";
+import { TradePointDetailSkeleton } from "@/components/skeletons/trade-point-detail-skeleton";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { TradePointContactsSection } from "@/components/trade-point-contacts-section";
@@ -1373,7 +1374,16 @@ export function TradePointDetailPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const overridesVersion = useOverridesRuntimeVersion();
-  useDealerTpOverridesHydration({ dealerId: rawDealer || undefined, tpId: rawPoint || undefined });
+  const { ready: overridesReady } = useDealerTpOverridesHydration({
+    dealerId: rawDealer || undefined,
+    tpId: rawPoint || undefined,
+  });
+  const [pageReady, setPageReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   useEffect(() => {
     const fn = () => setDataBump((n) => n + 1);
@@ -1405,6 +1415,10 @@ export function TradePointDetailPage() {
       entry: base.entry,
     };
   }, [rawDealer, rawPoint, dataBump, actx.enabled, actx.state, profile, overridesVersion]);
+
+  if (!pageReady || !overridesReady) {
+    return <TradePointDetailSkeleton />;
+  }
 
   if (!result) {
     return <TradePointNotFound dealerId={rawDealer} />;
