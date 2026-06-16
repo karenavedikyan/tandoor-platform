@@ -6,11 +6,12 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   defaultWorkViewForAccess,
   mapSalesRoleToDealerBaseAccess,
-  roleScopedDealerRows,
   type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
+import { getRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getRopOptions } from "@/lib/rop-manager-filters";
+import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
 function teamIdsInOrg(): Set<string> {
   return new Set(getRopOptions().map((o) => o.teamId));
@@ -46,10 +47,15 @@ export function filterDealersForEntryLeadershipScope(
 export function distributionEntryScopedDealerRows(
   workingRows: readonly DealerRow[],
   profile: ReleaseDemoProfile,
+  realScope?: SidebarNavRealScope,
 ): DealerRow[] {
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
-  const scoped = roleScopedDealerRows([...workingRows], profile);
+  const scoped = getRoleScopedDealerRowsAuto([...workingRows], profile, realScope);
   void defaultWorkViewForAccess(access);
+
+  if (realScope?.ready) {
+    return scoped;
+  }
 
   if (access === "sales_manager") {
     return scoped;

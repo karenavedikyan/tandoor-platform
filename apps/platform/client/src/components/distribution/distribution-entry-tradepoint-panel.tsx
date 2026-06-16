@@ -20,8 +20,7 @@ import {
 import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
-import {
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";import {
   buildDistributionEntryTradePointRows,
   findDealerTradePointForEntryRow,
   type DistributionEntryTradePointRow,
@@ -95,10 +94,7 @@ export function DistributionEntryTradePointPanel({
     [actx.enabled, managementPlane.mergedState, profile],
   );
 
-  const scopedDealersInternal = useMemo(
-    () => roleScopedDealerRows(workingDealerRows, profile),
-    [workingDealerRows, profile],
-  );
+  const scopedDealersInternal = useRoleScopedDealerRowsAuto(workingDealerRows, profile);
 
   const scopedDealers = dealersProp ?? scopedDealersInternal;
 

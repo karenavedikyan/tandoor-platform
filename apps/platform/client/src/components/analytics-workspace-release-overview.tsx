@@ -12,7 +12,8 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { buildBrowserHashAppHref, buildHashPath } from "@/lib/hash-route-utils";
 import { buildDealerBaseAllCitiesHref, buildDealerBaseCityDrillHref, getTopCityConcentrationRows } from "@/lib/city-concentration";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
-import { dealerNeedsAttention, isDealerTop, roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import { getEffectiveTeamLeadTeamId, releaseDemoRoleLabel, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { TaskCategoryId } from "@/lib/task-classification";
 import { TASK_CATEGORIES, getTaskCategoryCounts, getTaskCategoryLabel } from "@/lib/task-classification";
@@ -111,7 +112,7 @@ export function AnalyticsWorkspaceReleaseOverview() {
     return buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false });
   }, [actx.enabled, teamCtx.mergedState, profile]);
 
-  const scopedRows = useMemo(() => roleScopedDealerRows(workingRows, profile), [workingRows, profile]);
+  const scopedRows = useRoleScopedDealerRowsAuto(workingRows, profile);
   const topCityRows = useMemo(() => getTopCityConcentrationRows(scopedRows, 10), [scopedRows]);
   const dealerIds = useMemo(() => new Set(scopedRows.map((r) => r.id)), [scopedRows]);
 

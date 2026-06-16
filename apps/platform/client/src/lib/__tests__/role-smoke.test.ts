@@ -138,19 +138,33 @@ function mockScopedRealScope(role: UserRole): SidebarNavRealScope {
 
   const access = mapUserRoleToDealerBaseAccess(role);
   const meId = "00000000-0000-0000-0000-000000000001";
+  const teamUuid = "e5387f40-c693-44e6-ab17-e61a3ed0bd95";
+  const ropUserId = "ccffcf6e-2505-4eee-b257-ac65b60bb779";
+  const leadershipRole = role === "rop" || role === "regional_manager";
 
   const snap = {
-    me: { id: meId, role, fullName: "Тест", teamId: role === "rop" ? "team-demo" : null },
+    me: {
+      id: meId,
+      role,
+      fullName: "Тест",
+      teamId: leadershipRole ? teamUuid : null,
+    },
     visibility: { all: false, clientCodes: codes, teamIds: [], visibleUserIds: [] },
-    teams:
-      role === "rop"
-        ? [{ id: "team-demo", name: "Команда", ropUserId: meId, ropName: "РОП" }]
-        : [],
-    users: [{ id: meId, role, fullName: "Тест", teamId: role === "rop" ? "team-demo" : null }],
+    teams: leadershipRole
+      ? [{ id: teamUuid, name: "Купянский", ropUserId, ropName: "Купянский" }]
+      : [],
+    users: [
+      {
+        id: meId,
+        role,
+        fullName: "Тест",
+        teamId: leadershipRole ? teamUuid : null,
+      },
+    ],
   } as unknown as OrgSnapshot;
 
-  const teamCodes = role === "rop" ? new Set(codes) : new Set<string>();
-  const ownCodes = role === "manager" || role === "regional_manager" ? new Set(codes) : new Set<string>();
+  const teamCodes = leadershipRole ? new Set(codes) : new Set<string>();
+  const ownCodes = role === "manager" ? new Set(codes) : new Set<string>();
 
   return {
     isRealUser: true,

@@ -10,7 +10,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import { cn } from "@/lib/utils";
 import { buildTerritoryCardLivePack } from "@/lib/territory-card-live-data";
 import { TerritoryCardCockpitFactual } from "@/pages/territory-card-cockpit-factual";
@@ -65,12 +65,21 @@ export default function TerritoryCardPage() {
 
   const directorRopFactual = shouldUseTeamMergedActualizationPlane(profile);
 
+  const workingTerritoryRows = useMemo(
+    () =>
+      actx.enabled
+        ? buildDealerBaseRowsWithActualization(teamPlane.mergedState, profile, { includeArchivedDealers: false })
+        : [],
+    [actx.enabled, teamPlane.mergedState, profile],
+  );
+
+  const scopedDealerRows = useRoleScopedDealerRowsAuto(workingTerritoryRows, profile);
+
   const livePack = useMemo(() => {
     if (!actx.enabled) {
       return null;
     }
-    const rows = buildDealerBaseRowsWithActualization(teamPlane.mergedState, profile, { includeArchivedDealers: false });
-    const scoped = roleScopedDealerRows(rows, profile);
+    const scoped = scopedDealerRows;
     const label =
       profile.role === "team_lead"
         ? "Моя команда (активная база)"
@@ -79,7 +88,7 @@ export default function TerritoryCardPage() {
       directorRopFactualUi: directorRopFactual,
       mergedActualization: directorRopFactual ? teamPlane.mergedState : undefined,
     });
-  }, [actx.enabled, teamPlane.mergedState, profile, actx.loading, teamPlane.teamFetchLoading, directorRopFactual]);
+  }, [actx.enabled, teamPlane.mergedState, profile, actx.loading, teamPlane.teamFetchLoading, directorRopFactual, scopedDealerRows]);
 
   const summary = livePack?.summary;
   const planLines = livePack?.planLines ?? [];

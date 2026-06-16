@@ -34,13 +34,15 @@ import {
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
-  roleScopedDealerRows,
 } from "@/lib/dealer-base-role-views";
+import { getRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
+import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   resolveSidebarWorkingDealerClientCount,
   type SidebarDealerClientCountContext,
 } from "@/lib/dealer-base-sidebar-client-count";
+import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { getManagersForRopTeam } from "@/lib/rop-manager-filters";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
@@ -51,14 +53,18 @@ type DiagRow = {
   from: string;
 };
 
-function computePickerFilteredDefault(profile: ReturnType<typeof useReleaseDemoProfile>["profile"], actState: SidebarDealerClientCountContext): DealerRow[] {
+function computePickerFilteredDefault(
+  profile: ReturnType<typeof useReleaseDemoProfile>["profile"],
+  actState: SidebarDealerClientCountContext,
+  realScope?: SidebarNavRealScope,
+): DealerRow[] {
   if (actState.enabled && actState.loading) return [];
   const actForRows = actState.managementDisplayState ?? actState.state;
   const merged = actState.enabled
     ? buildDealerBaseRowsWithActualization(actForRows, profile, { includeArchivedDealers: false })
     : DEALER_BASE_ROWS;
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
-  const scoped = roleScopedDealerRows(merged, profile);
+  const scoped = getRoleScopedDealerRowsAuto(merged, profile, realScope);
   const init = initialRopManagerForProfile(profile, access);
   const pickerArgs = {
     search: "",
@@ -120,6 +126,7 @@ export default function AdminCountsDiagPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
+  const realScope = useSidebarNavRealScope();
 
   const sidebarCtx: SidebarDealerClientCountContext = useMemo(
     () => ({
@@ -140,8 +147,8 @@ export default function AdminCountsDiagPage() {
   });
 
   const pickerFiltered = useMemo(
-    () => computePickerFilteredDefault(profile, sidebarCtx),
-    [profile, sidebarCtx],
+    () => computePickerFilteredDefault(profile, sidebarCtx, realScope),
+    [profile, sidebarCtx, realScope],
   );
 
   const sidebarClients = useMemo(

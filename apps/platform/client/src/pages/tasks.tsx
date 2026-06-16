@@ -41,9 +41,9 @@ import {
   managerOptionsForProfile,
   mapSalesRoleToDealerBaseAccess,
   ropOptionsForProfile,
-  roleScopedDealerRows,
   type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_CHANGED_EVENT } from "@/lib/trade-point-showcase-matrix-storage";
 import {
@@ -814,10 +814,9 @@ export default function TasksPage() {
     [actx.enabled, managementPlane.mergedState, profile],
   );
 
-  const allowedDealerIds = useMemo(() => {
-    const scoped = roleScopedDealerRows(workingDealerRows, profile);
-    return new Set(scoped.map((d) => d.id));
-  }, [workingDealerRows, profile]);
+  const scopedDealerRows = useRoleScopedDealerRowsAuto(workingDealerRows, profile);
+
+  const allowedDealerIds = useMemo(() => new Set(scopedDealerRows.map((d) => d.id)), [scopedDealerRows]);
 
   const actualizationLoading =
     (actx.enabled && actx.loading) ||
@@ -831,14 +830,13 @@ export default function TasksPage() {
       return;
     }
     let cancelled = false;
-    const scoped = roleScopedDealerRows(workingDealerRows, profile);
-    void fetchShowcaseMatrixDeficitTasksForDealers(scoped).then((tasks) => {
+    void fetchShowcaseMatrixDeficitTasksForDealers(scopedDealerRows).then((tasks) => {
       if (!cancelled) setBackendDeficitTasks(tasks);
     });
     return () => {
       cancelled = true;
     };
-  }, [actualizationLoading, workingDealerRows, profile, showcaseTick]);
+  }, [actualizationLoading, scopedDealerRows, showcaseTick]);
 
   const hasPersistedShowcaseTasksInRoleScope = useMemo(() => {
     if (!directorRopFactualShowcaseTasks || actualizationLoading) return false;
