@@ -8,8 +8,8 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import type { DistributionSegmentFilter } from "@/lib/distribution-filters";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import {
-  getShowcaseMatrixModelsForTradePoint,
   type ShowcaseMatrixModelDefinition,
 } from "@/lib/trade-point-showcase-matrix-models";
 
@@ -70,9 +70,13 @@ export function isModelInTradePointTemplate(
   point: DealerTradePoint,
   modelId: string,
 ): boolean {
-  return getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory).some(
-    (m) => m.id === modelId,
-  );
+  return resolveTradePointMatrixModels({
+    dealerId: dealer.id,
+    tradePointId: point.id,
+    clientCategory: dealer.clientCategory,
+    region: dealer.region,
+    city: point.city,
+  }).some((m) => m.id === modelId);
 }
 
 /** Статус модели в конкретной ТТ для списка «по продукту». */
@@ -98,7 +102,14 @@ export function collectEntryCatalogModels(
   for (const dealer of dealers) {
     for (const { point } of getMergedDealerTradePoints(dealer, { includeArchived: false })) {
       if (point.status?.trim() === "Архив") continue;
-      for (const m of getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory)) {
+      const models = resolveTradePointMatrixModels({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        clientCategory: dealer.clientCategory,
+        region: dealer.region,
+        city: point.city,
+      });
+      for (const m of models) {
         if (!byId.has(m.id)) byId.set(m.id, m);
       }
     }

@@ -27,7 +27,7 @@ import {
   type MatrixTask,
   type MatrixTaskRecommendation,
 } from "@/lib/trade-point-task-data";
-import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import {
   canEditTradePointShowcaseMatrix,
   SHOWCASE_MATRIX_CHANGED_EVENT,
@@ -75,8 +75,14 @@ export function DistributionTradePointMatrixEntry({
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
-      getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory).length,
-    [dealer.id, point.id, dealer.clientCategory],
+      resolveTradePointMatrixModels({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        clientCategory: dealer.clientCategory,
+        region: dealer.region,
+        city: point.city,
+      }).length,
+    [dealer.id, point.id, dealer.clientCategory, dealer.region, point.city],
   );
 
   const canEdit = useMemo(

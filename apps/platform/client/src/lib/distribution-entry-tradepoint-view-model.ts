@@ -8,7 +8,7 @@ import { getDealerManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
-import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 
 export type DistributionEntryTradePointRow = {
   dealerId: string;
@@ -38,7 +38,13 @@ function normalizeCity(city: string | undefined): string | null {
 }
 
 function defaultResolveTemplateModelIds(dealer: DealerRow, point: DealerTradePoint): string[] {
-  return getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory).map((m) => m.id);
+  return resolveTradePointMatrixModels({
+    dealerId: dealer.id,
+    tradePointId: point.id,
+    clientCategory: dealer.clientCategory,
+    region: dealer.region,
+    city: point.city,
+  }).map((m) => m.id);
 }
 
 function countFilledForTemplate(

@@ -78,8 +78,8 @@ import {
   type FullscreenEntryDraftMap,
   type FullscreenEntryDraftRow,
 } from "@/lib/distribution-fullscreen-entry-draft";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import {
-  getShowcaseMatrixModelsForTradePoint,
   type ShowcaseMatrixModelDefinition,
 } from "@/lib/trade-point-showcase-matrix-models";
 import {
@@ -435,8 +435,15 @@ export function DistributionFullscreenEntry({
   }, [bump, point.id]);
 
   const matrixModels = useMemo(
-    () => getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory),
-    [dealer.clientCategory, dealer.id, point.id],
+    () =>
+      resolveTradePointMatrixModels({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        clientCategory: dealer.clientCategory,
+        region: dealer.region,
+        city: point.city,
+      }),
+    [dealer.clientCategory, dealer.id, dealer.region, point.id, point.city],
   );
 
   const matrixModelById = useMemo(() => {
