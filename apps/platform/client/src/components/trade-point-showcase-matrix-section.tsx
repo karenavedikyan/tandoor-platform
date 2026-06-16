@@ -461,6 +461,45 @@ export function TradePointShowcaseMatrixSection({
     return acc;
   }, [allModels, effectiveStatus]);
 
+  // [prompt-353] процент дистрибуции по сегментам — из реальных статусов матрицы
+  const distributionFromMatrix = useMemo(() => {
+    const acc = {
+      mk: { total: 0, installed: 0 },
+      vh: { total: 0, installed: 0 },
+      hardware: { total: 0, installed: 0 },
+    };
+    for (const m of allModels) {
+      const st = effectiveStatus(m.id);
+      if (st === "not_relevant") continue;
+      const bucket =
+        m.type === "interior"
+          ? acc.mk
+          : m.type === "entrance"
+            ? acc.vh
+            : m.type === "hardware"
+              ? acc.hardware
+              : null;
+      if (!bucket) continue;
+      bucket.total += 1;
+      if (st === "installed") bucket.installed += 1;
+    }
+    const pct = (b: { total: number; installed: number }) =>
+      b.total <= 0 ? 0 : Math.min(100, Math.max(0, Math.floor((b.installed / b.total) * 100)));
+    const totalRelevant = acc.mk.total + acc.vh.total + acc.hardware.total;
+    const totalInstalled = acc.mk.installed + acc.vh.installed + acc.hardware.installed;
+    const totalPct =
+      totalRelevant <= 0
+        ? 0
+        : Math.min(100, Math.max(0, Math.floor((totalInstalled / totalRelevant) * 100)));
+    return {
+      mk: pct(acc.mk),
+      vh: pct(acc.vh),
+      hardware: pct(acc.hardware),
+      total: totalPct,
+      breakdown: acc,
+    };
+  }, [allModels, effectiveStatus]);
+
   const [userQuickFilter, setUserQuickFilter] = useState<ShowcaseMatrixQuickFilterId | null>(null);
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
   const activeQuickFilter = userQuickFilter ?? autoQuickFilter;
@@ -1590,11 +1629,15 @@ export function TradePointShowcaseMatrixSection({
               >
                 <div className="grid gap-2 sm:grid-cols-3">
                   {[
-                    { label: "МК", pct: page.distribution.mk },
-                    { label: "ВХ", pct: page.distribution.vh },
-                    { label: "Общее", pct: page.distribution.total },
+                    { label: "МК", pct: distributionFromMatrix.mk },
+                    { label: "ВХ", pct: distributionFromMatrix.vh },
+                    { label: "Общее", pct: distributionFromMatrix.total },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-md border border-border/80 bg-muted/20 px-2 py-2">
+                    <div
+                      key={item.label}
+                      className="rounded-md border border-border/80 bg-muted/20 px-2 py-2"
+                      data-testid={`tile-trade-point-distribution-${item.label.toLowerCase()}`}
+                    >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold">{item.label}</p>
                         <span className="text-sm font-bold tabular-nums">{item.pct}%</span>
@@ -1603,7 +1646,18 @@ export function TradePointShowcaseMatrixSection({
                     </div>
                   ))}
                 </div>
-                <p className="text-xs leading-relaxed text-foreground">{page.distributionConclusion}</p>
+                <p
+                  className="text-xs leading-relaxed text-foreground"
+                  data-testid="text-trade-point-distribution-conclusion"
+                >
+                  {distributionFromMatrix.total >= 70
+                    ? "Показатели в комфортной зоне, точечные доработки по сегментам."
+                    : distributionFromMatrix.total >= 50
+                      ? "Есть резерв по выкладке и полноте линейки."
+                      : distributionFromMatrix.total > 0
+                        ? "Нужны действия по усилению дистрибуции и контролю на точке."
+                        : "Данные витрины ещё не внесены — выберите модели и зафиксируйте статусы."}
+                </p>
                 <TradePointShowcaseSegmentSummary tradePointId={point.id} density={density} />
               </CollapsibleContent>
             </Collapsible>
