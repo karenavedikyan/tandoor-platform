@@ -47,6 +47,9 @@ export function DistributionAnalyticsPage({
     [act, profile, scopedDealers, realScope],
   );
 
+  const totalRowsInScope = data.filteredRows.length;
+  const hasAnyEligible = data.groupAggregate.tradePointsCount > 0;
+
   return (
     <div className="space-y-3" data-testid="page-distribution-analytics">
       <DistributionAnalyticsFiltersPanel
@@ -67,6 +70,8 @@ export function DistributionAnalyticsPage({
             rows={data.tradePointRows}
             aggregate={data.groupAggregate}
             activeEquipmentTypes={filters.equipmentTypes}
+            totalRowsInScope={totalRowsInScope}
+            hasAnyEligible={hasAnyEligible}
           />
         </TabsContent>
         <TabsContent value="territory" className="mt-3">
@@ -74,6 +79,8 @@ export function DistributionAnalyticsPage({
             territoryRows={data.territoryRows}
             aggregate={data.groupAggregate}
             activeEquipmentTypes={filters.equipmentTypes}
+            totalRowsInScope={totalRowsInScope}
+            hasAnyEligible={hasAnyEligible}
           />
         </TabsContent>
         <TabsContent value="product" className="mt-3">
@@ -82,6 +89,8 @@ export function DistributionAnalyticsPage({
             aggregate={data.groupAggregate}
             filtersEncoded={filtersEncoded}
             activeEquipmentTypes={filters.equipmentTypes}
+            totalRowsInScope={totalRowsInScope}
+            hasAnyEligible={hasAnyEligible}
           />
         </TabsContent>
       </Tabs>

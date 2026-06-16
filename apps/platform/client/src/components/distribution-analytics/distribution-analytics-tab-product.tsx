@@ -4,6 +4,7 @@ import type { ProductAnalyticsRow } from "@/lib/distribution-analytics/distribut
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { DistributionAnalyticsKpiTiles, DistributionPercentBadge } from "./distribution-analytics-kpi-tiles";
+import { DistributionEmptyDataNotice } from "./distribution-empty-data-notice";
 import { formatDistributionPercent } from "@/lib/distribution-analytics/distribution-analytics-math";
 
 type Props = {
@@ -11,6 +12,8 @@ type Props = {
   aggregate: DistributionGroupMetrics;
   filtersEncoded?: string;
   activeEquipmentTypes?: EquipmentTypeKey[];
+  totalRowsInScope: number;
+  hasAnyEligible: boolean;
 };
 
 const TYPE_LABEL = { entrance: "ВХ", interior: "МК", hardware: "Фурнитура" } as const;
@@ -20,6 +23,8 @@ export function DistributionAnalyticsTabProduct({
   aggregate,
   filtersEncoded,
   activeEquipmentTypes = [],
+  totalRowsInScope,
+  hasAnyEligible,
 }: Props): ReactElement {
   return (
     <div className="space-y-3" data-testid="distribution-analytics-tab-product">
@@ -28,6 +33,8 @@ export function DistributionAnalyticsTabProduct({
         tradePointsCount={aggregate.tradePointsCount}
         activeEquipmentTypes={activeEquipmentTypes}
       />
+
+      <DistributionEmptyDataNotice hasAnyEligible={hasAnyEligible} totalRowsInScope={totalRowsInScope} />
 
       <div className="overflow-x-auto rounded-xl border border-border/70">
         <table className="min-w-[960px] w-full text-left text-xs">
