@@ -29,7 +29,7 @@ import {
   type TradePointShowcaseActualization,
 } from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
-import { getShowcaseMatrixModelsForTradePoint } from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import {
   computeTradePointShowcaseMatrixStats,
   loadShowcaseMatrixStorage,
@@ -306,8 +306,15 @@ export function TradePointManualActualizationView(props: {
   }, [dealer.id, point.id, tpOverride, mainSave.isDirty, mainSave.phase]);
 
   const templateModelsCount = useMemo(
-    () => getShowcaseMatrixModelsForTradePoint(dealer.id, point.id, dealer.clientCategory).length,
-    [dealer.id, point.id, dealer.clientCategory],
+    () =>
+      resolveTradePointMatrixModels({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        clientCategory: dealer.clientCategory,
+        region: dealer.region,
+        city: point.city,
+      }).length,
+    [dealer.id, point.id, dealer.clientCategory, dealer.region, point.city],
   );
 
   const matrixStats = useMemo(() => {
