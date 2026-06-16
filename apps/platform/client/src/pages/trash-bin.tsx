@@ -2,7 +2,7 @@
  * /trash — Корзина и Архив клиентов / торговых точек (Промт 45, 70.4, 70.5).
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Archive, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
@@ -73,6 +73,9 @@ import {
 } from "@/lib/dealer-overrides-runtime";
 import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
 import { buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
+import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
 
 type ConfirmKind =
   | { kind: "force-delete-dealer"; dealerId: string; name: string }
@@ -134,6 +137,11 @@ export function TrashBinPage(): ReactElement {
     () => buildTrashScopeFilter({ role: user?.role ?? null, profile, realScope }),
     [user?.role, profile, realScope],
   );
+
+  const trashDealersListRef = useRef<HTMLDivElement>(null);
+  const trashTpsListRef = useRef<HTMLDivElement>(null);
+
+  useScrollRestoration({ enabled: !actx.loading });
 
   const trashedDealerDisplays = useMemo(() => {
     const map = mergeTrashedDealersForUi(stateForRead);
@@ -925,6 +933,10 @@ export function TrashBinPage(): ReactElement {
     confirmFD?.kind === "force-delete-archived-dealers" ||
     confirmFD?.kind === "force-delete-archived-tps";
 
+  if (actx.loading) {
+    return <TrashBinSkeleton />;
+  }
+
   const onConfirmAction = () => {
     if (!confirmFD) return;
     switch (confirmFD.kind) {
@@ -1065,60 +1077,67 @@ export function TrashBinPage(): ReactElement {
                 В корзине пусто. Удалённые клиенты будут появляться здесь.
               </p>
             ) : (
-              trashedDealerDisplays.map((display) => {
-                const t = display.info;
-                return (
-                <Card
-                  key={t.dealerId}
-                  className="rounded-xl border border-border bg-card text-card-foreground"
-                  data-testid={`card-trash-dealer-${t.dealerId}`}
-                >
-                  <CardContent className="flex items-start justify-between gap-2 p-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <ClientAvatar size={36} shape="circle" name={display.name} seed={t.dealerId} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{display.name}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {display.city} · ИНН {display.inn} · код {display.dealerCode}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          удалил {t.trashedByName} · {formatDisplayDateTime(t.trashedAt)} · истекает{" "}
-                          {formatDisplayDate(t.expiresAt)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy === `restore-dealer:${t.dealerId}`}
-                        onClick={() => void onRestoreDealer(t.dealerId)}
-                        data-testid={`button-trash-dealer-restore-${t.dealerId}`}
-                      >
-                        Восстановить
-                      </Button>
-                      {canForceDelete ? (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={busy === `force-dealer:${t.dealerId}`}
-                          onClick={() =>
-                            setConfirmFD({
-                              kind: "force-delete-dealer",
-                              dealerId: t.dealerId,
-                              name: display.name,
-                            })
-                          }
-                          data-testid={`button-trash-dealer-force-delete-${t.dealerId}`}
-                        >
-                          Удалить навсегда
-                        </Button>
-                      ) : null}
-                    </div>
-                  </CardContent>
-                </Card>
-                );
-              })
+              <VirtualizedStackList
+                listRef={trashDealersListRef}
+                items={trashedDealerDisplays}
+                estimateSize={112}
+                className="space-y-2"
+                data-testid="trash-dealers-virtual-list"
+                getKey={(display) => display.info.dealerId}
+                renderItem={(display) => {
+                  const t = display.info;
+                  return (
+                    <Card
+                      className="rounded-xl border border-border bg-card text-card-foreground"
+                      data-testid={`card-trash-dealer-${t.dealerId}`}
+                    >
+                      <CardContent className="flex items-start justify-between gap-2 p-3">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <ClientAvatar size={36} shape="circle" name={display.name} seed={t.dealerId} />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">{display.name}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {display.city} · ИНН {display.inn} · код {display.dealerCode}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              удалил {t.trashedByName} · {formatDisplayDateTime(t.trashedAt)} · истекает{" "}
+                              {formatDisplayDate(t.expiresAt)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy === `restore-dealer:${t.dealerId}`}
+                            onClick={() => void onRestoreDealer(t.dealerId)}
+                            data-testid={`button-trash-dealer-restore-${t.dealerId}`}
+                          >
+                            Восстановить
+                          </Button>
+                          {canForceDelete ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={busy === `force-dealer:${t.dealerId}`}
+                              onClick={() =>
+                                setConfirmFD({
+                                  kind: "force-delete-dealer",
+                                  dealerId: t.dealerId,
+                                  name: display.name,
+                                })
+                              }
+                              data-testid={`button-trash-dealer-force-delete-${t.dealerId}`}
+                            >
+                              Удалить навсегда
+                            </Button>
+                          ) : null}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                }}
+              />
             )}
           </TabsContent>
           <TabsContent value="tps" className="mt-3 space-y-2">
@@ -1127,66 +1146,73 @@ export function TrashBinPage(): ReactElement {
                 В корзине пусто. Удалённые торговые точки будут появляться здесь.
               </p>
             ) : (
-              trashedTps.map((t) => (
-                <Card
-                  key={t.tradePointId}
-                  className="rounded-xl border border-border bg-card text-card-foreground"
-                  data-testid={`card-trash-tp-${t.tradePointId}`}
-                >
-                  <CardContent className="flex items-start justify-between gap-2 p-3">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <ClientAvatar
-                        size={32}
-                        shape="circle"
-                        name={t.snapshot.dealerFullName ?? t.snapshot.name ?? "—"}
-                        seed={t.dealerId}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">{t.snapshot.name ?? "—"}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {t.snapshot.city ?? "—"}
-                          {t.snapshot.address ? ` · ${t.snapshot.address}` : ""}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          клиент: {t.snapshot.dealerFullName ?? t.dealerId}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          удалил {t.trashedByName} · {formatDisplayDateTime(t.trashedAt)} · истекает{" "}
-                          {formatDisplayDate(t.expiresAt)}
-                        </p>
+              <VirtualizedStackList
+                listRef={trashTpsListRef}
+                items={trashedTps}
+                estimateSize={112}
+                className="space-y-2"
+                data-testid="trash-tps-virtual-list"
+                getKey={(t) => t.tradePointId}
+                renderItem={(t) => (
+                  <Card
+                    className="rounded-xl border border-border bg-card text-card-foreground"
+                    data-testid={`card-trash-tp-${t.tradePointId}`}
+                  >
+                    <CardContent className="flex items-start justify-between gap-2 p-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <ClientAvatar
+                          size={32}
+                          shape="circle"
+                          name={t.snapshot.dealerFullName ?? t.snapshot.name ?? "—"}
+                          seed={t.dealerId}
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-foreground">{t.snapshot.name ?? "—"}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t.snapshot.city ?? "—"}
+                            {t.snapshot.address ? ` · ${t.snapshot.address}` : ""}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            клиент: {t.snapshot.dealerFullName ?? t.dealerId}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            удалил {t.trashedByName} · {formatDisplayDateTime(t.trashedAt)} · истекает{" "}
+                            {formatDisplayDate(t.expiresAt)}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy === `restore-tp:${t.tradePointId}`}
-                        onClick={() => void onRestoreTp(t)}
-                        data-testid={`button-trash-tp-restore-${t.tradePointId}`}
-                      >
-                        Восстановить
-                      </Button>
-                      {canForceDelete ? (
+                      <div className="flex shrink-0 flex-col gap-1 sm:flex-row sm:gap-2">
                         <Button
                           size="sm"
-                          variant="destructive"
-                          disabled={busy === `force-tp:${t.tradePointId}`}
-                          onClick={() =>
-                            setConfirmFD({
-                              kind: "force-delete-tp",
-                              tradePointId: t.tradePointId,
-                              name: t.snapshot.name ?? t.tradePointId,
-                            })
-                          }
-                          data-testid={`button-trash-tp-force-delete-${t.tradePointId}`}
+                          variant="outline"
+                          disabled={busy === `restore-tp:${t.tradePointId}`}
+                          onClick={() => void onRestoreTp(t)}
+                          data-testid={`button-trash-tp-restore-${t.tradePointId}`}
                         >
-                          Удалить навсегда
+                          Восстановить
                         </Button>
-                      ) : null}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                        {canForceDelete ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={busy === `force-tp:${t.tradePointId}`}
+                            onClick={() =>
+                              setConfirmFD({
+                                kind: "force-delete-tp",
+                                tradePointId: t.tradePointId,
+                                name: t.snapshot.name ?? t.tradePointId,
+                              })
+                            }
+                            data-testid={`button-trash-tp-force-delete-${t.tradePointId}`}
+                          >
+                            Удалить навсегда
+                          </Button>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              />
             )}
           </TabsContent>
         </Tabs>

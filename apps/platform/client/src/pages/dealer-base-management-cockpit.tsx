@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info, Store, Users } from "lucide-react";
@@ -45,6 +45,15 @@ import {
 } from "@/lib/archive-record-visual";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { ManagementCockpitSkeleton } from "@/components/skeletons/management-cockpit-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import {
+  VirtualizedStackList,
+  largeListVirtualItemStyle,
+  shouldVirtualizeLargeList,
+  useLargeListScrollMargin,
+  useLargeListWindowVirtualizer,
+} from "@/lib/window-list-virtualizer";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
@@ -206,6 +215,9 @@ export function DealerBaseManagementCockpit({
   const [clientFilter, setClientFilter] = useState<ClientListFilter>("all");
   const [createDealerOpen, setCreateDealerOpen] = useState(false);
   const [citiesExpanded, setCitiesExpanded] = useState(false);
+  const clientListRef = useRef<HTMLDivElement>(null);
+
+  useScrollRestoration();
 
   useEffect(() => {
     try {
@@ -790,65 +802,122 @@ export function DealerBaseManagementCockpit({
   };
 
   const renderClientRows = (wide: boolean) => {
+    const useVirtual = shouldVirtualizeLargeList(filteredClients.length);
+    const scrollMargin = useLargeListScrollMargin(clientListRef, [filteredClients.length, wide, useVirtual]);
+    const virtualizer = useLargeListWindowVirtualizer({
+      count: filteredClients.length,
+      estimateSize: wide ? 56 : 96,
+      scrollMargin,
+      enabled: useVirtual,
+    });
+    const virtualItems = virtualizer?.getVirtualItems() ?? [];
+
+    const renderClientRow = (r: (typeof filteredClients)[number]) => {
+      const archived = actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState);
+      if (wide) {
+        return (
+          <TableRow key={r.id} className={cn("border-[#E3E6F3]", archivedEntityRowClassName(archived))}>
+            <TableCell className="max-w-[200px] truncate font-medium text-[#222631]">
+              <span className="inline-flex max-w-full flex-wrap items-center gap-1">
+                {r.name}
+                {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
+              </span>
+            </TableCell>
+            <TableCell className="text-sm text-[#8F96B0]">{r.city}</TableCell>
+            <TableCell className="text-sm text-[#8F96B0]">{getDealerManagerDisplay(r)}</TableCell>
+            <TableCell className="text-right tabular-nums text-[#222631]">{r.outlets}</TableCell>
+            <TableCell>
+              <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
+                <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Карточка</Link>
+              </Button>
+            </TableCell>
+          </TableRow>
+        );
+      }
+      return (
+        <li key={r.id} className={cn("rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3", archivedEntityRowClassName(archived))}>
+          <p className="inline-flex max-w-full flex-wrap items-center gap-1 font-medium text-[#222631]">
+            {r.name}
+            {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
+          </p>
+          <p className="text-xs text-[#8F96B0]">
+            {r.city} · {getDealerManagerDisplay(r)} · ТТ {r.outlets}
+          </p>
+          <Button variant="outline" size="sm" className="mt-2 h-8 border-[#E3E6F3] text-xs" asChild>
+            <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Открыть карточку</Link>
+          </Button>
+        </li>
+      );
+    };
+
     if (wide) {
       return (
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#E3E6F3]">
-              <TableHead className="text-[#8F96B0]">Клиент</TableHead>
-              <TableHead className="text-[#8F96B0]">Город</TableHead>
-              <TableHead className="text-[#8F96B0]">Менеджер</TableHead>
-              <TableHead className="text-right text-[#8F96B0]">ТТ</TableHead>
-              <TableHead className="w-[100px] text-[#8F96B0]"> </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredClients.map((r) => {
-              const archived = actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState);
-              return (
-              <TableRow key={r.id} className={cn("border-[#E3E6F3]", archivedEntityRowClassName(archived))}>
-                <TableCell className="max-w-[200px] truncate font-medium text-[#222631]">
-                  <span className="inline-flex max-w-full flex-wrap items-center gap-1">
-                    {r.name}
-                    {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm text-[#8F96B0]">{r.city}</TableCell>
-                <TableCell className="text-sm text-[#8F96B0]">{getDealerManagerDisplay(r)}</TableCell>
-                <TableCell className="text-right tabular-nums text-[#222631]">{r.outlets}</TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
-                    <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Карточка</Link>
-                  </Button>
-                </TableCell>
+        <div ref={clientListRef} data-testid="management-cockpit-client-list">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-[#E3E6F3]">
+                <TableHead className="text-[#8F96B0]">Клиент</TableHead>
+                <TableHead className="text-[#8F96B0]">Город</TableHead>
+                <TableHead className="text-[#8F96B0]">Менеджер</TableHead>
+                <TableHead className="text-right text-[#8F96B0]">ТТ</TableHead>
+                <TableHead className="w-[100px] text-[#8F96B0]"> </TableHead>
               </TableRow>
-            );
-            })}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            {useVirtual && virtualizer ? (
+              <TableBody className="relative block" style={{ height: virtualizer.getTotalSize() }}>
+                {virtualItems.map((vi) => {
+                  const r = filteredClients[vi.index]!;
+                  return (
+                    <TableRow
+                      key={r.id}
+                      data-index={vi.index}
+                      ref={virtualizer.measureElement}
+                      className={cn(
+                        "absolute left-0 flex w-full table border-[#E3E6F3]",
+                        archivedEntityRowClassName(
+                          actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState),
+                        ),
+                      )}
+                      style={largeListVirtualItemStyle(virtualizer, vi.start)}
+                      data-testid={`row-management-client-${r.id}`}
+                    >
+                      <TableCell className="max-w-[200px] truncate font-medium text-[#222631]">{r.name}</TableCell>
+                      <TableCell className="text-sm text-[#8F96B0]">{r.city}</TableCell>
+                      <TableCell className="text-sm text-[#8F96B0]">{getDealerManagerDisplay(r)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-[#222631]">{r.outlets}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
+                          <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Карточка</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            ) : (
+              <TableBody>{filteredClients.map((r) => renderClientRow(r))}</TableBody>
+            )}
+          </Table>
+        </div>
       );
     }
-    return (
-      <ul className="space-y-2">
-        {filteredClients.map((r) => {
-          const archived = actx.enabled && isDealerArchivedInActualization(r.id, teamCtx.mergedState);
-          return (
-          <li key={r.id} className={cn("rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3", archivedEntityRowClassName(archived))}>
-            <p className="inline-flex max-w-full flex-wrap items-center gap-1 font-medium text-[#222631]">
-              {r.name}
-              {archived ? <ArchiveInArchiveBadge testId={`badge-dealer-archived-${r.id}`} /> : null}
-            </p>
-            <p className="text-xs text-[#8F96B0]">
-              {r.city} · {getDealerManagerDisplay(r)} · ТТ {r.outlets}
-            </p>
-            <Button variant="outline" size="sm" className="mt-2 h-8 border-[#E3E6F3] text-xs" asChild>
-              <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Открыть карточку</Link>
-            </Button>
-          </li>
-        );
-        })}
-      </ul>
-    );
+
+    if (useVirtual) {
+      return (
+        <VirtualizedStackList
+          listRef={clientListRef}
+          items={filteredClients}
+          estimateSize={96}
+          className="space-y-2"
+          data-testid="management-cockpit-client-list"
+          getKey={(r) => r.id}
+          rowTestIdPrefix="row-management-client"
+          renderItem={(r) => renderClientRow(r)}
+        />
+      );
+    }
+
+    return <ul className="space-y-2">{filteredClients.map((r) => renderClientRow(r))}</ul>;
   };
 
   const renderTpRows = (wide: boolean) => {
@@ -1180,6 +1249,10 @@ export function DealerBaseManagementCockpit({
     </section>
   );
 
+  if (actx.loading && rows.length === 0) {
+    return <ManagementCockpitSkeleton />;
+  }
+
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10" data-testid="page-dealer-base">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1262,7 +1335,10 @@ export function DealerBaseManagementCockpit({
         <div className="min-w-0 flex-1 space-y-6" data-testid="section-client-base-director-overview">
           {overviewInfographic}
 
-          <div className="space-y-2" data-testid="section-client-base-mode-toggle">
+          <div
+            className="sticky top-0 z-20 space-y-2 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90"
+            data-testid="section-client-base-mode-toggle"
+          >
             <p className="text-[11px] font-medium uppercase tracking-wide text-[#8F96B0]">Режим</p>
             <div className="flex gap-2">
               {modeBtn("overview", "Обзор", "button-client-base-mode-overview")}

@@ -46,6 +46,8 @@ import {
   type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerBaseSkeleton } from "@/components/skeletons/dealer-base-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -1501,6 +1503,27 @@ export default function DealerBase() {
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
+
+  const isPageInitialLoading = useMemo(
+    () =>
+      (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
+      (catalogQ.isPending && !catalogQ.data) ||
+      (actx.enabled && actx.loading && !actx.meta.updatedAt),
+    [
+      isRealUser,
+      authLoading,
+      orgSnapQ.isLoading,
+      visCodesQ.isLoading,
+      catalogQ.isPending,
+      catalogQ.data,
+      actx.enabled,
+      actx.loading,
+      actx.meta.updatedAt,
+    ],
+  );
+
+  useScrollRestoration({ enabled: !isPageInitialLoading });
+
   const teamActualizationPlane = teamCtx.mergedState;
   const { publishDashboardRopTeamId } = teamCtx;
   const overviewTeamId = access === "sales_director" && ropTeam !== "all" ? ropTeam : undefined;
@@ -3532,6 +3555,10 @@ export default function DealerBase() {
     !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
+  if (!isTaskSelectMode && isPageInitialLoading) {
+    return <DealerBaseSkeleton />;
+  }
+
   if (!isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <DealerBaseManagementCockpit
@@ -3722,7 +3749,7 @@ export default function DealerBase() {
         </div>
       </section>
 
-      <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+      <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
         <CardContent className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
             <div className="relative min-w-0 flex-1">

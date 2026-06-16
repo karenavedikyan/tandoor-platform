@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ManagementCockpitSkeleton } from "@/components/skeletons/management-cockpit-skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
@@ -90,18 +90,7 @@ export function TradePointsManagementCockpit({
   const structure = overview?.structure;
 
   if (overviewQ.isLoading) {
-    return (
-      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-28 sm:pb-10" data-testid="page-trade-points">
-        <Skeleton className="h-10 w-64" />
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 rounded-xl" />
-          ))}
-        </div>
-        <Skeleton className="h-40 rounded-xl" />
-        <Skeleton className="h-56 rounded-xl" />
-      </div>
-    );
+    return <ManagementCockpitSkeleton />;
   }
 
   return (

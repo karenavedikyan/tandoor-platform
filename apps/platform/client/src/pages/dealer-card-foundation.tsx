@@ -188,7 +188,7 @@ import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actu
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { DealerManualActualizationPage } from "@/components/dealer-manual-actualization-page";
-import { PageLoadingFallback } from "@/components/navigation/page-loading";
+import { DealerCardSkeleton } from "@/components/skeletons/dealer-card-skeleton";
 
 const SECTION_IDS = [
   "overview",
@@ -2592,7 +2592,7 @@ export function DealerCardPage() {
 
   if (!baseRow) {
     if (actx.enabled && actx.loading && id.startsWith("manual-dealer")) {
-      return <PageLoadingFallback />;
+      return <DealerCardSkeleton />;
     }
     return <DealerNotFound />;
   }

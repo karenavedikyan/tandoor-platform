@@ -8,6 +8,7 @@ import { Link } from "wouter";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Check, ChevronDown, ChevronsUpDown, History, Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -814,9 +815,10 @@ export default function AdminClientAssignmentsPage() {
           {listQ.isError ? (
             <p className="p-4 text-sm text-destructive">{(listQ.error as Error)?.message ?? "Ошибка загрузки"}</p>
           ) : listQ.isLoading ? (
-            <div className="flex items-center gap-2 p-6 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Загрузка…
+            <div className="space-y-2 p-4" data-testid="page-skeleton">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded-sm" />
+              ))}
             </div>
           ) : (
             <ResponsiveList>
