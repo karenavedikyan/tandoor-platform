@@ -4,7 +4,8 @@
  */
 
 import { isClientTopTier } from "@/lib/client-category";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
 import { isManualActualizationDealerId, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
 
@@ -251,8 +252,8 @@ export type TerritoryTrainingAttentionKpis = {
   completed: number;
 };
 
-export function getTerritoryTrainingAttentionKpis(): TerritoryTrainingAttentionKpis {
-  return getTrainingAttentionKpisForDealers(DEALER_BASE_ROWS);
+export function getTerritoryTrainingAttentionKpis(rows: DealerRow[] = getCatalogDealerRows()): TerritoryTrainingAttentionKpis {
+  return getTrainingAttentionKpisForDealers(rows);
 }
 
 /** KPI обучения по произвольному набору строк клиентской базы (актуализация / активные клиенты). */

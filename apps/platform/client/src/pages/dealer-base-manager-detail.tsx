@@ -34,8 +34,8 @@ import {
   teamsForManagementView,
 } from "@/lib/dealer-base-management-view-model";
 import { assignmentsScopeIsActive, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
-import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
-import { buildDealerRowsFromReleaseClients, DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import {
@@ -77,6 +77,8 @@ function segmentBadgeClass(tone: string): string {
 }
 
 export default function DealerBaseManagerDetailPage() {
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const [, params] = useRoute("/dealer-base/manager/:managerId");
   const managerId = decodeURIComponent(params?.managerId ?? "");
 
@@ -121,15 +123,9 @@ export default function DealerBaseManagerDetailPage() {
   }, [myCodesQ.data]);
 
   const scopedRows = useMemo(() => {
-    let merged: typeof DEALER_BASE_ROWS;
+    let merged: DealerRow[];
     if (useReal && snap && visPayload) {
-      const clients = getVisibleReleaseClients(
-        snap,
-        visPayload.all,
-        visPayload.codes,
-        buildAssignmentsMap(visPayload.assignments),
-      );
-      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       merged = actx.enabled
         ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, {
             includeArchivedDealers: false,
@@ -145,7 +141,7 @@ export default function DealerBaseManagerDetailPage() {
       );
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
-    if (!actx.enabled) return roleScopedDealerRows(DEALER_BASE_ROWS, profile);
+    if (!actx.enabled) return roleScopedDealerRows(catalogRows, profile);
     return roleScopedDealerRows(
       buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false }),
       profile,
@@ -162,6 +158,7 @@ export default function DealerBaseManagerDetailPage() {
     isRealUser,
     authLoading,
     authError,
+    catalogRows,
   ]);
 
   const teams = useMemo(

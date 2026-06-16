@@ -39,7 +39,7 @@ import {
   buildOperationalAnalyticsRowSlicesFromDealers,
   type OperationalAnalyticsRowSlices,
 } from "@/lib/analytics-operational-data";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { formatCompactRub, formatPercent, formatUnits } from "@/lib/sales-manager-kpi-data";
 import { EquipmentContractDialog } from "@/components/analytics/equipment-contract-dialog";
 import { OperationalHeaderKpi, type OperationalStripMetric } from "@/components/analytics/operational-kpi-strip";
@@ -339,7 +339,7 @@ export function AnalyticsOperationalPanel() {
       return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));
     }
     if (actx.enabled) return [];
-    return DEALER_BASE_ROWS.map((d) => ({ id: d.id, name: d.name }));
+    return getCatalogDealerRows().map((d) => ({ id: d.id, name: d.name }));
   }, [operationalRowSlices, actx.enabled]);
 
   const [globalFilters, setGlobalFilters] = useState<OperationalGlobalFilters>(OPERATIONAL_DEFAULT_GLOBAL_FILTERS);

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import {
   buildBitrix24OpenTandoorUrl,
@@ -48,7 +48,7 @@ export default function Bitrix24PocPage() {
   const [chatHint, setChatHint] = useState<string | null>(null);
   const [chatDiagnostics, setChatDiagnostics] = useState<Bitrix24ChatDiagnosticRowDto[]>([]);
 
-  const sampleDealerId = DEALER_BASE_ROWS[0]?.id ?? "001";
+  const sampleDealerId = getCatalogDealerRows()[0]?.id ?? "001";
 
   const onCreateTestTask = useCallback(async () => {
     setTaskBusy(true);

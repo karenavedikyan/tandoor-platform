@@ -61,7 +61,7 @@ import { DealerActualizationCreateDialog } from "@/components/client-base-actual
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import {
   buildCityModels,
@@ -483,7 +483,7 @@ export function DealerBaseManagementCockpit({
     if (mergedDealerRowsForCreate && mergedDealerRowsForCreate.length > 0) return mergedDealerRowsForCreate;
     return actx.enabled
       ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false })
-      : DEALER_BASE_ROWS;
+      : getCatalogDealerRows();
   }, [mergedDealerRowsForCreate, actx.enabled, teamCtx.mergedState, profile]);
 
   const setModeAndPersist = useCallback((m: DirectorClientBaseMode) => {

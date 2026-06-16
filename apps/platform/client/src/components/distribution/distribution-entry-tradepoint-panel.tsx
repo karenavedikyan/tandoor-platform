@@ -17,7 +17,8 @@ import {
 import {
   DistributionTradePointMatrixEntry,
 } from "@/components/distribution/distribution-tradepoint-matrix-entry";
-import { DEALER_BASE_ROWS, type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";import {
@@ -90,7 +91,7 @@ export function DistributionEntryTradePointPanel({
         ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
             includeArchivedDealers: false,
           })
-        : DEALER_BASE_ROWS,
+        : getCatalogDealerRows(),
     [actx.enabled, managementPlane.mergedState, profile],
   );
 

@@ -6,6 +6,7 @@ import { useSalesPlanFactPersistedState } from "@/hooks/use-sales-plan-fact-stat
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { normalizeSalesPlanFactState } from "@/lib/sales-plan-fact-types";
@@ -17,6 +18,8 @@ export default function SalesPlanFactManagementPage() {
   const persona = useMemo(() => getSalesUserById(profile.personaUserId), [profile.personaUserId]);
 
   const { state, loading, saving, error, storageMessage, persist } = useSalesPlanFactPersistedState(profile);
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
 
   if (!persona || (role !== "sales_director" && role !== "team_lead" && role !== "sales_manager")) {
     return (
@@ -38,7 +41,7 @@ export default function SalesPlanFactManagementPage() {
         profile={profile}
         role={role}
         persona={persona}
-        dealers={DEALER_BASE_ROWS}
+        dealers={catalogRows}
         state={state}
         loading={loading}
         saving={saving}

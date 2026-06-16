@@ -37,7 +37,8 @@ import {
 } from "@/lib/dealer-base-role-views";
 import { getRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows } from "@/lib/dealer-base-source";
+import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   resolveSidebarWorkingDealerClientCount,
   type SidebarDealerClientCountContext,
@@ -62,7 +63,7 @@ function computePickerFilteredDefault(
   const actForRows = actState.managementDisplayState ?? actState.state;
   const merged = actState.enabled
     ? buildDealerBaseRowsWithActualization(actForRows, profile, { includeArchivedDealers: false })
-    : DEALER_BASE_ROWS;
+    : getCatalogDealerRows();
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
   const scoped = getRoleScopedDealerRowsAuto(merged, profile, realScope);
   const init = initialRopManagerForProfile(profile, access);

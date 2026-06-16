@@ -3,6 +3,7 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
+import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { buildSidebarNavRealScope, type SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
 export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
@@ -11,6 +12,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const orgSnapQ = useOrgSnapshot({ enabled: enabled && isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: enabled && isRealUser });
   const myCodesQ = useMyClientCodes({ enabled: enabled && isRealUser });
+  const catalogQ = useDealerBaseRows();
 
   const assignmentsScope = useMemo(() => {
     if (!myCodesQ.data) return undefined;
@@ -35,6 +37,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
         orgSnapLoading: orgSnapQ.isLoading,
         visCodesLoading: visCodesQ.isLoading,
         assignmentsScope,
+        catalogRows: catalogQ.data,
       }),
     [
       isRealUser,
@@ -48,6 +51,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       orgSnapQ.isLoading,
       visCodesQ.isLoading,
       assignmentsScope,
+      catalogQ.data,
     ],
   );
 

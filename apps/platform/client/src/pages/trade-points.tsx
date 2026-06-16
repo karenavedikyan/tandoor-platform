@@ -97,8 +97,8 @@ import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
-import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
-import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
+import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { TradePointsWorkspaceSummary } from "@/components/trade-points/trade-points-workspace-summary";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
@@ -278,6 +278,8 @@ type ActiveFilterChip = {
 
 export default function TradePointsPage(): ReactElement {
   useDealerTpOverridesHydration(true);
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
@@ -342,13 +344,7 @@ export default function TradePointsPage(): ReactElement {
 
   const mergedRowsActivePortfolioForManagement = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const clients = getVisibleReleaseClients(
-        snap,
-        visPayload.all,
-        visPayload.codes,
-        buildAssignmentsMap(visPayload.assignments),
-      );
-      const releaseRows = buildDealerRowsFromReleaseClients(clients);
+      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       if (!actx.enabled) return releaseRows;
       return buildDealerBaseRowsWithActualization(actState, profile, {
         includeArchivedDealers: false,
@@ -356,7 +352,7 @@ export default function TradePointsPage(): ReactElement {
       });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
-    if (!actx.enabled) return [];
+    if (!actx.enabled) return catalogRows;
     return buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false });
   }, [
     isRealUser,
@@ -369,6 +365,7 @@ export default function TradePointsPage(): ReactElement {
     actx.enabled,
     actState,
     profile,
+    catalogRows,
   ]);
 
   const scopedActivePortfolioRowsForManagement = useMemo(() => {
@@ -386,18 +383,12 @@ export default function TradePointsPage(): ReactElement {
 
   const tpListRealOpts = useMemo(() => {
     if (!useReal || !snap) return undefined;
-    const clients = getVisibleReleaseClients(
-      snap,
-      visPayload!.all,
-      visPayload!.codes,
-      buildAssignmentsMap(visPayload!.assignments),
-    );
-    const releaseRows = buildDealerRowsFromReleaseClients(clients);
+    const releaseRows = getVisibleDealerRows(catalogRows, visPayload!.all, visPayload!.codes);
     return {
       releaseDealerRows: releaseRows,
       orgScope: { snap, access },
     } as const;
-  }, [useReal, snap, visPayload, access]);
+  }, [useReal, snap, visPayload, access, catalogRows]);
 
   const sidebarRealScope = useMemo(
     () =>

@@ -1,6 +1,6 @@
 import type { AssignmentDto } from "@/lib/showcase-assignments-api";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { buildDealerRowsFromReleaseClients } from "@/lib/dealer-base-mock-data";
+import { getCatalogDealerRows, getVisibleDealerRows } from "@/lib/dealer-base-source";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
@@ -16,7 +16,6 @@ import {
   catalogSearchQueryMatchesHaystack,
   searchCatalog,
 } from "@/lib/catalog-data";
-import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { MyVisibleCodesResult } from "@/lib/use-my-visible-client-codes";
@@ -47,13 +46,11 @@ function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
 
   let rows: DealerRow[];
   if (ctx.isRealUser && ctx.snap && ctx.visPayload) {
-    const clients = getVisibleReleaseClients(
-      ctx.snap,
+    const releaseRows = getVisibleDealerRows(
+      getCatalogDealerRows(),
       ctx.visPayload.all,
       ctx.visPayload.codes,
-      buildAssignmentsMap(ctx.visPayload.assignments),
     );
-    const releaseRows = buildDealerRowsFromReleaseClients(clients);
     rows = ctx.actEnabled
       ? buildDealerBaseRowsWithActualization(ctx.actState, ctx.profile, {
           includeArchivedDealers: false,
@@ -71,7 +68,7 @@ function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
 
   rows = ctx.actEnabled
     ? buildDealerBaseRowsWithActualization(ctx.actState, ctx.profile, { includeArchivedDealers: false })
-    : [];
+    : getCatalogDealerRows();
   return roleScopedDealerRows(rows, ctx.profile);
 }
 
@@ -114,13 +111,10 @@ function searchLocalTradePoints(
   const tpListRealOpts =
     ctx.isRealUser && ctx.snap && ctx.visPayload
       ? {
-          releaseDealerRows: buildDealerRowsFromReleaseClients(
-            getVisibleReleaseClients(
-              ctx.snap,
-              ctx.visPayload.all,
-              ctx.visPayload.codes,
-              buildAssignmentsMap(ctx.visPayload.assignments),
-            ),
+          releaseDealerRows: getVisibleDealerRows(
+            getCatalogDealerRows(),
+            ctx.visPayload.all,
+            ctx.visPayload.codes,
           ),
           orgScope: { snap: ctx.snap, access: mapUserRoleToDealerBaseAccess(ctx.role!) },
         }

@@ -1,5 +1,6 @@
 import type { ActualizationState, ShowcaseMatrixTask } from "./client-base-actualization-state";
-import { DEALER_BASE_ROWS, type DealerRow } from "./dealer-base-mock-data";
+import { type DealerRow } from "./dealer-base-mock-data";
+import { getCatalogDealerRows } from "./dealer-base-source";
 import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
 import {
   getAllShowcaseGlobalTaskRows,
@@ -452,7 +453,7 @@ export function invalidateMatrixTasksCache(): void {
 
 function computeAllMatrixTasks(): MatrixTaskWithContext[] {
   const result: MatrixTaskWithContext[] = [];
-  for (const dealer of DEALER_BASE_ROWS) {
+  for (const dealer of getCatalogDealerRows()) {
     for (const point of dealer.tradePoints) {
       const matrix = getTradePointMatrix(dealer.id, point.id);
       const recs = buildRecommendedMatrixTasks(dealer.id, point.id, point.name, matrix);
@@ -484,7 +485,7 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
       }
     }
   }
-  result.push(...buildProductTrainingTasks(DEALER_BASE_ROWS));
+  result.push(...buildProductTrainingTasks(getCatalogDealerRows()));
   return result;
 }
 
@@ -494,7 +495,7 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
  */
 export function getAllMatrixTasks(): MatrixTaskWithContext[] {
   if (!matrixBaseTasksCache) matrixBaseTasksCache = computeAllMatrixTasks();
-  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasksForDealers(DEALER_BASE_ROWS)];
+  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasksForDealers(getCatalogDealerRows())];
 }
 
 function buildProductTrainingTasks(dealers: DealerRow[]): MatrixTaskWithContext[] {

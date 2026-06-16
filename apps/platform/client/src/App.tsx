@@ -41,7 +41,7 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
 import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
-import { attachRealScopeAuditUnloadFlush, setRealScopeAuditUserId } from "@/lib/real-scope-audit";
+import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -485,13 +485,15 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   const shellHomeHref = embeddedBitrix24 ? buildHashPath(homeHref.split("?")[0] ?? homeHref, { embedded: "bitrix24" }) : homeHref;
 
   return (
-    <ClientBaseActualizationProvider>
-      <ClientBaseTeamActualizationProvider>
-        <MainDashboardCityFilterProvider>
-          <AuthenticatedShell user={user} shellHomeHref={shellHomeHref} embeddedBitrix24={embeddedBitrix24} onLogout={logout} />
-        </MainDashboardCityFilterProvider>
-      </ClientBaseTeamActualizationProvider>
-    </ClientBaseActualizationProvider>
+    <DealerBaseRowsProvider>
+      <ClientBaseActualizationProvider>
+        <ClientBaseTeamActualizationProvider>
+          <MainDashboardCityFilterProvider>
+            <AuthenticatedShell user={user} shellHomeHref={shellHomeHref} embeddedBitrix24={embeddedBitrix24} onLogout={logout} />
+          </MainDashboardCityFilterProvider>
+        </ClientBaseTeamActualizationProvider>
+      </ClientBaseActualizationProvider>
+    </DealerBaseRowsProvider>
   );
 }
 
