@@ -184,10 +184,11 @@ export function getShowcaseMatrixModelsForTradePoint(
   return rotateStable(base, shift);
 }
 
-export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Высокий" | "Средний" | "Низкий" {
-  if (p === "high") return "Высокий";
-  if (p === "medium") return "Средний";
-  return "Низкий";
+/** Человеко-читаемый лейбл приоритета матрицы ТТ. high = Обязательная, medium = Рекомендованная, low = «—». */
+export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Обязательная" | "Рекомендованная" | "—" {
+  if (p === "high") return "Обязательная";
+  if (p === "medium") return "Рекомендованная";
+  return "—";
 }
 
 /**

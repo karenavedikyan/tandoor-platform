@@ -205,8 +205,8 @@ function readViewModeFromStorage(): ShowcaseMatrixViewMode {
 }
 
 function priorityBadgeClass(p: ShowcaseMatrixModelDefinition["basePriority"]) {
-  if (p === "high") return "border-red-200 bg-red-50 text-red-900";
-  if (p === "medium") return "border-amber-200 bg-amber-50 text-amber-950";
+  if (p === "high") return "border-rose-200 bg-rose-50 text-rose-900";
+  if (p === "medium") return "border-sky-200 bg-sky-50 text-sky-900";
   return "border-border bg-muted text-muted-foreground";
 }
 
