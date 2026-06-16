@@ -121,7 +121,7 @@ import { mergeActualizationState, type TrashedDealerInfo } from "@/lib/client-ba
 import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
-import { countShowcaseMatrixDeficitForDealer } from "@/lib/trade-point-list-for-actualization";
+import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -745,11 +745,11 @@ function dealerShowcaseAggregateHint(row: DealerRow, act: ActualizationState): s
     const sh = act.tradePointShowcaseActualizationById[e.point.id];
     if (countShowcaseMatrixDeficitForDealer(row, act, sh) > 0) return "Дефицит витрины";
   }
-  const anyFilled = merged.some((e) => {
-    const sh = act.tradePointShowcaseActualizationById[e.point.id];
-    return sh?.hasShowcase != null;
-  });
-  if (!anyFilled) return "Витрина не заполнена";
+  const buckets = merged.map((e) =>
+    deriveShowcaseBucket(act.tradePointShowcaseActualizationById[e.point.id]).bucket,
+  );
+  if (buckets.every((b) => b === "no_showcase")) return "Нет витрины";
+  if (buckets.some((b) => b === "partial" || b === "needs_attention")) return "Витрина не заполнена";
   return "Витрина";
 }
 

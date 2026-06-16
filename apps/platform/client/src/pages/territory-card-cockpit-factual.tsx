@@ -54,9 +54,8 @@ function planCardTestId(key: TerritoryPlanLine["key"]) {
 function showcaseHintForTp(tpId: string, merged: ActualizationState): string | null {
   const sh = merged.tradePointShowcaseActualizationById[tpId];
   if (!sh?.updatedAt?.trim()) return null;
-  if (sh.hasShowcase === true) return "Витрина: да (актуализация)";
   if (sh.hasShowcase === false) return "Витрина: нет (актуализация)";
-  return "Актуализация витрины сохранена";
+  return "Витрина: да (актуализация)";
 }
 
 function attentionForCity(city: TerritoryCitySummary, risks: TerritoryRiskItem[]): number {

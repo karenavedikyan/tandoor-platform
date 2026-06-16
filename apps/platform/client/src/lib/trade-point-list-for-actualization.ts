@@ -6,6 +6,7 @@
  */
 
 import type { ActualizationState, TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
+import { normalizeHasShowcase } from "@/lib/client-base-actualization-state";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
@@ -61,7 +62,7 @@ export type TradePointListRow = {
   portalOverfill: boolean;
   portalsUnfilled: boolean;
   hasFreePortals: boolean;
-  hasShowcase: boolean | null;
+  hasShowcase: boolean;
   showcaseUpdatedAt: string | null;
   unloadingOrder: number | null;
   isArchived: boolean;
@@ -104,21 +105,20 @@ export function deriveShowcaseBucket(sh: TradePointShowcaseActualization | undef
   bucket: TradePointShowcaseBucket;
   label: string;
 } {
-  if (!sh || sh.hasShowcase === null) {
-    return { bucket: "not_filled", label: "Не заполнена" };
-  }
-  if (sh.hasShowcase === false) {
+  const has = sh ? normalizeHasShowcase(sh.hasShowcase) : true;
+  if (has === false) {
     return { bucket: "no_showcase", label: "Нет витрины" };
   }
   const summary = computePortalSummary(sh);
-  const selected = sh.selectedShowcaseModels?.length ?? 0;
+  const selected = sh?.selectedShowcaseModels?.length ?? 0;
   const portalsDeclared =
-    sh.totalPortals != null ||
-    sh.entrancePortals != null ||
-    sh.interiorPortals != null ||
-    sh.tandoorTotalPortals != null ||
-    sh.tandoorEntrancePortals != null ||
-    sh.tandoorInteriorPortals != null;
+    sh != null &&
+    (sh.totalPortals != null ||
+      sh.entrancePortals != null ||
+      sh.interiorPortals != null ||
+      sh.tandoorTotalPortals != null ||
+      sh.tandoorEntrancePortals != null ||
+      sh.tandoorInteriorPortals != null);
 
   if (summary.needsPrimaryInstall) {
     return { bucket: "needs_attention", label: "Требует заполнения" };
@@ -178,12 +178,12 @@ export function buildTradePointListForActualization(
     const portalOverfill = computeShowcasePortalOverfill(selected, caps, getProductById);
     const summary = computePortalSummary(sh);
     const portalsUnfilled =
-      sh?.hasShowcase === true &&
+      normalizeHasShowcase(sh?.hasShowcase) &&
       !(
-        sh.totalPortals != null ||
-        sh.tandoorTotalPortals != null ||
-        sh.entrancePortals != null ||
-        sh.interiorPortals != null
+        sh?.totalPortals != null ||
+        sh?.tandoorTotalPortals != null ||
+        sh?.entrancePortals != null ||
+        sh?.interiorPortals != null
       );
     const hasFreePortals =
       (summary.entrancePotential != null && summary.entrancePotential > 0) ||
@@ -252,7 +252,7 @@ export function buildTradePointListForActualization(
       portalOverfill,
       portalsUnfilled,
       hasFreePortals,
-      hasShowcase: sh?.hasShowcase ?? null,
+      hasShowcase: normalizeHasShowcase(sh?.hasShowcase),
       showcaseUpdatedAt: sh?.updatedAt ?? null,
       unloadingOrder: unloading,
       isArchived: entry.isArchived || dealerArchived,

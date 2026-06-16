@@ -7,6 +7,7 @@ import {
   ACTUALIZATION_STATE_VERSION,
   createEmptyActualizationState,
   mergeActualizationState,
+  normalizeActualizationStateShowcases,
   type ActualizationState,
 } from "@/lib/client-base-actualization-state";
 import { me } from "@/lib/auth-api";
@@ -59,7 +60,9 @@ function normalizeState(raw: unknown): ActualizationState {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
     return createEmptyActualizationState();
   }
-  return mergeActualizationState(createEmptyActualizationState(), raw as Partial<ActualizationState>);
+  return normalizeActualizationStateShowcases(
+    mergeActualizationState(createEmptyActualizationState(), raw as Partial<ActualizationState>),
+  );
 }
 
 function parseApiEnvelope(j: Record<string, unknown>): ActualizationApiMeta {

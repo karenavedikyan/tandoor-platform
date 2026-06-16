@@ -249,7 +249,7 @@ export type ActualizationEntityPhoto = {
 export type TradePointShowcaseActualization = {
   tradePointId: string;
   dealerId: string;
-  /** null = не заполнено */
+  /** default = true; null допустим только для legacy-снапшотов и трактуется как true */
   hasShowcase: boolean | null;
   totalPortals: number | null;
   entrancePortals: number | null;
@@ -276,6 +276,37 @@ export type TradePointShowcaseActualization = {
   /** Явно созданные из матрицы задачи (не автоматически при выборе). */
   showcaseMatrixTasks?: ShowcaseMatrixTask[];
 };
+
+/**
+ * Промт 355: дефолт hasShowcase = true.
+ * null допустим только для legacy-снапшотов (localStorage / cache-v1 mirror)
+ * и трактуется как true. Явный false означает «Нет витрины».
+ */
+export function normalizeHasShowcase(v: boolean | null | undefined): boolean {
+  return v === false ? false : true;
+}
+
+export function normalizeTradePointShowcaseActualization(
+  sh: TradePointShowcaseActualization,
+): TradePointShowcaseActualization {
+  const hasShowcase = normalizeHasShowcase(sh.hasShowcase);
+  if (hasShowcase === sh.hasShowcase) return sh;
+  return { ...sh, hasShowcase };
+}
+
+/** Нормализует legacy null → true во всех записях витрины при гидрации снапшота. */
+export function normalizeActualizationStateShowcases(state: ActualizationState): ActualizationState {
+  const src = state.tradePointShowcaseActualizationById;
+  let changed = false;
+  const next: Record<string, TradePointShowcaseActualization> = {};
+  for (const [id, sh] of Object.entries(src)) {
+    const normalized = normalizeTradePointShowcaseActualization(sh);
+    if (normalized !== sh) changed = true;
+    next[id] = normalized;
+  }
+  if (!changed) return state;
+  return { ...state, tradePointShowcaseActualizationById: next };
+}
 
 export type ActualizationState = {
   version: number;
