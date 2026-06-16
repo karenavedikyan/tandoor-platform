@@ -14,13 +14,11 @@ import {
   MessageCircle,
   LogOut,
   Map,
-  MapPinned,
   Megaphone,
   FileText,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  PieChart,
   Store,
   UserRound,
   Users,
@@ -59,7 +57,6 @@ import {
 const SIDEBAR_COLLAPSED_LS_KEY = "tandoor-shell-sidebar-collapsed-v1";
 
 const MAIN_HREF = "/main";
-const TERRITORY_CARD_HREF = "/territory-card";
 const DEALER_BASE_HREF = "/dealer-base";
 const TRADE_POINTS_HREF = "/trade-points";
 const CLIENT_MAP_HREF = "/client-map";
@@ -69,7 +66,6 @@ const TASKS_INBOX_HREF = "/assignments";
 const ANALYTICS_HREF = "/analytics";
 const TRAINING_HREF = "/training";
 const SALES_CONTROL_HREF = "/sales-control";
-const ANALYTICS_WORKSPACE_HREF = "/analytics-workspace";
 const MARKETING_BRIEFS_HREF = "/marketing-briefs";
 const LISTINGS_HREF = "/listings";
 const SALES_MANAGER_HREF = "/sales-manager";
@@ -84,21 +80,17 @@ const ACTUALIZATION_SAVE_STATUS_ROUTES = [
   "/manager-workspace",
   "/sales-manager",
   "/tasks",
-  "/territory",
-  "/territory-card",
   "/trade-points",
   "/client-map",
 ];
 
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
-  "nav-item-territory-card": MapPinned,
   "nav-item-clients": Users,
   "nav-item-trade-points": Store,
   "nav-item-client-map": Map,
   "nav-item-client-base-activity": BarChart3,
   "nav-item-sales-plan-fact": ClipboardList,
-  "nav-item-team-analytics": PieChart,
   "nav-item-showcase-tasks": ListTodo,
   "nav-item-tasks-inbox": ClipboardList,
   "nav-item-catalog": LayoutGrid,
@@ -109,7 +101,6 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-client-base-activity": BarChart3,
   "nav-main": Home,
   "nav-client-map": Map,
-  "nav-territory-card": MapPinned,
   "nav-dealer-base": Users,
   "nav-trade-points": Store,
   "nav-catalog": LayoutGrid,
@@ -117,7 +108,6 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-communications": MessageCircle,
   "nav-training": BookOpen,
   "nav-sales-control": ClipboardList,
-  "nav-analytics-workspace": PieChart,
   "nav-marketing-briefs": Megaphone,
   "nav-listings": FileText,
   "nav-item-admin-brief-migrate": Database,
@@ -172,10 +162,6 @@ function isAnalyticsPath(path: string) {
   return path === ANALYTICS_HREF;
 }
 
-function isTerritoryCardPath(path: string) {
-  return path === TERRITORY_CARD_HREF;
-}
-
 function isTrainingPath(path: string) {
   return path === TRAINING_HREF || path.startsWith(`${TRAINING_HREF}/`);
 }
@@ -187,10 +173,6 @@ function isSalesControlPath(path: string) {
 function isSalesControlPlanFactPath(path: string) {
   const p = path.split("?")[0] ?? path;
   return p === "/sales-control/plan-fact" || p.startsWith("/sales-control/plan-fact/");
-}
-
-function isAnalyticsWorkspacePath(path: string) {
-  return path === ANALYTICS_WORKSPACE_HREF || path.startsWith(`${ANALYTICS_WORKSPACE_HREF}/`);
 }
 
 function isClientBaseActivityPath(path: string) {
@@ -232,11 +214,9 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   if (bid === "nav-tasks") return isTasksPath(location);
   if (bid === "nav-tasks-inbox") return isTasksInboxPath(location);
   if (bid === "nav-communications") return isCommunicationsPath(location);
-  if (bid === "nav-territory-card") return isTerritoryCardPath(location);
   if (bid === "nav-analytics") return isAnalyticsPath(location);
   if (bid === "nav-training") return isTrainingPath(location);
   if (bid === "nav-sales-control") return isSalesControlPath(location);
-  if (bid === "nav-analytics-workspace") return isAnalyticsWorkspacePath(location);
   if (bid === "nav-client-map") return isClientMapPath(location);
   if (bid === "nav-marketing-briefs") return isMarketingBriefsPath(location);
   if (bid === "nav-listings") return isListingsPath(location);
@@ -288,11 +268,9 @@ function headerContextLabel(location: string) {
   if (isTasksInboxPath(location)) return "Задачи";
   if (isTasksPath(location)) return "Задачи по витрине";
   if (isCatalogPath(location)) return "Каталог";
-  if (isTerritoryCardPath(location)) return "Карточка территории";
   if (isAnalyticsPath(location)) return "Аналитика";
   if (isTrainingPath(location)) return "Обучение";
   if (isSalesControlPath(location)) return "План-факт продаж";
-  if (isAnalyticsWorkspacePath(location)) return "Аналитика команды";
   if (isMarketingBriefsPath(location)) return "Маркетинговые брифы";
   if (isListingsPath(location)) return "Листовки";
   return "";
@@ -754,8 +732,6 @@ function isClientBaseActualizationShellBadgeRoute(location: string): boolean {
   if (starts("/manager-workspace")) return true;
   if (p === "/" || p === "/main" || p === "/sales-manager") return true;
   if (starts("/tasks")) return true;
-  if (starts("/territory")) return true;
-  if (starts("/territory-card")) return true;
   if (starts("/trade-points")) return true;
   if (starts("/client-map")) return true;
   if (p === "/client-base-activity") return true;

@@ -1,14 +1,11 @@
 import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
-import { useCurrentUser } from "@/hooks/use-current-user";
-import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
-import { canAccessPath } from "@/lib/auth-access";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
 import {
@@ -214,7 +211,6 @@ function YearScenarioCard({ s }: { s: ManagerYearScenario }) {
 }
 
 export default function SalesManagerWorkspace() {
-  const { user } = useCurrentUser();
   const [loc] = useLocation();
   const path = loc && loc.length > 0 ? loc : "/";
 
@@ -281,11 +277,6 @@ export default function SalesManagerWorkspace() {
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-sales-control">
               <Link href="/sales-control">План-факт продаж</Link>
             </Button>
-            {user && canAccessPath(userRoleToSalesRole(user.role), "/analytics-workspace") ? (
-              <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-analytics-workspace">
-                <Link href="/analytics-workspace">Аналитика команды</Link>
-              </Button>
-            ) : null}
             <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold" data-testid="button-sales-manager-open-marketing-briefs">
               <Link href="/marketing-briefs">Брифы</Link>
             </Button>

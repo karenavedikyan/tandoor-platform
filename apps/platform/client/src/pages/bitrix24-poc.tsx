@@ -169,7 +169,7 @@ export default function Bitrix24PocPage() {
             </Link>
           </Button>
           <Button asChild variant="secondary" className="min-h-10 w-full justify-start gap-2 sm:w-auto sm:min-w-[12rem]">
-            <Link href={withEmbedded("/analytics-workspace")}>
+            <Link href={withEmbedded("/analytics")}>
               <Target className="h-4 w-4 shrink-0" aria-hidden />
               Открыть KPI
             </Link>

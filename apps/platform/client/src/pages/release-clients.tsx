@@ -344,9 +344,6 @@ export default function ReleaseClientsPage() {
           Найдено по фильтрам: {filtered.length}
           {filtered.length > MAX_ROWS ? ` · в таблице показаны первые ${MAX_ROWS}` : ""}
         </p>
-        <Link href="/analytics-workspace" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
-          Аналитика команды
-        </Link>
       </div>
 
       <section className="min-w-0 rounded-2xl border border-border/80 bg-card" data-testid="section-release-clients-table">

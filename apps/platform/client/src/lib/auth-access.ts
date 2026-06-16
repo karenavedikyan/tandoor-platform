@@ -83,11 +83,11 @@ export function defaultHomePathForRole(role: SalesRole): string {
     case "team_lead":
       return "/dealer-base";
     case "sales_director":
-      return "/territory-card";
+      return "/dealer-base";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
-      return "/analytics-workspace";
+      return "/dealer-base";
     default:
       return "/dealer-base";
   }
@@ -108,7 +108,7 @@ export function defaultHomePathForUserRole(role: UserRole): string {
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
-      return "/analytics-workspace";
+      return "/dealer-base";
     case "category_manager":
       return "/dealer-base";
     default:
@@ -213,8 +213,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "team_lead") {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
-      (x) => isUnder(x, "/territory-card"),
-      (x) => isUnder(x, "/analytics-workspace"),
       (x) =>
         isUnder(x, "/dealer-base") ||
         isUnder(x, "/dealers") ||
@@ -243,8 +241,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "sales_director") {
     return any([
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
-      (x) => isUnder(x, "/territory-card"),
-      (x) => isUnder(x, "/analytics-workspace"),
       (x) =>
         isUnder(x, "/dealer-base") ||
         isUnder(x, "/dealers") ||
@@ -277,7 +273,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
       (x) => isUnder(x, "/trade-points"),
       (x) => isUnder(x, "/client-map"),
       (x) => isUnder(x, "/sales-control"),
-      (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
       (x) => isUnder(x, "/assignment"),
@@ -294,7 +289,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
 
   if (role === "analyst") {
     return any([
-      (x) => isUnder(x, "/analytics-workspace"),
       (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
@@ -548,12 +542,6 @@ export function getPilotNavigation(
     const items: PilotNavItem[] = [
       { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
       { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
-      {
-        href: "/analytics-workspace",
-        label: "Аналитика команды",
-        testId: "nav-item-team-analytics",
-        navBehaviorId: "nav-analytics-workspace",
-      },
       { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
     ];
     if (options.includeMarketingBriefsInDev) {
@@ -665,7 +653,6 @@ export function getPilotNavigation(
     const items: PilotNavItem[] = [];
     const push = (x: PilotNavItem) => items.push(x);
     if (role === "analyst") {
-      push({ href: "/analytics-workspace", label: "Аналитика команды", testId: "nav-analytics-workspace" });
       push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
       push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });

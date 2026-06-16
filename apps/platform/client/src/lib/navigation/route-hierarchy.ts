@@ -117,11 +117,9 @@ export function parentRouteFor(path: string): string {
     "/analytics",
     "/listings",
     "/client-map",
-    "/territory-card",
     "/main",
     "/tasks",
     "/release-one",
-    "/analytics-workspace",
     "/users",
     "/reset-requests",
   ]);
@@ -299,10 +297,8 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
     analytics: "Аналитика",
     listings: "Листинги",
     "client-map": "Карта клиентов",
-    "territory-card": "Территория",
     tasks: "Задачи",
     "release-one": "Релиз 1",
-    "analytics-workspace": "Аналитика",
     users: "Пользователи и доступ",
     "reset-requests": "Запросы сброса",
   };

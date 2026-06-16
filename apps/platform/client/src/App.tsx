@@ -69,7 +69,6 @@ const LazyAnalyticsPage = lazy(() => import("@/pages/analytics"));
 const LazyTrainingPage = lazy(() => import("@/pages/training"));
 const LazyTrainingProgramPage = lazy(() => import("@/pages/training-program"));
 const LazyTrainingArticlePage = lazy(() => import("@/pages/training-article"));
-const LazyTerritoryCardPage = lazy(() => import("@/pages/territory-card"));
 const LazySalesControlHub = lazy(() => import("@/pages/sales-control"));
 const LazySalesControlDirector = lazy(() => import("@/pages/sales-control-director"));
 const LazySalesControlTeamLead = lazy(() => import("@/pages/sales-control-team-lead"));
@@ -77,7 +76,6 @@ const LazySalesControlManager = lazy(() => import("@/pages/sales-control-manager
 const LazySalesControlPlans = lazy(() => import("@/pages/sales-control-plans"));
 const LazySalesControlPerformance = lazy(() => import("@/pages/sales-control-performance"));
 const LazySalesPlanFactManagement = lazy(() => import("@/pages/sales-plan-fact-management"));
-const LazyAnalyticsWorkspace = lazy(() => import("@/pages/analytics-workspace"));
 const LazyMarketingBriefs = lazy(() => import("@/pages/marketing-briefs"));
 const LazyMarketingBriefEditor = lazy(() => import("@/pages/marketing-brief-editor"));
 const LazyMarketingBriefPublished = lazy(() =>
@@ -148,7 +146,6 @@ const AnalyticsPageRoute = suspensePage(LazyAnalyticsPage);
 const TrainingPageRoute = suspensePage(LazyTrainingPage);
 const TrainingProgramPageRoute = suspensePage(LazyTrainingProgramPage);
 const TrainingArticlePageRoute = suspensePage(LazyTrainingArticlePage);
-const TerritoryCardPageRoute = suspensePage(LazyTerritoryCardPage);
 const SalesControlHubRoute = suspensePage(LazySalesControlHub);
 const SalesControlDirectorRoute = suspensePage(LazySalesControlDirector);
 const SalesControlTeamLeadRoute = suspensePage(LazySalesControlTeamLead);
@@ -156,7 +153,6 @@ const SalesControlManagerRoute = suspensePage(LazySalesControlManager);
 const SalesControlPlansRoute = suspensePage(LazySalesControlPlans);
 const SalesControlPerformanceRoute = suspensePage(LazySalesControlPerformance);
 const SalesPlanFactManagementRoute = suspensePage(LazySalesPlanFactManagement);
-const AnalyticsWorkspaceRoute = suspensePage(LazyAnalyticsWorkspace);
 const MarketingBriefsRoute = suspensePage(LazyMarketingBriefs);
 const MarketingBriefEditorRoute = suspensePage(LazyMarketingBriefEditor);
 const MarketingBriefPublishedRoute = suspensePage(LazyMarketingBriefPublished);
@@ -443,7 +439,6 @@ function AuthenticatedShell({
         <Route path="/training/programs/:programId" component={TrainingProgramPageRoute} />
         <Route path="/training/:articleId" component={TrainingArticlePageRoute} />
         <Route path="/training" component={TrainingPageRoute} />
-        <Route path="/territory-card" component={TerritoryCardPageRoute} />
         <Route path="/sales-control/plan-fact" component={SalesPlanFactManagementRoute} />
         <Route path="/sales-control/director" component={SalesControlDirectorRoute} />
         <Route path="/sales-control/team-lead" component={SalesControlTeamLeadRoute} />
@@ -451,7 +446,6 @@ function AuthenticatedShell({
         <Route path="/sales-control/plans" component={SalesControlPlansRoute} />
         <Route path="/sales-control/performance" component={SalesControlPerformanceRoute} />
         <Route path="/sales-control" component={SalesControlHubRoute} />
-        <Route path="/analytics-workspace" component={AnalyticsWorkspaceRoute} />
         <Route path="/marketing-briefs/view/:id" component={MarketingBriefPublishedRoute} />
         <Route path="/marketing-briefs/:id" component={MarketingBriefEditorRoute} />
         <Route path="/marketing-briefs" component={MarketingBriefsRoute} />

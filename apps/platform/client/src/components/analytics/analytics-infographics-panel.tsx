@@ -254,12 +254,6 @@ function segmentOpenDealersTestId(segment: PartnerSegment): string {
   return "button-infographic-segment-open-dealers-tandoor-club";
 }
 
-function segmentOpenTerritoryTestId(segment: PartnerSegment): string {
-  if (segment === "top500") return "button-infographic-segment-open-territory-top500";
-  if (segment === "fiveHundredPlus") return "button-infographic-segment-open-territory-500-plus";
-  return "button-infographic-segment-open-territory-tandoor-club";
-}
-
 function TopBars({ items, testId, subtitle }: { items: InfographicTopItem[]; testId: string; subtitle: string }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
@@ -342,10 +336,7 @@ export function AnalyticsInfographicsPanel() {
         >
           <p className="text-sm font-medium text-foreground">Быстрые действия</p>
           <div className="flex min-w-0 flex-wrap gap-2">
-            <Button asChild size="sm" variant="secondary" className="min-h-9 shrink-0 font-semibold" data-testid="button-infographic-open-territory">
-              <Link href="/territory-card">К карточке территории</Link>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="min-h-9 shrink-0 border-border bg-card font-semibold" data-testid="button-infographic-open-dealers">
+            <Button asChild size="sm" variant="secondary" className="min-h-9 shrink-0 font-semibold" data-testid="button-infographic-open-dealers">
               <Link href="/dealer-base">К клиентам</Link>
             </Button>
             <Button asChild size="sm" variant="outline" className="min-h-9 shrink-0 border-border bg-card font-semibold" data-testid="button-infographic-open-tasks">
@@ -454,15 +445,6 @@ export function AnalyticsInfographicsPanel() {
                     data-testid={segmentOpenDealersTestId(s.segment)}
                   >
                     <Link href="/dealer-base">К клиентам</Link>
-                  </Button>
-                  <Button
-                    asChild
-                    size="sm"
-                    variant="outline"
-                    className="min-h-9 border-border bg-card font-semibold"
-                    data-testid={segmentOpenTerritoryTestId(s.segment)}
-                  >
-                    <Link href="/territory-card">К территории</Link>
                   </Button>
                 </div>
               </CardContent>
