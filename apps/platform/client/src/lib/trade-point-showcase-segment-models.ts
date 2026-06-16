@@ -4,6 +4,10 @@ import type {
   ShowcasePlacementType,
 } from "@/lib/showcase-matrix-api";
 import { getProductById } from "@/lib/catalog-data";
+import {
+  SHOWCASE_MATRIX_MODEL_DEFINITIONS,
+  type ShowcaseMatrixModelDefinition,
+} from "@/lib/trade-point-showcase-matrix-models";
 
 export type SegmentOurModelCard = {
   modelId: string;
@@ -27,8 +31,11 @@ export type SegmentPlacementTypeBreakdownRow = {
   free: number;
 };
 
+export type SegmentDetailSource = "blocks" | "models" | "empty";
+
 export type SegmentDetail = {
   segment: ShowcasePlacementSegment;
+  source: SegmentDetailSource;
   blockCount: number;
   totalCapacity: number;
   totalOurs: number;
@@ -40,6 +47,10 @@ export type SegmentDetail = {
   competitorRows: SegmentCompetitorRow[];
 };
 
+function modelDefinitionForTargetId(targetId: string): ShowcaseMatrixModelDefinition | undefined {
+  return SHOWCASE_MATRIX_MODEL_DEFINITIONS.find((m) => m.id === targetId);
+}
+
 function blockOurs(b: ShowcaseMatrixEntryDto): number {
   if (typeof b.placementActual === "number" && Number.isFinite(b.placementActual)) {
     return Math.max(0, b.placementActual);
@@ -49,6 +60,36 @@ function blockOurs(b: ShowcaseMatrixEntryDto): number {
 
 function blockCompetitors(b: ShowcaseMatrixEntryDto): number {
   return (b.placementCompetitors ?? []).reduce((a, c) => a + Math.max(0, c?.count ?? 0), 0);
+}
+
+function ourModelCardFromId(modelId: string, count: number): SegmentOurModelCard {
+  const product = getProductById(modelId);
+  const def = modelDefinitionForTargetId(modelId);
+  return {
+    modelId,
+    name: product?.name?.trim() || def?.name?.trim() || modelId,
+    series: product?.series?.trim() || null,
+    imageUrl: product?.image?.trim() || def?.imageUrl?.trim() || null,
+    count,
+  };
+}
+
+function buildOurModelsFromInstalledEntries(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  segment: ShowcasePlacementSegment,
+): SegmentOurModelCard[] {
+  if (segment !== "vh" && segment !== "mk") return [];
+  const wantType = segment === "vh" ? "entrance" : "interior";
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    if (e.targetKind !== "model" || e.status !== "installed") continue;
+    const def = modelDefinitionForTargetId(e.targetId);
+    if (!def || def.type !== wantType) continue;
+    counts.set(e.targetId, (counts.get(e.targetId) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([modelId, count]) => ourModelCardFromId(modelId, count))
+    .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
 /** Полная детализация по сегменту: разбивка по типу размещения, модели, конкуренты. */
@@ -102,14 +143,7 @@ export function buildSegmentDetail(
         prev.count += count;
         continue;
       }
-      const product = getProductById(id);
-      ourModelsAcc.set(id, {
-        modelId: id,
-        name: product?.name?.trim() || id,
-        series: product?.series?.trim() || null,
-        imageUrl: product?.image?.trim() || null,
-        count,
-      });
+      ourModelsAcc.set(id, ourModelCardFromId(id, count));
     }
   }
 
@@ -125,12 +159,40 @@ export function buildSegmentDetail(
     }
   }
 
+  let ourModels = Array.from(ourModelsAcc.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, "ru"),
+  );
+
+  if (blocks.length === 0 && (segment === "vh" || segment === "mk")) {
+    ourModels = buildOurModelsFromInstalledEntries(entries, segment);
+    if (ourModels.length > 0) {
+      const modelOurs = ourModels.reduce((sum, m) => sum + m.count, 0);
+      return {
+        segment,
+        source: "models",
+        blockCount: 0,
+        totalCapacity: 0,
+        totalOurs: modelOurs,
+        totalCompetitors: 0,
+        free: 0,
+        distributionPercent: 0,
+        byPlacementType: [],
+        ourModels,
+        competitorRows: [],
+      };
+    }
+  }
+
   const free = Math.max(0, totalCapacity - totalOurs - totalCompetitors);
   const distributionPercent =
     totalCapacity > 0 ? Math.min(100, Math.max(0, Math.floor((totalOurs / totalCapacity) * 100))) : 0;
 
+  const source: SegmentDetailSource =
+    blocks.length > 0 ? "blocks" : ourModels.length > 0 ? "models" : "empty";
+
   return {
     segment,
+    source,
     blockCount: blocks.length,
     totalCapacity,
     totalOurs,
@@ -140,9 +202,7 @@ export function buildSegmentDetail(
     byPlacementType: Array.from(byType.values()).sort((a, b) =>
       a.placementType.localeCompare(b.placementType),
     ),
-    ourModels: Array.from(ourModelsAcc.values()).sort((a, b) =>
-      a.name.localeCompare(b.name, "ru"),
-    ),
+    ourModels,
     competitorRows: Array.from(compAcc.values()).sort((a, b) => b.count - a.count),
   };
 }

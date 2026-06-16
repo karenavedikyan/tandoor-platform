@@ -10,7 +10,7 @@ import {
   PLACEMENT_TYPE_LABEL_RU,
 } from "@/lib/showcase-placement-labels";
 import {
-  loadCachedPlacements,
+  loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
 } from "@/lib/showcase-matrix-store";
 import { buildSegmentDetail, type SegmentDetail } from "@/lib/trade-point-showcase-segment-models";
@@ -40,6 +40,22 @@ function percentBadgeClass(percent: number): string {
 }
 
 function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; compact: boolean }) {
+  if (detail.source === "models") {
+    return (
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-x-2 gap-y-1 text-xs tabular-nums text-muted-foreground",
+          compact && "text-[11px]",
+        )}
+      >
+        <span>наши модели: {detail.totalOurs}</span>
+        <Badge variant="outline" className="text-[10px] font-normal">
+          по статусам моделей
+        </Badge>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -188,6 +204,18 @@ function SegmentExpandedContent({
   detail: SegmentDetail;
   compact: boolean;
 }) {
+  if (detail.source === "models") {
+    return (
+      <div className={cn("space-y-3 border-t border-border/60 pt-3", compact && "space-y-2 pt-2")}>
+        <p className="text-sm text-muted-foreground">
+          Витрины как блоки в этом сегменте не заведены. Показаны модели, отмеченные на витрине ТТ по
+          статусу.
+        </p>
+        <SegmentOurModelsGrid detail={detail} compact={compact} />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-4 border-t border-border/60 pt-3", compact && "space-y-3 pt-2")}>
       <div className="space-y-2">
@@ -213,7 +241,7 @@ function SegmentRow({
   compact: boolean;
 }) {
   const label = PLACEMENT_SEGMENT_LABEL_RU[detail.segment];
-  const isEmpty = detail.blockCount === 0 && detail.ourModels.length === 0;
+  const isEmpty = detail.source === "empty";
 
   if (isEmpty) {
     return (
@@ -274,7 +302,7 @@ export function TradePointShowcaseSegmentSummary({
 
   const placements = useMemo(() => {
     void cacheBump;
-    return loadCachedPlacements(tradePointId);
+    return loadCachedMatrix(tradePointId);
   }, [tradePointId, cacheBump]);
 
   const segmentDetails = useMemo(
