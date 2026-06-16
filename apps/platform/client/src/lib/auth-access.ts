@@ -121,8 +121,15 @@ export function canManageClientAssignments(role: UserRole | null | undefined): b
   return role === "admin" || role === "director" || role === "rop";
 }
 
+/** Промт 378: страница «Активность команды». */
+export function canAccessTeamActivityForUser(role: UserRole | null | undefined): boolean {
+  if (!role) return false;
+  return role === "admin" || role === "director" || role === "rop" || role === "regional_manager";
+}
+
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
+  if (p === "/team-activity") return canAccessTeamActivityForUser(role);
   if (p === "/forgot") return true;
   if (p === "/reset-requests") {
     return role === "admin" || role === "director" || role === "rop";
@@ -605,6 +612,16 @@ export function getPilotNavigation(
         testId: "nav-item-sales-plan-fact",
         navBehaviorId: "nav-sales-control",
       },
+      ...(platformUserRole && canAccessTeamActivityForUser(platformUserRole)
+        ? ([
+            {
+              href: "/team-activity",
+              label: "Команда",
+              testId: "nav-item-team-activity",
+              navBehaviorId: "nav-team-activity",
+            },
+          ] satisfies PilotNavItem[])
+        : []),
       {
         href: "/trash",
         label: "Корзина",
