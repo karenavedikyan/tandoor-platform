@@ -262,7 +262,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
 
   const resolvedMatrix = useMemo<ResolvedTradePointMatrix>(() => {
     if (!matrixClientCategory) {
-      return { source: "fallback", defId: null, models: [] };
+      return { source: "empty", defId: null, models: [] };
     }
     return resolveTradePointMatrixWithSource({
       dealerId,
