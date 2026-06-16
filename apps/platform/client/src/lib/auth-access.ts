@@ -315,8 +315,9 @@ export function canManageMarketingBriefs(role: SalesRole): boolean {
 
 /**
  * Управление справочником матриц моделей на витрину (Дистрибуция).
- * На 1 этапе: admin и роли marketer/analyst как явный дефолтный доступ.
- * Позже — персональный grant из БД (`personalGrant`).
+ * Этап 2: admin, sales_director, team_lead, marketer, analyst, category_manager.
+ * Дальше — персональный grant из БД (`personalGrant`) и опциональный scope-RBAC
+ * (РОП редактирует только матрицы своего региона) — отдельным промтом.
  */
 export function canManageShowcaseMatrixCatalog(
   platformUserRole: UserRole | null | undefined,
@@ -325,7 +326,13 @@ export function canManageShowcaseMatrixCatalog(
 ): boolean {
   if (platformUserRole === "admin") return true;
   if ((role as string) === "admin") return true;
-  return role === "marketer" || role === "analyst" || (role as string) === "category_manager";
+  return (
+    role === "marketer" ||
+    role === "analyst" ||
+    (role as string) === "category_manager" ||
+    role === "sales_director" ||
+    role === "team_lead"
+  );
 }
 
 export function userHasRole(role: SalesRole, allowed: SalesRole[]): boolean {

@@ -279,6 +279,12 @@ export default function DistributionMatrixCatalogPage() {
                               {def.title?.trim() ? (
                                 <p className="mt-0.5 text-xs text-muted-foreground">{formatMatrixDefScopeLabel(def)}</p>
                               ) : null}
+                              <p
+                                className="mt-0.5 text-xs text-muted-foreground md:hidden"
+                                data-testid={`text-matrix-catalog-updated-${def.id}`}
+                              >
+                                Обновлено: {formatMatrixDefUpdatedLabel(def)}
+                              </p>
                             </td>
                             <td className="px-3 py-3 text-muted-foreground sm:px-4">
                               {formatMatrixDefPeriodLabel(def.effectiveFrom, def.effectiveTo)}

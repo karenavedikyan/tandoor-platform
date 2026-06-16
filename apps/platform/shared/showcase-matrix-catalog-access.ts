@@ -3,11 +3,19 @@
  * Соответствует клиентскому `canManageShowcaseMatrixCatalog`.
  */
 
-/** Роли с правом редактирования справочника на 1 этапе (явный дефолтный доступ). */
-const MANAGE_MATRIX_CATALOG_ROLES = new Set(["admin", "marketer", "analyst", "category_manager"]);
+/** Роли с правом редактирования справочника (этап 2: + sales_director, team_lead). */
+const MANAGE_MATRIX_CATALOG_ROLES = new Set([
+  "admin",
+  "marketer",
+  "analyst",
+  "category_manager",
+  "sales_director",
+  "team_lead",
+]);
 
 /**
- * Редактирование справочника матриц: admin или роли из разрешённого списка.
+ * Редактирование справочника матриц (этап 2): admin, sales_director, team_lead,
+ * marketer, analyst, category_manager.
  * TODO: персональный grant-флаг из БД (`personalGrant`).
  */
 export function canManageShowcaseMatrixCatalogServer(
