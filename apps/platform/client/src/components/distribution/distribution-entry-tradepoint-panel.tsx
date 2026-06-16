@@ -54,6 +54,7 @@ type DistributionEntryTradePointPanelProps = {
   onFilterChange: (next: DistributionFilterState) => void;
   regionOptions: string[];
   cityOptions: string[];
+  hideRegion?: boolean;
 };
 
 export function DistributionEntryTradePointPanel({
@@ -63,6 +64,7 @@ export function DistributionEntryTradePointPanel({
   onFilterChange,
   regionOptions,
   cityOptions,
+  hideRegion,
 }: DistributionEntryTradePointPanelProps) {
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
@@ -293,6 +295,7 @@ export function DistributionEntryTradePointPanel({
               onChange={onFilterChange}
               regionOptions={regionOptions}
               cityOptions={cityOptions}
+              hideRegion={hideRegion}
               title="Фильтры списка: по торговой точке"
             />
           </div>

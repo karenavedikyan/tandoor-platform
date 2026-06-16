@@ -52,6 +52,20 @@ export function defaultDistributionFilterState(): DistributionFilterState {
   };
 }
 
+export type DistributionFilterScope = {
+  hideRegion: boolean;
+};
+
+export function sanitizeDistributionFilterForScope(
+  state: DistributionFilterState,
+  scope: DistributionFilterScope,
+): DistributionFilterState {
+  if (scope.hideRegion && state.region !== "all") {
+    return { ...state, region: "all" };
+  }
+  return state;
+}
+
 export function periodWindowIso(
   period: DistributionFilterState["period"],
   now: number = Date.now(),

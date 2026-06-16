@@ -13,6 +13,7 @@ import { DistributionFiltersBar } from "@/components/distribution/distribution-f
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { distributionEntryScopedDealerRows } from "@/lib/distribution-entry-dealer-scope";
 import {
   defaultDistributionFilterState,
@@ -20,6 +21,7 @@ import {
   extractRegionOptions,
   filterScopeDealers,
   listActiveDistributionFilterChips,
+  sanitizeDistributionFilterForScope,
   type DistributionFilterState,
 } from "@/lib/distribution-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -56,6 +58,15 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
     () => distributionEntryScopedDealerRows(workingDealerRows, profile),
     [workingDealerRows, profile],
   );
+
+  const filterScope = useMemo(() => {
+    const access = mapSalesRoleToDealerBaseAccess(profile.role);
+    return { hideRegion: access === "sales_manager" || access === "team_lead" };
+  }, [profile.role]);
+
+  useEffect(() => {
+    setFilter((prev) => sanitizeDistributionFilterForScope(prev, filterScope));
+  }, [filterScope]);
 
   const filteredDealers = useMemo(() => filterScopeDealers(scoped, filter), [scoped, filter]);
 
@@ -100,6 +111,7 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
           onChange={setFilter}
           regionOptions={regionOptions}
           cityOptions={cityOptions}
+          hideRegion={filterScope.hideRegion}
           title={`Фильтры списка${axisTitle ? `: ${axisTitle.toLowerCase()}` : ""}`}
         />
       ) : null}
@@ -134,6 +146,7 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
           onFilterChange={setFilter}
           regionOptions={regionOptions}
           cityOptions={cityOptions}
+          hideRegion={filterScope.hideRegion}
         />
       ) : axis === "product" ? (
         <DistributionEntryProductPanel profile={profile} dealers={filteredDealers} filter={filter} />
