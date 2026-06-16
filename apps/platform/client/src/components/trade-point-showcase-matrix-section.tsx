@@ -55,6 +55,7 @@ import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-pre
 import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
+import { TradePointShowcaseHistorySection } from "@/components/distribution/trade-point-showcase-history-section";
 import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
@@ -1508,6 +1509,8 @@ export function TradePointShowcaseMatrixSection({
             actorUserId={actorUserId}
             actorName={actorName}
           />
+
+          <TradePointShowcaseHistorySection tradePointId={point.id} density={density} />
 
           <Separator className="bg-border/60" />
 
