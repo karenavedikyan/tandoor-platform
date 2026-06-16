@@ -1,7 +1,7 @@
 /**
  * Запуск: `npm run test:sidebar-counters` из каталога apps/platform.
  *
- * Промт 351: счётчики сайдбара для regional_manager соответствуют команде из UTM.
+ * Промт 354: счётчики сайдбара для regional_manager — личный scope по ownCodes.
  */
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
@@ -36,13 +36,25 @@ function bogachevSnap(): OrgSnapshot {
   } as unknown as OrgSnapshot;
 }
 
+const bogachevOwnCodes = new Set(
+  allRows
+    .filter((r) => r.releaseTeamId === "team-skalaban" && r.releaseCode?.trim())
+    .slice(0, 5)
+    .map((r) => r.releaseCode!.trim()),
+);
+
 const profile: ReleaseDemoProfile = { role: "team_lead", personaUserId: "user-tl-skalaban" };
 const realScope: SidebarNavRealScope = {
   isRealUser: true,
   loading: false,
   ready: true,
   releaseDealerRows: allRows,
-  orgScope: { snap: bogachevSnap(), access: "team_lead" },
+  orgScope: { snap: bogachevSnap(), access: "sales_manager" },
+  assignmentsScope: {
+    ownCodes: bogachevOwnCodes,
+    teamCodes: new Set(),
+    grantedCodes: new Set(),
+  },
 };
 
 const emptyAct = createEmptyActualizationState();
@@ -57,14 +69,18 @@ const ctx = {
 // Без актуализации, но с real-scope: счётчик = scoped + picker по умолчанию (без «приостановлен»)
 {
   const dealerCount = resolveSidebarWorkingDealerClientCount(profile, ctx);
-  const scoped = roleScopedDealerRowsForReal(allRows, bogachevSnap(), "team_lead");
+  const scoped = roleScopedDealerRowsForReal(allRows, bogachevSnap(), "sales_manager", undefined, {
+    ownCodes: bogachevOwnCodes,
+    teamCodes: new Set(),
+    grantedCodes: new Set(),
+  });
   const expected = applyDealerBasePickerFilters(
     scoped,
-    defaultDealerBasePickerArgsForCount(profile, "team_lead", true),
+    defaultDealerBasePickerArgsForCount(profile, "sales_manager", true),
   ).length;
   assert.equal(dealerCount, expected);
   assert.ok(dealerCount != null && dealerCount > 0);
-  assert.ok(dealerCount! < seedCountByTeam("team-skalaban") || dealerCount === seedCountByTeam("team-skalaban"));
+  assert.ok(dealerCount! <= bogachevOwnCodes.size);
 }
 
 {

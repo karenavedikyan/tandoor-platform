@@ -117,46 +117,56 @@ const rmSnap = {
   users: [{ id: RM_SEREBRYAKOV, fullName: "Серебряков", role: "regional_manager", teamId: TEAM_KUPIANSKY }],
 } as unknown as OrgSnapshot;
 
+const rmOwnCodes = new Set(
+  allRows
+    .filter((r) => r.releaseTeamId === "team-kupiansky" && r.releaseCode?.trim())
+    .slice(0, 4)
+    .map((r) => r.releaseCode!.trim()),
+);
+assert.ok(rmOwnCodes.size >= 2, "fixture: rm own codes");
+
 const rmProfile: ReleaseDemoProfile = { role: "team_lead", personaUserId: "user-tl-kupiansky" };
 const rmRealScope: SidebarNavRealScope = {
   isRealUser: true,
   loading: false,
   ready: true,
-  orgScope: { snap: rmSnap, access: "team_lead" },
-  assignmentsScope: { ownCodes: new Set(["MA-MA999999"]), teamCodes: new Set(), grantedCodes: new Set() },
+  releaseDealerRows: allRows,
+  orgScope: { snap: rmSnap, access: "sales_manager" },
+  assignmentsScope: { ownCodes: rmOwnCodes, teamCodes: new Set(), grantedCodes: new Set() },
 };
 
-// Real-режим regional_manager: team-scope как у РОПа, не ownCodes из overrides
+// Промт 354: regional_manager — личный scope по ownCodes, не вся команда РОПа
 let rmScopedCount = 0;
 {
-  const rmScoped = distributionEntryScopedDealerRows(DEALER_BASE_ROWS, rmProfile, rmRealScope);
+  const rmScoped = distributionEntryScopedDealerRows(allRows, rmProfile, rmRealScope);
   rmScopedCount = rmScoped.length;
-  assert.ok(rmScoped.length > DEMO_BASELINES.manager, "РМ видит больше, чем один менеджер");
-  assert.ok(
-    rmScoped.every((r) => r.releaseTeamId === "team-kupiansky"),
-    "РМ: только клиенты команды Купянский",
-  );
+  assert.equal(rmScoped.length, rmOwnCodes.size);
+  for (const row of rmScoped) {
+    const code = row.releaseCode?.trim() ?? "";
+    assert.ok(rmOwnCodes.has(code), `код вне ownCodes RM: ${code}`);
+  }
   const ropSnap = {
     me: { id: ROP_KUPIANSKY, role: "rop", fullName: "Купянский", teamId: TEAM_KUPIANSKY },
     visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
     teams: [{ id: TEAM_KUPIANSKY, name: "Купянский", ropUserId: ROP_KUPIANSKY, ropName: "Купянский" }],
     users: [],
   } as unknown as OrgSnapshot;
-  const ropScoped = distributionEntryScopedDealerRows(DEALER_BASE_ROWS, teamLeadProfile, {
+  const ropScoped = distributionEntryScopedDealerRows(allRows, teamLeadProfile, {
     isRealUser: true,
     loading: false,
     ready: true,
+    releaseDealerRows: allRows,
     orgScope: { snap: ropSnap, access: "team_lead" },
   });
-  assert.equal(rmScoped.length, ropScoped.length, "РМ scope = РОП scope");
+  assert.ok(rmScoped.length < ropScoped.length, "РМ видит меньше, чем вся команда РОПа");
 }
 
 // Real-режим: filterDealersForEntryLeadershipScope НЕ применяется поверх real-scope
 {
-  const access = mapSalesRoleToDealerBaseAccess(teamLeadProfile.role);
-  const realScoped = distributionEntryScopedDealerRows(DEALER_BASE_ROWS, teamLeadProfile, rmRealScope);
-  const withLeadership = filterDealersForEntryLeadershipScope(realScoped, access, teamLeadProfile);
-  const demoScoped = distributionEntryScopedDealerRows(DEALER_BASE_ROWS, teamLeadProfile, undefined);
+  const access = mapSalesRoleToDealerBaseAccess(rmProfile.role);
+  const realScoped = distributionEntryScopedDealerRows(allRows, rmProfile, rmRealScope);
+  const withLeadership = filterDealersForEntryLeadershipScope(realScoped, access, rmProfile);
+  const demoScoped = distributionEntryScopedDealerRows(allRows, rmProfile, undefined);
   assert.ok(demoScoped.length > 0);
   assert.equal(realScoped.length, rmScopedCount);
   assert.ok(
@@ -178,15 +188,22 @@ let rmScopedCount = 0;
   assert.equal(working.length, skalabanRows.length);
 }
 
-// Богачёв (Скалабан): не видит клиентов Сапожкова
+// Богачёв (Скалабан): только ownCodes, не вся команда и не Сапожков
 {
+  const bogachevOwnCodes = new Set(
+    skalabanRows
+      .filter((r) => r.releaseCode?.trim())
+      .slice(0, 6)
+      .map((r) => r.releaseCode!.trim()),
+  );
   const snap = regionalSnap(BOGACHEV, TEAM_SKALABAN, ROP_SKALABAN);
   const scope: SidebarNavRealScope = {
     isRealUser: true,
     loading: false,
     ready: true,
     releaseDealerRows: allRows,
-    orgScope: { snap, access: "team_lead" },
+    orgScope: { snap, access: "sales_manager" },
+    assignmentsScope: { ownCodes: bogachevOwnCodes, teamCodes: new Set(), grantedCodes: new Set() },
   };
   const scoped = buildDistributionScopedDealerRows(
     { role: "team_lead", personaUserId: "user-tl-skalaban" },
@@ -197,28 +214,34 @@ let rmScopedCount = 0;
       releaseDealerRows: allRows,
     },
   );
-  assert.ok(scoped.length > 0);
-  assert.equal(scoped.length, seedCountByTeam("team-skalaban"));
-  assert.ok(scoped.every((r) => r.releaseTeamId === "team-skalaban"));
+  assert.equal(scoped.length, bogachevOwnCodes.size);
   const sapozhkovIds = new Set(sapozhkovRows.map((r) => r.id));
   assert.ok(!scoped.some((r) => sapozhkovIds.has(r.id)), "Богачёв не должен видеть клиентов Сапожкова");
+  assert.ok(scoped.length < seedCountByTeam("team-skalaban"), "Богачёв: ownCodes меньше всей команды");
 }
 
-// Дрогобицкий (Сапожков): только команда Сапожкова
+// Дрогобицкий (Сапожков): только ownCodes территории
 {
+  const drogoOwnCodes = new Set(
+    sapozhkovRows
+      .filter((r) => r.releaseCode?.trim())
+      .slice(0, 5)
+      .map((r) => r.releaseCode!.trim()),
+  );
   const snap = regionalSnap(DROGOZHITSKY, TEAM_SAPOZHKOV, ROP_SAPOZHKOV);
   const scoped = distributionEntryScopedDealerRows(allRows, { role: "team_lead", personaUserId: "user-tl-sapozhkov" }, {
     isRealUser: true,
     loading: false,
     ready: true,
     releaseDealerRows: allRows,
-    orgScope: { snap, access: "team_lead" },
+    orgScope: { snap, access: "sales_manager" },
+    assignmentsScope: { ownCodes: drogoOwnCodes, teamCodes: new Set(), grantedCodes: new Set() },
   });
-  assert.equal(scoped.length, seedCountByTeam("team-sapozhkov"));
-  assert.ok(scoped.every((r) => r.releaseTeamId === "team-sapozhkov"));
+  assert.equal(scoped.length, drogoOwnCodes.size);
+  assert.ok(scoped.length < seedCountByTeam("team-sapozhkov"));
 }
 
-// regional_manager без teamId → []
+// regional_manager без assignmentsScope → []
 {
   const snap = {
     me: { id: BOGACHEV, role: "regional_manager", fullName: "Богачёв", teamId: null },
@@ -230,7 +253,8 @@ let rmScopedCount = 0;
     isRealUser: true,
     loading: false,
     ready: true,
-    orgScope: { snap, access: "team_lead" },
+    releaseDealerRows: allRows,
+    orgScope: { snap, access: "sales_manager" },
   });
   assert.deepEqual(scoped, []);
 }
