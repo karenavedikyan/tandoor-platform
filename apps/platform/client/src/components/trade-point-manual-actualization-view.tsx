@@ -62,6 +62,12 @@ import {
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
+import { getProductById } from "@/lib/catalog-data";
+import {
+  countSelectedByType,
+  getShowcaseTypeCapacity,
+  type ShowcaseTypeKey,
+} from "@/lib/showcase-type-capacity";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { hydrateTradePointOverridesForEntity } from "@/lib/dealer-overrides-sync";
 import { DEALER_TRADE_POINTS_EVENT, getTradePointEdit } from "@/lib/dealer-trade-points-overrides";
@@ -77,6 +83,7 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
     totalPortals: null,
     entrancePortals: null,
     interiorPortals: null,
+    hardwareSections: null,
     showcaseAreaSqm: null,
     showcaseComment: "",
     tandoorTotalPortals: null,
@@ -513,6 +520,7 @@ export function TradePointManualActualizationView(props: {
       "Есть витрина",
       `порталы ${dashNum(showcaseRec?.totalPortals)}`,
       `Tandoor ${dashNum(showcaseRec?.tandoorTotalPortals)}`,
+      `фурнитура ${dashNum(showcaseRec?.hardwareSections)}`,
       `своб./конк. ${dashNum(summary.freeOrCompetitor)}`,
       `пот. ${dashNum(summary.entrancePotential)}/${dashNum(summary.interiorPotential)}`,
       `дефицит ${deficit}`,
@@ -522,6 +530,7 @@ export function TradePointManualActualizationView(props: {
     hasShowcase,
     showcaseRec?.totalPortals,
     showcaseRec?.tandoorTotalPortals,
+    showcaseRec?.hardwareSections,
     summary.freeOrCompetitor,
     summary.entrancePotential,
     summary.interiorPotential,
@@ -556,8 +565,18 @@ export function TradePointManualActualizationView(props: {
     const photosStatus: TpSectionStatusKind = tpPhotoCount === 0 ? "empty" : "partial";
 
     let showcaseStatusMeta: TpSectionStatusKind = "partial";
+    const selectedModels = showcaseRec?.selectedShowcaseModels ?? [];
+    const needsCapacityAttention = (["entrance", "interior", "hardware"] as ShowcaseTypeKey[]).some(
+      (type) =>
+        countSelectedByType(selectedModels, type, getProductById) > 0 &&
+        getShowcaseTypeCapacity(showcaseRec, type) == null,
+    );
     if (hasShowcase === false) showcaseStatusMeta = "no_showcase";
-    else if (summary.needsPrimaryInstall || (templateModelsCount > 0 && matrixStats.missing > 0)) {
+    else if (
+      summary.needsPrimaryInstall ||
+      needsCapacityAttention ||
+      (templateModelsCount > 0 && matrixStats.missing > 0)
+    ) {
       showcaseStatusMeta = "attention";
     } else if (
       hasShowcase === true &&
@@ -605,6 +624,7 @@ export function TradePointManualActualizationView(props: {
     dealer.regionalManager,
     showcaseTriggerSummary,
     hasShowcase,
+    showcaseRec,
     summary.needsPrimaryInstall,
     templateModelsCount,
     matrixStats.missing,

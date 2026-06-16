@@ -46,6 +46,7 @@ export function inferShowcasePortalTypeFromCatalogProduct(p: CatalogProduct | un
   if (!p) return "other";
   if (p.doorKind === "Входная") return "entrance";
   if (p.doorKind === "Межкомнатная") return "interior";
+  if (p.doorKind === "Фурнитура" || p.category?.includes("Фурнитур")) return "hardware";
   return "other";
 }
 
@@ -61,23 +62,45 @@ export type ShowcasePortalCaps = {
   entrance: number | null;
   interior: number | null;
   total: number | null;
+  hardware: number | null;
 };
+
+export type ShowcasePortalOverfillDetail = {
+  entranceOverfill: number;
+  interiorOverfill: number;
+  hardwareOverfill: number;
+  totalOverfill: number;
+  hasOverfill: boolean;
+};
+
+export function computeShowcasePortalOverfillDetail(
+  selected: readonly TradePointShowcaseSelectedModel[],
+  caps: ShowcasePortalCaps,
+  catalogLookup: (id: string) => CatalogProduct | undefined,
+): ShowcasePortalOverfillDetail {
+  let ent = 0;
+  let int = 0;
+  let hw = 0;
+  for (const m of selected) {
+    const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
+    if (t === "entrance") ent += 1;
+    else if (t === "interior") int += 1;
+    else if (t === "hardware") hw += 1;
+  }
+  const n = selected.length;
+  const entranceOverfill = caps.entrance != null ? Math.max(0, ent - caps.entrance) : 0;
+  const interiorOverfill = caps.interior != null ? Math.max(0, int - caps.interior) : 0;
+  const hardwareOverfill = caps.hardware != null ? Math.max(0, hw - caps.hardware) : 0;
+  const totalOverfill = caps.total != null ? Math.max(0, n - caps.total) : 0;
+  const hasOverfill =
+    entranceOverfill > 0 || interiorOverfill > 0 || hardwareOverfill > 0 || totalOverfill > 0;
+  return { entranceOverfill, interiorOverfill, hardwareOverfill, totalOverfill, hasOverfill };
+}
 
 export function computeShowcasePortalOverfill(
   selected: readonly TradePointShowcaseSelectedModel[],
   caps: ShowcasePortalCaps,
   catalogLookup: (id: string) => CatalogProduct | undefined,
 ): boolean {
-  let ent = 0;
-  let int = 0;
-  for (const m of selected) {
-    const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
-    if (t === "entrance") ent += 1;
-    else if (t === "interior") int += 1;
-  }
-  const n = selected.length;
-  if (caps.entrance != null && ent > caps.entrance) return true;
-  if (caps.interior != null && int > caps.interior) return true;
-  if (caps.total != null && n > caps.total) return true;
-  return false;
+  return computeShowcasePortalOverfillDetail(selected, caps, catalogLookup).hasOverfill;
 }

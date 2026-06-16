@@ -116,6 +116,7 @@ export function deriveShowcaseBucket(sh: TradePointShowcaseActualization | undef
     (sh.totalPortals != null ||
       sh.entrancePortals != null ||
       sh.interiorPortals != null ||
+      sh.hardwareSections != null ||
       sh.tandoorTotalPortals != null ||
       sh.tandoorEntrancePortals != null ||
       sh.tandoorInteriorPortals != null);
@@ -130,11 +131,12 @@ export function deriveShowcaseBucket(sh: TradePointShowcaseActualization | undef
 }
 
 function portalCapsFromShowcase(sh: TradePointShowcaseActualization | undefined): ShowcasePortalCaps {
-  if (!sh) return { entrance: null, interior: null, total: null };
+  if (!sh) return { entrance: null, interior: null, total: null, hardware: null };
   return {
     entrance: sh.entrancePortals ?? sh.tandoorEntrancePortals,
     interior: sh.interiorPortals ?? sh.tandoorInteriorPortals,
     total: sh.totalPortals ?? sh.tandoorTotalPortals,
+    hardware: sh.hardwareSections ?? null,
   };
 }
 
@@ -183,7 +185,8 @@ export function buildTradePointListForActualization(
         sh?.totalPortals != null ||
         sh?.tandoorTotalPortals != null ||
         sh?.entrancePortals != null ||
-        sh?.interiorPortals != null
+        sh?.interiorPortals != null ||
+        sh?.hardwareSections != null
       );
     const hasFreePortals =
       (summary.entrancePotential != null && summary.entrancePotential > 0) ||

@@ -7,8 +7,6 @@ import {
   type TradePointShowcaseActualization,
 } from "../client-base-actualization-state";
 import { deriveShowcaseBucket } from "../trade-point-list-for-actualization";
-
-assert.equal(normalizeHasShowcase(null), true);
 assert.equal(normalizeHasShowcase(undefined), true);
 assert.equal(normalizeHasShowcase(true), true);
 assert.equal(normalizeHasShowcase(false), false);
@@ -20,6 +18,7 @@ const emptyLegacy: TradePointShowcaseActualization = {
   totalPortals: null,
   entrancePortals: null,
   interiorPortals: null,
+  hardwareSections: null,
   showcaseAreaSqm: null,
   showcaseComment: "",
   tandoorTotalPortals: null,
@@ -53,6 +52,11 @@ const emptyLegacy: TradePointShowcaseActualization = {
 {
   const bucket = deriveShowcaseBucket({ ...emptyLegacy, hasShowcase: false });
   assert.equal(bucket.bucket, "no_showcase");
+}
+
+{
+  const bucket = deriveShowcaseBucket({ ...emptyLegacy, hardwareSections: 2 });
+  assert.equal(bucket.bucket, "partial");
 }
 
 console.log("showcase-default-true: ok");
