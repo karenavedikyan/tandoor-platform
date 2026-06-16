@@ -10,7 +10,7 @@ import { ModelCardCompetitorsSection } from "@/components/model-card/model-card-
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { getProductById } from "@/lib/catalog-data";
-import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
 import { deserializeFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import {
   buildModelGapTradePoints,
@@ -27,7 +27,7 @@ export default function ModelCardPage() {
   const modelId = decodeURIComponent(params.modelId ?? "");
   const product = getProductById(modelId);
   const { profile } = useReleaseDemoProfile();
-  const routeQs = useRouteSearchParams();
+  const routeQs = useHashRouteSearchParams();
   const filters = useMemo(() => deserializeFilters(routeQs.get("fromFilters")), [routeQs]);
   const data = useDistributionAnalyticsData(profile, filters);
   const actx = useClientBaseActualization();

@@ -47,6 +47,24 @@ export function readRouteQuery(): URLSearchParams {
 }
 
 /**
+ * Читает query-параметры, объединяя:
+ *  1. `window.location.search` (стандартный query до `#`)
+ *  2. `window.location.hash` part после `?` (например `#/distribution?view=analytics`)
+ * Hash-секция имеет приоритет.
+ */
+export function readHashRouteQuery(): URLSearchParams {
+  if (typeof window === "undefined") return new URLSearchParams();
+  const sp = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+  const qIdx = hash.indexOf("?");
+  if (qIdx >= 0) {
+    const hashSp = new URLSearchParams(hash.slice(qIdx + 1));
+    for (const [k, v] of hashSp.entries()) sp.set(k, v);
+  }
+  return sp;
+}
+
+/**
  * Реагирует на смену hash и на изменение search (например после клика по Link с buildHashPath).
  */
 export function useRouteSearchParams(): URLSearchParams {
@@ -62,4 +80,22 @@ export function useRouteSearchParams(): URLSearchParams {
     };
   }, []);
   return useMemo(() => readRouteQuery(), [loc, tick]);
+}
+
+/**
+ * React-хук, реактивно отдающий объединённые query-параметры (search + hash).
+ */
+export function useHashRouteSearchParams(): URLSearchParams {
+  const [loc] = useLocation();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setTick((n) => n + 1);
+    window.addEventListener("hashchange", bump);
+    window.addEventListener("popstate", bump);
+    return () => {
+      window.removeEventListener("hashchange", bump);
+      window.removeEventListener("popstate", bump);
+    };
+  }, []);
+  return useMemo(() => readHashRouteQuery(), [loc, tick]);
 }
