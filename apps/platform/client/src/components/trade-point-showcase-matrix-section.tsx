@@ -1500,8 +1500,6 @@ export function TradePointShowcaseMatrixSection({
         )}
           </div>
 
-          <TradePointShowcaseSegmentSummary tradePointId={point.id} density={density} />
-
           <TradePointPlacementBlocksSection
             dealerId={dealer.id}
             tradePointId={point.id}
@@ -1614,6 +1612,7 @@ export function TradePointShowcaseMatrixSection({
                   ))}
                 </div>
                 <p className="text-xs leading-relaxed text-foreground">{page.distributionConclusion}</p>
+                <TradePointShowcaseSegmentSummary tradePointId={point.id} density={density} />
               </CollapsibleContent>
             </Collapsible>
           </div>
