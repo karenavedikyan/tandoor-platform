@@ -187,7 +187,7 @@ export type DealerActualizationAudit = {
 };
 
 /** Тип портала для учёта выбранных моделей на витрине (снимок, не весь каталог). */
-export type ShowcaseSelectedPortalType = "entrance" | "interior" | "other";
+export type ShowcaseSelectedPortalType = "entrance" | "interior" | "hardware" | "other";
 
 /** Выбранная на витрине модель (минимальный снимок; детали подтягиваются из каталога по productId). */
 export type TradePointShowcaseSelectedModel = {
@@ -254,6 +254,8 @@ export type TradePointShowcaseActualization = {
   totalPortals: number | null;
   entrancePortals: number | null;
   interiorPortals: number | null;
+  /** Секций / композиций фурнитуры в ТТ (не входит в totalPortals). */
+  hardwareSections: number | null;
   showcaseAreaSqm: number | null;
   showcaseComment: string;
   tandoorTotalPortals: number | null;
@@ -290,8 +292,9 @@ export function normalizeTradePointShowcaseActualization(
   sh: TradePointShowcaseActualization,
 ): TradePointShowcaseActualization {
   const hasShowcase = normalizeHasShowcase(sh.hasShowcase);
-  if (hasShowcase === sh.hasShowcase) return sh;
-  return { ...sh, hasShowcase };
+  const hardwareSections = sh.hardwareSections ?? null;
+  if (hasShowcase === sh.hasShowcase && hardwareSections === sh.hardwareSections) return sh;
+  return { ...sh, hasShowcase, hardwareSections };
 }
 
 /** Нормализует legacy null → true во всех записях витрины при гидрации снапшота. */

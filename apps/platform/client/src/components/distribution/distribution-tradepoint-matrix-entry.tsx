@@ -10,6 +10,7 @@ import {
 } from "@/components/trade-point-matrix-tasks-slot";
 import { Card, CardContent } from "@/components/ui/card";
 import { TradePointShowcaseMatrixSection } from "@/components/trade-point-showcase-matrix-section";
+import { TradePointShowcaseCatalogSlot } from "@/components/trade-point-showcase-catalog-slot";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { formatRelativeTime } from "@/lib/format-datetime";
@@ -275,6 +276,14 @@ export function DistributionTradePointMatrixEntry({
           <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
         </CollapsibleContent>
       </Collapsible>
+      <TradePointShowcaseCatalogSlot
+        dealer={dealer}
+        point={point}
+        profile={profile}
+        actorUserId={actorUserId}
+        actorLabel={actorName}
+        canEdit={canEdit}
+      />
       {templateModelsCount === 0 ? (
         <Card className="rounded-xl border border-border bg-card shadow-xs">
           <CardContent className="px-4 py-8 text-center">

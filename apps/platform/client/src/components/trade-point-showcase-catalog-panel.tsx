@@ -31,6 +31,18 @@ import {
   inferShowcasePortalTypeFromCatalogProduct,
   type ShowcasePortalCaps,
 } from "@/lib/trade-point-showcase-matrix-required";
+import type { TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
+import {
+  countSelectedByType,
+  evaluateSelectionGate,
+  getShowcaseTypeCapacity,
+  inferShowcaseTypeKeyFromProduct,
+  patchShowcaseTypeCapacity,
+  SHOWCASE_TYPE_SHORT_RU,
+  type ShowcaseTypeKey,
+} from "@/lib/showcase-type-capacity";
+import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
+import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
 import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
 import {
@@ -53,7 +65,7 @@ export type CatalogFilterPreset =
   | "interior"
   | "overfill";
 
-type DoorTypeFilter = "all" | "entrance" | "interior" | "other";
+type DoorTypeFilter = "all" | "entrance" | "interior" | "hardware" | "other";
 
 function lsKeyView(tpId: string): string {
   return `tandoor-tp-showcase-view-${tpId}`;
@@ -103,12 +115,14 @@ export type TradePointShowcaseCatalogPanelProps = {
   showcaseMatrixTasks: ShowcaseMatrixTask[];
   onChangeTasks: (next: ShowcaseMatrixTask[]) => void;
   onMarkDirty: () => void;
-  portalCaps: ShowcasePortalCaps;
+  showcaseRec?: TradePointShowcaseActualization;
+  onPatchShowcase?: (patch: Partial<TradePointShowcaseActualization>) => void;
+  portalCaps?: ShowcasePortalCaps;
   onOpenEntry?: (productId?: string) => void;
 };
 
-function isDoorProduct(p: CatalogProduct): boolean {
-  return p.doorKind === "Входная" || p.doorKind === "Межкомнатная";
+function isShowcaseCatalogProduct(p: CatalogProduct): boolean {
+  return p.doorKind === "Входная" || p.doorKind === "Межкомнатная" || p.doorKind === "Фурнитура";
 }
 
 function productBadges(params: { selected: boolean; required: boolean; categoryKnown: boolean }): { line: string; missing: boolean } {
@@ -131,9 +145,22 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     showcaseMatrixTasks,
     onChangeTasks,
     onMarkDirty,
-    portalCaps,
+    showcaseRec,
+    onPatchShowcase,
+    portalCaps: portalCapsProp,
     onOpenEntry,
   } = props;
+
+  const portalCaps = useMemo((): ShowcasePortalCaps => {
+    if (portalCapsProp) return portalCapsProp;
+    if (!showcaseRec) return { entrance: null, interior: null, total: null, hardware: null };
+    return {
+      entrance: showcaseRec.entrancePortals,
+      interior: showcaseRec.interiorPortals,
+      total: showcaseRec.totalPortals,
+      hardware: showcaseRec.hardwareSections,
+    };
+  }, [portalCapsProp, showcaseRec]);
 
   const [hydrated, setHydrated] = useState(false);
   const [mainTab, setMainTab] = useState<"catalog" | "matrix">("catalog");
@@ -145,6 +172,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
   const [matrixListMode, setMatrixListMode] = useState<"deficit" | "all">("deficit");
   const [jumpHighlightId, setJumpHighlightId] = useState<string | null>(null);
+  const [pendingSelectionProductId, setPendingSelectionProductId] = useState<string | null>(null);
+  const [headerCapacityFormType, setHeaderCapacityFormType] = useState<ShowcaseTypeKey | null>(null);
   const [bump, setBump] = useState(0);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
@@ -230,7 +259,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     return n;
   }, [requiredDefs, isProductSelected]);
 
-  const doorCatalog = useMemo(() => CATALOG_PRODUCTS.filter(isDoorProduct), []);
+  const doorCatalog = useMemo(() => CATALOG_PRODUCTS.filter(isShowcaseCatalogProduct), []);
 
   const hayById = useMemo(() => {
     const m = new Map<string, string>();
@@ -247,7 +276,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     let list = doorCatalog;
     if (doorType === "entrance") list = list.filter((p) => p.doorKind === "Входная");
     else if (doorType === "interior") list = list.filter((p) => p.doorKind === "Межкомнатная");
-    else if (doorType === "other") list = list.filter((p) => p.doorKind !== "Входная" && p.doorKind !== "Межкомнатная");
+    else if (doorType === "hardware") list = list.filter((p) => p.doorKind === "Фурнитура");
+    else if (doorType === "other") list = list.filter((p) => !isShowcaseCatalogProduct(p));
 
     const q = search.trim();
     if (q) {
@@ -270,52 +300,135 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     return list;
   }, [doorCatalog, doorType, search, hayById, preset, isProductSelected, requiredIdSet, matrixClientCategory, portalWarn]);
 
+  const typeStatusLine = useMemo(() => {
+    const types: ShowcaseTypeKey[] = ["entrance", "interior", "hardware"];
+    return types.map((type) => {
+      const cap = getShowcaseTypeCapacity(showcaseRec, type);
+      const cnt = countSelectedByType(selectedShowcaseModels, type, catalogLookup);
+      const short = SHOWCASE_TYPE_SHORT_RU[type];
+      if (cap == null) {
+        return { type, label: `${short}: ${cnt} из — не заполнено`, unfilled: true, overfill: false };
+      }
+      const over = cnt > cap;
+      return {
+        type,
+        label: `${short}: ${cnt} из ${cap}${over ? " (превышено)" : ""}`,
+        unfilled: false,
+        overfill: over,
+      };
+    });
+  }, [selectedShowcaseModels, showcaseRec]);
+
   const countsLine = useMemo(() => {
     let ent = 0;
     let int = 0;
     let oth = 0;
+    let hw = 0;
     for (const m of selectedShowcaseModels) {
       const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
       if (t === "entrance") ent += 1;
       else if (t === "interior") int += 1;
+      else if (t === "hardware") hw += 1;
       else oth += 1;
     }
     const parts: string[] = [];
     if (portalCaps.entrance != null) parts.push(`входных моделей: ${ent} из ${portalCaps.entrance}`);
     if (portalCaps.interior != null) parts.push(`межкомнатных: ${int} из ${portalCaps.interior}`);
+    if (portalCaps.hardware != null) parts.push(`фурнитуры: ${hw} из ${portalCaps.hardware}`);
     if (portalCaps.total != null) parts.push(`всего на витрине: ${selectedShowcaseModels.length} из ${portalCaps.total}`);
     if (oth > 0) parts.push(`тип не определён: ${oth}`);
     return parts.length ? parts.join(" · ") : "";
   }, [selectedShowcaseModels, portalCaps]);
+
+  const applyShowcasePatch = useCallback(
+    (patch: Partial<TradePointShowcaseActualization>) => {
+      onMarkDirty();
+      onPatchShowcase?.(patch);
+    },
+    [onMarkDirty, onPatchShowcase],
+  );
+
+  const performSelect = useCallback(
+    (p: CatalogProduct) => {
+      setMatrixStatus({
+        dealerId,
+        tradePointId,
+        targetKind: "model",
+        targetId: p.id,
+        status: "installed",
+        updatedBy: actorUserId,
+        updatedByName: actorLabel,
+      });
+      const iso = new Date().toISOString();
+      const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
+      onChangeSelected([
+        ...selectedShowcaseModels.filter((x) => x.productId !== p.id),
+        {
+          productId: p.id,
+          productName: p.name,
+          productType: p.type,
+          selectedAt: iso,
+          selectedBy: actorUserId,
+          selectedByName: actorLabel,
+          portalType,
+        },
+      ]);
+    },
+    [actorLabel, actorUserId, dealerId, onChangeSelected, selectedShowcaseModels, tradePointId],
+  );
+
+  const completeCapacityAndSelect = useCallback(
+    (productId: string, type: ShowcaseTypeKey, savedValue: number) => {
+      const p = getProductById(productId);
+      if (!p) return;
+      const baseRec = showcaseRec;
+      const withSaved = { ...baseRec, ...patchShowcaseTypeCapacity(type, savedValue) } as
+        | TradePointShowcaseActualization
+        | undefined;
+      applyShowcasePatch(patchShowcaseTypeCapacity(type, savedValue));
+      const gate = evaluateSelectionGate(withSaved, selectedShowcaseModels, p, catalogLookup);
+      if (
+        gate?.action === "select-and-grow" &&
+        gate.nextCapacity != null &&
+        gate.oldCapacity != null
+      ) {
+        applyShowcasePatch(patchShowcaseTypeCapacity(type, gate.nextCapacity));
+        notifyShowcaseCapacityAutoGrow({
+          tradePointId,
+          type,
+          oldCapacity: gate.oldCapacity,
+          nextCapacity: gate.nextCapacity,
+        });
+      }
+      performSelect(p);
+    },
+    [applyShowcasePatch, performSelect, selectedShowcaseModels, showcaseRec, tradePointId],
+  );
 
   const toggleSelected = useCallback(
     (p: CatalogProduct, nextChecked: boolean) => {
       if (!canEdit) return;
       onMarkDirty();
       if (nextChecked) {
-        setMatrixStatus({
-          dealerId,
-          tradePointId,
-          targetKind: "model",
-          targetId: p.id,
-          status: "installed",
-          updatedBy: actorUserId,
-          updatedByName: actorLabel,
-        });
-        const iso = new Date().toISOString();
-        const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
-        onChangeSelected([
-          ...selectedShowcaseModels.filter((x) => x.productId !== p.id),
-          {
-            productId: p.id,
-            productName: p.name,
-            productType: p.type,
-            selectedAt: iso,
-            selectedBy: actorUserId,
-            selectedByName: actorLabel,
-            portalType,
-          },
-        ]);
+        const gate = evaluateSelectionGate(showcaseRec, selectedShowcaseModels, p, catalogLookup);
+        if (gate?.action === "open-capacity-form") {
+          setPendingSelectionProductId(p.id);
+          return;
+        }
+        if (
+          gate?.action === "select-and-grow" &&
+          gate.nextCapacity != null &&
+          gate.oldCapacity != null
+        ) {
+          applyShowcasePatch(patchShowcaseTypeCapacity(gate.type, gate.nextCapacity));
+          notifyShowcaseCapacityAutoGrow({
+            tradePointId,
+            type: gate.type,
+            oldCapacity: gate.oldCapacity,
+            nextCapacity: gate.nextCapacity,
+          });
+        }
+        performSelect(p);
       } else {
         setMatrixStatus({
           dealerId,
@@ -329,7 +442,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         onChangeSelected(selectedShowcaseModels.filter((x) => x.productId !== p.id));
       }
     },
-    [actorLabel, actorUserId, canEdit, dealerId, onChangeSelected, onMarkDirty, selectedShowcaseModels, tradePointId],
+    [
+      actorLabel,
+      actorUserId,
+      applyShowcasePatch,
+      canEdit,
+      dealerId,
+      onChangeSelected,
+      onMarkDirty,
+      performSelect,
+      selectedShowcaseModels,
+      showcaseRec,
+      tradePointId,
+    ],
   );
 
   const requestEntryForProduct = useCallback(
@@ -382,7 +507,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string }[] = [];
     if (preset !== "all") chips.push({ key: `preset:${preset}`, label: presetLabelRu(preset) });
-    if (doorType !== "all") chips.push({ key: `door:${doorType}`, label: doorType === "entrance" ? "Входные" : doorType === "interior" ? "Межкомнатные" : "Другое" });
+    if (doorType !== "all") chips.push({ key: `door:${doorType}`, label: doorType === "entrance" ? "Входные" : doorType === "interior" ? "Межкомнатные" : doorType === "hardware" ? "Фурнитура" : "Другое" });
     if (search.trim()) chips.push({ key: "search", label: `Поиск: ${search.trim().slice(0, 24)}${search.trim().length > 24 ? "…" : ""}` });
     return chips;
   }, [preset, doorType, search]);
@@ -413,7 +538,10 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     const req = matrixClientCategory != null && requiredIdSet.has(p.id);
     const { line, missing } = productBadges({ selected: sel, required: req, categoryKnown: matrixClientCategory != null });
     const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
-    const typeShort = portalType === "entrance" ? "Вх." : portalType === "interior" ? "МК" : "—";
+    const typeShort =
+      portalType === "entrance" ? "Вх." : portalType === "interior" ? "МК" : portalType === "hardware" ? "Фурн." : "—";
+    const productTypeKey = inferShowcaseTypeKeyFromProduct(p);
+    const pendingCapacity = pendingSelectionProductId === p.id && productTypeKey != null;
 
     const imgBox = (opts: { maxH: string; rounded: string }) => (
       <div
@@ -501,6 +629,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         <p className="text-[10px] font-medium text-muted-foreground" data-testid={`text-showcase-product-status-${p.id}`}>
           {line}
         </p>
+        {pendingCapacity && productTypeKey ? (
+          <ShowcaseTypeCapacityInlineForm
+            type={productTypeKey}
+            currentCapacity={getShowcaseTypeCapacity(showcaseRec, productTypeKey)}
+            hint={`Чтобы добавить «${p.name}», укажите сколько ${SHOWCASE_TYPE_SHORT_RU[productTypeKey].toLowerCase()} в ТТ`}
+            onSave={(value) => {
+              setPendingSelectionProductId(null);
+              completeCapacityAndSelect(p.id, productTypeKey, value);
+            }}
+            onCancel={() => setPendingSelectionProductId(null)}
+            className="mt-1"
+          />
+        ) : null}
       </div>
     );
 
@@ -528,6 +669,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
             </Badge>
           ) : null}
         </div>
+        {pendingCapacity && productTypeKey ? (
+          <ShowcaseTypeCapacityInlineForm
+            type={productTypeKey}
+            currentCapacity={getShowcaseTypeCapacity(showcaseRec, productTypeKey)}
+            hint={`Чтобы добавить «${p.name}», укажите количество`}
+            onSave={(value) => {
+              setPendingSelectionProductId(null);
+              completeCapacityAndSelect(p.id, productTypeKey, value);
+            }}
+            onCancel={() => setPendingSelectionProductId(null)}
+            className="mt-1"
+          />
+        ) : null}
       </div>
     );
 
@@ -705,6 +859,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                       <option value="all">Все</option>
                       <option value="entrance">Входные</option>
                       <option value="interior">Межкомнатные</option>
+                      <option value="hardware">Фурнитура</option>
                       <option value="other">Другое</option>
                     </select>
                   </div>
@@ -733,6 +888,37 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
               Выбрано моделей больше, чем порталов по типам. Проверьте цифры витрины.
             </p>
           ) : null}
+          <div className="space-y-1" data-testid="text-showcase-type-capacity-status">
+            {typeStatusLine.map((row) => (
+              <p key={row.type} className="text-[11px]">
+                {row.unfilled ? (
+                  <>
+                    <span className="text-muted-foreground">{row.label.replace(" не заполнено", "")} </span>
+                    <button
+                      type="button"
+                      className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
+                      onClick={() => setHeaderCapacityFormType(row.type)}
+                    >
+                      не заполнено
+                    </button>
+                  </>
+                ) : (
+                  <span className={row.overfill ? "font-medium text-destructive" : "text-muted-foreground"}>{row.label}</span>
+                )}
+              </p>
+            ))}
+            {headerCapacityFormType ? (
+              <ShowcaseTypeCapacityInlineForm
+                type={headerCapacityFormType}
+                currentCapacity={getShowcaseTypeCapacity(showcaseRec, headerCapacityFormType)}
+                onSave={(value) => {
+                  applyShowcasePatch(patchShowcaseTypeCapacity(headerCapacityFormType, value));
+                  setHeaderCapacityFormType(null);
+                }}
+                onCancel={() => setHeaderCapacityFormType(null)}
+              />
+            ) : null}
+          </div>
           {countsLine ? <p className="text-[11px] text-muted-foreground">{countsLine}</p> : null}
 
           <div className={gridClass}>{filteredCatalog.map(renderProductCard)}</div>

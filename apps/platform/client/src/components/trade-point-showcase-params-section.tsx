@@ -26,6 +26,13 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
+import {
+  getShowcaseTypeCapacity,
+  patchShowcaseTypeCapacity,
+  SHOWCASE_TYPE_LABEL_RU,
+  type ShowcaseTypeKey,
+} from "@/lib/showcase-type-capacity";
 
 function numOrNull(v: string): number | null {
   const t = v.trim();
@@ -43,6 +50,7 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
     totalPortals: null,
     entrancePortals: null,
     interiorPortals: null,
+    hardwareSections: null,
     showcaseAreaSqm: null,
     showcaseComment: "",
     tandoorTotalPortals: null,
@@ -82,6 +90,10 @@ export function TradePointShowcaseParamsSection({
   const save = useSectionSaveFeedback();
 
   const [hasShowcase, setHasShowcase] = useState<boolean>(() => normalizeHasShowcase(rec?.hasShowcase));
+  const [entrancePortals, setEntrancePortals] = useState(rec?.entrancePortals != null ? String(rec.entrancePortals) : "");
+  const [interiorPortals, setInteriorPortals] = useState(rec?.interiorPortals != null ? String(rec.interiorPortals) : "");
+  const [hardwareSections, setHardwareSections] = useState(rec?.hardwareSections != null ? String(rec.hardwareSections) : "");
+  const [inlineCapacityType, setInlineCapacityType] = useState<ShowcaseTypeKey | null>(null);
   const [area, setArea] = useState(rec?.showcaseAreaSqm != null ? String(rec.showcaseAreaSqm) : "");
   const [showcaseComment, setShowcaseComment] = useState(rec?.showcaseComment ?? "");
   const [expPot, setExpPot] = useState<boolean | null>(rec?.hasExpansionPotential ?? null);
@@ -100,6 +112,10 @@ export function TradePointShowcaseParamsSection({
     if (save.isDirty || save.phase === "saving") return;
     const sh = rec ?? emptyShowcase(dealer.id, point.id);
     setHasShowcase(normalizeHasShowcase(sh.hasShowcase));
+    setEntrancePortals(sh.entrancePortals != null ? String(sh.entrancePortals) : "");
+    setInteriorPortals(sh.interiorPortals != null ? String(sh.interiorPortals) : "");
+    setHardwareSections(sh.hardwareSections != null ? String(sh.hardwareSections) : "");
+    setInlineCapacityType(null);
     setArea(sh.showcaseAreaSqm != null ? String(sh.showcaseAreaSqm) : "");
     setShowcaseComment(sh.showcaseComment ?? "");
     setExpPot(sh.hasExpansionPotential);
@@ -119,6 +135,9 @@ export function TradePointShowcaseParamsSection({
       const patch: TradePointShowcaseActualization = {
         ...prevRec,
         hasShowcase,
+        entrancePortals: numOrNull(entrancePortals),
+        interiorPortals: numOrNull(interiorPortals),
+        hardwareSections: numOrNull(hardwareSections),
         showcaseAreaSqm: numOrNull(area),
         showcaseComment: showcaseComment.trim(),
         hasExpansionPotential: expPot,
@@ -145,6 +164,9 @@ export function TradePointShowcaseParamsSection({
     dealer.id,
     point.id,
     hasShowcase,
+    entrancePortals,
+    interiorPortals,
+    hardwareSections,
     area,
     showcaseComment,
     expPot,
@@ -234,6 +256,94 @@ export function TradePointShowcaseParamsSection({
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2" data-testid="section-showcase-portal-counts">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Порталы и секции</p>
+              {(
+                [
+                  {
+                    type: "entrance" as const,
+                    label: "Входных порталов",
+                    value: entrancePortals,
+                    setValue: setEntrancePortals,
+                    testId: "input-showcase-entrance-portals",
+                  },
+                  {
+                    type: "interior" as const,
+                    label: "Межкомнатных порталов",
+                    value: interiorPortals,
+                    setValue: setInteriorPortals,
+                    testId: "input-showcase-interior-portals",
+                  },
+                  {
+                    type: "hardware" as const,
+                    label: "Секций фурнитуры",
+                    value: hardwareSections,
+                    setValue: setHardwareSections,
+                    testId: "input-showcase-hardware-sections",
+                    hint: "Количество композиций / стендов фурнитуры в ТТ",
+                  },
+                ] as const
+              ).map((row) => {
+                const capacity = getShowcaseTypeCapacity(rec, row.type);
+                const unfilled = capacity == null;
+                return (
+                  <div key={row.type} className="space-y-1 rounded-md border border-border/50 bg-muted/10 p-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {SHOWCASE_TYPE_LABEL_RU[row.type]}
+                      </Label>
+                      {canEdit && unfilled ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-[10px] text-amber-900 dark:text-amber-100"
+                          onClick={() => setInlineCapacityType(row.type)}
+                        >
+                          Указать количество
+                        </Button>
+                      ) : null}
+                    </div>
+                    {inlineCapacityType === row.type && canEdit ? (
+                      <ShowcaseTypeCapacityInlineForm
+                        type={row.type}
+                        currentCapacity={capacity}
+                        onSave={(n) => {
+                          row.setValue(String(n));
+                          markDirty();
+                          setInlineCapacityType(null);
+                        }}
+                        onCancel={() => setInlineCapacityType(null)}
+                      />
+                    ) : (
+                      <div className="space-y-1">
+                        <Label className="text-xs font-normal text-foreground">{row.label}</Label>
+                        {canEdit ? (
+                          <Input
+                            className="min-h-9"
+                            inputMode="numeric"
+                            data-testid={row.testId}
+                            value={row.value}
+                            onChange={(e) => {
+                              row.setValue(e.target.value);
+                              markDirty();
+                            }}
+                          />
+                        ) : (
+                          <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                            {readOnlyLabel(row.value)}
+                          </p>
+                        )}
+                        {"hint" in row && row.hint ? (
+                          <p className="text-[10px] text-muted-foreground">{row.hint}</p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
             <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Площадь витрины, м²
