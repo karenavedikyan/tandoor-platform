@@ -12,6 +12,7 @@ import {
   type ShowcaseMatrixModelDefinition,
   type ShowcaseMatrixModelType,
   type ShowcaseMatrixPriorityRank,
+  showcaseMatrixTypeLabelRu,
 } from "@/lib/trade-point-showcase-matrix-models";
 
 export type ResolveTradePointMatrixParams = {
@@ -47,11 +48,12 @@ function isUuid(id: string): boolean {
 
 function catalogSegmentToModelType(segment: ShowcaseMatrixDefModelDto["segment"]): ShowcaseMatrixModelType {
   if (segment === "vh") return "entrance";
+  if (segment === "hardware") return "hardware";
   return "interior";
 }
 
-function typeLabelFor(type: ShowcaseMatrixModelType): "ВХ" | "МК" {
-  return type === "entrance" ? "ВХ" : "МК";
+function typeLabelFor(type: ShowcaseMatrixModelType): ShowcaseMatrixTypeLabelRu {
+  return showcaseMatrixTypeLabelRu(type);
 }
 
 function emptyPresentation(clientCategory: ClientCategoryId): Omit<

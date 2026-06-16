@@ -19,8 +19,19 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   catalogHrefForMatrixModel,
   priorityLabelRu,
+  showcaseMatrixTypeLabelRu,
   type ShowcaseMatrixModelDefinition,
 } from "@/lib/trade-point-showcase-matrix-models";
+import {
+  filterShowcaseModelsForDisplay,
+  modelMatchesQuickFilter,
+  modelsMatchingCategory,
+  pruneCatalogFiltersForAllowedKeys,
+  readShowcaseMatrixCategoryFilterFromStorage,
+  writeShowcaseMatrixCategoryFilterToStorage,
+  type ShowcaseMatrixCategoryFilter,
+  type ShowcaseMatrixQuickFilterId,
+} from "@/lib/trade-point-showcase-matrix-filters";
 import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
 import {
   refreshMatrixDefFromServer,
@@ -75,9 +86,6 @@ function showcaseModelImageSrc(m: ShowcaseMatrixModelDefinition): string {
   return getProductById(m.id)?.image?.trim() ?? "";
 }
 
-type ShowcaseMatrixQuickFilterId = "needed" | "installed" | "postponed" | "not_relevant" | "all";
-
-type ShowcaseMatrixCategoryFilter = "all" | "entrance" | "interior";
 
 type MatrixCatalogFilterRow = {
   key: string;
@@ -85,14 +93,6 @@ type MatrixCatalogFilterRow = {
   options: { value: string; label: string }[];
 };
 
-function modelsMatchingCategory(
-  list: ShowcaseMatrixModelDefinition[],
-  categoryFilter: ShowcaseMatrixCategoryFilter,
-): ShowcaseMatrixModelDefinition[] {
-  if (categoryFilter === "all") return list;
-  if (categoryFilter === "entrance") return list.filter((m) => m.type === "entrance");
-  return list.filter((m) => m.type === "interior");
-}
 
 function collectMatrixCatalogFilterRows(scopeModels: ShowcaseMatrixModelDefinition[]): MatrixCatalogFilterRow[] {
   const series = new Set<string>();
@@ -230,14 +230,6 @@ function matrixCardShellClass(st: ShowcaseMatrixStatusId): string {
   return "border border-dashed border-border/80 bg-muted/20 opacity-[0.92] shadow-sm";
 }
 
-function modelMatchesQuickFilter(st: ShowcaseMatrixStatusId, f: ShowcaseMatrixQuickFilterId): boolean {
-  if (st === "not_relevant") return f === "not_relevant";
-  if (f === "all") return true;
-  if (f === "needed") return st === "need_install";
-  if (f === "installed") return st === "installed";
-  if (f === "postponed") return st === "postponed";
-  return false;
-}
 
 const MANUAL_MODEL_PRESENTATION_DEFAULTS = {
   importanceReason: "",
@@ -253,7 +245,9 @@ const MANUAL_MODEL_PRESENTATION_DEFAULTS = {
 function catalogProductMatrixType(productId: string): ShowcaseMatrixModelDefinition["type"] {
   const p = getProductById(productId);
   if (!p) return "interior";
-  if (p.doorKind === "Межкомнатная" || p.category.includes("Межкомнат")) return "interior";
+  const category = p.category ?? "";
+  if (category.includes("Фурнитур")) return "hardware";
+  if (p.doorKind === "Межкомнатная" || category.includes("Межкомнат")) return "interior";
   return "entrance";
 }
 
@@ -268,7 +262,7 @@ function buildManualModelFromEntry(
     id: entry.targetId,
     name: resolved.productName?.trim() || getProductById(entry.targetId)?.name?.trim() || entry.targetId,
     type,
-    typeLabelRu: type === "entrance" ? "ВХ" : "МК",
+    typeLabelRu: showcaseMatrixTypeLabelRu(type),
     imageUrl: resolved.showcaseMatrixImageSrc ?? product?.image?.trim() ?? "",
     basePriority: "medium",
     categoryRules: [],
@@ -281,21 +275,6 @@ function sortModelsByPriorityThenName(
 ): ShowcaseMatrixModelDefinition[] {
   const pr: Record<ShowcaseMatrixModelDefinition["basePriority"], number> = { high: 0, medium: 1, low: 2 };
   return [...list].sort((a, b) => pr[a.basePriority] - pr[b.basePriority] || a.name.localeCompare(b.name));
-}
-
-function filterShowcaseModelsForDisplay(
-  list: ShowcaseMatrixModelDefinition[],
-  activeQuickFilter: ShowcaseMatrixQuickFilterId,
-  categoryFilter: ShowcaseMatrixCategoryFilter,
-  catalogFilters: Record<string, string[]>,
-  effectiveStatus: (modelId: string) => ShowcaseMatrixStatusId,
-): ShowcaseMatrixModelDefinition[] {
-  return list.filter((m) => {
-    if (!modelMatchesQuickFilter(effectiveStatus(m.id), activeQuickFilter)) return false;
-    if (categoryFilter === "entrance" && m.type !== "entrance") return false;
-    if (categoryFilter === "interior" && m.type !== "interior") return false;
-    return modelPassesMatrixCatalogFilters(m, catalogFilters);
-  });
 }
 
 export type TradePointShowcasePageBundle = {
@@ -486,7 +465,9 @@ export function TradePointShowcaseMatrixSection({
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
   const activeQuickFilter = userQuickFilter ?? autoQuickFilter;
 
-  const [categoryFilter, setCategoryFilter] = useState<ShowcaseMatrixCategoryFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<ShowcaseMatrixCategoryFilter>(() =>
+    readShowcaseMatrixCategoryFilterFromStorage(point.id),
+  );
   const [catalogFilters, setCatalogFilters] = useState<Record<string, string[]>>({});
   const [catalogFiltersPanelOpen, setCatalogFiltersPanelOpen] = useState(false);
   const [matrixViewFiltersOpen, setMatrixViewFiltersOpen] = useState(false);
@@ -512,23 +493,22 @@ export function TradePointShowcaseMatrixSection({
   );
 
   useEffect(() => {
+    writeShowcaseMatrixCategoryFilterToStorage(point.id, categoryFilter);
+  }, [categoryFilter, point.id]);
+
+  useEffect(() => {
     setCatalogFilters({});
   }, [categoryFilter]);
 
+  const catalogFilterRowKeys = useMemo(
+    () => catalogFilterRows.map((r) => r.key).join("\0"),
+    [catalogFilterRows],
+  );
+
   useEffect(() => {
     const allowed = new Set(catalogFilterRows.map((r) => r.key));
-    setCatalogFilters((prev) => {
-      let changed = false;
-      const next: Record<string, string[]> = { ...prev };
-      for (const k of Object.keys(next)) {
-        if (!allowed.has(k)) {
-          delete next[k];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [catalogFilterRows]);
+    setCatalogFilters((prev) => pruneCatalogFiltersForAllowedKeys(prev, allowed));
+  }, [catalogFilterRowKeys, catalogFilterRows]);
 
   useEffect(() => {
     if (catalogFilterRows.length === 0) setCatalogFiltersPanelOpen(false);
@@ -542,6 +522,7 @@ export function TradePointShowcaseMatrixSection({
         categoryFilter,
         catalogFilters,
         effectiveStatus,
+        modelPassesMatrixCatalogFilters,
       ),
     [statusFilteredModels, activeQuickFilter, categoryFilter, catalogFilters, effectiveStatus],
   );
@@ -554,6 +535,7 @@ export function TradePointShowcaseMatrixSection({
         categoryFilter,
         catalogFilters,
         effectiveStatus,
+        modelPassesMatrixCatalogFilters,
       ),
     [statusFilteredManualModels, activeQuickFilter, categoryFilter, catalogFilters, effectiveStatus],
   );
@@ -1374,6 +1356,16 @@ export function TradePointShowcaseMatrixSection({
                             onClick={() => setCategoryFilter("interior")}
                           >
                             МК двери
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={categoryFilter === "hardware" ? "default" : "outline"}
+                            className="h-8 shrink-0 text-xs"
+                            data-testid="button-showcase-matrix-category-hardware"
+                            onClick={() => setCategoryFilter("hardware")}
+                          >
+                            Фурнитура
                           </Button>
                         </div>
                       </div>
