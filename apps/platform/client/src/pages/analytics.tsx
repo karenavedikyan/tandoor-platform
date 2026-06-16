@@ -65,16 +65,13 @@ export default function AnalyticsPage() {
               Классическая сводка продаж здесь строилась на демонстрационных данных. Для руководителя при включённой актуализации
               она скрыта до подключения реальной выгрузки.
             </p>
-            <p className="text-xs font-medium text-primary">Используйте «Клиентскую базу», «Аналитику команды» и операционные блоки — они опираются на активную базу.</p>
+            <p className="text-xs font-medium text-primary">Используйте «Клиентскую базу» и операционные блоки — они опираются на активную базу.</p>
             <div className="flex flex-wrap gap-2">
               <Button asChild className="min-h-10 font-semibold">
                 <Link href="/main">К главному</Link>
               </Button>
               <Button asChild variant="secondary" className="min-h-10 font-semibold">
                 <Link href="/dealer-base">Клиентская база</Link>
-              </Button>
-              <Button asChild variant="outline" className="min-h-10 border-border bg-card font-semibold">
-                <Link href="/analytics-workspace">Аналитика команды</Link>
               </Button>
             </div>
           </div>

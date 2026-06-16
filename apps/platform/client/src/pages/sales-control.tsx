@@ -118,9 +118,6 @@ export default function SalesControlHub() {
               <Link href="/sales-control/plans">Планы</Link>
             </Button>
             <Button asChild variant="secondary" size="sm">
-              <Link href="/analytics-workspace">Аналитика команды</Link>
-            </Button>
-            <Button asChild variant="secondary" size="sm">
               <Link href="/marketing-briefs">Брифы</Link>
             </Button>
           </CardContent>

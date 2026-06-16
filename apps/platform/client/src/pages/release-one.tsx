@@ -90,7 +90,7 @@ export default function ReleaseOnePage() {
           </CardHeader>
           <CardContent>
             <Button asChild variant="secondary" className="min-h-10 w-full font-semibold sm:w-auto">
-              <Link href="/analytics-workspace">Аналитика команды</Link>
+              <Link href="/analytics">Аналитика</Link>
             </Button>
           </CardContent>
         </Card>
@@ -138,7 +138,7 @@ export default function ReleaseOnePage() {
             </CardTitle>
             <CardDescription>
               Клиентская база, карточки клиента и торговой точки с блоком «Обучение и внимание к персоналу», задачи по продуктовому
-              обучению, карточка территории.
+              обучению.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -147,9 +147,6 @@ export default function ReleaseOnePage() {
             </Button>
             <Button asChild variant="outline" className="min-h-10">
               <Link href="/tasks">Задачи</Link>
-            </Button>
-            <Button asChild variant="outline" className="min-h-10">
-              <Link href="/territory-card">Карточка территории</Link>
             </Button>
           </CardContent>
         </Card>

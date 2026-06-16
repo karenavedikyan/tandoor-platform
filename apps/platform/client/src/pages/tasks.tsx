@@ -983,9 +983,6 @@ export default function TasksPage() {
                     К торговым точкам
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="min-h-10 w-full sm:w-auto">
-                  <Link href={buildHashPath("/territory-card")}>К карточке территории</Link>
-                </Button>
               </div>
             </CardContent>
           </Card>

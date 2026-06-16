@@ -34,7 +34,7 @@ function statusBadgeClass(status: "required" | "recommended" | "new" | "updated"
 
 function contextHref(ctx: RelatedTaskContext): string {
   if (ctx === "showcase" || ctx === "hardware" || ctx === "dealer_card" || ctx === "orders") return "/tasks";
-  if (ctx === "territory") return "/territory-card";
+  if (ctx === "territory") return "/dealer-base";
   if (ctx === "analytics") return "/analytics";
   return "/dealer-base";
 }

@@ -93,7 +93,7 @@ const CASES: RoleExpectation[] = [
     role: "analyst",
     expectedSalesRole: "analyst",
     expectedFallbackPersona: "user-anl-ivanets",
-    navMustContain: ["nav-analytics-workspace", "nav-dealer-base"],
+    navMustContain: ["nav-dealer-base", "nav-trade-points"],
     hasOwnScope: false,
   },
   {
