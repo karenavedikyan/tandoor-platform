@@ -6,10 +6,7 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { inferShowcasePortalTypeFromCatalogProduct } from "@/lib/trade-point-showcase-matrix-required";
-import {
-  getShowcaseMatrixModelsForTradePoint,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
 import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import type { ShowcaseTypeKey } from "@/lib/showcase-type-capacity";
 import {
@@ -186,13 +183,6 @@ export function buildProductAnalyticsRows(
   return rows;
 }
 
-export function isModelRequiredForDealerCategory(
-  model: ShowcaseMatrixModelDefinition,
-  clientCategory: ClientCategoryId,
-): boolean {
-  return model.categoryRules.includes(clientCategory);
-}
-
 export function buildModelGapTradePoints(
   modelId: string,
   modelType: EquipmentTypeKey,
@@ -207,11 +197,13 @@ export function buildModelGapTradePoints(
     const sh = shByTradePointId[item.row.tradePointId];
     const cap = item.metrics.byType[modelType].capacity;
     if (cap == null || cap <= 0) continue;
-    const required = getShowcaseMatrixModelsForTradePoint(
-      item.row.dealerId,
-      item.row.tradePointId,
-      item.row.clientCategory,
-    ).some((m) => m.id === modelId);
+    const required = resolveTradePointMatrixModels({
+      dealerId: item.row.dealerId,
+      tradePointId: item.row.tradePointId,
+      clientCategory: item.row.clientCategory,
+      region: item.row.dealer.region,
+      city: item.row.city,
+    }).some((m) => m.id === modelId);
     if (!required) continue;
     const present = sh?.selectedShowcaseModels?.some((m) => m.productId === modelId) ?? false;
     if (present) continue;
