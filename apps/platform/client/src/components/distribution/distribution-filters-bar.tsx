@@ -29,6 +29,7 @@ type DistributionFiltersBarProps = {
   regionOptions: string[];
   cityOptions: string[];
   title?: string;
+  hideRegion?: boolean;
 };
 
 function FilterField({
@@ -53,6 +54,7 @@ function FiltersGrid({
   onChange,
   regionOptions,
   cityOptions,
+  hideRegion,
 }: DistributionFiltersBarProps) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -122,21 +124,23 @@ function FiltersGrid({
         </Select>
       </FilterField>
 
-      <FilterField label="Регион">
-        <Select value={value.region} onValueChange={(region) => onChange({ ...value, region })}>
-          <SelectTrigger data-testid="select-distribution-filter-region">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все регионы</SelectItem>
-            {regionOptions.map((r) => (
-              <SelectItem key={r} value={r}>
-                {r}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </FilterField>
+      {hideRegion ? null : (
+        <FilterField label="Регион">
+          <Select value={value.region} onValueChange={(region) => onChange({ ...value, region })}>
+            <SelectTrigger data-testid="select-distribution-filter-region">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все регионы</SelectItem>
+              {regionOptions.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+      )}
 
       <FilterField label="Город">
         <Select value={value.city} onValueChange={(city) => onChange({ ...value, city })}>
