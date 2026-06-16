@@ -178,7 +178,6 @@ function stubMatrixModelFromProduct(p: CatalogProduct): ShowcaseMatrixModelDefin
     typeLabelRu: entrance ? "ВХ" : "МК",
     imageUrl: p.image ?? "",
     basePriority: "medium",
-    categoryRules: [],
     importanceReason: "",
     characteristics: "",
     advantages: "",

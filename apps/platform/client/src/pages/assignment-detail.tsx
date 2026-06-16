@@ -243,7 +243,6 @@ function itemToPresentationModel(
     objections: "",
     objectionAnswers: "",
     copyMessage: "",
-    categoryRules: [],
   };
 }
 

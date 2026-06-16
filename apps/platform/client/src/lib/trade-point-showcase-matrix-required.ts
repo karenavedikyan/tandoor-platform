@@ -1,24 +1,18 @@
 import type { ClientCategoryId } from "@/lib/client-category";
 import type { CatalogProduct } from "@/lib/catalog-product-type";
 import type { ShowcaseSelectedPortalType, TradePointShowcaseSelectedModel } from "@/lib/client-base-actualization-state";
-import {
-  SHOWCASE_MATRIX_MODEL_DEFINITIONS,
-  type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import {
   resolveRequiredTradePointMatrixModels,
   type ResolveTradePointMatrixParams,
 } from "@/lib/trade-point-matrix-resolver";
 
-/** Обязательные позиции матрицы для бизнес-категории клиента (по правилам categoryRules). */
+/** Обязательные позиции матрицы для торговой точки (high в активной managed-матрице). */
 export function getRequiredShowcaseMatrixDefinitions(
   clientCategory: ClientCategoryId,
-  scope?: Omit<ResolveTradePointMatrixParams, "clientCategory">,
+  scope: Omit<ResolveTradePointMatrixParams, "clientCategory">,
 ): ShowcaseMatrixModelDefinition[] {
-  if (scope) {
-    return resolveRequiredTradePointMatrixModels({ ...scope, clientCategory });
-  }
-  return SHOWCASE_MATRIX_MODEL_DEFINITIONS.filter((m) => m.categoryRules.includes(clientCategory));
+  return resolveRequiredTradePointMatrixModels({ ...scope, clientCategory });
 }
 
 /**
