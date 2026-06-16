@@ -36,3 +36,20 @@ describe("category_manager role", () => {
     expect(isFullClientVisibilityRole("manager")).toBe(false);
   });
 });
+
+describe("canManageShowcaseMatrixCatalogServer", () => {
+  it.each([
+    ["admin", true],
+    ["sales_director", true],
+    ["team_lead", true],
+    ["marketer", true],
+    ["analyst", true],
+    ["category_manager", true],
+    ["manager", false],
+    ["cashier", false],
+    ["client", false],
+    ["", false],
+  ] as const)("role %s → %s", (role, expected) => {
+    expect(canManageShowcaseMatrixCatalogServer(role)).toBe(expected);
+  });
+});

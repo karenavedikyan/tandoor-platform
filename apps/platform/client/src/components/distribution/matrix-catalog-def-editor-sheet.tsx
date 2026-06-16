@@ -25,7 +25,7 @@ import {
   type Catalog1cPicked,
 } from "@/components/distribution/matrix-catalog-product-picker";
 import { CLIENT_CATEGORY_META, type ClientCategoryId } from "@/lib/client-category";
-import { inferMatrixSegmentFrom1c, isMatrixPeriodRangeValid } from "@/lib/distribution-matrix-catalog-view-model";
+import { formatMatrixDefUpdatedLabel, inferMatrixSegmentFrom1c, isMatrixPeriodRangeValid } from "@/lib/distribution-matrix-catalog-view-model";
 import { PLACEMENT_SEGMENT_LABEL_RU } from "@/lib/showcase-placement-labels";
 import type {
   ShowcaseMatrixCatalogPriority,
@@ -162,6 +162,10 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState<ShowcaseMatrixCatalogStatus>("draft");
   const [models, setModels] = useState<EditorModelRow[]>([]);
+  const [loadedDefMeta, setLoadedDefMeta] = useState<Pick<
+    ShowcaseMatrixDefDto,
+    "id" | "updatedAt" | "updatedByName"
+  > | null>(null);
 
   const resetForm = useCallback(() => {
     setClientCategory(initialClientCategory ?? "top150");
@@ -175,6 +179,7 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
     setComment("");
     setStatus("draft");
     setModels([]);
+    setLoadedDefMeta(null);
     setPeriodError(false);
   }, [initialClientCategory]);
 
@@ -190,6 +195,11 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
     setComment(def.comment ?? "");
     setStatus(def.status === "archived" ? "draft" : def.status);
     setModels(modelsFromDef(def.id));
+    setLoadedDefMeta(
+      def.id
+        ? { id: def.id, updatedAt: def.updatedAt, updatedByName: def.updatedByName }
+        : null,
+    );
   }, []);
 
   useEffect(() => {
@@ -303,6 +313,11 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
         <SheetContent side="right" className="flex w-full flex-col overflow-hidden sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>{sheetTitle}</SheetTitle>
+            {loadedDefMeta?.id ? (
+              <p className="text-xs text-muted-foreground" data-testid="text-matrix-catalog-editor-updated">
+                Обновлено: {formatMatrixDefUpdatedLabel(loadedDefMeta)}
+              </p>
+            ) : null}
           </SheetHeader>
 
           {loading ? (
