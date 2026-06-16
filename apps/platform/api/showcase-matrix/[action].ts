@@ -102,20 +102,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     if (action === "list" && req.method === "GET") {
-      const payload = await handleShowcaseMatrixList(pool, {
-        tradePointId: parseQueryString(req.query.tradePointId),
-        dealerId: parseQueryString(req.query.dealerId),
-      });
+      const payload = await handleShowcaseMatrixList(
+        pool,
+        {
+          tradePointId: parseQueryString(req.query.tradePointId),
+          dealerId: parseQueryString(req.query.dealerId),
+        },
+        vis,
+      );
       sendJson(res, 200, payload);
       return;
     }
 
     if (action === "history" && req.method === "GET") {
-      const payload = await handleShowcaseMatrixHistory(pool, {
-        tradePointId: parseQueryString(req.query.tradePointId),
-        dealerId: parseQueryString(req.query.dealerId),
-        limit: parseQueryInt(req.query.limit),
-      });
+      const payload = await handleShowcaseMatrixHistory(
+        pool,
+        {
+          tradePointId: parseQueryString(req.query.tradePointId),
+          dealerId: parseQueryString(req.query.dealerId),
+          limit: parseQueryInt(req.query.limit),
+        },
+        vis,
+      );
       sendJson(res, 200, payload);
       return;
     }
