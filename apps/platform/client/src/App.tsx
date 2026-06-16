@@ -42,6 +42,7 @@ import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from
 import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
+import { useBootstrap } from "@/hooks/use-bootstrap";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -476,12 +477,17 @@ function AuthenticatedShell({
 function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => Promise<void> }) {
   const [loc] = useLocation();
   const embeddedBitrix24 = useBitrix24EmbeddedFlag();
+  const bootstrap = useBootstrap();
 
   const path = loc && loc.length > 0 ? loc : "/";
   const normPath = normRoutePath(path);
 
   if (!canAccessPathForUser(user.role, path)) {
     return <HashRedirect to={defaultHomePathForUserRole(user.role)} />;
+  }
+
+  if (bootstrap.isLoading && !bootstrap.isError) {
+    return <PageLoadingFallback />;
   }
 
   const homeHref = defaultHomePathForUserRole(user.role);

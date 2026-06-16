@@ -22,6 +22,7 @@ import {
   ResponsibilityValidationError,
   type AssignBody,
 } from "../../shared/responsibility-handlers.js";
+import { invalidateResponsibilityCaches } from "../../shared/api-cache-invalidation.js";
 
 function queryParam(req: VercelRequest, key: string): string {
   const raw = req.query[key];
@@ -73,6 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "assign" && req.method === "POST") {
       sendJson(res, 200, await handleAssign(pool, { id: me.id, role: me.role, status: me.status }, body as AssignBody));
+      invalidateResponsibilityCaches();
       return;
     }
 

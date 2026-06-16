@@ -20,6 +20,8 @@ import {
   sanitizeStateForNonManagerRole,
   shouldSanitizeStateForRole,
 } from "../../shared/admin/manager-only-state-fields.js";
+import { serveCachedJson, userScopedCacheKey } from "../../shared/api-cache-middleware.js";
+import { invalidateActualizationCaches } from "../../shared/api-cache-invalidation.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 // Стейт актуализации может достигать ~1.3 МБ у активных пользователей с большой базой.
@@ -945,86 +947,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return;
       }
 
-      if (!dbUrl) {
-        const ownRow = memoryStore.get(userId);
-        const orderedStates: Record<string, unknown>[] = [ownRow ? coerceState(ownRow.state) : emptyState()];
-        let maxUpdatedAt: string | null = null;
-        memoryStore.forEach((row, storedUserId) => {
-          if (row.updatedAt && (!maxUpdatedAt || row.updatedAt > maxUpdatedAt)) maxUpdatedAt = row.updatedAt;
-          if (storedUserId !== userId) orderedStates.push(coerceState(row.state));
-        });
-        const state = mergeActualizationStates(orderedStates);
-        const updatedAt = ownRow?.updatedAt ?? maxUpdatedAt;
-        sendJson(
-          res,
-          200,
-          buildResponse(
-            true,
-            "server_memory",
-            state,
-            updatedAt,
-            `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
-          ),
-        );
-        return;
-      }
-
-      try {
-        const sql = await createSqlExecutor(dbUrl);
-        const visibleScopeKeys = await resolveVisibleUserScopeKeys(sql, userId, role);
-        const ownScope = scopeKeyForUser(userId);
-        const orderedScopes = [ownScope, ...visibleScopeKeys.filter((k) => k !== ownScope)];
-        if (orderedScopes.length === 0) {
-          sendJson(
-            res,
-            200,
-            buildResponse(true, "persistent", emptyState(), null, MSG_PERSISTENT_OK),
-          );
-          return;
-        }
-        const rows = await sql`
-          SELECT scope_key, state, updated_at, role
-          FROM client_base_actualization_state
-          WHERE scope_key = ANY(${orderedScopes})
-        `;
-        const rowByScope = new Map<string, { state: unknown; updated_at: unknown; role: unknown }>();
-        for (const r of rows) {
-          rowByScope.set(String(r.scope_key), { state: r.state, updated_at: r.updated_at, role: r.role });
-        }
-        const orderedStates: Record<string, unknown>[] = [];
-        let maxUpdatedAt: string | null = null;
-        let ownUpdatedAt: string | null = null;
-        for (const sk of orderedScopes) {
-          const row = rowByScope.get(sk);
-          if (!row) {
-            if (sk === ownScope) orderedStates.push(emptyState());
-            continue;
-          }
-          // Промт 50: на читаем строку — если её роль не manager, обнуляем
-          // 14 manager-only полей перед попаданием в merge. Это страховка для
-          // строк, написанных до SQL-миграции (см. scripts/migrate-2026-05-27-manager-only-state.mjs).
-          const rowState = coerceState(row.state);
-          const rowRole = canonicalizeRole(typeof row.role === "string" ? row.role : null);
-          const safeState = shouldSanitizeStateForRole(rowRole) ? sanitizeStateForNonManagerRole(rowState) : rowState;
-          orderedStates.push(safeState);
-          const iso = rowUpdatedAtIso(row.updated_at);
-          if (iso) {
-            if (!maxUpdatedAt || iso > maxUpdatedAt) maxUpdatedAt = iso;
-            if (sk === ownScope) ownUpdatedAt = iso;
-          }
-        }
-        const merged = mergeActualizationStates(orderedStates);
-        const userVisibleUpdatedAt = ownUpdatedAt ?? maxUpdatedAt;
-        sendJson(res, 200, buildResponse(true, "persistent", merged, userVisibleUpdatedAt, MSG_PERSISTENT_OK));
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        console.error("[actualization-api] persistent GET", m.slice(0, 200));
-        sendJson(
-          res,
-          200,
-          buildResponse(false, "persistent", emptyState(), null, MSG_STORAGE_ERROR, "ACTUALIZATION_STORAGE_ERROR"),
-        );
-      }
+      const cacheKey = userScopedCacheKey("actualization-state", userId, role ?? "");
+      await serveCachedJson(req, res, 200, {
+        cacheKey,
+        ttlMs: 30_000,
+        maxAgeSec: 30,
+        buildBody: async () => loadActualizationStatePayload(userId, role),
+        shouldCache: (body) => {
+          if (!body || typeof body !== "object") return false;
+          return (body as { success?: boolean }).success === true;
+        },
+      });
       return;
     }
 
@@ -1177,6 +1110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           console.error("[actualization-api] shadow city write failed", m.slice(0, 200));
         }
         sendJson(res, 200, buildResponse(true, "persistent", saved, updatedAt, MSG_PERSISTENT_OK));
+        invalidateActualizationCaches(userId);
       } catch (e) {
         const m = e instanceof Error ? e.message : String(e);
         console.error("[actualization-api] persistent POST", m.slice(0, 200));
@@ -1206,5 +1140,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       updatedAt: null,
       message: "Внутренняя ошибка API актуализации.",
     });
+  }
+}
+
+/** Загрузка merged state для bootstrap / кэшируемых GET (Промт 380). */
+export async function loadActualizationStatePayload(
+  userId: string,
+  role: string | null,
+): Promise<Record<string, unknown>> {
+  const globallyDisabled = isActualizationGloballyDisabled();
+  const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
+
+  if (globallyDisabled) {
+    return buildResponse(true, "not_configured", emptyState(), null, MSG_FEATURE_DISABLED);
+  }
+
+  if (!dbUrl) {
+    const ownRow = memoryStore.get(userId);
+    const orderedStates: Record<string, unknown>[] = [ownRow ? coerceState(ownRow.state) : emptyState()];
+    let maxUpdatedAt: string | null = null;
+    memoryStore.forEach((row, storedUserId) => {
+      if (row.updatedAt && (!maxUpdatedAt || row.updatedAt > maxUpdatedAt)) maxUpdatedAt = row.updatedAt;
+      if (storedUserId !== userId) orderedStates.push(coerceState(row.state));
+    });
+    const state = mergeActualizationStates(orderedStates);
+    const updatedAt = ownRow?.updatedAt ?? maxUpdatedAt;
+    return buildResponse(
+      true,
+      "server_memory",
+      state,
+      updatedAt,
+      `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
+    );
+  }
+
+  try {
+    const sql = await createSqlExecutor(dbUrl);
+    const visibleScopeKeys = await resolveVisibleUserScopeKeys(sql, userId, role);
+    const ownScope = scopeKeyForUser(userId);
+    const orderedScopes = [ownScope, ...visibleScopeKeys.filter((k) => k !== ownScope)];
+    if (orderedScopes.length === 0) {
+      return buildResponse(true, "persistent", emptyState(), null, MSG_PERSISTENT_OK);
+    }
+    const rows = await sql`
+      SELECT scope_key, state, updated_at, role
+      FROM client_base_actualization_state
+      WHERE scope_key = ANY(${orderedScopes})
+    `;
+    const rowByScope = new Map<string, { state: unknown; updated_at: unknown; role: unknown }>();
+    for (const r of rows) {
+      rowByScope.set(String(r.scope_key), { state: r.state, updated_at: r.updated_at, role: r.role });
+    }
+    const orderedStates: Record<string, unknown>[] = [];
+    let maxUpdatedAt: string | null = null;
+    let ownUpdatedAt: string | null = null;
+    for (const sk of orderedScopes) {
+      const row = rowByScope.get(sk);
+      if (!row) {
+        if (sk === ownScope) orderedStates.push(emptyState());
+        continue;
+      }
+      const rowState = coerceState(row.state);
+      const rowRole = canonicalizeRole(typeof row.role === "string" ? row.role : null);
+      const safeState = shouldSanitizeStateForRole(rowRole) ? sanitizeStateForNonManagerRole(rowState) : rowState;
+      orderedStates.push(safeState);
+      const iso = rowUpdatedAtIso(row.updated_at);
+      if (iso) {
+        if (!maxUpdatedAt || iso > maxUpdatedAt) maxUpdatedAt = iso;
+        if (sk === ownScope) ownUpdatedAt = iso;
+      }
+    }
+    const merged = mergeActualizationStates(orderedStates);
+    const userVisibleUpdatedAt = ownUpdatedAt ?? maxUpdatedAt;
+    return buildResponse(true, "persistent", merged, userVisibleUpdatedAt, MSG_PERSISTENT_OK);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[actualization-api] loadActualizationStatePayload", m.slice(0, 200));
+    return buildResponse(false, "persistent", emptyState(), null, MSG_STORAGE_ERROR, "ACTUALIZATION_STORAGE_ERROR");
   }
 }

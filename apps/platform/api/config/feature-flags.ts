@@ -4,13 +4,22 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sendJson } from "../../shared/admin/admin-auth.js";
+import { globalCacheKey, serveCachedJson } from "../../shared/api-cache-middleware.js";
 import { getFeatureFlags } from "../../server/api/feature-flags-api.js";
 
-export default function handler(req: VercelRequest, res: VercelResponse): void {
+const TTL_MS = 300_000;
+const MAX_AGE_SEC = 300;
+
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "GET") {
     sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только GET." });
     return;
   }
-  res.setHeader("Cache-Control", "no-store");
-  sendJson(res, 200, getFeatureFlags());
+
+  await serveCachedJson(req, res, 200, {
+    cacheKey: globalCacheKey("feature-flags"),
+    ttlMs: TTL_MS,
+    maxAgeSec: MAX_AGE_SEC,
+    buildBody: async () => getFeatureFlags(),
+  });
 }
