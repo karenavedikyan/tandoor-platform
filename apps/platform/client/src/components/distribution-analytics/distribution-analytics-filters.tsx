@@ -14,6 +14,7 @@ import {
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { collectAnalyticsCatalogProducts } from "@/lib/distribution-analytics/distribution-analytics-view-models";
+import { AnalyticsModelPicker } from "./analytics-model-picker";
 import { CLIENT_CATEGORY_META, type ClientCategoryId } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
 
@@ -91,14 +92,7 @@ export function DistributionAnalyticsFiltersPanel({
       ),
     [scopedRows],
   );
-  const modelOptions = useMemo(
-    () =>
-      collectAnalyticsCatalogProducts().map((p) => ({
-        value: p.id,
-        label: p.name,
-      })),
-    [],
-  );
+  const analyticsProducts = useMemo(() => collectAnalyticsCatalogProducts(), []);
 
   const chips = useMemo(() => buildFilterChips(filters), [filters]);
 
@@ -174,12 +168,11 @@ export function DistributionAnalyticsFiltersPanel({
             );
           })}
         </div>
-        <MultiSelect
-          className="mt-2"
-          options={modelOptions}
+        <AnalyticsModelPicker
+          products={analyticsProducts}
+          activeEquipmentTypes={draft.equipmentTypes}
           value={draft.modelIds}
           onChange={(modelIds) => setDraft((d) => ({ ...d, modelIds }))}
-          placeholder="Модели"
           testId="filter-analytics-models"
         />
       </Section>
