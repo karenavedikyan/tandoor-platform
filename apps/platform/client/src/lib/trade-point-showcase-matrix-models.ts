@@ -1,4 +1,3 @@
-import type { ClientCategoryId } from "@/lib/client-category";
 import { TANDOOR_REAL_CATALOG_SEED } from "@/lib/tandoor-real-catalog-seed.generated";
 
 export type ShowcaseMatrixModelType = "entrance" | "interior" | "hardware";
@@ -6,8 +5,6 @@ export type ShowcaseMatrixModelType = "entrance" | "interior" | "hardware";
 export type ShowcaseMatrixTypeLabelRu = "ВХ" | "МК" | "Фурнитура";
 
 export type ShowcaseMatrixPriorityRank = "high" | "medium" | "low";
-
-export type ShowcaseMatrixTier = "expanded" | "medium" | "base" | "starter";
 
 export type ShowcaseMatrixModelDefinition = {
   id: string;
@@ -129,50 +126,6 @@ function buildDefinitions(): ShowcaseMatrixModelDefinition[] {
 }
 
 export const SHOWCASE_MATRIX_MODEL_DEFINITIONS: ShowcaseMatrixModelDefinition[] = buildDefinitions();
-
-export function matrixTierForClientCategory(cat: ClientCategoryId): ShowcaseMatrixTier {
-  if (cat === "top150") return "expanded";
-  if (cat === "top350") return "medium";
-  if (cat === "top500" || cat === "top500plus") return "base";
-  return "starter";
-}
-
-const TIER_MODEL_COUNT: Record<ShowcaseMatrixTier, number> = {
-  /** ТОП 150 — расширенная матрица */
-  expanded: 8,
-  /** ТОП 350 — средняя */
-  medium: 6,
-  /** ТОП 500 — базовая */
-  base: 5,
-  /** Новые / потенциальные — стартовая */
-  starter: 4,
-};
-
-function rotateStable<T>(arr: T[], shift: number): T[] {
-  const n = arr.length;
-  if (n === 0) return [];
-  const s = ((shift % n) + n) % n;
-  return [...arr.slice(s), ...arr.slice(0, s)];
-}
-
-export function charSumStable(s: string): number {
-  let sum = 0;
-  for (let i = 0; i < s.length; i += 1) sum += s.charCodeAt(i);
-  return sum;
-}
-
-/** Модели для сегмента клиента: фиксированное число по сегменту, порядок сдвигается по id точки (без случайности). */
-export function getShowcaseMatrixModelsForTradePoint(
-  dealerId: string,
-  tradePointId: string,
-  clientCategory: ClientCategoryId,
-): ShowcaseMatrixModelDefinition[] {
-  const tier = matrixTierForClientCategory(clientCategory);
-  const want = Math.min(TIER_MODEL_COUNT[tier], SHOWCASE_MATRIX_MODEL_DEFINITIONS.length);
-  const base = SHOWCASE_MATRIX_MODEL_DEFINITIONS.slice(0, want);
-  const shift = charSumStable(`${dealerId}|${tradePointId}`) % base.length;
-  return rotateStable(base, shift);
-}
 
 /** Человеко-читаемый лейбл приоритета матрицы ТТ. high = Обязательная, medium = Рекомендованная, low = «—». */
 export function priorityLabelRu(p: ShowcaseMatrixPriorityRank): "Обязательная" | "Рекомендованная" | "—" {

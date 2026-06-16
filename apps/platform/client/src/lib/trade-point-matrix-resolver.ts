@@ -1,5 +1,5 @@
 /**
- * Единый резолвер состава матрицы для торговой точки: справочник → фолбэк на хардкод.
+ * Единый резолвер состава матрицы для торговой точки: только managed-матрица из каталога.
  */
 
 import type { ClientCategoryId } from "@/lib/client-category";
@@ -7,11 +7,11 @@ import type { ShowcaseMatrixCatalogPriority, ShowcaseMatrixDefModelDto } from "@
 import { resolveActiveMatrixDefFromCache, todayIsoDateLocal } from "@/lib/showcase-matrix-catalog-resolve";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import {
-  getShowcaseMatrixModelsForTradePoint,
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
   type ShowcaseMatrixModelType,
   type ShowcaseMatrixPriorityRank,
+  type ShowcaseMatrixTypeLabelRu,
   showcaseMatrixTypeLabelRu,
 } from "@/lib/trade-point-showcase-matrix-models";
 
@@ -24,7 +24,7 @@ export type ResolveTradePointMatrixParams = {
   onDate?: string;
 };
 
-export type ResolvedTradePointMatrixSource = "managed" | "fallback";
+export type ResolvedTradePointMatrixSource = "managed" | "empty";
 
 export type ResolvedTradePointMatrix = {
   source: ResolvedTradePointMatrixSource;
@@ -150,18 +150,13 @@ export function resolveActiveManagedMatrix(
 
 export function resolveTradePointMatrixModels(params: ResolveTradePointMatrixParams): ShowcaseMatrixModelDefinition[] {
   const managed = resolveActiveManagedMatrix(params);
-  if (managed) return managed.models;
-  return getShowcaseMatrixModelsForTradePoint(params.dealerId, params.tradePointId, params.clientCategory);
+  return managed ? managed.models : [];
 }
 
 export function resolveTradePointMatrixWithSource(params: ResolveTradePointMatrixParams): ResolvedTradePointMatrix {
   const managed = resolveActiveManagedMatrix(params);
   if (managed) return managed;
-  return {
-    source: "fallback",
-    defId: null,
-    models: getShowcaseMatrixModelsForTradePoint(params.dealerId, params.tradePointId, params.clientCategory),
-  };
+  return { source: "empty", defId: null, models: [] };
 }
 
 /** Обязательные позиции: high в активной матрице; если high нет — все позиции матрицы. */

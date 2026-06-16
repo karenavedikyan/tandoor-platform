@@ -16,6 +16,7 @@ import {
 import {
   resolveActiveManagedMatrix,
   resolveTradePointMatrixModels,
+  resolveTradePointMatrixWithSource,
 } from "../trade-point-matrix-resolver.js";
 
 const CACHE_KEY = "tandoor:showcase-matrix-catalog:cache-v1";
@@ -77,7 +78,7 @@ function seedCache(payload: { headers: ShowcaseMatrixDefDto[]; defsById: Record<
 
 seedCache({ headers: [], defsById: {} });
 
-const hardcoded = resolveTradePointMatrixModels({
+const emptyResult = resolveTradePointMatrixModels({
   dealerId: "d-fallback",
   tradePointId: "tp-fallback",
   clientCategory: "top150",
@@ -85,7 +86,19 @@ const hardcoded = resolveTradePointMatrixModels({
   city: "краснодар",
   onDate: "2026-06-15",
 });
-assert.ok(hardcoded.length > 0, "fallback returns hardcoded models");
+assert.strictEqual(emptyResult.length, 0, "no managed matrix → empty array");
+
+const withSource = resolveTradePointMatrixWithSource({
+  dealerId: "d-fallback",
+  tradePointId: "tp-fallback",
+  clientCategory: "top150",
+  region: "краснодарский край",
+  city: "краснодар",
+  onDate: "2026-06-15",
+});
+assert.strictEqual(withSource.source, "empty", "source is empty when no managed matrix");
+assert.strictEqual(withSource.defId, null);
+assert.strictEqual(withSource.models.length, 0);
 
 const globalHeader = def({ id: "def-global", scopeKind: "global", clientCategory: "top150" });
 const regionHeader = def({
