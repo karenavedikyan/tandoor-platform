@@ -99,6 +99,8 @@ import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { TradePointsSkeleton } from "@/components/skeletons/trade-points-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { TradePointsWorkspaceSummary } from "@/components/trade-points/trade-points-workspace-summary";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
@@ -314,6 +316,26 @@ export default function TradePointsPage(): ReactElement {
   const isMobile = useIsMobile();
   const teamCtx = useClientBaseTeamActualization();
   const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
+
+  const isPageInitialLoading = useMemo(
+    () =>
+      (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
+      (catalogQ.isPending && !catalogQ.data) ||
+      (actx.enabled && actx.loading && !actx.meta.updatedAt),
+    [
+      isRealUser,
+      authLoading,
+      orgSnapQ.isLoading,
+      visCodesQ.isLoading,
+      catalogQ.isPending,
+      catalogQ.data,
+      actx.enabled,
+      actx.loading,
+      actx.meta.updatedAt,
+    ],
+  );
+
+  useScrollRestoration({ enabled: !isPageInitialLoading });
 
   const [tradePointDensity, setTradePointDensity] = useState<TradePointShowcaseDensity>(() => readTradePointDensityFromStorage());
   const [desktopFiltersCollapsed, setDesktopFiltersCollapsed] = useState(() => readFiltersCollapsedFromStorage());
@@ -1402,6 +1424,10 @@ export default function TradePointsPage(): ReactElement {
     );
   };
 
+  if (isPageInitialLoading) {
+    return <TradePointsSkeleton />;
+  }
+
   if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <TradePointsManagementCockpit
@@ -1424,7 +1450,7 @@ export default function TradePointsPage(): ReactElement {
           <p className="text-sm text-muted-foreground">Все точки клиентов, доступные по вашей зоне ответственности</p>
         </div>
 
-        <Card className="rounded-2xl border border-border/80 bg-card shadow-md">
+        <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
           <CardContent className="space-y-2.5 p-3 sm:p-4">
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
               <div className="relative min-w-0 flex-1">
