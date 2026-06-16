@@ -3,7 +3,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SHOWCASE_TYPE_LABEL_RU, type ShowcaseTypeKey } from "@/lib/showcase-type-capacity";
+import type { ShowcaseTypeKey } from "@/lib/showcase-type-capacity";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -13,6 +13,12 @@ type Props = {
   onSave: (value: number) => void;
   onCancel: () => void;
   className?: string;
+};
+
+const CAPACITY_FORM_TITLE: Record<ShowcaseTypeKey, string> = {
+  entrance: "Сколько витрин для входных дверей в этой ТТ?",
+  interior: "Сколько витрин для межкомнатных дверей в этой ТТ?",
+  hardware: "Сколько секций фурнитуры в этой ТТ?",
 };
 
 export function ShowcaseTypeCapacityInlineForm({
@@ -29,12 +35,16 @@ export function ShowcaseTypeCapacityInlineForm({
   const submit = () => {
     const t = value.trim();
     if (!t && t !== "0") {
-      setError("Введите 0 или больше");
+      setError("Введите целое число (0 или больше)");
       return;
     }
     const n = Number(t);
+    if (!Number.isInteger(n)) {
+      setError("Введите целое число (0 или больше)");
+      return;
+    }
     if (!Number.isFinite(n) || n < 0) {
-      setError("Введите 0 или больше");
+      setError("Введите целое число (0 или больше)");
       return;
     }
     setError(null);
@@ -53,7 +63,7 @@ export function ShowcaseTypeCapacityInlineForm({
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-semibold leading-snug text-amber-950 dark:text-amber-50">
-          Сколько {SHOWCASE_TYPE_LABEL_RU[type]} в ТТ?
+          {CAPACITY_FORM_TITLE[type]}
         </p>
         <Button
           type="button"
@@ -72,6 +82,7 @@ export function ShowcaseTypeCapacityInlineForm({
           type="number"
           min={0}
           className="h-8 w-24 text-sm"
+          placeholder="шт."
           value={value}
           data-testid={`input-showcase-type-capacity-${type}`}
           onChange={(e) => {
@@ -89,6 +100,9 @@ export function ShowcaseTypeCapacityInlineForm({
           Сохранить
         </Button>
       </div>
+      <p className="mt-1 text-[10px] leading-snug text-amber-900/80 dark:text-amber-100/70">
+        Это число — знаменатель в формуле дистрибуции по типу.
+      </p>
       {error ? (
         <p className="mt-1 text-[10px] font-medium text-destructive" data-testid={`text-showcase-type-capacity-error-${type}`}>
           {error}
