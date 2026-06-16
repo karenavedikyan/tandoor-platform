@@ -132,6 +132,16 @@ function productBadges(params: { selected: boolean; required: boolean; categoryK
   return { line: "Не требуется", missing: false };
 }
 
+function buildCapacityFormHint(type: ShowcaseTypeKey, productName: string): string {
+  const what =
+    type === "entrance"
+      ? "Учитывайте все витрины под входные двери — порталы и любые другие конструкции."
+      : type === "interior"
+        ? "Учитывайте все витрины под межкомнатные двери — порталы, книжки, раздвижные и т. д."
+        : "Учитывайте все секции, на которых выставлена фурнитура — ручки, петли, замки и т. д.";
+  return `Чтобы добавить «${productName}» и корректно посчитать дистрибуцию, укажите общее количество. ${what}`;
+}
+
 export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogPanelProps): ReactElement {
   const {
     tradePointId,
@@ -633,7 +643,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           <ShowcaseTypeCapacityInlineForm
             type={productTypeKey}
             currentCapacity={getShowcaseTypeCapacity(showcaseRec, productTypeKey)}
-            hint={`Чтобы добавить «${p.name}», укажите сколько ${SHOWCASE_TYPE_SHORT_RU[productTypeKey].toLowerCase()} в ТТ`}
+            hint={buildCapacityFormHint(productTypeKey, p.name)}
             onSave={(value) => {
               setPendingSelectionProductId(null);
               completeCapacityAndSelect(p.id, productTypeKey, value);
@@ -673,7 +683,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           <ShowcaseTypeCapacityInlineForm
             type={productTypeKey}
             currentCapacity={getShowcaseTypeCapacity(showcaseRec, productTypeKey)}
-            hint={`Чтобы добавить «${p.name}», укажите количество`}
+            hint={buildCapacityFormHint(productTypeKey, p.name)}
             onSave={(value) => {
               setPendingSelectionProductId(null);
               completeCapacityAndSelect(p.id, productTypeKey, value);
