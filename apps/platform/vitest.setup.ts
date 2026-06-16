@@ -21,16 +21,19 @@ const localStorageMock = {
 
 let opCounter = 0;
 
+// В jsdom-тестах оставляем нативный window/document; в node — минимальный stub.
+if (typeof document === "undefined") {
+  vi.stubGlobal("window", {
+    localStorage: localStorageMock,
+    sessionStorage: localStorageMock,
+    dispatchEvent: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
+  vi.stubGlobal("navigator", { onLine: true });
+}
 vi.stubGlobal("localStorage", localStorageMock);
 vi.stubGlobal("sessionStorage", localStorageMock);
-vi.stubGlobal("window", {
-  localStorage: localStorageMock,
-  sessionStorage: localStorageMock,
-  dispatchEvent: vi.fn(),
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-});
-vi.stubGlobal("navigator", { onLine: true });
 vi.stubGlobal("crypto", {
   randomUUID: () => {
     opCounter += 1;
