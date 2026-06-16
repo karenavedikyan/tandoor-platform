@@ -5,6 +5,7 @@
 
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "wouter";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -27,10 +28,13 @@ import type { ClientCategoryId } from "@/lib/client-category";
 import {
   computeShowcasePortalOverfill,
   effectivePortalTypeForSelectedModel,
-  getRequiredShowcaseMatrixDefinitions,
   inferShowcasePortalTypeFromCatalogProduct,
   type ShowcasePortalCaps,
 } from "@/lib/trade-point-showcase-matrix-required";
+import {
+  resolveTradePointMatrixWithSource,
+  type ResolvedTradePointMatrix,
+} from "@/lib/trade-point-matrix-resolver";
 import type { TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
 import {
   countSelectedByType,
@@ -43,7 +47,6 @@ import {
 } from "@/lib/showcase-type-capacity";
 import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
 import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
-import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
 import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
 import {
   loadCachedMatrix,
@@ -58,6 +61,7 @@ export type ShowcaseCatalogViewMode = "large" | "compact" | "mini" | "list";
 export type CatalogFilterPreset =
   | "all"
   | "required"
+  | "recommended"
   | "missing"
   | "on_showcase"
   | "unselected"
@@ -146,6 +150,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const {
     tradePointId,
     dealerId,
+    matrixScopeRegion,
+    matrixScopeCity,
     matrixClientCategory,
     canEdit,
     actorUserId,
@@ -254,12 +260,35 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     [backendModelStatus, selectedShowcaseModels],
   );
 
-  const requiredDefs = useMemo(() => {
-    if (!matrixClientCategory) return [] as ShowcaseMatrixModelDefinition[];
-    return getRequiredShowcaseMatrixDefinitions(matrixClientCategory);
-  }, [matrixClientCategory]);
+  const resolvedMatrix = useMemo<ResolvedTradePointMatrix>(() => {
+    if (!matrixClientCategory) {
+      return { source: "fallback", defId: null, models: [] };
+    }
+    return resolveTradePointMatrixWithSource({
+      dealerId,
+      tradePointId,
+      clientCategory: matrixClientCategory,
+      region: matrixScopeRegion ?? null,
+      city: matrixScopeCity ?? null,
+    });
+  }, [matrixClientCategory, dealerId, tradePointId, matrixScopeRegion, matrixScopeCity]);
+
+  const hasManagedMatrix = resolvedMatrix.source === "managed";
+
+  /** Только модели с high-приоритетом — «Обязательно». */
+  const requiredDefs = useMemo(
+    () => resolvedMatrix.models.filter((m) => m.basePriority === "high"),
+    [resolvedMatrix.models],
+  );
+
+  /** Модели с medium-приоритетом — «Рекомендовано». */
+  const recommendedDefs = useMemo(
+    () => resolvedMatrix.models.filter((m) => m.basePriority === "medium"),
+    [resolvedMatrix.models],
+  );
 
   const requiredIdSet = useMemo(() => new Set(requiredDefs.map((d) => d.id)), [requiredDefs]);
+  const recommendedIdSet = useMemo(() => new Set(recommendedDefs.map((d) => d.id)), [recommendedDefs]);
 
   const missingRequiredCount = useMemo(() => {
     let n = 0;
@@ -294,12 +323,11 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       list = list.filter((p) => catalogSearchQueryMatchesHaystack(q, hayById.get(p.id) ?? ""));
     }
 
-    const catKnown = matrixClientCategory != null;
-
     if (preset === "on_showcase") list = list.filter((p) => isProductSelected(p.id));
     else if (preset === "unselected") list = list.filter((p) => !isProductSelected(p.id));
-    else if (preset === "required") list = list.filter((p) => catKnown && requiredIdSet.has(p.id));
-    else if (preset === "missing") list = list.filter((p) => catKnown && requiredIdSet.has(p.id) && !isProductSelected(p.id));
+    else if (preset === "required") list = list.filter((p) => hasManagedMatrix && requiredIdSet.has(p.id));
+    else if (preset === "recommended") list = list.filter((p) => hasManagedMatrix && recommendedIdSet.has(p.id));
+    else if (preset === "missing") list = list.filter((p) => hasManagedMatrix && requiredIdSet.has(p.id) && !isProductSelected(p.id));
     else if (preset === "entrance") list = list.filter((p) => inferShowcasePortalTypeFromCatalogProduct(p) === "entrance");
     else if (preset === "interior") list = list.filter((p) => inferShowcasePortalTypeFromCatalogProduct(p) === "interior");
     else if (preset === "overfill") {
@@ -308,7 +336,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     }
 
     return list;
-  }, [doorCatalog, doorType, search, hayById, preset, isProductSelected, requiredIdSet, matrixClientCategory, portalWarn]);
+  }, [doorCatalog, doorType, search, hayById, preset, isProductSelected, requiredIdSet, recommendedIdSet, hasManagedMatrix, portalWarn]);
 
   const typeStatusLine = useMemo(() => {
     const types: ShowcaseTypeKey[] = ["entrance", "interior", "hardware"];
@@ -512,7 +540,13 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     [onChangeSelected, onMarkDirty, selectedShowcaseModels],
   );
 
-  const matrixEmptyConfigured = matrixClientCategory != null && requiredDefs.length === 0;
+  const matrixEmptyConfigured = hasManagedMatrix && requiredDefs.length === 0;
+
+  useEffect(() => {
+    if (!hasManagedMatrix && (preset === "required" || preset === "recommended" || preset === "missing")) {
+      setPreset("all");
+    }
+  }, [hasManagedMatrix, preset]);
 
   const activeFilterChips = useMemo(() => {
     const chips: { key: string; label: string }[] = [];
@@ -545,8 +579,9 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
 
   const renderProductCard = (p: CatalogProduct): ReactElement => {
     const sel = isProductSelected(p.id);
-    const req = matrixClientCategory != null && requiredIdSet.has(p.id);
-    const { line, missing } = productBadges({ selected: sel, required: req, categoryKnown: matrixClientCategory != null });
+    const req = hasManagedMatrix && requiredIdSet.has(p.id);
+    const rec = hasManagedMatrix && recommendedIdSet.has(p.id);
+    const { line, missing } = productBadges({ selected: sel, required: req, categoryKnown: hasManagedMatrix });
     const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
     const typeShort =
       portalType === "entrance" ? "Вх." : portalType === "interior" ? "МК" : portalType === "hardware" ? "Фурн." : "—";
@@ -578,8 +613,20 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           </Badge>
         ) : null}
         {req ? (
-          <Badge variant="outline" className="h-5 border-amber-500/70 px-1.5 text-[10px] font-normal text-amber-950 dark:text-amber-100" data-testid={`badge-showcase-model-required-${p.id}`}>
+          <Badge
+            variant="outline"
+            className="h-5 border-rose-500/70 bg-rose-500/10 px-1.5 text-[10px] font-medium text-rose-900 dark:text-rose-200"
+            data-testid={`badge-showcase-model-required-${p.id}`}
+          >
             Обязательная
+          </Badge>
+        ) : rec ? (
+          <Badge
+            variant="outline"
+            className="h-5 border-sky-500/70 bg-sky-500/10 px-1.5 text-[10px] font-medium text-sky-900 dark:text-sky-200"
+            data-testid={`badge-showcase-model-recommended-${p.id}`}
+          >
+            Рекомендованная
           </Badge>
         ) : null}
         {req && missing ? (
@@ -778,16 +825,24 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           ? "grid grid-cols-2 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6"
           : "flex flex-col gap-1.5";
 
-  const presetChips: { id: CatalogFilterPreset; label: string }[] = [
-    { id: "all", label: "Все" },
-    { id: "required", label: "Обязательные" },
-    { id: "missing", label: "Нужно поставить" },
-    { id: "on_showcase", label: "Уже стоит" },
-    { id: "unselected", label: "Не выбраны" },
-    { id: "entrance", label: "Входные" },
-    { id: "interior", label: "Межкомнатные" },
-    { id: "overfill", label: "Переполнение" },
-  ];
+  const presetChips = useMemo<{ id: CatalogFilterPreset; label: string }[]>(() => {
+    const base: { id: CatalogFilterPreset; label: string }[] = [{ id: "all", label: "Все" }];
+    if (hasManagedMatrix) {
+      base.push(
+        { id: "required", label: "Обязательные" },
+        { id: "recommended", label: "Рекомендованные" },
+        { id: "missing", label: "Нужно поставить" },
+      );
+    }
+    base.push(
+      { id: "on_showcase", label: "Уже стоит" },
+      { id: "unselected", label: "Не выбраны" },
+      { id: "entrance", label: "Входные" },
+      { id: "interior", label: "Межкомнатные" },
+      { id: "overfill", label: "Переполнение" },
+    );
+    return base;
+  }, [hasManagedMatrix]);
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4" data-testid="section-trade-point-showcase-catalog">
@@ -892,6 +947,28 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
               </div>
             ) : null}
           </div>
+
+          {!hasManagedMatrix ? (
+            <div
+              className="rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 p-3 text-sm"
+              data-testid="banner-no-managed-matrix"
+            >
+              <p className="font-medium text-amber-900 dark:text-amber-100">
+                Для этой торговой точки не назначена матрица витрины.
+              </p>
+              <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                Без матрицы нельзя отметить «обязательные» и «рекомендованные» модели. Назначьте матрицу в справочнике —{" "}
+                <Link
+                  href="/distribution/matrix-catalog"
+                  className="font-medium underline underline-offset-2"
+                  data-testid="link-banner-go-to-matrix-catalog"
+                >
+                  перейти в справочник матриц
+                </Link>
+                .
+              </p>
+            </div>
+          ) : null}
 
           {portalWarn ? (
             <p className="text-xs font-medium text-amber-900 dark:text-amber-100" data-testid="text-showcase-portal-warning">
@@ -1100,6 +1177,8 @@ function presetLabelRu(p: CatalogFilterPreset): string {
       return "Все";
     case "required":
       return "Обязательные";
+    case "recommended":
+      return "Рекомендованные";
     case "missing":
       return "Нужно поставить";
     case "on_showcase":
