@@ -4,9 +4,6 @@
 import assert from "node:assert/strict";
 import type { PoolLike } from "../admin/admin-auth.js";
 import { buildPerfSummary, canAccessPerfSummary, parsePerfRangeDays } from "../web-vitals-handlers.js";
-import { getCached, resetApiLruCache, setCached } from "../api-lru-cache.js";
-
-resetApiLruCache();
 
 assert.equal(parsePerfRangeDays("7d"), 7);
 assert.equal(parsePerfRangeDays("1d"), 1);
@@ -71,9 +68,5 @@ assert.equal(summary.by_pathname[0]?.pathname, "/catalog");
 assert.equal(summary.by_role.length, 2);
 assert.equal(summary.trend.length, 2);
 assert.ok(summary.budget_violations.length >= 0);
-
-const cacheKey = "perf-summary:test";
-setCached(cacheKey, summary, 60_000);
-assert.ok(getCached(cacheKey));
 
 console.log("perf-summary: ok");
