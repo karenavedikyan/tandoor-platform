@@ -4,11 +4,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
-import { serveCachedJson, userScopedCacheKey } from "../../shared/api-cache-middleware.js";
 import { fetchMyClientCodes } from "../../shared/my-client-codes-handlers.js";
-
-const TTL_MS = 60_000;
-const MAX_AGE_SEC = 60;
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -33,18 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const cacheKey = userScopedCacheKey("my-codes", me.id, me.role);
-
-    await serveCachedJson(req, res, 200, {
-      cacheKey,
-      ttlMs: TTL_MS,
-      maxAgeSec: MAX_AGE_SEC,
-      buildBody: async () => fetchMyClientCodes(pool, { id: me.id, role: me.role }),
-      shouldCache: (body) => {
-        if (!body || typeof body !== "object") return false;
-        return (body as { success?: boolean }).success === true;
-      },
-    });
+    const payload = await fetchMyClientCodes(pool, { id: me.id, role: me.role });
+    sendJson(res, 200, payload as unknown as Record<string, unknown>);
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/clients/my-codes]", m.slice(0, 200));

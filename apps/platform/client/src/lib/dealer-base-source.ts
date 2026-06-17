@@ -42,13 +42,6 @@ export function setDealerBaseRowsCache(rows: DealerRow[]): void {
   cachedCatalogRows = rows;
 }
 
-/** Сид из /api/bootstrap (Промт 380). */
-export function setFeatureFlagsFromBootstrap(flags: Record<string, boolean>): void {
-  if ("USE_DB_DEALERS" in flags) {
-    featureFlagUseDb = flags.USE_DB_DEALERS === true;
-  }
-}
-
 export async function fetchDealerBaseRows(): Promise<DealerRow[]> {
   if (await shouldUseDbDealers()) {
     try {

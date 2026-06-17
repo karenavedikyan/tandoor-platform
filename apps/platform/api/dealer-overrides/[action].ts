@@ -26,7 +26,6 @@ import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
 } from "../../shared/overrides-api-access-log.js";
-import { invalidateDealerCatalogCaches } from "../../shared/api-cache-invalidation.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const actionRaw = req.query.action;
@@ -84,27 +83,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "upsert" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesUpsert(req, res, pool, sessionUser));
-      invalidateDealerCatalogCaches();
       return;
     }
     if (action === "set-training" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesSetTraining(req, res, pool, sessionUser));
-      invalidateDealerCatalogCaches();
       return;
     }
     if (action === "trash" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesTrash(req, res, pool, sessionUser));
-      invalidateDealerCatalogCaches();
       return;
     }
     if (action === "untrash" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesUntrash(req, res, pool, sessionUser));
-      invalidateDealerCatalogCaches();
       return;
     }
     if (action === "create-manual" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesCreateManual(req, res, pool, sessionUser));
-      invalidateDealerCatalogCaches();
       return;
     }
 

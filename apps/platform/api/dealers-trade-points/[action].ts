@@ -18,8 +18,6 @@ import {
   resolveDealersTradePointsSummary,
   type DealersTradePointsSearchFilters,
 } from "../../server/dealers/dealers-trade-points-source.js";
-import { serveCachedJson, userScopedCacheKey } from "../../shared/api-cache-middleware.js";
-import { hashQueryForCache } from "../../shared/bootstrap-handler.js";
 
 const READ_ROLES = new Set([
   "admin",
@@ -104,18 +102,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (action === "list") {
-      const filters = filtersFromQuery(req);
-      const queryHash = hashQueryForCache(filters as Record<string, unknown>);
-      await serveCachedJson(req, res, 200, {
-        cacheKey: userScopedCacheKey("dealers-trade-points", me.id, me.role, queryHash),
-        ttlMs: 60_000,
-        maxAgeSec: 60,
-        buildBody: async () => resolveDealersTradePointsList(pool, filters),
-        shouldCache: (body) => {
-          if (!body || typeof body !== "object") return false;
-          return (body as { success?: boolean }).success === true;
-        },
-      });
+      const payload = await resolveDealersTradePointsList(pool, filtersFromQuery(req));
+      sendJson(res, 200, payload);
       return;
     }
 

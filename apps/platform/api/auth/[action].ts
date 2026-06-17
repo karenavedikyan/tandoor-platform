@@ -17,9 +17,6 @@ import { neon } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
-import { serveCachedJson, userScopedCacheKey } from "../../shared/api-cache-middleware.js";
-import { buildAuthMePayload, resolveSessionUserRow } from "../../shared/auth-me-read.js";
-import { invalidateAuthSessionCaches } from "../../shared/api-cache-invalidation.js";
 
 type UserRole =
   | "director"
@@ -843,8 +840,6 @@ async function handleLogin(req: VercelRequest, headers: Record<string, string | 
       metadata: { ip, userAgent },
     });
 
-    invalidateAuthSessionCaches(user.id);
-
     const snapshot = {
       id: user.id,
       email: user.email,
@@ -1449,7 +1444,6 @@ async function handleLogout(headers: Record<string, string | string[] | undefine
       metadata: { ip, userAgent },
     });
   }
-  if (actorUserId) invalidateAuthSessionCaches(actorUserId);
   return { status: 200, setCookie: [clearAuthCookie(), clearAdminReturnCookie()], json: { success: true } };
 }
 
@@ -1487,7 +1481,6 @@ async function handleLogoutAll(headers: Record<string, string | string[] | undef
     entityId: userId,
     metadata: { ip, userAgent },
   });
-  invalidateAuthSessionCaches(userId);
   return {
     status: 200,
     cacheControl: "no-store",
@@ -1528,30 +1521,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
     if (action === "me" && req.method === "GET") {
-      const pool = getPool();
-      if (!pool) {
-        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-        return;
-      }
-      const row = await resolveSessionUserRow(pool, headers);
-      if (!row) {
-        sendJson(res, 401, { success: false, code: "UNAUTHENTICATED" });
-        return;
-      }
-      await serveCachedJson(req, res, 200, {
-        cacheKey: userScopedCacheKey("auth-me", row.id, row.role),
-        ttlMs: 30_000,
-        maxAgeSec: 30,
-        buildBody: async () => {
-          const r = await buildAuthMePayload(pool, headers);
-          if (!r.success) throw new Error("UNAUTHENTICATED");
-          return r;
-        },
-        shouldCache: (body) => {
-          if (!body || typeof body !== "object") return false;
-          return (body as { success?: boolean }).success === true;
-        },
-      });
+      applyResult(res, await handleMe(headers));
       return;
     }
     if (action === "impersonate-start" && req.method === "POST") {
@@ -1563,49 +1533,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
     if (action === "my-visible-codes" && req.method === "GET") {
-      const pool = getPool();
-      if (!pool) {
-        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-        return;
-      }
-      const row = await resolveSessionUserRow(pool, headers);
-      if (!row) {
-        sendJson(res, 401, { success: false, code: "UNAUTHORIZED" });
-        return;
-      }
-      await serveCachedJson(req, res, 200, {
-        cacheKey: userScopedCacheKey("my-visible-codes", row.id, row.role),
-        ttlMs: 60_000,
-        maxAgeSec: 60,
-        buildBody: async () => {
-          const r = await handleMyVisibleCodes(headers);
-          if (r.status !== 200) throw new Error("VISIBLE_CODES_FAILED");
-          return r.json;
-        },
-      });
+      applyResult(res, await handleMyVisibleCodes(headers));
       return;
     }
     if (action === "my-org-snapshot" && req.method === "GET") {
-      const pool = getPool();
-      if (!pool) {
-        sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
-        return;
-      }
-      const row = await resolveSessionUserRow(pool, headers);
-      if (!row) {
-        sendJson(res, 401, { success: false, code: "UNAUTHORIZED" });
-        return;
-      }
-      await serveCachedJson(req, res, 200, {
-        cacheKey: userScopedCacheKey("my-org-snapshot", row.id, row.role),
-        ttlMs: 60_000,
-        maxAgeSec: 60,
-        buildBody: async () => {
-          const r = await handleMyOrgSnapshot(headers);
-          if (r.status !== 200) throw new Error("ORG_SNAPSHOT_FAILED");
-          return r.json;
-        },
-      });
+      applyResult(res, await handleMyOrgSnapshot(headers));
       return;
     }
     if (action === "reset-request-approvers" && req.method === "POST") {

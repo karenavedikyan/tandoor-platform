@@ -31,7 +31,6 @@ import {
   handleUserTeamHistory,
   handleUserTeamReassign,
 } from "../../../shared/admin/client-assignments-handlers.js";
-import { invalidateAssignmentCaches } from "../../../shared/api-cache-invalidation.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -57,12 +56,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "clients-reassign" && req.method === "POST") {
       await handleClientsReassign(req, res, pool, me);
-      invalidateAssignmentCaches();
       return;
     }
     if (action === "user-team-reassign" && req.method === "POST") {
       await handleUserTeamReassign(req, res, pool, me);
-      invalidateAssignmentCaches();
       return;
     }
     if (action === "clients-assignments-list" && req.method === "GET") {
@@ -87,12 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "rop-grants-add" && req.method === "POST") {
       await handleRopGrantsAdd(req, res, pool, me);
-      invalidateAssignmentCaches();
       return;
     }
     if (action === "rop-grants-remove" && req.method === "POST") {
       await handleRopGrantsRemove(req, res, pool, me);
-      invalidateAssignmentCaches();
       return;
     }
 

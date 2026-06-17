@@ -24,7 +24,6 @@ import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
 } from "../../shared/overrides-api-access-log.js";
-import { invalidateTradePointOverrideCaches } from "../../shared/api-cache-invalidation.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const actionRaw = req.query.action;
@@ -78,22 +77,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "upsert" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesUpsert(req, res, pool, sessionUser));
-      invalidateTradePointOverrideCaches();
       return;
     }
     if (action === "set-training" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesSetTraining(req, res, pool, sessionUser));
-      invalidateTradePointOverrideCaches();
       return;
     }
     if (action === "trash" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesTrash(req, res, pool, sessionUser));
-      invalidateTradePointOverrideCaches();
       return;
     }
     if (action === "untrash" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesUntrash(req, res, pool, sessionUser));
-      invalidateTradePointOverrideCaches();
       return;
     }
 
