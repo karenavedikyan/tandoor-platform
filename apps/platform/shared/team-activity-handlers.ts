@@ -298,7 +298,7 @@ export async function fetchTeamActivityEvents(
     user_id: targetUserId,
     range,
     events: r.rows.map((row) => ({
-      at: row.at instanceof Date ? row.at.toISOString() : String(row.at),
+      at: typeof row.at === "object" && row.at !== null && typeof (row.at as Date).toISOString === "function" ? (row.at as Date).toISOString() : String(row.at),
       type: row.type as TeamActivityEventRow["type"],
       dealer_id: row.dealer_id ? String(row.dealer_id) : null,
       client_id: row.client_id ? String(row.client_id) : null,

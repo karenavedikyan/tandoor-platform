@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 
 export default function TeamActivityPage() {
-  const { user, loading: userLoading } = useCurrentUser();
+  const { user, isLoading: userLoading } = useCurrentUser();
   const [range, setRange] = useState<TeamActivityRange>("7d");
   const [teamId, setTeamId] = useState<string>("__all__");
   const [selectedManager, setSelectedManager] = useState<TeamActivityRow | null>(null);

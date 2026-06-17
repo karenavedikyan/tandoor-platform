@@ -8,11 +8,11 @@ import {
   resolveCurrentUser,
   sendJson,
   vercelHeaders,
-} from "../../shared/admin/admin-auth.js";
+} from "../shared/admin/admin-auth.js";
 import {
   fetchTeamActivity,
   isTeamActivityManagerForbidden,
-} from "../../shared/team-activity-handlers.js";
+} from "../shared/team-activity-handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
