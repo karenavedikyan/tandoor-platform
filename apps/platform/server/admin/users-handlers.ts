@@ -5,10 +5,10 @@
 
 import type { Request, Response } from "express";
 import { and, desc, eq, ilike, isNull, lt, ne, or, sql } from "drizzle-orm";
-import type { UserRole, UserStatus } from "@shared/auth";
-import { BUSINESS_ROLES } from "@shared/auth";
-import { canCreatePasswordResetLink, roleHasPermission } from "@shared/auth-rbac";
-import { auditLog, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
+import type { UserRole, UserStatus } from "../../shared/auth.js";
+import { BUSINESS_ROLES } from "../../shared/auth.js";
+import { canCreatePasswordResetLink, roleHasPermission } from "../../shared/auth-rbac.js";
+import { auditLog, authUsers, passwordResetLinks, sessions } from "../../shared/auth-schema.js";
 import type { AuthUserSnapshot } from "../auth/auth-user-snapshot";
 import { getAuthDb } from "../auth/db";
 import { hashPassword } from "../auth/password-hash";

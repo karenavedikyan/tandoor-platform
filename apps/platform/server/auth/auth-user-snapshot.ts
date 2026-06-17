@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { UserRole, UserStatus } from "@shared/auth";
-import { authUsers } from "@shared/auth-schema";
+import type { UserRole, UserStatus } from "../../shared/auth.js";
+import { authUsers } from "../../shared/auth-schema.js";
 import { getAuthDb } from "./db";
 
 export type AuthUserSnapshot = {

@@ -5,8 +5,8 @@
  */
 
 import type { RequestHandler } from "express";
-import type { Permission } from "@shared/auth-rbac";
-import { roleHasPermission } from "@shared/auth-rbac";
+import type { Permission } from "../../shared/auth-rbac.js";
+import { roleHasPermission } from "../../shared/auth-rbac.js";
 
 export function requirePermission(perm: Permission): RequestHandler {
   return (req, res, next) => {

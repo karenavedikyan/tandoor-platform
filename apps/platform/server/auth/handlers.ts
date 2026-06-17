@@ -10,9 +10,9 @@
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
-import type { UserRole, UserStatus } from "@shared/auth";
-import { roleHasPermission } from "@shared/auth-rbac";
-import { auditLog, authLoginFailures, authUsers, passwordResetLinks, sessions } from "@shared/auth-schema";
+import type { UserRole, UserStatus } from "../../shared/auth.js";
+import { roleHasPermission } from "../../shared/auth-rbac.js";
+import { auditLog, authLoginFailures, authUsers, passwordResetLinks, sessions } from "../../shared/auth-schema.js";
 import { loadAuthUserSnapshot, type AuthUserSnapshot } from "./auth-user-snapshot";
 import {
   buildAdminReturnCookie,

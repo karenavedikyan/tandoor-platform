@@ -6,7 +6,7 @@
 import type { Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
-import { auditLog, authUsers, sessions } from "@shared/auth-schema";
+import { auditLog, authUsers, sessions } from "../../shared/auth-schema.js";
 import type { AuthUserSnapshot } from "../auth/auth-user-snapshot";
 import { parseAuthRefreshToken } from "../auth/cookie";
 import { getAuthDb } from "../auth/db";

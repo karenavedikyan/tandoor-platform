@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { sessions } from "@shared/auth-schema";
+import { sessions } from "../../shared/auth-schema.js";
 import { getAuthDb } from "./db";
 import { sessionTtlSeconds } from "./session-ttl";
 

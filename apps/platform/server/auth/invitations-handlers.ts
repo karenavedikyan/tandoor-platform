@@ -6,10 +6,10 @@
 import { randomBytes, randomUUID, createHash, timingSafeEqual } from "node:crypto";
 import type { Request, Response } from "express";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
-import type { UserRole } from "@shared/auth";
-import { BUSINESS_ROLES } from "@shared/auth";
-import { canInviteRole, roleHasPermission } from "@shared/auth-rbac";
-import { auditLog, authUsers, invitations, userTeamMemberships } from "@shared/auth-schema";
+import type { UserRole } from "../../shared/auth.js";
+import { BUSINESS_ROLES } from "../../shared/auth.js";
+import { canInviteRole, roleHasPermission } from "../../shared/auth-rbac.js";
+import { auditLog, authUsers, invitations, userTeamMemberships } from "../../shared/auth-schema.js";
 import type { AuthUserSnapshot } from "./auth-user-snapshot";
 import { buildAuthCookie } from "./cookie";
 import { getAuthDb } from "./db";
