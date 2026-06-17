@@ -2,12 +2,20 @@
  * Read-only диагностика расхождений счётчиков клиентов / ТТ / городов (промт 90).
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
@@ -47,6 +55,8 @@ import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { getManagersForRopTeam } from "@/lib/rop-manager-filters";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
+import { listUsers } from "@/lib/admin-users-api";
+import { fetchScopeDebug, type ScopeDebugPayload } from "@/lib/scope-debug-api";
 
 type DiagRow = {
   source: string;
@@ -124,6 +134,11 @@ function DiagTable({ title, rows, footnote }: { title: string; rows: DiagRow[]; 
 
 export default function AdminCountsDiagPage() {
   const { user } = useCurrentUser();
+  const canScopeDebug = Boolean(user && ["admin", "director"].includes(user.role));
+  const [scopeUserId, setScopeUserId] = useState("");
+  const [scopeDebug, setScopeDebug] = useState<ScopeDebugPayload | null>(null);
+  const [scopeDebugError, setScopeDebugError] = useState<string | null>(null);
+  const [scopeDebugLoading, setScopeDebugLoading] = useState(false);
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
@@ -145,6 +160,17 @@ export default function AdminCountsDiagPage() {
     queryFn: fetchTradePointsOverview,
     enabled: Boolean(user && ["admin", "director", "rop", "analyst"].includes(user.role)),
     staleTime: 30_000,
+  });
+
+  const scopeUsersQ = useQuery({
+    queryKey: ["admin-users", "scope-debug-pick"],
+    queryFn: async () => {
+      const r = await listUsers({ status: "active", limit: 500, offset: 0 });
+      if (!r.ok) throw new Error(r.message);
+      return r.result.users;
+    },
+    enabled: canScopeDebug,
+    staleTime: 60_000,
   });
 
   const pickerFiltered = useMemo(
@@ -340,12 +366,111 @@ export default function AdminCountsDiagPage() {
         footnote="/dealer-base — все города клиентов в pickerFiltered; /trade-points — только города с активными ТТ в overview."
       />
 
+      {canScopeDebug ? (
+        <Card data-testid="scope-debug-panel">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Блок 4. Объяснить scope</CardTitle>
+            <CardDescription>
+              Разложение счётчиков сайдбара для выбранного пользователя (`GET /api/admin/scope-debug`). Числа
+              совпадают с бейджами «Клиенты-дилеры», «Торговые точки», «Корзина».
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="min-w-[240px] flex-1 space-y-2">
+                <Label htmlFor="scope-debug-user">Пользователь</Label>
+                <Select
+                  value={scopeUserId}
+                  onValueChange={(v) => {
+                    setScopeUserId(v);
+                    setScopeDebug(null);
+                    setScopeDebugError(null);
+                  }}
+                >
+                  <SelectTrigger id="scope-debug-user" data-testid="select-scope-debug-user">
+                    <SelectValue placeholder={scopeUsersQ.isLoading ? "Загрузка…" : "Выберите пользователя"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(scopeUsersQ.data ?? []).map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName} ({u.email}) — {u.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                disabled={!scopeUserId || scopeDebugLoading}
+                data-testid="btn-scope-debug"
+                onClick={() => {
+                  void (async () => {
+                    setScopeDebugLoading(true);
+                    setScopeDebugError(null);
+                    try {
+                      const payload = await fetchScopeDebug({ userId: scopeUserId });
+                      setScopeDebug(payload);
+                    } catch (e) {
+                      setScopeDebug(null);
+                      setScopeDebugError(e instanceof Error ? e.message : "Ошибка scope-debug");
+                    } finally {
+                      setScopeDebugLoading(false);
+                    }
+                  })();
+                }}
+              >
+                {scopeDebugLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                    Загрузка…
+                  </>
+                ) : (
+                  "Объяснить scope"
+                )}
+              </Button>
+            </div>
+
+            {scopeDebugError ? (
+              <p className="text-sm text-destructive" data-testid="scope-debug-error">
+                {scopeDebugError}
+              </p>
+            ) : null}
+
+            {scopeDebug ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <p className="font-medium">
+                    {scopeDebug.user.full_name} ({scopeDebug.user.email}) — {scopeDebug.user.role}
+                  </p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+                    {scopeDebug.explanation.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 font-semibold tabular-nums">
+                    Клиенты: {scopeDebug.scope.visible_dealer_count} · ТТ:{" "}
+                    {scopeDebug.scope.visible_trade_point_count} · Корзина:{" "}
+                    {scopeDebug.scope.trashed_in_scope_count}
+                  </p>
+                </div>
+                <pre
+                  className="max-h-[28rem] overflow-auto rounded-lg bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100"
+                  data-testid="scope-debug-json"
+                >
+                  {JSON.stringify(scopeDebug, null, 2)}
+                </pre>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Collapsible>
         <Card>
           <CardHeader className="pb-2">
             <CollapsibleTrigger asChild>
               <Button variant="ghost" className="h-auto w-full justify-start px-0 font-semibold">
-                Блок 4. Raw dump
+                Блок 5. Raw dump
               </Button>
             </CollapsibleTrigger>
             <CardDescription>pickerFiltered (5 строк), ropGroups, контекст загрузки</CardDescription>
