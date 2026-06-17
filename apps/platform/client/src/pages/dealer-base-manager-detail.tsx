@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
@@ -160,6 +161,12 @@ export default function DealerBaseManagerDetailPage() {
 
   const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
 
+  const targetScopeQ = useMyScopeFromDB({
+    enabled: Boolean(managerApiUserId) && Boolean(me?.id),
+    forUserId: managerApiUserId && me?.id && managerApiUserId !== me.id ? managerApiUserId : undefined,
+  });
+  const viewingOtherUserScope = Boolean(managerApiUserId && me?.id && managerApiUserId !== me.id);
+
   const tradePointsOverviewQ = useQuery({
     queryKey: ["trade-points-overview"],
     queryFn: fetchTradePointsOverview,
@@ -227,6 +234,39 @@ export default function DealerBaseManagerDetailPage() {
     (actx.enabled && teamCtx.teamFetchLoading);
 
   const managementPlane = shouldUseTeamMergedActualizationPlane(profile);
+
+  if (viewingOtherUserScope && targetScopeQ.loading) {
+    return (
+      <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-manager-detail">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (viewingOtherUserScope && targetScopeQ.forbidden) {
+    return (
+      <div className="min-w-0 py-12 text-center" data-testid="page-dealer-base-manager-detail">
+        <p className="text-sm text-muted-foreground" data-testid="manager-detail-scope-forbidden">
+          Нет доступа к scope этого сотрудника
+        </p>
+      </div>
+    );
+  }
+
+  if (viewingOtherUserScope && !targetScopeQ.loading && !targetScopeQ.ready) {
+    return (
+      <div className="min-w-0 py-12 text-center" data-testid="page-dealer-base-manager-detail">
+        <p className="text-sm text-muted-foreground" data-testid="manager-detail-scope-not-found">
+          Сотрудник не найден или недоступен
+        </p>
+      </div>
+    );
+  }
 
   if (!loading && catalogQ.isError) {
     return (
