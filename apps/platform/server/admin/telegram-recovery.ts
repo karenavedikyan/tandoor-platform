@@ -7,7 +7,7 @@ import type { Request, Response } from "express";
 import { neon } from "@neondatabase/serverless";
 import { wrapNeonWithShadow, type NeonHttp } from "../db/neon-client.js";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { auditLog } from "@shared/auth-schema";
+import { auditLog } from "../../shared/auth-schema.js";
 import { getAuthDb } from "../auth/db";
 
 const JSON_CT = "application/json; charset=utf-8";

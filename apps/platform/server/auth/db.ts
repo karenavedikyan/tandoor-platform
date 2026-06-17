@@ -5,8 +5,8 @@
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import * as authSchema from "@shared/auth-schema";
-import * as dealersSchema from "@shared/dealers-schema";
+import * as authSchema from "../../shared/auth-schema.js";
+import * as dealersSchema from "../../shared/dealers-schema.js";
 import { wrapNeonWithShadow } from "../db/neon-client.js";
 
 const mergedSchema = { ...authSchema, ...dealersSchema };

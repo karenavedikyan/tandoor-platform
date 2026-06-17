@@ -5,8 +5,8 @@
 
 import type { Request, Response } from "express";
 import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
-import { roleHasPermission } from "@shared/auth-rbac";
-import { auditLog, authUsers } from "@shared/auth-schema";
+import { roleHasPermission } from "../../shared/auth-rbac.js";
+import { auditLog, authUsers } from "../../shared/auth-schema.js";
 import type { AuthUserSnapshot } from "../auth/auth-user-snapshot";
 import { getAuthDb } from "../auth/db";
 
