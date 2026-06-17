@@ -11,6 +11,10 @@ import {
   type DealersTradePointsSearchFilters,
   type DealersTradePointsSummary,
 } from "../../shared/dealers-trade-points-handlers.js";
+
+// Re-export types so api/dealers-trade-points/[action].ts can import them
+// from this module without reaching into shared/* directly.
+export type { DealersTradePointsSearchFilters, DealersTradePointsSummary };
 import type { DealerRow } from "../../client/src/lib/dealer-base-mock-data.js";
 import { loadAllDealersFromDb } from "./db-dealers-loader.js";
 import { dbBundlesToDealerRows } from "./db-to-dealer-row.js";
