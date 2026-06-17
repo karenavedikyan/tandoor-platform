@@ -1938,15 +1938,22 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
     return ropSelectOptions.find((o) => o.teamId === ropTeam)?.label;
   }, [ropTeam, ropSelectOptions]);
 
+  // При просмотре scope другого пользователя (штаб менеджера) scope уже задан через scopeUserId,
+  // поэтому picker-фильтры РОП/менеджер должны быть "all", чтобы не сравнивать UUID реальных команд
+  // с mock-строками release_team_id/release_manager_id в dealers.
+  const ropTeamForPicker = viewingOtherUserScope ? "all" : ropTeam;
+  const ropTeamLabelForPicker = viewingOtherUserScope ? undefined : ropTeamLabel;
+  const managerForPicker = viewingOtherUserScope ? "all" : manager;
+
   const pickerArgs = useMemo(
     () => ({
       search: deferredSearch,
       quick,
       cities,
       categories,
-      ropTeam,
-      ropTeamLabel,
-      manager,
+      ropTeam: ropTeamForPicker,
+      ropTeamLabel: ropTeamLabelForPicker,
+      manager: managerForPicker,
       managerCatalogForRop,
       geoRegion,
       geoDistrict,
@@ -1957,9 +1964,9 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
       quick,
       cities,
       categories,
-      ropTeam,
-      ropTeamLabel,
-      manager,
+      ropTeamForPicker,
+      ropTeamLabelForPicker,
+      managerForPicker,
       managerCatalogForRop,
       geoRegion,
       geoDistrict,
