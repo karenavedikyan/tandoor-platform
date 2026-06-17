@@ -4,8 +4,8 @@ import {
   getInternalNavDepth,
   markNextNavigationAsReplace,
   saveScrollForCurrentLocation,
-} from "./navigation/navigation-depth.js";
-import { parentRouteFor } from "./navigation/route-hierarchy.js";
+} from "../navigation/navigation-depth.js";
+import { parentRouteFor } from "../navigation/route-hierarchy.js";
 
 export function useSmartBack() {
   const [location, setLocation] = useLocation();

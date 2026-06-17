@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 
 const DEALER = "dealer-test-1";
-const PROFILE = { personaUserId: "u1", role: "admin", displayName: "Test" } as import("@/lib/release-demo-profile").ReleaseDemoProfile;
+const PROFILE = { personaUserId: "u1", role: "admin", displayName: "Test" } as import("../release-demo-profile.js").ReleaseDemoProfile;
 
 let fetchCalls: Array<{ url: string; method: string; body?: unknown }> = [];
 
@@ -69,7 +69,7 @@ const originalFetch = globalThis.fetch;
 async function runTests(): Promise<void> {
   globalThis.fetch = mockFetch as typeof fetch;
 
-  const { upsertPrimaryDealerContactFromEditForm } = await import("@/lib/client-contacts");
+  const { upsertPrimaryDealerContactFromEditForm } = await import("../client-contacts.js");
 
   // empty list → create
   fetchCalls = [];

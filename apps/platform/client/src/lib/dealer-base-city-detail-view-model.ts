@@ -136,7 +136,7 @@ export function buildCityDetailModel(
 export function cityDetailRowMatchesSegment(
   row: DealerRow,
   segment: CityDetailSegmentKey | null,
-  releaseByCode?: Map<string, import("@/lib/release-client-data").ReleaseClient>,
+  releaseByCode?: Map<string, import("./release-client-data.js").ReleaseClient>,
 ): boolean {
   return dealerRowMatchesSegment(row, segment, releaseByCode);
 }

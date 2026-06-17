@@ -2,8 +2,8 @@
  * Запуск: npm run test:distribution-entry-product
  */
 import assert from "node:assert/strict";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
-import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
+import type { ShowcaseMatrixModelDefinition } from "../trade-point-showcase-matrix-models.js";
 import {
   buildEntryProductModelRows,
   matrixModelToCatalogListProduct,

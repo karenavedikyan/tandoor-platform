@@ -2,7 +2,7 @@
  * Запуск: npm run test:placement-distribution
  */
 import assert from "node:assert/strict";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import { computePlacementDistribution } from "../showcase-placement-distribution";
 
 function placement(

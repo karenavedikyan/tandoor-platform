@@ -4,8 +4,8 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { buildSegmentDetail } from "@/lib/trade-point-showcase-segment-models";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+import { buildSegmentDetail } from "../trade-point-showcase-segment-models.js";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 
 function makeBlock(opts: {
   segment: "vh" | "mk" | "hardware";

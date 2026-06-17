@@ -4,14 +4,14 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import type { ShowcaseMatrixEventDto } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixEventDto } from "../showcase-matrix-api.js";
 import {
   defaultHistoryFilter,
   filterHistoryEvents,
   groupEventsByDay,
   toHistoryViewModel,
   uniqueUsersFromEvents,
-} from "@/lib/trade-point-showcase-history-view-model";
+} from "../trade-point-showcase-history-view-model.js";
 
 function ev(overrides: Partial<ShowcaseMatrixEventDto>): ShowcaseMatrixEventDto {
   return {

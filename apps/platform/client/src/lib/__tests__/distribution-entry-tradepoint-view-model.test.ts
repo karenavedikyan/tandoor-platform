@@ -2,8 +2,8 @@
  * Запуск: npm run test:distribution-entry-tradepoint
  */
 import assert from "node:assert/strict";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+import type { DealerRow } from "../dealer-base-mock-data.js";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import {
   buildDistributionEntryTradePointRows,
   type DistributionEntryTradePointRow,

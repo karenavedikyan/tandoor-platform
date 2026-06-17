@@ -2,7 +2,7 @@
  * Запуск: npm run test:distribution-matrix-catalog-view-model (из apps/platform).
  */
 import assert from "node:assert/strict";
-import type { ShowcaseMatrixDefDto } from "@/lib/showcase-matrix-catalog-api";
+import type { ShowcaseMatrixDefDto } from "../showcase-matrix-catalog-api.js";
 import {
   filterMatrixDefs,
   formatMatrixDefPeriodLabel,

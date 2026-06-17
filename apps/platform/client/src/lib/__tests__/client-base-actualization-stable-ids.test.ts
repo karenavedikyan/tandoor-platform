@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "../dealer-base-mock-data.js";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import {
   findDealerCandidatesByName,
