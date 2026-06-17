@@ -96,6 +96,7 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
+import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
@@ -289,13 +290,28 @@ type ActiveFilterChip = {
   label: string;
 };
 
-export default function TradePointsPage(): ReactElement {
+export type TradePointsProps = {
+  scopeUserId?: string;
+  embedListOnly?: boolean;
+};
+
+export default function TradePointsPage({
+  scopeUserId,
+  embedListOnly = false,
+}: TradePointsProps = {}): ReactElement {
+  const scopeUserIdResolved = scopeUserId?.trim() || undefined;
   useDealerTpOverridesHydration(true);
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
+  const readOnlyScope = viewingOtherUserScope;
+  const targetScopeQ = useMyScopeFromDB({
+    enabled: viewingOtherUserScope,
+    forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
+  });
   const user = me ?? undefined;
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
@@ -311,29 +327,46 @@ export default function TradePointsPage(): ReactElement {
   }, [myCodesQ.data]);
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
+
+  const effectiveVisPayload = useMemo(() => {
+    if (!viewingOtherUserScope) return visPayload;
+    if (!targetScopeQ.ready) return null;
+    return {
+      all: targetScopeQ.scope_explanation.full_catalog,
+      codes: targetScopeQ.scope_explanation.full_catalog
+        ? null
+        : Array.from(targetScopeQ.activeDealerExternalKeySet),
+    };
+  }, [viewingOtherUserScope, targetScopeQ, visPayload]);
+
   const useReal = Boolean(
     isRealUser &&
       !authLoading &&
       !authError &&
       snap &&
-      visPayload &&
-      !orgSnapQ.isError &&
-      !visCodesQ.isError,
+      effectiveVisPayload &&
+      (viewingOtherUserScope ? !targetScopeQ.error : !orgSnapQ.isError && !visCodesQ.isError),
   );
   const access = useMemo(() => {
+    if (viewingOtherUserScope && targetScopeQ.ready) {
+      return mapUserRoleToDealerBaseAccess(targetScopeQ.scopeSubject.role);
+    }
     if (isRealUser && me?.role) return mapUserRoleToDealerBaseAccess(me.role);
     return mapSalesRoleToDealerBaseAccess(profile.role);
-  }, [isRealUser, me?.role, profile.role]);
+  }, [viewingOtherUserScope, targetScopeQ.ready, targetScopeQ.scopeSubject.role, isRealUser, me?.role, profile.role]);
   const isMobile = useIsMobile();
   const teamCtx = useClientBaseTeamActualization();
   const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
 
   const isPageInitialLoading = useMemo(
     () =>
+      (viewingOtherUserScope && targetScopeQ.loading) ||
       (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
       (catalogQ.isPending && !catalogQ.data) ||
       (actx.enabled && actx.loading && !actx.meta.updatedAt),
     [
+      viewingOtherUserScope,
+      targetScopeQ.loading,
       isRealUser,
       authLoading,
       orgSnapQ.isLoading,
@@ -377,15 +410,15 @@ export default function TradePointsPage(): ReactElement {
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
   const mergedRowsActivePortfolioForManagement = useMemo(() => {
-    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
+    if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
       if (!actx.enabled) return releaseRows;
       return buildDealerBaseRowsWithActualization(actState, profile, {
         includeArchivedDealers: false,
         releaseDealerRows: releaseRows,
       });
     }
-    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
+    if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
     return buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false });
   }, [
@@ -393,7 +426,7 @@ export default function TradePointsPage(): ReactElement {
     authLoading,
     authError,
     snap,
-    visPayload,
+    effectiveVisPayload,
     orgSnapQ.isError,
     visCodesQ.isError,
     actx.enabled,
@@ -403,6 +436,9 @@ export default function TradePointsPage(): ReactElement {
   ]);
 
   const scopedActivePortfolioRowsForManagement = useMemo(() => {
+    if (viewingOtherUserScope && targetScopeQ.ready) {
+      return mergedRowsActivePortfolioForManagement;
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsActivePortfolioForManagement,
@@ -413,16 +449,16 @@ export default function TradePointsPage(): ReactElement {
       );
     }
     return roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile);
-  }, [useReal, snap, mergedRowsActivePortfolioForManagement, profile, access, assignmentsScope]);
+  }, [viewingOtherUserScope, targetScopeQ.ready, useReal, snap, mergedRowsActivePortfolioForManagement, profile, access, assignmentsScope]);
 
   const tpListRealOpts = useMemo(() => {
-    if (!useReal || !snap) return undefined;
-    const releaseRows = getVisibleDealerRows(catalogRows, visPayload!.all, visPayload!.codes);
+    if (!useReal || !snap || !effectiveVisPayload) return undefined;
+    const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
     return {
       releaseDealerRows: releaseRows,
       orgScope: { snap, access },
     } as const;
-  }, [useReal, snap, visPayload, access, catalogRows]);
+  }, [useReal, snap, effectiveVisPayload, access, catalogRows]);
 
   const sidebarRealScope = useMemo(
     () =>
@@ -430,16 +466,35 @@ export default function TradePointsPage(): ReactElement {
         isRealUser,
         authLoading,
         authError,
-        role: me?.role,
+        role: viewingOtherUserScope && targetScopeQ.ready ? targetScopeQ.scopeSubject.role : me?.role,
         snap,
-        visPayload,
+        visPayload: viewingOtherUserScope
+          ? targetScopeQ.ready
+            ? {
+                all: targetScopeQ.scope_explanation.full_catalog,
+                codes: targetScopeQ.scope_explanation.full_catalog
+                  ? null
+                  : Array.from(targetScopeQ.activeDealerExternalKeySet),
+                assignments: null,
+              }
+            : undefined
+          : visPayload,
         orgSnapError: orgSnapQ.isError,
-        visCodesError: visCodesQ.isError,
+        visCodesError: viewingOtherUserScope ? targetScopeQ.error : visCodesQ.isError,
         orgSnapLoading: orgSnapQ.isLoading,
-        visCodesLoading: visCodesQ.isLoading,
-        assignmentsScope,
+        visCodesLoading: viewingOtherUserScope ? targetScopeQ.loading : visCodesQ.isLoading,
+        assignmentsScope: viewingOtherUserScope ? undefined : assignmentsScope,
+        catalogRows: catalogQ.data,
+        dbScopedExternalKeys: viewingOtherUserScope && targetScopeQ.ready ? targetScopeQ.activeDealerExternalKeySet : undefined,
       }),
     [
+      viewingOtherUserScope,
+      targetScopeQ.ready,
+      targetScopeQ.loading,
+      targetScopeQ.error,
+      targetScopeQ.scope_explanation.full_catalog,
+      targetScopeQ.activeDealerExternalKeySet,
+      targetScopeQ.scopeSubject.role,
       isRealUser,
       authLoading,
       authError,
@@ -451,6 +506,7 @@ export default function TradePointsPage(): ReactElement {
       orgSnapQ.isLoading,
       visCodesQ.isLoading,
       assignmentsScope,
+      catalogQ.data,
     ],
   );
 
@@ -683,7 +739,7 @@ export default function TradePointsPage(): ReactElement {
     [actx.enabled, profile, assignmentsScope],
   );
 
-  const canShowBulkTradePointControls = actx.enabled && canActualizeClientBase(profile) && !showArchived;
+  const canShowBulkTradePointControls = !readOnlyScope && actx.enabled && canActualizeClientBase(profile) && !showArchived;
 
   /** Сколько ТТ в текущей выдаче (по фильтрам) реально можно архивировать. */
   const eligibleTradePointsInFilterCount = useMemo(() => filteredSorted.filter((r) => canArchiveRow(r)).length, [filteredSorted, canArchiveRow]);
@@ -1450,6 +1506,14 @@ export default function TradePointsPage(): ReactElement {
     return <TradePointsSkeleton />;
   }
 
+  if (viewingOtherUserScope && targetScopeQ.forbidden) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground" data-testid="trade-points-scope-forbidden">
+        Нет доступа к scope этого сотрудника
+      </div>
+    );
+  }
+
   if (catalogQ.isError) {
     return (
       <div data-testid="page-trade-points">
@@ -1466,7 +1530,7 @@ export default function TradePointsPage(): ReactElement {
     );
   }
 
-  if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
+  if (!embedListOnly && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <TradePointsManagementCockpit
         profile={profile}
@@ -1478,8 +1542,12 @@ export default function TradePointsPage(): ReactElement {
   }
 
   return (
-    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
+    <div
+      className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0"
+      data-testid={embedListOnly ? "trade-points-list-embed" : "page-trade-points"}
+    >
       <div className="flex flex-col gap-3">
+        {!embedListOnly ? (
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <Store className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden />
@@ -1487,6 +1555,7 @@ export default function TradePointsPage(): ReactElement {
           </div>
           <p className="text-sm text-muted-foreground">Все точки клиентов, доступные по вашей зоне ответственности</p>
         </div>
+        ) : null}
 
         <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
           <CardContent className="space-y-2.5 p-3 sm:p-4">
