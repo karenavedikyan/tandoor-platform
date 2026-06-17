@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeBlocksFromServer } from "../brief-blocks-editor-state";
-import type { MarketingBriefBlockRow } from "@/lib/marketing-briefs-api";
+import type { MarketingBriefBlockRow } from "../marketing-briefs-api.js";
 
 function textBlock(id: string, body: string, order = 0): MarketingBriefBlockRow {
   return {

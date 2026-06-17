@@ -117,7 +117,7 @@ const teamRows = [
     users: [
       { id: boykoUuid, fullName: "Бойко Екатерина Михайловна", role: "manager", teamId: TEAM },
     ],
-  } as import("@/lib/use-org-snapshot").OrgSnapshot;
+  } as import("../use-org-snapshot.js").OrgSnapshot;
   const managers = aggregateManagersForTeam(TEAM, [r], snap, responsibleByCode, userIdToCatalogMgrId);
   const boyko = managers.find((m) => m.managerId === MGR_BOYKO);
   assert.ok(boyko);
@@ -160,7 +160,7 @@ const teamRows = [
         teamId: KUPIANSKY_UUID,
       },
     ],
-  } as import("@/lib/use-org-snapshot").OrgSnapshot;
+  } as import("../use-org-snapshot.js").OrgSnapshot;
   const portfolioRows = [
     row("c-ma-1", {
       releaseCode: "MA-BOYKO-1",

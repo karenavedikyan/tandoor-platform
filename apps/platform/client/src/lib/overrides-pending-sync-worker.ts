@@ -124,7 +124,7 @@ async function processItem(item: PendingSyncItem): Promise<void> {
       const r = await apiUpsertShipmentRoute({
         id: typeof p.id === "string" ? p.id : undefined,
         userId: String(p.userId),
-        dayId: p.dayId as import("@/lib/dealer-shipment-days").DealerShipmentDayId,
+        dayId: p.dayId as import("./dealer-shipment-days.js").DealerShipmentDayId,
         name: String(p.name ?? ""),
         cities: Array.isArray(p.cities) ? (p.cities as string[]) : [],
       });

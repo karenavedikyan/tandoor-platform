@@ -2,12 +2,12 @@
  * Запуск: `npm run test:distribution-scope-summary-view-model` из каталога apps/platform.
  */
 import { describe, expect, it } from "vitest";
-import type { TradePointListRow } from "@/lib/dealer-base-management-view-model";
+import type { TradePointListRow } from "../dealer-base-management-view-model.js";
 import {
   buildDistributionScopeSummary,
   filterSummaryRows,
-} from "@/lib/distribution-scope-summary-view-model";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+} from "../distribution-scope-summary-view-model.js";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 
 const VH_MODEL = "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya";
 const VH_MODEL_2 = "tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya";

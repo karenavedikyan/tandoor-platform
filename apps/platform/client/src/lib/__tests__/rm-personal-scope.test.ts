@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import { roleScopedDealerRowsForReal } from "../dealer-base-real-scope.js";
+import type { DealerRow } from "../dealer-base-mock-data.js";
+import type { OrgSnapshot } from "../use-org-snapshot.js";
 
 function makeRow(id: string, releaseCode: string): DealerRow {
   return {

@@ -1,12 +1,12 @@
-import { normalizeHasShowcase } from "./client-base-actualization-state.js";
+import { normalizeHasShowcase } from "../client-base-actualization-state.js";
 import type {
   TradePointShowcaseActualization,
   TradePointShowcaseSelectedModel,
-} from "./client-base-actualization-state.js";
-import type { CatalogProduct } from "./catalog-product-type.js";
-import type { ShowcaseTypeKey } from "./showcase-type-capacity.js";
-import { getShowcaseTypeCapacity } from "./showcase-type-capacity.js";
-import { effectivePortalTypeForSelectedModel } from "./trade-point-showcase-matrix-required.js";
+} from "../client-base-actualization-state.js";
+import type { CatalogProduct } from "../catalog-product-type.js";
+import type { ShowcaseTypeKey } from "../showcase-type-capacity.js";
+import { getShowcaseTypeCapacity } from "../showcase-type-capacity.js";
+import { effectivePortalTypeForSelectedModel } from "../trade-point-showcase-matrix-required.js";
 
 export type EquipmentTypeKey = ShowcaseTypeKey;
 

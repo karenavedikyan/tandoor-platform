@@ -1,28 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UserRole } from "@shared/auth";
-import { useAuthUser } from "../hooks/use-auth-user.js";
-import { useReleaseDemoProfile } from "../hooks/use-release-demo-profile.js";
-import { useOrgSnapshot } from "./use-org-snapshot.js";
-import { useMyVisibleClientCodes } from "./use-my-visible-client-codes.js";
-import { useMyClientCodes } from "../hooks/use-my-client-codes.js";
-import { useClientBaseActualization } from "../context/client-base-actualization-context.js";
-import { useClientBaseTeamActualization } from "../context/client-base-team-actualization-context.js";
+import { useAuthUser } from "../../hooks/use-auth-user.js";
+import { useReleaseDemoProfile } from "../../hooks/use-release-demo-profile.js";
+import { useOrgSnapshot } from "../use-org-snapshot.js";
+import { useMyVisibleClientCodes } from "../use-my-visible-client-codes.js";
+import { useMyClientCodes } from "../../hooks/use-my-client-codes.js";
+import { useClientBaseActualization } from "../../context/client-base-actualization-context.js";
+import { useClientBaseTeamActualization } from "../../context/client-base-team-actualization-context.js";
 import type { GlobalSearchResult } from "@shared/search-handlers";
-import { searchGlobal } from "./search/global-search-api.js";
-import { filterQuickLinks, type GlobalSearchQuickLink } from "./search/global-search-quick-links.js";
+import { searchGlobal } from "../search/global-search-api.js";
+import { filterQuickLinks, type GlobalSearchQuickLink } from "../search/global-search-quick-links.js";
 import {
   buildDefaultLocalSearchContext,
   buildLocalGlobalSearch,
   emptyGlobalSearchResult,
-} from "./search/local-global-search.js";
+} from "../search/local-global-search.js";
 import {
   dedupeById,
   GLOBAL_SEARCH_LIMIT_PER_TYPE,
   isContentSearchQuery,
-} from "./search/search-query-utils.js";
-import type { AssignmentDto } from "./showcase-assignments-api.js";
-import { assignmentsScopeIsActive, type AssignmentsScope } from "./dealer-base-real-scope.js";
+} from "../search/search-query-utils.js";
+import type { AssignmentDto } from "../showcase-assignments-api.js";
+import { assignmentsScopeIsActive, type AssignmentsScope } from "../dealer-base-real-scope.js";
 
 const SERVER_DEBOUNCE_MS = 280;
 

@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CACHE_KEY,
-} from "@/lib/showcase-matrix-store";
+} from "../showcase-matrix-store.js";
 import {
   upsertShowcaseMatrixModelState,
   SHOWCASE_MATRIX_STORAGE_KEY,
-} from "@/lib/trade-point-showcase-matrix-storage";
-import { buildSegmentDetail } from "@/lib/trade-point-showcase-segment-models";
-import { SHOWCASE_MATRIX_MODEL_DEFINITIONS } from "@/lib/trade-point-showcase-matrix-models";
+} from "../trade-point-showcase-matrix-storage.js";
+import { buildSegmentDetail } from "../trade-point-showcase-segment-models.js";
+import { SHOWCASE_MATRIX_MODEL_DEFINITIONS } from "../trade-point-showcase-matrix-models.js";
 
 const DEALER = "client-test-353";
 const TP = `${DEALER}-default`;

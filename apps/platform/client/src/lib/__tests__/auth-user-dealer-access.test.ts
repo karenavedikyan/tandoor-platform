@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
+import { mapUserRoleToDealerBaseAccess } from "../auth-user-dealer-access.js";
 
 describe("Промт 354: mapUserRoleToDealerBaseAccess", () => {
   it("regional_manager → sales_manager (личный scope, без команды)", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesSearch, normalizeForSearch } from "@/lib/entity-list-filtering";
+import { matchesSearch, normalizeForSearch } from "../entity-list-filtering.js";
 
 describe("entity-list-filtering", () => {
   it("normalizeForSearch folds case and ё", () => {

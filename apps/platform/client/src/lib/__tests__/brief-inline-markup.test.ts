@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { wrapBriefTextSelection } from "@/components/marketing-brief/marketing-brief-blocks-published";
+import { wrapBriefTextSelection } from "../../components/marketing-brief/marketing-brief-blocks-published.js";
 
 describe("brief inline markup", () => {
   it("wraps selection in bold markers", () => {

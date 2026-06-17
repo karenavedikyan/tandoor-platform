@@ -375,7 +375,7 @@ export async function backfillClientCommentsFromLocalStorage(authUserId: string)
     const dealerState = loadDealerCardCommentsState();
     const tpState = loadTradePointCommentsState();
     const dealerComments = dealerState.commentsByDealer[clientId] ?? [];
-    const tpComments: Record<string, import("@/lib/trade-point-comments").TradePointComment[]> = {};
+    const tpComments: Record<string, import("./trade-point-comments.js").TradePointComment[]> = {};
     const prefix = `${clientId}|`;
     for (const [key, list] of Object.entries(tpState.commentsByTradePoint)) {
       if (!key.startsWith(prefix)) continue;
