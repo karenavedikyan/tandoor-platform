@@ -18,6 +18,10 @@ import {
   resolveDealersTradePointsSummary,
   type DealersTradePointsSearchFilters,
 } from "../../server/dealers/dealers-trade-points-source.js";
+import {
+  handleTradePointsListScoped,
+  type ListScopedTradePointsResult,
+} from "../../shared/trade-points-list-scoped-handlers.js";
 
 const READ_ROLES = new Set([
   "admin",
@@ -70,6 +74,13 @@ function filtersFromQuery(req: VercelRequest): DealersTradePointsSearchFilters {
   };
 }
 
+function parseForUserId(req: VercelRequest): string | undefined {
+  const raw = req.query.for_user_id;
+  const s = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw ?? "");
+  const t = s.trim();
+  return t || undefined;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const actionRaw = req.query.action;
   const action = Array.isArray(actionRaw) ? String(actionRaw[0] ?? "") : String(actionRaw ?? "");
@@ -120,6 +131,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       const payload = await resolveDealersTradePointsGet(pool, externalKey);
       if (!payload.success) {
         sendJson(res, 404, payload);
+        return;
+      }
+      sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "list-scoped") {
+      const payload: ListScopedTradePointsResult = await handleTradePointsListScoped(
+        pool,
+        { id: me.id, role: me.role },
+        parseForUserId(req),
+      );
+      if ("forbidden" in payload) {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+        return;
+      }
+      if ("notFound" in payload) {
+        sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Пользователь не найден." });
         return;
       }
       sendJson(res, 200, payload);
