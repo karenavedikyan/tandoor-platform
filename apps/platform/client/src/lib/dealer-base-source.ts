@@ -83,6 +83,22 @@ export function getCatalogDealerById(rawId: string): DealerRow | undefined {
   return rows.find((r) => r.id === t);
 }
 
+/**
+ * Преобразует external_key (формат 'client-' + lower(release_code))
+ * в raw release_code (без префикса).
+ * Если префикс отсутствует — возвращает строку как есть.
+ */
+export function externalKeyToReleaseCode(externalKey: string): string {
+  const PREFIX = "client-";
+  return externalKey.startsWith(PREFIX) ? externalKey.slice(PREFIX.length) : externalKey;
+}
+
+export function externalKeysToReleaseCodes(externalKeys: Iterable<string>): string[] {
+  const out: string[] = [];
+  for (const k of externalKeys) out.push(externalKeyToReleaseCode(k));
+  return out;
+}
+
 export function filterDealerRowsByVisibleCodes(
   rows: DealerRow[],
   codes: string[] | null,
