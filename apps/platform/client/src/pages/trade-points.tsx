@@ -80,7 +80,6 @@ import {
 } from "@/lib/client-base-actualization-permissions";
 import { buildTradePointsWorkingRowsForCount } from "@/lib/trade-points-working-rows";
 import { buildSidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import {
   buildTradePointListForActualization,
   type TradePointListRow,
@@ -290,16 +289,7 @@ type ActiveFilterChip = {
   label: string;
 };
 
-export type TradePointsPageProps = {
-  scopeUserId?: string;
-  embedListOnly?: boolean;
-};
-
-export default function TradePointsPage({
-  scopeUserId,
-  embedListOnly = false,
-}: TradePointsPageProps = {}): ReactElement {
-  const scopeUserIdResolved = scopeUserId?.trim() || undefined;
+export default function TradePointsPage(): ReactElement {
   useDealerTpOverridesHydration(true);
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
@@ -434,12 +424,9 @@ export default function TradePointsPage({
     } as const;
   }, [useReal, snap, visPayload, access, catalogRows]);
 
-  const sidebarRealScopeFromHook = useSidebarNavRealScope(isRealUser, scopeUserIdResolved);
-
   const sidebarRealScope = useMemo(
-    () => {
-      if (scopeUserIdResolved) return sidebarRealScopeFromHook;
-      return buildSidebarNavRealScope({
+    () =>
+      buildSidebarNavRealScope({
         isRealUser,
         authLoading,
         authError,
@@ -451,12 +438,8 @@ export default function TradePointsPage({
         orgSnapLoading: orgSnapQ.isLoading,
         visCodesLoading: visCodesQ.isLoading,
         assignmentsScope,
-        catalogRows: catalogQ.data,
-      });
-    },
+      }),
     [
-      scopeUserIdResolved,
-      sidebarRealScopeFromHook,
       isRealUser,
       authLoading,
       authError,
@@ -468,7 +451,6 @@ export default function TradePointsPage({
       orgSnapQ.isLoading,
       visCodesQ.isLoading,
       assignmentsScope,
-      catalogQ.data,
     ],
   );
 
@@ -1496,12 +1478,8 @@ export default function TradePointsPage({
   }
 
   return (
-    <div
-      className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0"
-      data-testid={embedListOnly ? "trade-points-list-embed" : "page-trade-points"}
-    >
+    <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden px-1 sm:space-y-6 sm:px-0" data-testid="page-trade-points">
       <div className="flex flex-col gap-3">
-        {!embedListOnly ? (
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2">
             <Store className="h-6 w-6 shrink-0 text-muted-foreground" aria-hidden />
@@ -1509,7 +1487,6 @@ export default function TradePointsPage({
           </div>
           <p className="text-sm text-muted-foreground">Все точки клиентов, доступные по вашей зоне ответственности</p>
         </div>
-        ) : null}
 
         <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
           <CardContent className="space-y-2.5 p-3 sm:p-4">

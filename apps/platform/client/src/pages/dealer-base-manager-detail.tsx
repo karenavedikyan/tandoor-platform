@@ -12,6 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useAuthUser } from "@/hooks/use-auth-user";
@@ -45,8 +53,17 @@ import {
   managerHeatBarClass,
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
-import { DealerBaseListView } from "@/components/dealer-base/dealer-base-list-view";
-import { TradePointsListView } from "@/components/trade-points/trade-points-list-view";
+import { getClientCategoryLabel } from "@/lib/client-category";
+import { ClientCategoryBadge } from "@/components/client-category-badge";
+import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
+import { EntityListFilters } from "@/components/entity-list/entity-list-filters";
+import { ManagerTradePointsTab } from "@/components/trade-points/manager-trade-points-tab";
+import {
+  buildCategoryOptionsFromRows,
+  buildCityOptionsFromRows,
+  countActiveEntityListFilters,
+  matchesSearch,
+} from "@/lib/entity-list-filtering";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { resolveManagerApiUserId } from "@/lib/trade-points-overview-view-model";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
@@ -201,6 +218,9 @@ export default function DealerBaseManagerDetailPage() {
 
   const [segmentFilter, setSegmentFilter] = useState<DealerBaseSegmentKey | null>(null);
   const [activeTab, setActiveTab] = useState<"clients" | "cities" | "trade_points" | "attention">("clients");
+  const [searchQ, setSearchQ] = useState("");
+  const [categoryF, setCategoryF] = useState("all");
+  const [cityF, setCityF] = useState("all");
 
   const managerTpFromOverview = useMemo<number | null>(() => {
     const data = tradePointsOverviewQ.data;
@@ -219,6 +239,34 @@ export default function DealerBaseManagerDetailPage() {
     if (managerTpFromOverview != null) return String(managerTpFromOverview);
     return String(dashboard.kpis.tradePoints);
   }, [dashboard, tradePointsOverviewQ.isLoading, tradePointsOverviewQ.data, managerTpFromOverview]);
+
+  const segmentRows = useMemo(() => {
+    if (!dashboard) return [];
+    return dashboard.rows.filter((r) => dealerRowMatchesSegment(r, segmentFilter));
+  }, [dashboard, segmentFilter]);
+
+  const categoryOptions = useMemo(
+    () => buildCategoryOptionsFromRows(segmentRows, getClientCategoryLabel),
+    [segmentRows],
+  );
+  const cityOptions = useMemo(() => buildCityOptionsFromRows(segmentRows), [segmentRows]);
+
+  const filteredClients = useMemo(() => {
+    let rows = segmentRows;
+    if (categoryF !== "all")
+      rows = rows.filter((r) => resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null) === categoryF);
+    if (cityF !== "all") rows = rows.filter((r) => (r.city ?? "").trim() === cityF);
+    if (searchQ.trim()) rows = rows.filter((r) => matchesSearch(searchQ, [r.name]));
+    return rows;
+  }, [segmentRows, categoryF, cityF, searchQ]);
+
+  const listFilterActiveCount = countActiveEntityListFilters([categoryF, cityF]);
+
+  const resetListFilters = () => {
+    setSearchQ("");
+    setCategoryF("all");
+    setCityF("all");
+  };
 
   const loading =
     authLoading ||
@@ -415,7 +463,7 @@ export default function DealerBaseManagerDetailPage() {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-4">
             <TabsTrigger value="clients" className="text-xs sm:text-sm" data-testid="tab-manager-clients">
-              Клиенты ({dashboard.kpis.activeClients})
+              Клиенты ({filteredClients.length})
             </TabsTrigger>
             <TabsTrigger value="cities" className="text-xs sm:text-sm" data-testid="tab-manager-cities">
               Города ({dashboard.cities.length})
@@ -446,7 +494,90 @@ export default function DealerBaseManagerDetailPage() {
                 </Badge>
               </div>
             ) : null}
-            <DealerBaseListView scopeUserId={managerApiUserId} />
+            <EntityListFilters
+              className="mb-3"
+              search={searchQ}
+              onSearchChange={setSearchQ}
+              searchPlaceholder="Поиск по названию клиента…"
+              resultCount={filteredClients.length}
+              activeCount={listFilterActiveCount}
+              onReset={resetListFilters}
+              filters={[
+                {
+                  key: "category",
+                  label: "Категория",
+                  value: categoryF,
+                  onChange: setCategoryF,
+                  options: categoryOptions,
+                },
+                {
+                  key: "city",
+                  label: "Город",
+                  value: cityF,
+                  onChange: setCityF,
+                  options: cityOptions,
+                },
+              ]}
+            />
+            {filteredClients.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                {segmentRows.length === 0
+                  ? "Нет клиентов в выбранном сегменте."
+                  : "Нет клиентов по выбранным фильтрам."}
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Клиент</TableHead>
+                      <TableHead>Город</TableHead>
+                      <TableHead>Категория</TableHead>
+                      <TableHead className="text-right">ТТ</TableHead>
+                      <TableHead className="w-[88px]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredClients
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+                      .map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="max-w-[200px] truncate font-medium">{r.name}</TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                              onClick={() => setCityF((r.city ?? "").trim() || "all")}
+                              data-testid={`link-manager-client-city-${r.id}`}
+                            >
+                              {r.city}
+                            </button>
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="inline-flex transition-opacity hover:opacity-90"
+                              onClick={() =>
+                                setCategoryF(resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null))
+                              }
+                              data-testid={`link-manager-client-category-${r.id}`}
+                            >
+                              <ClientCategoryBadge dealer={r} state={actx.enabled ? actx.state : null} />
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{r.outlets}</TableCell>
+                          <TableCell>
+                            <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
+                              <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Карточка</Link>
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="cities" className="mt-3">
@@ -473,7 +604,7 @@ export default function DealerBaseManagerDetailPage() {
           </TabsContent>
 
           <TabsContent value="trade_points" className="mt-3">
-            <TradePointsListView scopeUserId={managerApiUserId} />
+            <ManagerTradePointsTab managerUserId={managerApiUserId} />
           </TabsContent>
 
           <TabsContent value="attention" className="mt-3">
