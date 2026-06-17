@@ -21,6 +21,12 @@ import {
   handleTradePointOverridesUpsert,
 } from "../../shared/trade-point-overrides-handlers.js";
 import {
+  handleTradePointOverridesAdminRestore,
+  handleTradePointOverridesPurge,
+  handleTradePointOverridesRequestPurge,
+  handleTradePointOverridesRestore,
+} from "../../shared/trade-point-purge-handlers.js";
+import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
 } from "../../shared/overrides-api-access-log.js";
@@ -89,6 +95,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "untrash" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesUntrash(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "request-purge" && req.method === "POST") {
+      await runLogged(() => handleTradePointOverridesRequestPurge(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "restore" && req.method === "POST") {
+      await runLogged(() => handleTradePointOverridesRestore(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "purge" && req.method === "POST") {
+      await runLogged(() => handleTradePointOverridesPurge(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "admin-restore" && req.method === "POST") {
+      await runLogged(() => handleTradePointOverridesAdminRestore(req, res, pool, sessionUser));
       return;
     }
 

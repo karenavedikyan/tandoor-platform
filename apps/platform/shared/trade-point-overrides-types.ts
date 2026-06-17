@@ -17,6 +17,10 @@ export type TradePointOverrideRow = {
   is_hardware_warehouse: boolean | null;
   trashed_at: string | null;
   trashed_by: string | null;
+  purge_requested_at: string | null;
+  purge_requested_by: string | null;
+  purged_at: string | null;
+  purged_by: string | null;
   rop_id: string | null;
   rop_name: string | null;
   regional_manager_id: string | null;
@@ -87,6 +91,10 @@ export function mapTradePointOverrideRow(r: Record<string, unknown>): TradePoint
         : r.is_hardware_warehouse === true || r.is_hardware_warehouse === "t",
     trashed_at: r.trashed_at != null ? String(r.trashed_at) : null,
     trashed_by: r.trashed_by != null ? String(r.trashed_by) : null,
+    purge_requested_at: r.purge_requested_at != null ? String(r.purge_requested_at) : null,
+    purge_requested_by: r.purge_requested_by != null ? String(r.purge_requested_by) : null,
+    purged_at: r.purged_at != null ? String(r.purged_at) : null,
+    purged_by: r.purged_by != null ? String(r.purged_by) : null,
     rop_id: r.rop_id != null ? String(r.rop_id) : null,
     rop_name: r.rop_name != null ? String(r.rop_name) : null,
     regional_manager_id: r.regional_manager_id != null ? String(r.regional_manager_id) : null,

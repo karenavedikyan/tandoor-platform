@@ -33,7 +33,9 @@ export type Permission =
   // Hardening (Prompt 09)
   | "audit.read"
   | "sessions.read_self"
-  | "sessions.revoke_self";
+  | "sessions.revoke_self"
+  // Trash purge (Prompt 386)
+  | "admin.purge_dealer";
 
 /**
  * Какие роли могут пригласить какую целевую роль.
@@ -73,6 +75,7 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "audit.read",
     "sessions.read_self",
     "sessions.revoke_self",
+    "admin.purge_dealer",
   ]),
   director: new Set<Permission>([
     "invitations.create",
@@ -85,6 +88,7 @@ const PERMISSIONS_BY_ROLE: Record<UserRole, ReadonlySet<Permission>> = {
     "audit.read",
     "sessions.read_self",
     "sessions.revoke_self",
+    "admin.purge_dealer",
   ]),
   rop: new Set<Permission>([
     "invitations.create",

@@ -5219,6 +5219,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleTpCountDiag(req, res, pool, headers);
       return;
     }
+    if (action === "purge-queue" && req.method === "GET") {
+      const { handleAdminPurgeQueue } = await import("../../shared/admin-purge-queue-handlers.js");
+      await handleAdminPurgeQueue(req, res, pool, headers);
+      return;
+    }
     if (action === "scope-debug" && req.method === "GET") {
       const { handleScopeDebugRequest } = await import("../../shared/scope-debug-handlers.js");
       await handleScopeDebugRequest(req, res, pool, headers);

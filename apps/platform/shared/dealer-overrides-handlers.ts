@@ -404,20 +404,11 @@ export async function handleDealerOverridesUntrash(
   pool: PoolLike,
   me: SessionUser,
 ): Promise<void> {
-  if (!assertCanWrite(me, res)) return;
-  const dealerId = typeof (req.body as Record<string, unknown>)?.dealer_id === "string"
-    ? String((req.body as Record<string, unknown>).dealer_id).trim()
-    : "";
-  if (!dealerId) {
-    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите dealer_id." });
-    return;
-  }
-  const check = await canUserTrashDealer(pool, me.id, me.role, dealerId);
-  if (!check.allowed) {
-    denyTrashOutOfScope(res, check.reason);
-    return;
-  }
-  await setTrash(pool, me, dealerId, false, res);
+  const { handleDealerOverridesRestore } = await import("./dealer-purge-handlers.js");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (body.target === undefined) body.target = "active";
+  req.body = body;
+  await handleDealerOverridesRestore(req, res, pool, me);
 }
 
 export async function handleDealerOverridesCreateManual(

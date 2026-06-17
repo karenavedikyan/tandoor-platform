@@ -23,6 +23,12 @@ import {
   handleDealerOverridesUpsert,
 } from "../../shared/dealer-overrides-handlers.js";
 import {
+  handleDealerOverridesAdminRestore,
+  handleDealerOverridesPurge,
+  handleDealerOverridesRequestPurge,
+  handleDealerOverridesRestore,
+} from "../../shared/dealer-purge-handlers.js";
+import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
 } from "../../shared/overrides-api-access-log.js";
@@ -95,6 +101,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "untrash" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesUntrash(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "request-purge" && req.method === "POST") {
+      await runLogged(() => handleDealerOverridesRequestPurge(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "restore" && req.method === "POST") {
+      await runLogged(() => handleDealerOverridesRestore(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "purge" && req.method === "POST") {
+      await runLogged(() => handleDealerOverridesPurge(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "admin-restore" && req.method === "POST") {
+      await runLogged(() => handleDealerOverridesAdminRestore(req, res, pool, sessionUser));
       return;
     }
     if (action === "create-manual" && req.method === "POST") {

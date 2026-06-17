@@ -13,6 +13,7 @@ export {
 } from "./overrides-api-result.js";
 import { sanitizeTradePointOverrideFieldsForApi } from "./overrides-persona-fields.js";
 import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
+import { invalidateMyDealerScope } from "./dealers-my-scope-api.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -169,6 +170,76 @@ export async function untrashTradePointStrict(tpId: string): Promise<OverridesAp
 
 export async function untrashTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
   const r = await untrashTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
+}
+
+async function postTradePointPurgeAction<T>(
+  action: string,
+  body: Record<string, unknown>,
+  traceFn: string,
+): Promise<OverridesApiResult<T>> {
+  const tpId = typeof body.tp_id === "string" ? body.tp_id : undefined;
+  const r = await overridesApiPost<T>({
+    scope: "trade-point",
+    action,
+    url: `/api/trade-point-overrides/${action}`,
+    entityId: tpId,
+    body,
+    traceFn,
+  });
+  if (r.ok) invalidateMyDealerScope();
+  return r;
+}
+
+export async function requestPurgeTradePointStrict(
+  tpId: string,
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("requestPurgeTradePointStrict", { tpId });
+  return postTradePointPurgeAction("request-purge", { tp_id: tpId }, "requestPurgeTradePointStrict");
+}
+
+export async function requestPurgeTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
+  const r = await requestPurgeTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function restoreTradePointStrict(
+  tpId: string,
+  target: "employee_trash" | "active" = "employee_trash",
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("restoreTradePointStrict", { tpId, target });
+  return postTradePointPurgeAction("restore", { tp_id: tpId, target }, "restoreTradePointStrict");
+}
+
+export async function restoreTradePoint(
+  tpId: string,
+  target: "employee_trash" | "active" = "employee_trash",
+): Promise<TradePointOverrideRow | null> {
+  const r = await restoreTradePointStrict(tpId, target);
+  return r.ok ? r.data.override : null;
+}
+
+export async function purgeTradePointStrict(
+  tpId: string,
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("purgeTradePointStrict", { tpId });
+  return postTradePointPurgeAction("purge", { tp_id: tpId }, "purgeTradePointStrict");
+}
+
+export async function purgeTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
+  const r = await purgeTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function adminRestoreTradePointStrict(
+  tpId: string,
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("adminRestoreTradePointStrict", { tpId });
+  return postTradePointPurgeAction("admin-restore", { tp_id: tpId }, "adminRestoreTradePointStrict");
+}
+
+export async function adminRestoreTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
+  const r = await adminRestoreTradePointStrict(tpId);
   return r.ok ? r.data.override : null;
 }
 

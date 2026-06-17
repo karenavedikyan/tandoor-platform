@@ -2,13 +2,17 @@
  * GET /api/dealers/my-scope — клиент (Промт 384).
  */
 
+import type { QueryClient } from "@tanstack/react-query";
 import type { UserRole } from "@shared/auth";
+import { queryClient } from "./queryClient";
 
 export type MyDealerScopeTotals = {
   active_dealers: number;
   active_trade_points: number;
   trashed_dealers: number;
   trashed_trade_points: number;
+  admin_purge_queue_dealers?: number;
+  admin_purge_queue_trade_points?: number;
 };
 
 export type MyDealerScopeExplanation = {
@@ -44,4 +48,8 @@ export async function fetchMyDealerScope(): Promise<MyDealerScopePayload> {
     throw new Error(json.message ?? `my-scope HTTP ${res.status}`);
   }
   return json;
+}
+
+export function invalidateMyDealerScope(qc: QueryClient = queryClient): void {
+  void qc.invalidateQueries({ queryKey: MY_DEALER_SCOPE_QUERY_KEY });
 }

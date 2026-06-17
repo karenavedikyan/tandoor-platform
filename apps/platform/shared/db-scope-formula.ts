@@ -20,6 +20,8 @@ export type DbScopeTotals = {
   active_trade_points: number;
   trashed_dealers: number;
   trashed_trade_points: number;
+  admin_purge_queue_dealers?: number;
+  admin_purge_queue_trade_points?: number;
 };
 
 export type DbScopeResult = {
@@ -66,6 +68,78 @@ export const TRADE_POINT_OVERRIDE_JOIN = `
     OR tpo.tp_id = tp.external_key
   )
 `;
+
+/** Корзина сотрудника (не purged, не в очереди админа). */
+export const DEALER_IS_EMPLOYEE_TRASH_SQL = `(
+  d_ov.trashed_at IS NOT NULL
+  AND d_ov.purge_requested_at IS NULL
+  AND d_ov.purged_at IS NULL
+)`;
+
+export const DEALER_IS_ACTIVE_SQL = `(d_ov.purged_at IS NULL AND d_ov.trashed_at IS NULL)`;
+
+export async function computeAdminPurgeQueueCounts(
+  pool: PoolLike,
+): Promise<{ dealers: number; trade_points: number }> {
+  const dealersQ = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n
+     FROM dealer_overrides d_ov
+     WHERE d_ov.purge_requested_at IS NOT NULL AND d_ov.purged_at IS NULL`,
+  );
+  const tpQ = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::text AS n
+     FROM trade_point_overrides tpo
+     WHERE tpo.purge_requested_at IS NOT NULL AND tpo.purged_at IS NULL`,
+  );
+  return {
+    dealers: Number(dealersQ.rows[0]?.n ?? 0),
+    trade_points: Number(tpQ.rows[0]?.n ?? 0),
+  };
+}
+
+export type AdminPurgeQueueDealerRow = {
+  id: string;
+  external_key: string;
+  name: string;
+  release_code: string | null;
+  trashed_at: string | null;
+  trashed_by: string | null;
+  purge_requested_at: string | null;
+  purge_requested_by: string | null;
+  trashed_by_name: string | null;
+  purge_requested_by_name: string | null;
+};
+
+export async function computeAdminPurgeQueue(pool: PoolLike): Promise<{
+  dealers: AdminPurgeQueueDealerRow[];
+  trade_points: Record<string, unknown>[];
+}> {
+  const dealersQ = await pool.query<AdminPurgeQueueDealerRow>(
+    `SELECT d.id::text AS id, d.external_key, d.name, d.release_code,
+            d_ov.trashed_at, d_ov.trashed_by::text,
+            d_ov.purge_requested_at, d_ov.purge_requested_by::text,
+            u_trashed.full_name AS trashed_by_name,
+            u_requested.full_name AS purge_requested_by_name
+     FROM dealers d
+     ${DEALER_OVERRIDE_JOIN}
+     LEFT JOIN users u_trashed ON u_trashed.id = d_ov.trashed_by
+     LEFT JOIN users u_requested ON u_requested.id = d_ov.purge_requested_by
+     WHERE d_ov.purge_requested_at IS NOT NULL AND d_ov.purged_at IS NULL
+     ORDER BY d_ov.purge_requested_at DESC`,
+  );
+  const tpQ = await pool.query<Record<string, unknown>>(
+    `SELECT tpo.tp_id, tpo.dealer_id, tpo.trashed_at, tpo.trashed_by::text,
+            tpo.purge_requested_at, tpo.purge_requested_by::text,
+            u_trashed.full_name AS trashed_by_name,
+            u_requested.full_name AS purge_requested_by_name
+     FROM trade_point_overrides tpo
+     LEFT JOIN users u_trashed ON u_trashed.id = tpo.trashed_by
+     LEFT JOIN users u_requested ON u_requested.id = tpo.purge_requested_by
+     WHERE tpo.purge_requested_at IS NOT NULL AND tpo.purged_at IS NULL
+     ORDER BY tpo.purge_requested_at DESC`,
+  );
+  return { dealers: dealersQ.rows, trade_points: tpQ.rows };
+}
 
 export async function resolveUserTeamIds(
   pool: PoolLike,
@@ -160,14 +234,28 @@ export async function computeDbScopeForUser(
   role: UserRole,
 ): Promise<DbScopeResult> {
   const meta = await resolveScopeCodesMeta(pool, userId, role);
+  const adminQueue =
+    role === "admin" || role === "director" ? await computeAdminPurgeQueueCounts(pool) : null;
+
+  const attachAdminTotals = (totals: DbScopeTotals): DbScopeTotals => {
+    if (!adminQueue) return totals;
+    return {
+      ...totals,
+      admin_purge_queue_dealers: adminQueue.dealers,
+      admin_purge_queue_trade_points: adminQueue.trade_points,
+    };
+  };
 
   if (meta.fullCatalog) {
     const dealersQ = await pool.query<{
       id: string;
       external_key: string;
-      is_trashed: boolean;
+      is_purged: boolean;
+      is_employee_trash: boolean;
     }>(
-      `SELECT d.id::text AS id, d.external_key, (d_ov.trashed_at IS NOT NULL) AS is_trashed
+      `SELECT d.id::text AS id, d.external_key,
+              (d_ov.purged_at IS NOT NULL) AS is_purged,
+              ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash
        FROM dealers d
        ${DEALER_OVERRIDE_JOIN}`,
     );
@@ -176,7 +264,8 @@ export async function computeDbScopeForUser(
     const trashedIds: string[] = [];
     const trashedKeys: string[] = [];
     for (const row of dealersQ.rows) {
-      if (row.is_trashed) {
+      if (row.is_purged) continue;
+      if (row.is_employee_trash) {
         trashedIds.push(row.id);
         trashedKeys.push(row.external_key);
       } else {
@@ -187,24 +276,24 @@ export async function computeDbScopeForUser(
 
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tpo.trashed_at IS NULL)::text AS active_tps,
-         COUNT(*) FILTER (WHERE tpo.trashed_at IS NOT NULL)::text AS trashed_tps
+         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
+         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
        FROM trade_points tp
        INNER JOIN dealers d ON d.id = tp.dealer_id
        ${DEALER_OVERRIDE_JOIN}
        ${TRADE_POINT_OVERRIDE_JOIN}
-       WHERE d_ov.trashed_at IS NULL`,
+       WHERE d_ov.purged_at IS NULL AND d_ov.trashed_at IS NULL`,
     );
     const activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
     const trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
 
     return {
-      totals: {
+      totals: attachAdminTotals({
         active_dealers: activeIds.length,
         active_trade_points: activeTp,
         trashed_dealers: trashedIds.length,
         trashed_trade_points: trashedTp,
-      },
+      }),
       active_dealer_ids: activeIds,
       active_dealer_external_keys: activeKeys,
       trashed_dealer_ids: trashedIds,
@@ -223,12 +312,12 @@ export async function computeDbScopeForUser(
 
   if (meta.allCodes.length === 0) {
     return {
-      totals: {
+      totals: attachAdminTotals({
         active_dealers: 0,
         active_trade_points: 0,
         trashed_dealers: 0,
         trashed_trade_points: 0,
-      },
+      }),
       active_dealer_ids: [],
       active_dealer_external_keys: [],
       trashed_dealer_ids: [],
@@ -248,9 +337,12 @@ export async function computeDbScopeForUser(
   const dealersQ = await pool.query<{
     id: string;
     external_key: string;
-    is_trashed: boolean;
+    is_purged: boolean;
+    is_employee_trash: boolean;
   }>(
-    `SELECT d.id::text AS id, d.external_key, (d_ov.trashed_at IS NOT NULL) AS is_trashed
+    `SELECT d.id::text AS id, d.external_key,
+            (d_ov.purged_at IS NOT NULL) AS is_purged,
+            ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash
      FROM dealers d
      ${DEALER_OVERRIDE_JOIN}
      WHERE d.release_code = ANY($1::text[])`,
@@ -262,7 +354,8 @@ export async function computeDbScopeForUser(
   const trashedIds: string[] = [];
   const trashedKeys: string[] = [];
   for (const row of dealersQ.rows) {
-    if (row.is_trashed) {
+    if (row.is_purged) continue;
+    if (row.is_employee_trash) {
       trashedIds.push(row.id);
       trashedKeys.push(row.external_key);
     } else {
@@ -276,8 +369,8 @@ export async function computeDbScopeForUser(
   if (activeIds.length > 0) {
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tpo.trashed_at IS NULL)::text AS active_tps,
-         COUNT(*) FILTER (WHERE tpo.trashed_at IS NOT NULL)::text AS trashed_tps
+         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
+         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
        FROM trade_points tp
        ${TRADE_POINT_OVERRIDE_JOIN}
        WHERE tp.dealer_id = ANY($1::uuid[])`,
@@ -288,12 +381,12 @@ export async function computeDbScopeForUser(
   }
 
   return {
-    totals: {
+    totals: attachAdminTotals({
       active_dealers: activeIds.length,
       active_trade_points: activeTp,
       trashed_dealers: trashedIds.length,
       trashed_trade_points: trashedTp,
-    },
+    }),
     active_dealer_ids: activeIds,
     active_dealer_external_keys: activeKeys,
     trashed_dealer_ids: trashedIds,

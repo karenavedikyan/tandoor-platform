@@ -63,8 +63,8 @@ import {
 import { resolveTrashedDealerDisplayName } from "@/lib/client-base-actualization-visibility";
 import type { TrashActor } from "@/lib/trash-dealer-helper";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
-import { untrashDealer } from "@/lib/dealer-overrides-api";
-import { untrashTradePoint } from "@/lib/trade-point-overrides-api";
+import { untrashDealer, requestPurgeDealerStrict } from "@/lib/dealer-overrides-api";
+import { untrashTradePoint, requestPurgeTradePointStrict } from "@/lib/trade-point-overrides-api";
 import {
   mergeTrashedDealersForUi,
   mergeTrashedTradePointsForUi,
@@ -80,6 +80,10 @@ import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
 type ConfirmKind =
   | { kind: "force-delete-dealer"; dealerId: string; name: string }
   | { kind: "force-delete-tp"; tradePointId: string; name: string }
+  | { kind: "request-purge-dealer"; dealerId: string; name: string }
+  | { kind: "request-purge-tp"; tradePointId: string; name: string }
+  | { kind: "request-purge-all-dealers"; count: number; ids: string[] }
+  | { kind: "request-purge-all-tps"; count: number; ids: string[] }
   | { kind: "restore-all-archived-dealers"; count: number }
   | { kind: "restore-all-archived-tps"; count: number }
   | { kind: "move-archived-dealers-to-trash"; count: number; ids: string[] }
@@ -311,6 +315,74 @@ export function TrashBinPage(): ReactElement {
       void teamPlane.refresh();
     } else {
       toast({ title: "Не удалось восстановить", variant: "destructive" });
+    }
+  };
+
+  const onRequestPurgeDealer = async (dealerId: string): Promise<void> => {
+    if (busy) return;
+    setBusy(`request-purge-dealer:${dealerId}`);
+    patchDealerTrashRuntime(dealerId, null);
+    const r = await requestPurgeDealerStrict(dealerId);
+    setBusy(null);
+    if (r.ok) {
+      toast({ title: "Запись отправлена админу на окончательное удаление" });
+      void teamPlane.refresh();
+    } else {
+      toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
+    }
+  };
+
+  const onRequestPurgeTp = async (tradePointId: string): Promise<void> => {
+    if (busy) return;
+    setBusy(`request-purge-tp:${tradePointId}`);
+    patchTradePointTrashRuntime(tradePointId, null);
+    const r = await requestPurgeTradePointStrict(tradePointId);
+    setBusy(null);
+    if (r.ok) {
+      toast({ title: "Запись отправлена админу на окончательное удаление" });
+      void teamPlane.refresh();
+    } else {
+      toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
+    }
+  };
+
+  const onRequestPurgeAllDealers = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("request-purge-all-dealers");
+    try {
+      let ok = 0;
+      for (const id of ids) {
+        patchDealerTrashRuntime(id, null);
+        const r = await requestPurgeDealerStrict(id);
+        if (r.ok) ok++;
+      }
+      toast({
+        title: ok === ids.length ? "Корзина очищена" : `Отправлено ${ok} из ${ids.length}`,
+        variant: ok === 0 ? "destructive" : undefined,
+      });
+      void teamPlane.refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onRequestPurgeAllTps = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("request-purge-all-tps");
+    try {
+      let ok = 0;
+      for (const id of ids) {
+        patchTradePointTrashRuntime(id, null);
+        const r = await requestPurgeTradePointStrict(id);
+        if (r.ok) ok++;
+      }
+      toast({
+        title: ok === ids.length ? "Корзина очищена" : `Отправлено ${ok} из ${ids.length}`,
+        variant: ok === 0 ? "destructive" : undefined,
+      });
+      void teamPlane.refresh();
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -879,6 +951,13 @@ export function TrashBinPage(): ReactElement {
       case "force-delete-dealer":
       case "force-delete-tp":
         return "Удалить навсегда?";
+      case "request-purge-dealer":
+      case "request-purge-tp":
+        return "Отправить на удаление?";
+      case "request-purge-all-dealers":
+        return `Очистить корзину (${confirmFD.count} клиентов)?`;
+      case "request-purge-all-tps":
+        return `Очистить корзину (${confirmFD.count} торговых точек)?`;
       default:
         return "Подтвердите действие";
     }
@@ -891,6 +970,11 @@ export function TrashBinPage(): ReactElement {
         return `Клиент «${confirmFD.name}» будет удалён окончательно. Восстановить будет невозможно.`;
       case "force-delete-tp":
         return `Торговая точка «${confirmFD.name}» будет удалена окончательно. Восстановить будет невозможно.`;
+      case "request-purge-dealer":
+      case "request-purge-tp":
+      case "request-purge-all-dealers":
+      case "request-purge-all-tps":
+        return "Запись будет отправлена админу на окончательное удаление. Восстановить сами больше не сможете. Продолжить?";
       case "restore-all-archived-dealers":
         return "Все клиенты вернутся в активную базу. Это действие не удаляет данные карточек, контакты, изменения — только снимает пометку «архив». Восстановить?";
       case "restore-all-archived-tps":
@@ -922,6 +1006,11 @@ export function TrashBinPage(): ReactElement {
       case "force-delete-dealer":
       case "force-delete-tp":
         return "Удалить навсегда";
+      case "request-purge-dealer":
+      case "request-purge-tp":
+      case "request-purge-all-dealers":
+      case "request-purge-all-tps":
+        return "Продолжить";
       default:
         return "Подтвердить";
     }
@@ -931,7 +1020,11 @@ export function TrashBinPage(): ReactElement {
     confirmFD?.kind === "force-delete-dealer" ||
     confirmFD?.kind === "force-delete-tp" ||
     confirmFD?.kind === "force-delete-archived-dealers" ||
-    confirmFD?.kind === "force-delete-archived-tps";
+    confirmFD?.kind === "force-delete-archived-tps" ||
+    confirmFD?.kind === "request-purge-dealer" ||
+    confirmFD?.kind === "request-purge-tp" ||
+    confirmFD?.kind === "request-purge-all-dealers" ||
+    confirmFD?.kind === "request-purge-all-tps";
 
   if (actx.loading) {
     return <TrashBinSkeleton />;
@@ -945,6 +1038,18 @@ export function TrashBinPage(): ReactElement {
         break;
       case "force-delete-tp":
         void onForceDeleteTp(confirmFD.tradePointId);
+        break;
+      case "request-purge-dealer":
+        void onRequestPurgeDealer(confirmFD.dealerId);
+        break;
+      case "request-purge-tp":
+        void onRequestPurgeTp(confirmFD.tradePointId);
+        break;
+      case "request-purge-all-dealers":
+        void onRequestPurgeAllDealers(confirmFD.ids);
+        break;
+      case "request-purge-all-tps":
+        void onRequestPurgeAllTps(confirmFD.ids);
         break;
       case "restore-all-archived-dealers":
         void onRestoreAllArchivedDealers(confirmFD.count);
@@ -1061,7 +1166,45 @@ export function TrashBinPage(): ReactElement {
       </section>
 
       <section className="space-y-3" data-testid="section-trash">
-        <h2 className="text-lg font-semibold text-foreground">Корзина</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-foreground">Корзина</h2>
+          {trashTab === "clients" && trashedDealers.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                setConfirmFD({
+                  kind: "request-purge-all-dealers",
+                  count: trashedDealers.length,
+                  ids: trashedDealers.map((d) => d.dealerId),
+                })
+              }
+              data-testid="button-trash-clear-all-dealers"
+            >
+              Очистить корзину ({trashedDealers.length})
+            </Button>
+          ) : null}
+          {trashTab === "tps" && trashedTps.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                setConfirmFD({
+                  kind: "request-purge-all-tps",
+                  count: trashedTps.length,
+                  ids: trashedTps.map((t) => t.tradePointId),
+                })
+              }
+              data-testid="button-trash-clear-all-tps"
+            >
+              Очистить корзину ({trashedTps.length})
+            </Button>
+          ) : null}
+        </div>
         <Tabs value={trashTab} onValueChange={(v) => setTrashTab(v as "clients" | "tps")}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="clients" className="text-xs" data-testid="tab-trash-clients">
@@ -1115,23 +1258,21 @@ export function TrashBinPage(): ReactElement {
                           >
                             Восстановить
                           </Button>
-                          {canForceDelete ? (
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              disabled={busy === `force-dealer:${t.dealerId}`}
-                              onClick={() =>
-                                setConfirmFD({
-                                  kind: "force-delete-dealer",
-                                  dealerId: t.dealerId,
-                                  name: display.name,
-                                })
-                              }
-                              data-testid={`button-trash-dealer-force-delete-${t.dealerId}`}
-                            >
-                              Удалить навсегда
-                            </Button>
-                          ) : null}
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={busy === `request-purge-dealer:${t.dealerId}`}
+                            onClick={() =>
+                              setConfirmFD({
+                                kind: "request-purge-dealer",
+                                dealerId: t.dealerId,
+                                name: display.name,
+                              })
+                            }
+                            data-testid={`button-trash-dealer-request-purge-${t.dealerId}`}
+                          >
+                            Удалить
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -1191,23 +1332,21 @@ export function TrashBinPage(): ReactElement {
                         >
                           Восстановить
                         </Button>
-                        {canForceDelete ? (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={busy === `force-tp:${t.tradePointId}`}
-                            onClick={() =>
-                              setConfirmFD({
-                                kind: "force-delete-tp",
-                                tradePointId: t.tradePointId,
-                                name: t.snapshot.name ?? t.tradePointId,
-                              })
-                            }
-                            data-testid={`button-trash-tp-force-delete-${t.tradePointId}`}
-                          >
-                            Удалить навсегда
-                          </Button>
-                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy === `request-purge-tp:${t.tradePointId}`}
+                          onClick={() =>
+                            setConfirmFD({
+                              kind: "request-purge-tp",
+                              tradePointId: t.tradePointId,
+                              name: t.snapshot.name ?? t.tradePointId,
+                            })
+                          }
+                          data-testid={`button-trash-tp-request-purge-${t.tradePointId}`}
+                        >
+                          Удалить
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>

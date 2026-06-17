@@ -142,6 +142,10 @@ const WRITE_ACTIONS = new Set([
   "trash",
   "untrash",
   "create-manual",
+  "request-purge",
+  "restore",
+  "purge",
+  "admin-restore",
 ]);
 
 export function isOverridesWriteAction(action: string): boolean {

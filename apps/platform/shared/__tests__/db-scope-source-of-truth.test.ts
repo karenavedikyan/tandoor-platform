@@ -63,7 +63,8 @@ function mockPool(role: string): PoolLike {
         const rows = DEALERS.filter((d) => codes.includes(d.release_code)).map((d) => ({
           id: d.id,
           external_key: d.external_key,
-          is_trashed: d.trashed,
+          is_purged: false,
+          is_employee_trash: d.trashed,
         }));
         return { rows };
       }
@@ -71,9 +72,16 @@ function mockPool(role: string): PoolLike {
         const rows = DEALERS.map((d) => ({
           id: d.id,
           external_key: d.external_key,
-          is_trashed: d.trashed,
+          is_purged: false,
+          is_employee_trash: d.trashed,
         }));
         return { rows };
+      }
+      if (s.includes("FROM dealer_overrides d_ov") && s.includes("purge_requested_at IS NOT NULL")) {
+        return { rows: [{ n: "0" }] };
+      }
+      if (s.includes("FROM trade_point_overrides tpo") && s.includes("purge_requested_at IS NOT NULL")) {
+        return { rows: [{ n: "0" }] };
       }
       if (s.includes("FROM trade_points tp") && s.includes("dealer_id = ANY")) {
         const dealerIds = (params?.[0] as string[]) ?? [];

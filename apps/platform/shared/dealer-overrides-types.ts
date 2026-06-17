@@ -13,6 +13,10 @@ export type DealerOverrideRow = {
   client_category: string | null;
   trashed_at: string | null;
   trashed_by: string | null;
+  purge_requested_at: string | null;
+  purge_requested_by: string | null;
+  purged_at: string | null;
+  purged_by: string | null;
   unloading_order: string | null;
   regional_manager_id: string | null;
   regional_manager_name: string | null;
@@ -79,6 +83,10 @@ export function mapDealerOverrideRow(r: Record<string, unknown>): DealerOverride
     client_category: r.client_category != null ? String(r.client_category) : null,
     trashed_at: r.trashed_at != null ? String(r.trashed_at) : null,
     trashed_by: r.trashed_by != null ? String(r.trashed_by) : null,
+    purge_requested_at: r.purge_requested_at != null ? String(r.purge_requested_at) : null,
+    purge_requested_by: r.purge_requested_by != null ? String(r.purge_requested_by) : null,
+    purged_at: r.purged_at != null ? String(r.purged_at) : null,
+    purged_by: r.purged_by != null ? String(r.purged_by) : null,
     unloading_order: r.unloading_order != null ? String(r.unloading_order) : null,
     regional_manager_id: r.regional_manager_id != null ? String(r.regional_manager_id) : null,
     regional_manager_name: r.regional_manager_name != null ? String(r.regional_manager_name) : null,
