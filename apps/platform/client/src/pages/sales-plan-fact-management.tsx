@@ -7,7 +7,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { userRoleToSalesRole } from "@/lib/role-mapping";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { normalizeSalesPlanFactState } from "@/lib/sales-plan-fact-types";
 
@@ -19,7 +19,31 @@ export default function SalesPlanFactManagementPage() {
 
   const { state, loading, saving, error, storageMessage, persist } = useSalesPlanFactPersistedState(profile);
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
+
+  if (catalogQ.isPending && !catalogQ.data) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 p-4" data-testid="page-sales-plan-fact-management">
+        <p className="text-sm text-muted-foreground">Загрузка каталога клиентов…</p>
+      </div>
+    );
+  }
+
+  if (catalogQ.isError) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 p-4" data-testid="page-sales-plan-fact-management">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 p-4" data-testid="page-sales-plan-fact-management">
+        <DealerCatalogEmpty />
+      </div>
+    );
+  }
 
   if (!persona || (role !== "sales_director" && role !== "team_lead" && role !== "sales_manager")) {
     return (

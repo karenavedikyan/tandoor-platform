@@ -34,8 +34,9 @@ import {
   teamsForManagementView,
 } from "@/lib/dealer-base-management-view-model";
 import { assignmentsScopeIsActive, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
 import {
@@ -78,7 +79,7 @@ function segmentBadgeClass(tone: string): string {
 
 export default function DealerBaseManagerDetailPage() {
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
   const [, params] = useRoute("/dealer-base/manager/:managerId");
   const managerId = decodeURIComponent(params?.managerId ?? "");
 
@@ -269,11 +270,28 @@ export default function DealerBaseManagerDetailPage() {
 
   const loading =
     authLoading ||
+    (catalogQ.isPending && !catalogQ.data) ||
     (isRealUser && (orgSnapQ.isLoading || visCodesQ.isLoading)) ||
     (actx.enabled && actx.loading) ||
     (actx.enabled && teamCtx.teamFetchLoading);
 
   const managementPlane = shouldUseTeamMergedActualizationPlane(profile);
+
+  if (!loading && catalogQ.isError) {
+    return (
+      <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-manager-detail">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!loading && !catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-manager-detail">
+        <DealerCatalogEmpty />
+      </div>
+    );
+  }
 
   if (!loading && (!actx.enabled || !managementPlane)) {
     return <Redirect to={buildHashPath("/dealer-base")} />;

@@ -19,8 +19,9 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { type DealerRow } from "@/lib/dealer-base-mock-data";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
@@ -104,7 +105,7 @@ function roleSubtitle(role: SalesRole, profile: ReleaseDemoProfile): string {
 
 export default function ClientMapPage() {
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const [, setLoc] = useHashLocation();
@@ -249,6 +250,30 @@ export default function ClientMapPage() {
     },
     [markerById, setLoc],
   );
+
+  if (catalogQ.isPending && !catalogQ.data) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-24 p-4" data-testid="page-client-map">
+        <p className="text-sm text-muted-foreground">Загрузка каталога клиентов…</p>
+      </div>
+    );
+  }
+
+  if (catalogQ.isError) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-24 p-4" data-testid="page-client-map">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-24 p-4" data-testid="page-client-map">
+        <DealerCatalogEmpty />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-24" data-testid="page-client-map">

@@ -2,7 +2,7 @@
  * Запуск: `npm run test:dealer-base-source` из каталога apps/platform.
  */
 import assert from "node:assert/strict";
-import { DEALER_BASE_ROWS } from "../dealer-base-mock-data";
+import type { DealerRow } from "../dealer-base-mock-data";
 import {
   fetchDealerBaseRows,
   filterDealerRowsByVisibleCodes,
@@ -14,8 +14,50 @@ import {
   shouldUseDbDealers,
 } from "../dealer-base-source";
 
-const API_DEALER = {
-  ...DEALER_BASE_ROWS[0]!,
+const FIXTURES: DealerRow[] = [
+  {
+    id: "fix-001",
+    name: "Alpha Dealer",
+    releaseCode: "RC001",
+    releaseTeamId: "team-a",
+    city: "Москва",
+    clientCategory: "top150",
+    status: "active",
+    tradePoints: [],
+  } as DealerRow,
+  {
+    id: "fix-002",
+    name: "Beta Dealer",
+    releaseCode: "RC002",
+    releaseTeamId: "team-b",
+    city: "СПб",
+    clientCategory: "top350",
+    status: "active",
+    tradePoints: [],
+  } as DealerRow,
+  {
+    id: "fix-003",
+    name: "Gamma Dealer",
+    releaseCode: "RC003",
+    releaseTeamId: "team-a",
+    city: "Казань",
+    clientCategory: "new_client",
+    status: "active",
+    tradePoints: [],
+  } as DealerRow,
+  {
+    id: "fix-004",
+    name: "No Code Dealer",
+    releaseTeamId: "team-a",
+    city: "Тула",
+    clientCategory: "new_client",
+    status: "active",
+    tradePoints: [],
+  } as DealerRow,
+];
+
+const API_DEALER: DealerRow = {
+  ...FIXTURES[0]!,
   id: "api-001",
   name: "API Dealer",
 };
@@ -39,7 +81,7 @@ function withMockFetch(impl: (url: string) => unknown | null, fn: () => void | P
   });
 }
 
-// USE_DB_DEALERS=false → seed
+// USE_DB_DEALERS=false → пустой массив (без хардкода)
 await withMockFetch(
   (url) => {
     if (url.includes("/api/config/feature-flags")) {
@@ -50,8 +92,7 @@ await withMockFetch(
   async () => {
     assert.equal(await shouldUseDbDealers(), false);
     const rows = await fetchDealerBaseRows();
-    assert.equal(rows, DEALER_BASE_ROWS);
-    assert.equal(rows.length, DEALER_BASE_ROWS.length);
+    assert.deepEqual(rows, []);
   },
 );
 
@@ -74,7 +115,7 @@ await withMockFetch(
   },
 );
 
-// USE_DB_DEALERS=true + API failure → seed fallback
+// USE_DB_DEALERS=true + API failure → пустой массив (без хардкода)
 await withMockFetch(
   (url) => {
     if (url.includes("/api/config/feature-flags")) {
@@ -87,7 +128,7 @@ await withMockFetch(
   },
   async () => {
     const rows = await fetchDealerBaseRows();
-    assert.equal(rows, DEALER_BASE_ROWS);
+    assert.deepEqual(rows, []);
   },
 );
 
@@ -102,16 +143,15 @@ await withMockFetch(
 
 // visible codes filter
 {
-  const sample = DEALER_BASE_ROWS.filter((r) => r.releaseCode).slice(0, 3);
-  const codes = sample.map((r) => r.releaseCode!);
-  const filtered = filterDealerRowsByVisibleCodes(DEALER_BASE_ROWS, codes);
-  assert.ok(filtered.length >= sample.length);
+  const codes = ["RC001", "RC002"];
+  const filtered = filterDealerRowsByVisibleCodes(FIXTURES, codes);
+  assert.equal(filtered.length, 2);
   for (const row of filtered) {
     assert.ok(row.releaseCode && codes.includes(row.releaseCode));
   }
-  const visible = getVisibleDealerRows(DEALER_BASE_ROWS, false, codes);
+  const visible = getVisibleDealerRows(FIXTURES, false, codes);
   assert.deepEqual(visible.map((r) => r.id).sort(), filtered.map((r) => r.id).sort());
-  assert.equal(getVisibleDealerRows(DEALER_BASE_ROWS, true, codes).length, DEALER_BASE_ROWS.length);
+  assert.equal(getVisibleDealerRows(FIXTURES, true, codes).length, FIXTURES.length);
 }
 
 console.log("dealer-base-source.test.ts: ok");
