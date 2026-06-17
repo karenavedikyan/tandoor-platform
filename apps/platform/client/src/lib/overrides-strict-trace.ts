@@ -2,8 +2,8 @@
  * Трассировка strict-вызовов overrides (Промт 113.2).
  */
 
-import type { OverridesApiResult } from "@/lib/overrides-api-result";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+import type { OverridesApiResult } from "./overrides-api-result.js";
+import { pushOverridesTrace } from "./overrides-trace-log.js";
 
 export function fieldsKeysOf(fields: unknown): string[] | undefined {
   if (!fields || typeof fields !== "object" || Array.isArray(fields)) return undefined;

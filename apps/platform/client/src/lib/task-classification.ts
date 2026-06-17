@@ -2,7 +2,7 @@ import {
   MATRIX_TASK_TYPE_LABEL,
   type MatrixTaskType,
   type MatrixTaskWithContext,
-} from "@/lib/trade-point-task-data";
+} from "./trade-point-task-data.js";
 
 export type TaskCategoryId = "showcase" | "documents" | "finance" | "logistics" | "training" | "crm" | "other";
 

@@ -3,15 +3,15 @@
  * Общий модуль для страницы /dealer-base и счётчика в навигации.
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import { clientCategoryMatchesFilter, isClientTopTier } from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getDealerRopDisplay } from "@/lib/dealer-base-mock-data";
-import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
-import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import type { SalesUser } from "@/lib/sales-control-data";
+import type { ClientCategoryId } from "./client-category.js";
+import { clientCategoryMatchesFilter, isClientTopTier } from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getDealerRopDisplay } from "./dealer-base-mock-data.js";
+import { getDealerRegionalManagerEffectiveDisplay } from "./dealer-regional-manager-overrides.js";
+import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import type { SalesUser } from "./sales-control-data.js";
 
-import { rowMatchesGeoFilters } from "@/lib/dealer-base-geo-parse";
+import { rowMatchesGeoFilters } from "./dealer-base-geo-parse.js";
 
 export type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
 

@@ -2,7 +2,7 @@
  * HTTP API контактов клиента (Postgres).
  */
 
-import type { ClientContact, ClientContactsState, ContactTimelineEntry } from "@/lib/client-contacts";
+import type { ClientContact, ClientContactsState, ContactTimelineEntry } from "./client-contacts.js";
 
 function legalEntityContactsStorageKey(dealerId: string, legalEntityId: string): string {
   return `${dealerId}|${legalEntityId}`;

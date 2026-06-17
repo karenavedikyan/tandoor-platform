@@ -1,6 +1,6 @@
-import type { MatrixTaskWithContext } from "@/lib/trade-point-task-data";
-import { MATRIX_TASK_TYPE_LABEL } from "@/lib/trade-point-task-data";
-import { classifyTask, type TaskClassification } from "@/lib/task-classification";
+import type { MatrixTaskWithContext } from "./trade-point-task-data.js";
+import { MATRIX_TASK_TYPE_LABEL } from "./trade-point-task-data.js";
+import { classifyTask, type TaskClassification } from "./task-classification.js";
 
 export type TaskPresetId = "all" | "urgent" | "showcase" | "training" | "overdue" | "rop_escalations";
 

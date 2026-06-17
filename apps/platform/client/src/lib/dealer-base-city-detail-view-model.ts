@@ -2,23 +2,23 @@
  * Drill-down модель города для управленческого экрана «Клиентская база».
  */
 
-import { dealerNeedsAttention } from "@/lib/dealer-base-role-views";
+import { dealerNeedsAttention } from "./dealer-base-role-views.js";
 import {
   buildCityModels,
   catalogManagerIdFromUserRef,
   resolveDealerRowTeamId,
   type ResponsibleByCodeMap,
-} from "@/lib/dealer-base-management-view-model";
+} from "./dealer-base-management-view-model.js";
 import {
   buildDealerRowSegments,
   buildReleaseClientByCodeMap,
   dealerRowMatchesSegment,
   type CityDetailSegmentKey,
   type DealerBaseSegmentKey,
-} from "@/lib/dealer-base-dealer-segment";
-import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseClientTypeTone } from "@/lib/release-client-data";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+} from "./dealer-base-dealer-segment.js";
+import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseClientTypeTone } from "./release-client-data.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
 
 export type { CityDetailSegmentKey, DealerBaseSegmentKey };
 
@@ -52,7 +52,7 @@ export type CityDetailModel = {
 export {
   resolveDealerRowSegmentKey,
   resolveDealerRowSegmentKey as resolveCityRowSegmentKey,
-} from "@/lib/dealer-base-dealer-segment";
+} from "./dealer-base-dealer-segment.js";
 
 /** Catalog manager id для строки — та же логика, что в `buildCityByManager`. */
 export function resolveDealerRowManagerCatalogId(row: DealerRow): string {

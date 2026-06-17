@@ -2,8 +2,8 @@
  * Стабильные идентификаторы и проверки дублей для ручной актуализации клиентской базы.
  */
 
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import type { ActualizationState, ManualDealer, ManualTradePoint } from "@/lib/client-base-actualization-state";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import type { ActualizationState, ManualDealer, ManualTradePoint } from "./client-base-actualization-state.js";
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");

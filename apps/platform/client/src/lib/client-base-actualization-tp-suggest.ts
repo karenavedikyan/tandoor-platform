@@ -1,5 +1,5 @@
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import type { ManualTradePoint } from "@/lib/client-base-actualization-state";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import type { ManualTradePoint } from "./client-base-actualization-state.js";
 
 export type TradePointSuggestion = {
   tradePointId: string;

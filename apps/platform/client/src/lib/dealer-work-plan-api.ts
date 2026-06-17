@@ -2,7 +2,7 @@
  * HTTP API рабочего плана клиентов (Postgres).
  */
 
-import type { DealerWorkPlanScheduleEntry, DealerWorkPlanState } from "@/lib/dealer-work-plan";
+import type { DealerWorkPlanScheduleEntry, DealerWorkPlanState } from "./dealer-work-plan.js";
 
 export const DEALER_WORK_PLAN_MIGRATED_KEY_PREFIX = "tandoor-dealer-work-plan-migrated-v1-";
 

@@ -1,5 +1,5 @@
-import type { ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
-import type { ShowcaseMatrixStatusId } from "@/lib/trade-point-showcase-matrix-storage";
+import type { ShowcasePlacementSegment, ShowcasePlacementType } from "./showcase-matrix-api.js";
+import type { ShowcaseMatrixStatusId } from "./trade-point-showcase-matrix-storage.js";
 
 export type FullscreenEntryBaseline = {
   status: ShowcaseMatrixStatusId;

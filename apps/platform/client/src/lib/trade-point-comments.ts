@@ -4,12 +4,12 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { apiCreateComment } from "@/lib/client-comments-api";
-import { refreshDbCommentsForClient, resolveTradePointComments } from "@/lib/client-comments-db-cache";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { apiCreateComment } from "./client-comments-api.js";
+import { refreshDbCommentsForClient, resolveTradePointComments } from "./client-comments-db-cache.js";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
 
 export const TRADE_POINT_COMMENTS_STORAGE_KEY = "tandoor-trade-point-comments-v1";
 export const TRADE_POINT_COMMENTS_EVENT = "tandoor-trade-point-comments-changed";

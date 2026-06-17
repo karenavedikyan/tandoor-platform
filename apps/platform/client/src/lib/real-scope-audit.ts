@@ -3,7 +3,7 @@
  * Не меняет рантайм-поведение — только собирает агрегированные события.
  */
 
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 
 export type RealScopeAuditEvent = {
   callSite: string;

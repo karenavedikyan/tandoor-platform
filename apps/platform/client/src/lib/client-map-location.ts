@@ -3,9 +3,9 @@
  * Защита от неоднозначных названий (напр. «Ленинградская» станица в Краснодарском крае vs ЛО).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { RUSSIAN_CITY_CENTERS } from "@/lib/russian-city-centers.generated";
-import { normalizeCityLookupKey } from "@/lib/russian-city-coordinates";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { RUSSIAN_CITY_CENTERS } from "./russian-city-centers.generated.js";
+import { normalizeCityLookupKey } from "./russian-city-coordinates.js";
 
 /** Доп. центры для составных ключей (не city-only). Координаты офлайн-подобраны / OSM-уровень точности. */
 export const CLIENT_MAP_EXTRA_FALLBACK_CENTERS: Record<string, { lat: number; lng: number }> = {

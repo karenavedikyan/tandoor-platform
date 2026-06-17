@@ -2,9 +2,9 @@
  * HTTP API комментариев клиента и ТТ (Postgres).
  */
 
-import type { DealerCardComment, DealerCardCommentsState } from "@/lib/dealer-card-comments";
-import type { TradePointComment, TradePointCommentsState } from "@/lib/trade-point-comments";
-import { tradePointCommentsKey } from "@/lib/trade-point-comments";
+import type { DealerCardComment, DealerCardCommentsState } from "./dealer-card-comments.js";
+import type { TradePointComment, TradePointCommentsState } from "./trade-point-comments.js";
+import { tradePointCommentsKey } from "./trade-point-comments.js";
 
 export const CLIENT_COMMENTS_MIGRATED_KEY_PREFIX = "tandoor-client-comments-migrated-v1-";
 

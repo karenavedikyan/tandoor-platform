@@ -3,8 +3,8 @@
  * + справочники команд/менеджеров; без merge с SEED/synthetic фактами.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { SalesRole, SalesUser } from "./sales-control-data.js";
 import {
   getAllSalesManagers,
   getTeamById,
@@ -15,8 +15,8 @@ import {
   SALES_TEAMS,
   formatRub,
   formatSalesMetricValue,
-} from "@/lib/sales-control-data";
-import type { SalesPlanFactLine, SalesPlanFactPersistedState } from "@/lib/sales-plan-fact-types";
+} from "./sales-control-data.js";
+import type { SalesPlanFactLine, SalesPlanFactPersistedState } from "./sales-plan-fact-types.js";
 
 export type SalesPlanFactCockpitMode =
   | "overview"

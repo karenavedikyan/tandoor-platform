@@ -1,7 +1,7 @@
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import type { OrgSnapshot, OrgSnapshotUser } from "@/lib/use-org-snapshot";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import type { OrgSnapshot, OrgSnapshotUser } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 
 /** РОП (UUID) → catalog teamId в release-сиде. */

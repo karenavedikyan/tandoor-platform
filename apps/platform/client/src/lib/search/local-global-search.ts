@@ -1,31 +1,31 @@
-import type { AssignmentDto } from "@/lib/showcase-assignments-api";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows, getVisibleDealerRows } from "@/lib/dealer-base-source";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
-import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
+import type { AssignmentDto } from "./showcase-assignments-api.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows, getVisibleDealerRows } from "./dealer-base-source.js";
+import { buildDealerBaseRowsWithActualization } from "./client-base-actualization-data-merge.js";
+import { createEmptyActualizationState } from "./client-base-actualization-state.js";
+import { mapUserRoleToDealerBaseAccess } from "./auth-user-dealer-access.js";
 import {
   assignmentsScopeIsActive,
   roleScopedDealerRowsForReal,
   type AssignmentsScope,
-} from "@/lib/dealer-base-real-scope";
-import { mapSalesRoleToDealerBaseAccess, roleScopedDealerRows } from "@/lib/dealer-base-role-views";
-import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
+} from "./dealer-base-real-scope.js";
+import { mapSalesRoleToDealerBaseAccess, roleScopedDealerRows } from "./dealer-base-role-views.js";
+import { buildTradePointListForActualization } from "./trade-point-list-for-actualization.js";
 import {
   buildCatalogProductSearchHaystack,
   catalogSearchQueryMatchesHaystack,
   searchCatalog,
-} from "@/lib/catalog-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import type { MyVisibleCodesResult } from "@/lib/use-my-visible-client-codes";
+} from "./catalog-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
 import type { GlobalSearchResult } from "@shared/search-handlers";
 import {
   GLOBAL_SEARCH_LIMIT_PER_TYPE,
   multiWordSearchMatches,
   normalizeSearchHaystack,
-} from "@/lib/search/search-query-utils";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
+} from "./search/search-query-utils.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
 import type { UserRole } from "@shared/auth";
 
 export type LocalGlobalSearchContext = {

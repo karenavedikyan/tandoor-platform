@@ -2,7 +2,7 @@
  * РОП и РМ на карточке торговой точки (overrides в trade_point_overrides).
  */
 
-import { saveTradePointFields } from "@/lib/use-dealer-field-saver";
+import { saveTradePointFields } from "./use-dealer-field-saver.js";
 
 export const TP_ROP_RM_OVERRIDES_STORAGE_KEY = "tandoor-trade-point-rop-rm-overrides-v1";
 export const TP_ROP_RM_OVERRIDES_EVENT = "tandoor-trade-point-rop-rm-overrides-changed";

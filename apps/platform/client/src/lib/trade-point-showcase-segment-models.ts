@@ -2,12 +2,12 @@ import type {
   ShowcaseMatrixEntryDto,
   ShowcasePlacementSegment,
   ShowcasePlacementType,
-} from "@/lib/showcase-matrix-api";
-import { getProductById } from "@/lib/catalog-data";
+} from "./showcase-matrix-api.js";
+import { getProductById } from "./catalog-data.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+} from "./trade-point-showcase-matrix-models.js";
 
 export type SegmentOurModelCard = {
   modelId: string;

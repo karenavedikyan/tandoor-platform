@@ -2,10 +2,10 @@
  * Города для блока «География покрытия» на главной (только активные клиенты и ТТ).
  */
 
-import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { cityKeyForDealerRow } from "@/lib/archive-record-visual";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import { cityKeyForDealerRow } from "./archive-record-visual.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type MainDashboardCityTile = {
   city: string;

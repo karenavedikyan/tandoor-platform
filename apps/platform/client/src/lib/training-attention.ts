@@ -3,11 +3,11 @@
  * Локальная логика под будущий API; критерии — первая версия правил на мок-данных.
  */
 
-import { isClientTopTier } from "@/lib/client-category";
-import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { getDealerAnalyticsSignalCards } from "@/lib/dealer-analytics-signals";
-import { isManualActualizationDealerId, isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { isClientTopTier } from "./client-category.js";
+import { type DealerRow, type DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { getDealerAnalyticsSignalCards } from "./dealer-analytics-signals.js";
+import { isManualActualizationDealerId, isManualActualizationTradePointId } from "./client-base-actualization-stable-ids.js";
 
 export type TrainingAttentionLevel = "none" | "watch" | "recommended" | "priority";
 

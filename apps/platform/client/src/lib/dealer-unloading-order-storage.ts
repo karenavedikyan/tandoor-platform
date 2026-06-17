@@ -2,11 +2,11 @@
  * Порядок выгрузки клиента (localStorage-кеш + Postgres, Промт 113 / 114).
  */
 
-import { upsertDealerOverrideStrict } from "@/lib/dealer-overrides-api";
-import { getDbUnloadingOrderOverride, patchDealerUnloadingOrderRuntime } from "@/lib/dealer-overrides-runtime";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
-import { saveDealerField } from "@/lib/use-dealer-field-saver";
+import { upsertDealerOverrideStrict } from "./dealer-overrides-api.js";
+import { getDbUnloadingOrderOverride, patchDealerUnloadingOrderRuntime } from "./dealer-overrides-runtime.js";
+import { handleOverridesStrictResult } from "./overrides-save-feedback.js";
+import { makePendingId } from "./overrides-pending-sync.js";
+import { saveDealerField } from "./use-dealer-field-saver.js";
 
 export const DEALER_UNLOADING_ORDER_STORAGE_KEY = "tandoor-dealer-unloading-order-v1";
 export const DEALER_UNLOADING_ORDER_EVENT = "tandoor-dealer-unloading-order-changed";

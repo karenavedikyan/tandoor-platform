@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UserRole } from "@shared/auth";
-import { listUsers } from "@/lib/admin-users-api";
-import { userHas } from "@/lib/auth-rbac";
+import { listUsers } from "./admin-users-api.js";
+import { userHas } from "./auth-rbac.js";
 
 export type ImpersonationTarget = {
   id: string;

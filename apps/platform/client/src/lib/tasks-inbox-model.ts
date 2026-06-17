@@ -1,4 +1,4 @@
-import type { AssignmentDto, AssignmentStatus } from "@/lib/showcase-assignments-api";
+import type { AssignmentDto, AssignmentStatus } from "./showcase-assignments-api.js";
 
 export type TaskSource = "showcase_assignment";
 export type TaskDirection = "incoming" | "outgoing";

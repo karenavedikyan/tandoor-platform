@@ -3,24 +3,24 @@
  * Атрибуция действий — по полям createdBy / updatedBy / archivedBy / uploadedBy и *Name.
  */
 
-import type { ActualizationState, LegalEntityActualizationState } from "@/lib/client-base-actualization-state";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ActualizationState, LegalEntityActualizationState } from "./client-base-actualization-state.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getDealerRegionalManagerDisplay } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   getAllSalesManagers,
   getSalesUserById,
   getTeamById,
   getTeamLeadForTeam,
   type SalesUser,
-} from "@/lib/sales-control-data";
-import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
+} from "./sales-control-data.js";
+import { isRopOrManagerAllFilter } from "./rop-manager-filters.js";
 import {
   mergeLegalEntitiesForActualization,
   mergeTradePointsActiveForActualization,
-} from "@/lib/client-base-actualization-data-merge";
-import { buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
+} from "./client-base-actualization-data-merge.js";
+import { buildTradePointListForActualization } from "./trade-point-list-for-actualization.js";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "./archive-record-visual.js";
 
 /** Безопасная нормализация текста из API/состояния (undefined, не-строки). */
 export function normalizeText(value: unknown): string {

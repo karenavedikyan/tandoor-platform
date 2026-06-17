@@ -2,7 +2,7 @@
  * Клиентская иерархия /admin/users по справочнику SALES_USERS (без изменения API).
  */
 
-import type { AdminUser } from "@/lib/admin-users-api";
+import type { AdminUser } from "./admin-users-api.js";
 import {
   SALES_DIRECTOR_USER_ID,
   SALES_TEAMS,
@@ -11,7 +11,7 @@ import {
   getTeamManagers,
   type SalesRole,
   type SalesUser,
-} from "@/lib/sales-control-data";
+} from "./sales-control-data.js";
 
 export type HierarchyRoot = {
   key: string;

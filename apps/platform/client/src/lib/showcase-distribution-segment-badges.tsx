@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import type { SegmentDetailSource } from "@/lib/trade-point-showcase-segment-models";
-import { cn } from "@/lib/utils";
+import { Badge } from "../components/ui/badge.js";
+import type { SegmentDetailSource } from "./trade-point-showcase-segment-models.js";
+import { cn } from "./utils.js";
 
 export function percentBadgeVariant(percent: number): "destructive" | "secondary" | "default" {
   if (percent < 30) return "destructive";

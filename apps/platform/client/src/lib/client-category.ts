@@ -4,8 +4,8 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { ReleaseClientNormalizedType } from "@/lib/release-client-seed.generated";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ReleaseClientNormalizedType } from "./release-client-seed.generated.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 
 export type ClientCategoryId =
   | "new_client"

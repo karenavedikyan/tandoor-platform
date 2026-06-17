@@ -1,4 +1,4 @@
-import { RUSSIAN_CITY_CENTERS } from "@/lib/russian-city-centers.generated";
+import { RUSSIAN_CITY_CENTERS } from "./russian-city-centers.generated.js";
 
 /** Нормализация для поиска в справочнике (без изменения отображаемого названия). */
 export function normalizeCityLookupKey(city: string): string {

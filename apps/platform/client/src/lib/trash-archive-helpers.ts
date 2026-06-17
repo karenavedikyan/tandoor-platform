@@ -1,7 +1,7 @@
 /**
  * Хелперы для секции «Архив» на /trash (Промт 70.5).
  */
-import type { ReleaseClient } from "@/lib/release-client-data";
+import type { ReleaseClient } from "./release-client-data.js";
 import {
   type ActualizationState,
   type ArchivedDealerInfo,
@@ -9,14 +9,14 @@ import {
   mergeActualizationState,
   type TrashedDealerInfo,
   type TrashedTradePointInfo,
-} from "@/lib/client-base-actualization-state";
+} from "./client-base-actualization-state.js";
 import {
   makeTrashedDealerInfo,
   makeTrashedTradePointInfo,
   snapshotDealerFromRow,
   snapshotTradePointFromRow,
   type TrashActor,
-} from "@/lib/trash-dealer-helper";
+} from "./trash-dealer-helper.js";
 
 export const ARCHIVE_PAGE_SIZE = 100;
 

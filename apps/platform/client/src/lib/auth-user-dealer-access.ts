@@ -1,5 +1,5 @@
 import type { UserRole } from "@shared/auth";
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
 
 /** Сопоставление платформенной роли с режимом доступа страницы клиентской базы (мок-роли sales-control). */
 export function mapUserRoleToDealerBaseAccess(role: UserRole): DealerBaseAccessRole {

@@ -2,10 +2,10 @@
  * Счётчик рабочих ТТ для бейджа навигации — совпадает с `summary.total` на /trade-points.
  */
 
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-import { countTradePointsWorkingRows } from "@/lib/trade-points-working-rows";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
+import { countTradePointsWorkingRows } from "./trade-points-working-rows.js";
 
 export type SidebarTradePointsCountContext = {
   enabled: boolean;

@@ -3,18 +3,18 @@
  * Чтение: Postgres (кеш) → fallback localStorage. Запись: API.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getPassportLegalEntities, type PassportLegalEntity } from "@/lib/dealer-card-release-signals";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getPassportLegalEntities, type PassportLegalEntity } from "./dealer-card-release-signals.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   apiArchiveLegalEntity,
   apiCreateFull,
   apiDeleteLegalEntity,
   apiPatchFull,
   apiUnarchiveLegalEntity,
-} from "@/lib/dealer-legal-entities-api";
-import type { LegalEntityPaymentForm, LegalEntityUpsertFields } from "@/lib/legal-entities-payment-api";
+} from "./dealer-legal-entities-api.js";
+import type { LegalEntityPaymentForm, LegalEntityUpsertFields } from "./legal-entities-payment-api.js";
 import {
   getDbLegalEntitiesStateForDealer,
   notifyDealerLegalEntitiesChanged,
@@ -23,7 +23,7 @@ import {
   resolveLegalEntitiesStateForDealer,
   setDbLegalEntitiesStateForDealer,
   upsertOptimisticLegalEntity,
-} from "@/lib/dealer-legal-entities-db-cache";
+} from "./dealer-legal-entities-db-cache.js";
 
 export const DEALER_LEGAL_ENTITIES_STORAGE_KEY = "tandoor-dealer-legal-entities-v1";
 export const DEALER_LEGAL_ENTITIES_EVENT = "tandoor-dealer-legal-entities-changed";

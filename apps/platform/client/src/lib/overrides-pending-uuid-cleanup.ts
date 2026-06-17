@@ -5,7 +5,7 @@
 import {
   purgeStaleDeadPendingSync,
   removePendingSyncWithUuidErrors,
-} from "@/lib/overrides-pending-sync";
+} from "./overrides-pending-sync.js";
 
 const CLEANUP_FLAG_PREFIX = "tandoor-pending-sync-cleanup-uuid-v1-";
 

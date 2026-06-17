@@ -16,7 +16,7 @@ import {
   computeTrashExpiresAt,
   type TrashedDealerInfo,
   type TrashedTradePointInfo,
-} from "@/lib/client-base-actualization-state";
+} from "./client-base-actualization-state.js";
 
 export type TrashSource = "client_bulk_delete" | "client_card_delete" | "manual_actualization";
 

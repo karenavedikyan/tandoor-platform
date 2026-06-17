@@ -8,8 +8,8 @@ import {
   type DealerWorkPlanState,
   loadDealerWorkPlanState,
   saveDealerWorkPlanState,
-} from "@/lib/dealer-work-plan";
-import { fetchWorkPlan, itemsToLocalSlice, type WorkPlanItemDto } from "@/lib/dealer-work-plan-api";
+} from "./dealer-work-plan.js";
+import { fetchWorkPlan, itemsToLocalSlice, type WorkPlanItemDto } from "./dealer-work-plan-api.js";
 
 export type UserWorkPlanSlice = {
   hidden: Record<string, true>;

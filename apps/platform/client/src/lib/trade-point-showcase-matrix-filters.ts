@@ -1,5 +1,5 @@
-import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
-import type { ShowcaseMatrixStatusId } from "@/lib/trade-point-showcase-matrix-storage";
+import type { ShowcaseMatrixModelDefinition } from "./trade-point-showcase-matrix-models.js";
+import type { ShowcaseMatrixStatusId } from "./trade-point-showcase-matrix-storage.js";
 
 export type ShowcaseMatrixQuickFilterId = "needed" | "installed" | "postponed" | "not_relevant" | "all";
 

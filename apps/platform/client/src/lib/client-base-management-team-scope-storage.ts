@@ -3,15 +3,15 @@
  * Директор: persist в localStorage + событие; РОП/менеджер: только нормализация id.
  */
 
-import { getRopOptions } from "@/lib/rop-manager-filters";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
+import { getRopOptions } from "./rop-manager-filters.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { isRopOrManagerAllFilter } from "./rop-manager-filters.js";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
   type DealerBaseAccessRole,
-} from "@/lib/dealer-base-role-views";
+} from "./dealer-base-role-views.js";
 
 export const MANAGEMENT_TEAM_SCOPE_LS_KEY = "tandoor-client-base-management-team-scope-v1";
 

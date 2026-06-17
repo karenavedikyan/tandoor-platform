@@ -2,16 +2,16 @@
  * Скоуп дилеров для вкладки «Ввод» в дистрибуции: роль + дефолтный режим работы РОП/директора.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 import {
   defaultWorkViewForAccess,
   mapSalesRoleToDealerBaseAccess,
   type DealerBaseAccessRole,
-} from "@/lib/dealer-base-role-views";
-import { getRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
-import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getRopOptions } from "@/lib/rop-manager-filters";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+} from "./dealer-base-role-views.js";
+import { getRoleScopedDealerRowsAuto } from "../hooks/use-role-scoped-dealer-rows-auto.js";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getRopOptions } from "./rop-manager-filters.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
 
 function teamIdsInOrg(): Set<string> {
   return new Set(getRopOptions().map((o) => o.teamId));

@@ -4,12 +4,12 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { apiCreateComment } from "@/lib/client-comments-api";
-import { refreshDbCommentsForClient, resolveDealerCommentsForClient } from "@/lib/client-comments-db-cache";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { apiCreateComment } from "./client-comments-api.js";
+import { refreshDbCommentsForClient, resolveDealerCommentsForClient } from "./client-comments-db-cache.js";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
 
 export const DEALER_CARD_COMMENTS_STORAGE_KEY = "tandoor-dealer-card-comments-v1";
 export const DEALER_CARD_COMMENTS_EVENT = "tandoor-dealer-card-comments-changed";

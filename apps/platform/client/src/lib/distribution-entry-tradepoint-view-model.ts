@@ -2,13 +2,13 @@
  * View-model списка ТТ для быстрого ввода факта в разделе «Дистрибуция».
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getDealerManagerDisplay } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
-import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
+import type { ClientCategoryId } from "./client-category.js";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getDealerManagerDisplay } from "./dealer-base-mock-data.js";
+import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
+import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
+import { loadCachedMatrix } from "./showcase-matrix-store.js";
+import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
 
 export type DistributionEntryTradePointRow = {
   dealerId: string;

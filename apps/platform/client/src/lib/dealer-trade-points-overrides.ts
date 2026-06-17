@@ -2,14 +2,14 @@
  * Ручные торговые точки и правки ТТ (localStorage, без backend).
  */
 
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getDealerRegionalManagerDisplay, normalizeTradePointId } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerById } from "@/lib/dealer-base-source";
-import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { saveTradePointFields } from "@/lib/use-dealer-field-saver";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getDealerRegionalManagerDisplay, normalizeTradePointId } from "./dealer-base-mock-data.js";
+import { getCatalogDealerById } from "./dealer-base-source.js";
+import { isManualActualizationDealerId } from "./client-base-actualization-stable-ids.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import { saveTradePointFields } from "./use-dealer-field-saver.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { userLabelFromProfile } from "./showcase-distribution-data.js";
 
 export const DEALER_TRADE_POINTS_STORAGE_KEY = "tandoor-dealer-trade-points-v1";
 export const DEALER_TRADE_POINTS_EVENT = "tandoor-dealer-trade-points-changed";

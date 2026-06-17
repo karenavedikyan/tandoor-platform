@@ -2,9 +2,9 @@
  * Рабочие сигналы по оборудованию точки (пилот, без подтверждения фактических остатков и без дублирования задач по витрине).
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
+import type { ClientCategoryId } from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { isManualActualizationDealerId } from "./client-base-actualization-stable-ids.js";
 
 export type DealerEquipmentStatus = "ok" | "needs_check" | "missing" | "outdated";
 

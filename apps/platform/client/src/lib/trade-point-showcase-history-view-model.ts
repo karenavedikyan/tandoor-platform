@@ -3,10 +3,10 @@ import type {
   ShowcaseMatrixStatus,
   ShowcasePlacementSegment,
   ShowcasePlacementType,
-} from "@/lib/showcase-matrix-api";
-import { getProductById } from "@/lib/catalog-data";
-import { PLACEMENT_SEGMENT_LABEL_RU, PLACEMENT_TYPE_LABEL_RU } from "@/lib/showcase-placement-labels";
-import { statusLabelRu } from "@/lib/trade-point-showcase-matrix-storage";
+} from "./showcase-matrix-api.js";
+import { getProductById } from "./catalog-data.js";
+import { PLACEMENT_SEGMENT_LABEL_RU, PLACEMENT_TYPE_LABEL_RU } from "./showcase-placement-labels.js";
+import { statusLabelRu } from "./trade-point-showcase-matrix-storage.js";
 
 export type HistoryEventAction =
   | "status_change"

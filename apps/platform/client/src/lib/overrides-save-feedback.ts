@@ -2,19 +2,19 @@
  * Единая обработка результата strict-сохранения overrides (Промт 113.1).
  */
 
-import { toast } from "@/hooks/use-toast";
-import type { OverridesApiResult } from "@/lib/overrides-api-result";
+import { toast } from "../hooks/use-toast.js";
+import type { OverridesApiResult } from "./overrides-api-result.js";
 import {
   isForbiddenOutOfScopeResult,
   OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE,
-} from "@/lib/overrides-api-result";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+} from "./overrides-api-result.js";
+import { pushOverridesTrace } from "./overrides-trace-log.js";
 import {
   dequeuePendingSync,
   enqueuePendingSync,
   makePendingId,
   type PendingSyncKind,
-} from "@/lib/overrides-pending-sync";
+} from "./overrides-pending-sync.js";
 
 export function showOverridesSaveFailureToast(fieldLabel: string, result?: Extract<OverridesApiResult<unknown>, { ok: false }>): void {
   if (result && isForbiddenOutOfScopeResult(result)) {

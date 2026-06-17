@@ -3,12 +3,12 @@
  */
 
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
-import { buildHashPath } from "@/lib/hash-route-utils";
-import type { ManagerHeatLevel } from "@/lib/manager-load-heat";
+import { buildHashPath } from "./hash-route-utils.js";
+import type { ManagerHeatLevel } from "./manager-load-heat.js";
 import type {
   TradePointsOverview,
   TradePointsOverviewRopManager,
-} from "@/lib/trade-points-overview-api";
+} from "./trade-points-overview-api.js";
 
 export type TpStateSegmentKey = "with_photo" | "no_photo" | "unfilled";
 

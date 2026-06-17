@@ -2,9 +2,9 @@
  * Назначение РОП на карточке дилера (overrides: rop_id + rop_name).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getDealerRopDisplay } from "@/lib/dealer-base-mock-data";
-import { saveDealerFields } from "@/lib/use-dealer-field-saver";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getDealerRopDisplay } from "./dealer-base-mock-data.js";
+import { saveDealerFields } from "./use-dealer-field-saver.js";
 
 export const DEALER_ROP_OVERRIDES_STORAGE_KEY = "tandoor-dealer-rop-overrides-v1";
 export const DEALER_ROP_OVERRIDES_EVENT = "tandoor-dealer-rop-overrides-changed";

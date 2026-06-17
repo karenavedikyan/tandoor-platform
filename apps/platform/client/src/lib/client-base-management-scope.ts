@@ -4,23 +4,23 @@
  * те же правила userId, что и дашборд активности (`resolveActualizationDashboardSourceUserIds`).
  */
 
-import { fetchActualizationStateByUserIdsBatch } from "@/lib/client-base-actualization-api";
-import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { fetchActualizationStateByUserIdsBatch } from "./client-base-actualization-api.js";
+import { canActualizeClientBase } from "./client-base-actualization-permissions.js";
+import { buildDealerBaseRowsWithActualization } from "./client-base-actualization-data-merge.js";
 import {
   countManualDealersInState,
   countManualTradePointsInState,
   mergeActualizationStatesForActivityDashboard,
   resolveActualizationDashboardSourceUserIds,
-} from "@/lib/client-base-actualization-team-state-merge";
-import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
+} from "./client-base-actualization-team-state-merge.js";
+import { createEmptyActualizationState, type ActualizationState } from "./client-base-actualization-state.js";
 import {
   getTeamActualizationCacheKey,
   invalidateTeamActualizationCache,
   runWithTeamActualizationCache,
-} from "@/lib/client-base-team-actualization-cache";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+} from "./client-base-team-actualization-cache.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import type { UserRole } from "@shared/auth";
 
 export { invalidateTeamActualizationCache };

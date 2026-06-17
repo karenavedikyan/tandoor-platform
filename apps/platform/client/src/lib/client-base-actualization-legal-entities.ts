@@ -2,9 +2,9 @@
  * Юрлица в актуализации: стабильные id, коды TND-LE-*, архив и восстановление.
  */
 
-import type { ActualizationSource, ActualizationState, ArchivedLegalEntityInfo } from "@/lib/client-base-actualization-state";
-import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
+import type { ActualizationSource, ActualizationState, ArchivedLegalEntityInfo } from "./client-base-actualization-state.js";
+import { mergeActualizationState } from "./client-base-actualization-state.js";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "./archive-record-visual.js";
 
 const DISPLAY_CODE_RE = /^TND-LE-(\d{6})$/i;
 

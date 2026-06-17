@@ -2,7 +2,7 @@
  * Слияние данных клиентской базы с ActualizationState (поверх release + localStorage overrides).
  */
 
-import type { DealerRow, DealerFormat, DealerStatus, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import type { DealerRow, DealerFormat, DealerStatus, DealerTradePoint } from "./dealer-base-mock-data.js";
 import {
   type DealerTerms,
   type DealerSalesKpis,
@@ -13,50 +13,50 @@ import {
   getDealerRegionalManagerDisplay,
   normalizeDealerId,
   normalizeTradePointId,
-} from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerById, getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
-import { getDealerRowWithProfileOverrides } from "@/lib/dealer-profile-overrides";
+} from "./dealer-base-mock-data.js";
+import { getCatalogDealerById, getCatalogDealerRows } from "./dealer-base-source.js";
+import { isDealerTrashedInRuntime } from "./dealer-overrides-runtime.js";
+import { getDealerRowWithProfileOverrides } from "./dealer-profile-overrides.js";
 import {
   getMergedDealerTradePoints,
   virtualDefaultTradePointId,
   type MergedTradePointEntry,
-} from "@/lib/dealer-trade-points-overrides";
-import { getMergedDealerLegalEntities, type MergedDealerLegalEntity } from "@/lib/dealer-legal-entities";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getSalesUserById } from "@/lib/sales-control-data";
+} from "./dealer-trade-points-overrides.js";
+import { getMergedDealerLegalEntities, type MergedDealerLegalEntity } from "./dealer-legal-entities.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getSalesUserById } from "./sales-control-data.js";
 import type {
   ActualizationState,
   ManualDealer,
   ManualTradePoint,
   TradePointActualizationOverride,
-} from "@/lib/client-base-actualization-state";
-import { mergeActualizationState } from "@/lib/client-base-actualization-state";
+} from "./client-base-actualization-state.js";
+import { mergeActualizationState } from "./client-base-actualization-state.js";
 import {
   getManualDealerDisplayCode,
   getManualTradePointDisplayCode,
   isManualActualizationDealerId,
-} from "@/lib/client-base-actualization-stable-ids";
-import { isLegalEntityArchivedInActualization } from "@/lib/client-base-actualization-legal-entities";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
-import { dealerStatusFromPassportLifecycle } from "@/lib/client-base-actualization-visibility";
+} from "./client-base-actualization-stable-ids.js";
+import { isLegalEntityArchivedInActualization } from "./client-base-actualization-legal-entities.js";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "./archive-record-visual.js";
+import { dealerStatusFromPassportLifecycle } from "./client-base-actualization-visibility.js";
 import {
   clientCategoryFromPassportTier,
   getClientCategoryLabel,
   normalizeClientCategory,
   type ClientCategoryId,
-} from "@/lib/client-category";
-import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
-import { getDealerCoverDisplayUrls, getTradePointCoverDisplayUrls } from "@/lib/client-base-actualization-photos";
+} from "./client-category.js";
+import { resolveEffectiveClientCategory } from "./effective-client-category.js";
+import { getDealerCoverDisplayUrls, getTradePointCoverDisplayUrls } from "./client-base-actualization-photos.js";
 import {
   readCommercialBoolNull,
   readCommercialString,
-} from "@/lib/dealer-commercial-characteristics";
+} from "./dealer-commercial-characteristics.js";
 import {
   dealerFieldsIncludeShipmentKeys,
   formatShipmentDaysForDisplay,
   normalizeManualDealerShipmentDayIdsFromFields,
-} from "@/lib/dealer-shipment-days";
+} from "./dealer-shipment-days.js";
 
 function str(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;

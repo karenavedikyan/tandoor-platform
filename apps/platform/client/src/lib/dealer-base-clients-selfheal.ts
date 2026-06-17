@@ -1,6 +1,6 @@
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import type { ClientCategorySelection, QuickFilter } from "@/lib/dealer-base-picker-filters";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import type { ClientCategorySelection, QuickFilter } from "./dealer-base-picker-filters.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
 
 export type SelfHealZeroResultArgs = {
   useReal: boolean;

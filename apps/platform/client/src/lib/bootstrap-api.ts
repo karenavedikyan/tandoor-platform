@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AuthUserDTO } from "@/lib/auth-api";
-import { AUTH_ME_QUERY_KEY } from "@/hooks/use-auth-user";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import type { MyVisibleCodesResult } from "@/lib/use-my-visible-client-codes";
-import { seedFeatureFlagsFromBootstrap } from "@/lib/dealer-base-source";
+import type { AuthUserDTO } from "./auth-api.js";
+import { AUTH_ME_QUERY_KEY } from "../hooks/use-auth-user.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
+import { seedFeatureFlagsFromBootstrap } from "./dealer-base-source.js";
 
 export type BootstrapFeatureFlags = {
   success: true;

@@ -1,6 +1,6 @@
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type TaskSelectTarget = {
   dealerId: string;

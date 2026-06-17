@@ -9,15 +9,15 @@ import {
   createManualDealerStrict,
   setDealerTrainingStrict,
   upsertDealerOverrideStrict,
-} from "@/lib/dealer-overrides-api";
-import type { OverridesApiResult } from "@/lib/overrides-api-result";
-import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
-import { makePendingId } from "@/lib/overrides-pending-sync";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+} from "./dealer-overrides-api.js";
+import type { OverridesApiResult } from "./overrides-api-result.js";
+import { handleOverridesStrictResult } from "./overrides-save-feedback.js";
+import { makePendingId } from "./overrides-pending-sync.js";
+import { pushOverridesTrace } from "./overrides-trace-log.js";
 import {
   setTradePointTrainingStrict,
   upsertTradePointOverrideStrict,
-} from "@/lib/trade-point-overrides-api";
+} from "./trade-point-overrides-api.js";
 
 export const STRICT_COVERED_DEALER_FIELDS = [
   "name",

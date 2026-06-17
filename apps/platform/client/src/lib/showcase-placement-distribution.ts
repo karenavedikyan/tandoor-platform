@@ -1,4 +1,4 @@
-import type { ShowcaseMatrixEntryDto, ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixEntryDto, ShowcasePlacementSegment } from "./showcase-matrix-api.js";
 
 export type PlacementDistributionStats = {
   totalCapacity: number;

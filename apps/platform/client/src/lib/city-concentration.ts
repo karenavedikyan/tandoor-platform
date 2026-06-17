@@ -1,12 +1,12 @@
-import { buildCityArchiveCountsMap } from "@/lib/archive-record-visual";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
-import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
-import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
-import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
-import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
+import { buildCityArchiveCountsMap } from "./archive-record-visual.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { dealerNeedsAttention, isDealerTop } from "./dealer-base-role-views.js";
+import { buildBrowserHashAppHref } from "./hash-route-utils.js";
+import { isRopOrManagerAllFilter } from "./rop-manager-filters.js";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getSalesUserById, type SalesRole } from "./sales-control-data.js";
+import { normalizeTerritoryCityName } from "./territory-city-normalize.js";
 
 export type CityRiskLevel = "critical" | "ok";
 

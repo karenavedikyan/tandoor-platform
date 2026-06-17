@@ -2,7 +2,7 @@
  * Расчёты по порталам витрины для актуализации (manual TP).
  */
 
-import type { TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
+import type { TradePointShowcaseActualization } from "./client-base-actualization-state.js";
 
 export type PortalSummary = {
   totalPortals: number | null;

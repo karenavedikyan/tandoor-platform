@@ -3,10 +3,10 @@
  * Обезличенные агрегаты и синтетические строки поверх клиентской базы и каталога.
  */
 
-import { getClientCategoryOptions, isClientTopTier, type ClientCategoryId } from "@/lib/client-category";
-import { type DealerRow } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
+import { getClientCategoryOptions, isClientTopTier, type ClientCategoryId } from "./client-category.js";
+import { type DealerRow } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { CATALOG_PRODUCTS, type CatalogProduct } from "./catalog-data.js";
 
 export type PartnerSegment = "top500" | "fiveHundredPlus" | "tandoorClub";
 

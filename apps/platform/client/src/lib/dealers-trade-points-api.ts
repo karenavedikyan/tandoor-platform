@@ -2,8 +2,8 @@
  * Client API for dealers and trade points (Промт 348, 376).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseClientSearchFilters, ReleaseClientSummary } from "@/lib/release-client-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseClientSearchFilters, ReleaseClientSummary } from "./release-client-data.js";
 
 export type DealersSourceMeta = {
   source: "seed" | "db";

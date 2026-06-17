@@ -5,7 +5,7 @@
  * TODO(auth-users-admin-cd7c): убрать хардкод, брать связку из `/api/users` или профиля.
  */
 
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 
 /** Bitrix24 user id по id пользователя из SALES_USERS. */
 const BITRIX24_USER_ID_BY_SALES_USER_ID: Record<string, string> = {

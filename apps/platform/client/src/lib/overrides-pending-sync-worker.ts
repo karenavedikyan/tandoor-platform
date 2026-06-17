@@ -8,18 +8,18 @@ import {
   trashDealerStrict,
   untrashDealerStrict,
   upsertDealerOverrideStrict,
-} from "@/lib/dealer-overrides-api";
+} from "./dealer-overrides-api.js";
 import {
   setTradePointTrainingStrict,
   trashTradePointStrict,
   untrashTradePointStrict,
   upsertTradePointOverrideStrict,
-} from "@/lib/trade-point-overrides-api";
-import { apiCreateComment } from "@/lib/client-comments-api";
+} from "./trade-point-overrides-api.js";
+import { apiCreateComment } from "./client-comments-api.js";
 import {
   apiDeleteShipmentRoute,
   apiUpsertShipmentRoute,
-} from "@/lib/dealer-shipment-routes-api";
+} from "./dealer-shipment-routes-api.js";
 import {
   apiDeleteMatrixDefStrict,
   apiReplaceMatrixDefModelsStrict,
@@ -28,15 +28,15 @@ import {
   type ShowcaseMatrixCatalogStatus,
   type ShowcaseMatrixDefModelInput,
   type ShowcaseMatrixDefUpsertInput,
-} from "@/lib/showcase-matrix-catalog-api";
+} from "./showcase-matrix-catalog-api.js";
 import {
   apiUpsertShowcaseMatrixEntryStrict,
   type ShowcasePlacementSegment,
   type ShowcasePlacementType,
   type ShowcaseMatrixStatus,
   type ShowcaseMatrixTargetKind,
-} from "@/lib/showcase-matrix-api";
-import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
+} from "./showcase-matrix-api.js";
+import { sanitizeDealerOverrideFieldsForApi } from "./overrides-persona-fields.js";
 import {
   dequeuePendingSync,
   listPendingSyncItems,
@@ -44,8 +44,8 @@ import {
   markPendingSyncFailed,
   purgeStaleDeadPendingSync,
   type PendingSyncItem,
-} from "@/lib/overrides-pending-sync";
-import { refreshDbCommentsForClient } from "@/lib/client-comments-db-cache";
+} from "./overrides-pending-sync.js";
+import { refreshDbCommentsForClient } from "./client-comments-db-cache.js";
 
 const INTERVAL_MS = 15_000;
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;

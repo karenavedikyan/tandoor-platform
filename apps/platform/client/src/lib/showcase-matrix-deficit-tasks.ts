@@ -2,20 +2,20 @@
  * Дефицит-задачи витрины из backend-матрицы (Промт 153).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getProductById } from "@/lib/catalog-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getProductById } from "./catalog-data.js";
 import {
   fetchShowcaseMatrixScope,
   type ShowcaseMatrixEntryDto,
   type ShowcaseMatrixStatus,
-} from "@/lib/showcase-matrix-api";
-import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
+} from "./showcase-matrix-api.js";
+import { loadCachedMatrix } from "./showcase-matrix-store.js";
+import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
 import type {
   MatrixTaskPriority,
   MatrixTaskStatus,
   MatrixTaskWithContext,
-} from "@/lib/trade-point-task-data";
+} from "./trade-point-task-data.js";
 
 const DEFICIT_STATUSES: ShowcaseMatrixStatus[] = ["need_install", "postponed"];
 

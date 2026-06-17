@@ -1,12 +1,12 @@
-import type { TradePointListRow } from "@/lib/dealer-base-management-view-model";
-import type { ShowcaseMatrixEntryDto, ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
+import type { TradePointListRow } from "./dealer-base-management-view-model.js";
+import type { ShowcaseMatrixEntryDto, ShowcasePlacementSegment } from "./showcase-matrix-api.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
-} from "@/lib/trade-point-showcase-matrix-models";
+} from "./trade-point-showcase-matrix-models.js";
 import {
   buildSegmentDetail,
   type SegmentDetailSource,
-} from "@/lib/trade-point-showcase-segment-models";
+} from "./trade-point-showcase-segment-models.js";
 
 const SEGMENT_ORDER: ShowcasePlacementSegment[] = ["vh", "mk", "hardware"];
 

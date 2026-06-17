@@ -1,6 +1,6 @@
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import type { SalesUser } from "@/lib/sales-control-data";
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import type { SalesUser } from "./sales-control-data.js";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
 
 export function realRopOptions(snap: OrgSnapshot): Array<{ teamId: string; label: string }> {
   return snap.teams.map((t) => ({ teamId: t.id, label: t.ropName?.trim() ? t.ropName.trim() : t.name }));

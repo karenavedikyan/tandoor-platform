@@ -3,14 +3,14 @@
  * Чтение: Postgres (кеш) + LS fallback. Запись: оптимистично в LS + API.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 import {
   apiClearSchedule,
   apiHide,
   apiRestore,
   apiSchedule,
-} from "@/lib/dealer-work-plan-api";
-import { refreshWorkPlanFromApi, resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
+} from "./dealer-work-plan-api.js";
+import { refreshWorkPlanFromApi, resolveWorkPlanState } from "./dealer-work-plan-db-cache.js";
 
 export const DEALER_WORK_PLAN_STORAGE_KEY = "tandoor-dealer-work-plan-v1";
 export const DEALER_WORK_PLAN_EVENT = "tandoor-dealer-work-plan-changed";

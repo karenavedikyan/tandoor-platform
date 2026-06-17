@@ -2,21 +2,21 @@
  * Клиентский слой для GET/POST /api/actualization/state + локальный fallback.
  */
 
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   ACTUALIZATION_STATE_VERSION,
   createEmptyActualizationState,
   mergeActualizationState,
   normalizeActualizationStateShowcases,
   type ActualizationState,
-} from "@/lib/client-base-actualization-state";
-import { me } from "@/lib/auth-api";
+} from "./client-base-actualization-state.js";
+import { me } from "./auth-api.js";
 import {
   markActualizationSaveFailed,
   markActualizationSaveStarted,
   markActualizationSaveSucceeded,
-} from "@/lib/client-base-actualization-save-status";
-import { invalidateTeamActualizationCache } from "@/lib/client-base-team-actualization-cache";
+} from "./client-base-actualization-save-status.js";
+import { invalidateTeamActualizationCache } from "./client-base-team-actualization-cache.js";
 
 export const ACTUALIZATION_STATE_CACHE_KEY = "tandoor-client-base-actualization-state-cache-v1";
 

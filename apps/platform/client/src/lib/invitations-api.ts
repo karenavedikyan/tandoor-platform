@@ -3,7 +3,7 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { AuthUserDTO } from "@/lib/auth-api";
+import type { AuthUserDTO } from "./auth-api.js";
 
 export type InvitationRoleSlot = UserRole;
 
@@ -40,7 +40,7 @@ export type CreateInvitationInput = { email: string; role: UserRole; teamId?: st
 
 export type AcceptInvitationInput = { token: string; fullName: string; password: string };
 
-export { userCanManageInvitations, allowedInviteTargetsFor } from "@/lib/auth-rbac";
+export { userCanManageInvitations, allowedInviteTargetsFor } from "./auth-rbac.js";
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   try {

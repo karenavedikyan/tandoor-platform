@@ -6,7 +6,7 @@ import type {
   DealerLegalEntitiesState,
   DealerLegalEntity,
   DealerLegalEntityHistoryEntry,
-} from "@/lib/dealer-legal-entities";
+} from "./dealer-legal-entities.js";
 
 export const DEALER_LEGAL_ENTITIES_MIGRATED_KEY_PREFIX = "tandoor-dealer-legal-entities-migrated-v1-";
 

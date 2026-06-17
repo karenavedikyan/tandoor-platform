@@ -9,7 +9,7 @@ import {
   getTeamManagers,
   SALES_TEAMS,
   type SalesUser,
-} from "@/lib/sales-control-data";
+} from "./sales-control-data.js";
 
 /** Значение «все» в селектах (совместимо с release-clients ALL и dealer-base "all"). */
 export function isRopOrManagerAllFilter(v: string | undefined): boolean {

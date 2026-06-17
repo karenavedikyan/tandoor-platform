@@ -3,13 +3,13 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows, getVisibleDealerRows } from "@/lib/dealer-base-source";
-import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import { assignmentsScopeIsActive, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import type { MyVisibleCodesResult } from "@/lib/use-my-visible-client-codes";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows, getVisibleDealerRows } from "./dealer-base-source.js";
+import { mapUserRoleToDealerBaseAccess } from "./auth-user-dealer-access.js";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { assignmentsScopeIsActive, type AssignmentsScope } from "./dealer-base-real-scope.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
 
 export type SidebarNavRealScope = {
   isRealUser: boolean;

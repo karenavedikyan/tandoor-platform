@@ -3,13 +3,13 @@
  * Изменения — sessionStorage (ключ tandoor-showcase-distribution-v1).
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getSalesUserById } from "@/lib/sales-control-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
-import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
+import type { ClientCategoryId } from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getSalesUserById } from "./sales-control-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
+import { mapSalesRoleToDealerBaseAccess } from "./dealer-base-role-views.js";
+import { isManualActualizationDealerId } from "./client-base-actualization-stable-ids.js";
 
 export type ShowcaseCategoryId = "entrance_doors" | "interior_doors" | "hardware" | "molding";
 
