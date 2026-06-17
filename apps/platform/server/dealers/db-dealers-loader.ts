@@ -3,7 +3,7 @@
  */
 
 import { asc, eq } from "drizzle-orm";
-import { dealers, tradePoints } from "@shared/dealers-schema";
+import { dealers, tradePoints } from "../../shared/dealers-schema.js";
 import type { DbDealerRow, DbTradePointRow } from "../../shared/dealers-trade-points-mapper.js";
 import { getAuthDb } from "../auth/db.js";
 
