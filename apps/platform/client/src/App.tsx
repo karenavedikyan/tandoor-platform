@@ -32,15 +32,13 @@ import NotFound from "@/pages/not-found";
 import PreviewUnavailable from "@/pages/preview-unavailable";
 import InternalPrototypePlaceholder from "@/pages/internal-prototype-placeholder";
 import { INTERNAL_PROTOTYPE_ROUTES } from "@/lib/preview-config";
-import { ClientBaseActualizationProvider, useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { ClientBaseTeamActualizationProvider, useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
+import { ClientBaseActualizationProvider } from "@/context/client-base-actualization-context";
+import { ClientBaseTeamActualizationProvider } from "@/context/client-base-team-actualization-context";
 import { MainDashboardCityFilterProvider } from "@/context/main-dashboard-city-filter-context";
 import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from "@/lib/dealer-base-sidebar-client-count";
-import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
-import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
+import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
@@ -295,47 +293,17 @@ function AuthenticatedShell({
   const overridesBootstrap = (
     <OverridesSessionBootstrap userId={user.id} localUserId={profile.personaUserId} />
   );
-  const actx = useClientBaseActualization();
-  const teamPlane = useClientBaseTeamActualization();
   const showTradePointsNav =
     salesRole === "sales_director" ||
     salesRole === "team_lead" ||
     salesRole === "sales_manager" ||
     salesRole === "marketer" ||
     salesRole === "analyst";
-  const sidebarRealScope = useSidebarNavRealScope(showTradePointsNav || actx.enabled);
-  const sidebarCountCtx = useMemo(
-    () => ({
-      enabled: actx.enabled,
-      loading: actx.loading,
-      state: actx.state,
-      managementDisplayState: teamPlane.mergedState,
-      managementTeamFetchLoading: teamPlane.teamFetchLoading,
-      realScope: sidebarRealScope,
-      role: user.role,
-    }),
-    [
-      actx.enabled,
-      actx.loading,
-      actx.state,
-      teamPlane.mergedState,
-      teamPlane.teamFetchLoading,
-      sidebarRealScope,
-      user.role,
-    ],
-  );
-  const dealerNavCount = useMemo(
-    () => resolveSidebarWorkingDealerClientCount(profile, sidebarCountCtx),
-    [profile, sidebarCountCtx],
-  );
-  const tradePointNavCount = useMemo(() => {
-    if (!showTradePointsNav) return undefined;
-    return resolveSidebarTradePointsCount(profile, sidebarCountCtx);
-  }, [showTradePointsNav, profile, sidebarCountCtx]);
-  const trashNavCount = useMemo(
-    () => resolveSidebarTrashCount(profile, sidebarCountCtx),
-    [profile, sidebarCountCtx],
-  );
+  const dbScope = useMyScopeFromDB(Boolean(user?.id));
+  const dbSidebarCounts = sidebarCountsFromDbScope(dbScope);
+  const dealerNavCount = dbSidebarCounts.dealers;
+  const tradePointNavCount = showTradePointsNav ? dbSidebarCounts.tradePoints : undefined;
+  const trashNavCount = dbSidebarCounts.trash;
   const navigation = useMemo(
     () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount),
     [salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount],
