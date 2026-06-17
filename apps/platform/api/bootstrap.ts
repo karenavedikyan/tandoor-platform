@@ -3,8 +3,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPool, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
-import { buildBootstrapPayload } from "../../shared/auth-bootstrap-handlers.js";
+import { getPool, sendJson, vercelHeaders } from "../shared/admin/admin-auth.js";
+import { buildBootstrapPayload } from "../shared/auth-bootstrap-handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
