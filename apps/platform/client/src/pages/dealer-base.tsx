@@ -40,12 +40,12 @@ import {
 } from "@/lib/client-category";
 import { getDealerRegionalManagerEffectiveDisplay } from "@/lib/dealer-regional-manager-overrides";
 import {
-  DEALER_BASE_ROWS,
   type DealerRow,
   type DealerStatus,
   type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { DealerBaseSkeleton } from "@/components/skeletons/dealer-base-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
@@ -1402,7 +1402,7 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
 
 export default function DealerBase() {
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
@@ -3557,6 +3557,22 @@ export default function DealerBase() {
 
   if (!isTaskSelectMode && isPageInitialLoading) {
     return <DealerBaseSkeleton />;
+  }
+
+  if (!isTaskSelectMode && catalogQ.isError) {
+    return (
+      <div data-testid="page-dealer-base">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!isTaskSelectMode && !catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div data-testid="page-dealer-base">
+        <DealerCatalogEmpty />
+      </div>
+    );
   }
 
   if (!isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {

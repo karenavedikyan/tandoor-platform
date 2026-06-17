@@ -97,8 +97,8 @@ import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
-import { DEALER_BASE_ROWS } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { TradePointsSkeleton } from "@/components/skeletons/trade-points-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
@@ -292,7 +292,7 @@ type ActiveFilterChip = {
 export default function TradePointsPage(): ReactElement {
   useDealerTpOverridesHydration(true);
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
@@ -1448,6 +1448,22 @@ export default function TradePointsPage(): ReactElement {
 
   if (isPageInitialLoading) {
     return <TradePointsSkeleton />;
+  }
+
+  if (catalogQ.isError) {
+    return (
+      <div data-testid="page-trade-points">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div data-testid="page-trade-points">
+        <DealerCatalogEmpty />
+      </div>
+    );
   }
 
   if (actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {

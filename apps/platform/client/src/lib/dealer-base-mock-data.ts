@@ -443,9 +443,6 @@ export function buildDealerRowsFromReleaseClients(clients: ReleaseClient[]): Dea
   return dedupeDealerIds(clients.map(mapReleaseClientToDealerRow));
 }
 
-/** Клиентская база Release 1: строки из импорта Excel (release-client-seed). */
-export const DEALER_BASE_ROWS: DealerRow[] = buildDealerRowsFromReleaseClients(getReleaseClients());
-
 function padLegacyDealer(n: number): string {
   return String(n).padStart(3, "0");
 }
@@ -456,11 +453,6 @@ export function normalizeDealerId(raw: string): string {
     return padLegacyDealer(parseInt(t, 10));
   }
   return t;
-}
-
-export function getDealerById(rawId: string): DealerRow | undefined {
-  const id = normalizeDealerId(rawId);
-  return DEALER_BASE_ROWS.find((r) => r.id === id);
 }
 
 /** Нормализует id точки: `<dealerId>-NN` или legacy `001-1` → `001-01`. */
@@ -477,14 +469,3 @@ export function normalizeTradePointId(dealerIdRaw: string, rawPointId: string): 
   return t;
 }
 
-export function getTradePointByIds(
-  rawDealerId: string,
-  rawPointId: string,
-): { dealer: DealerRow; point: DealerTradePoint } | undefined {
-  const dealer = getDealerById(rawDealerId);
-  if (!dealer) return undefined;
-  const normalizedPoint = normalizeTradePointId(dealer.id, rawPointId);
-  const point = dealer.tradePoints.find((p) => p.id === normalizedPoint);
-  if (!point) return undefined;
-  return { dealer, point };
-}

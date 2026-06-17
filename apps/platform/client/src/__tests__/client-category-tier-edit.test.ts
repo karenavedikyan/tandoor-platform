@@ -16,7 +16,18 @@ import assert from "node:assert/strict";
 import { clientCategoryFromPassportTier, normalizePassportCategoryTier } from "../lib/client-category";
 import { createEmptyActualizationState } from "../lib/client-base-actualization-state";
 import { mergeDealerRowWithActualization } from "../lib/client-base-actualization-data-merge";
-import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
+import type { DealerRow } from "../lib/dealer-base-mock-data";
+
+const FIXTURE_ROW: DealerRow = {
+  id: "test-001",
+  name: "Тест",
+  city: "Москва",
+  clientCategory: "top500",
+  status: "активный",
+  tradePoints: [],
+  contacts: { lpr: "Иван", buyer: "", phone: "", email: "", channel: "" },
+  terms: { tandoorClub: "", special: "", payment: "", edo: "", limit: "", bonuses: "" },
+} as DealerRow;
 
 // 1. top150 → top150
 {
@@ -45,9 +56,7 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
 
 // 5. Integration: override содержит только passportCategoryTier → row.clientCategory переключается.
 {
-  const baseRow = DEALER_BASE_ROWS[0];
-  assert.ok(baseRow, "DEALER_BASE_ROWS not empty");
-  const row = { ...baseRow, clientCategory: "top500" as const };
+  const row = { ...FIXTURE_ROW, clientCategory: "top500" as const };
   const state = createEmptyActualizationState();
   state.dealerOverridesById = {
     [row.id]: {
@@ -65,9 +74,7 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
 
 // 6. Integration: passportCategoryTier=other → clientCategory=new_client.
 {
-  const baseRow = DEALER_BASE_ROWS[0];
-  assert.ok(baseRow);
-  const row = { ...baseRow, clientCategory: "top500" as const };
+  const row = { ...FIXTURE_ROW, clientCategory: "top500" as const };
   const state = createEmptyActualizationState();
   state.dealerOverridesById = {
     [row.id]: {
@@ -85,16 +92,14 @@ import { DEALER_BASE_ROWS } from "../lib/dealer-base-mock-data";
 
 // 7. Integration: явный clientCategory в override побеждает над passportCategoryTier.
 {
-  const baseRow = DEALER_BASE_ROWS[0];
-  assert.ok(baseRow);
-  const row = { ...baseRow, clientCategory: "top500" as const };
+  const row = { ...FIXTURE_ROW, clientCategory: "top500" as const };
   const state = createEmptyActualizationState();
   state.dealerOverridesById = {
     [row.id]: {
       dealerId: row.id,
       fields: {
         clientCategory: "top350",
-        passportCategoryTier: "top150", // должно проигнорироваться, потому что явный clientCategory есть
+        passportCategoryTier: "top150",
       } as Record<string, unknown>,
       updatedAt: new Date().toISOString(),
       updatedBy: "u1",

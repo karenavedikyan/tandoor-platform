@@ -17,11 +17,13 @@ import {
   countDealerBaseHeaderTotal,
   defaultDealerBasePickerArgsForCount,
 } from "../dealer-base-working-rows";
+import { setDealerBaseRowsCache } from "../dealer-base-source";
 import { loadReleaseDemoProfile } from "../release-demo-profile";
 import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "../dealer-overrides-runtime";
 import type { SidebarNavRealScope } from "../sidebar-nav-real-scope";
 
 const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
+setDealerBaseRowsCache(allRows);
 
 function firstManagerRow() {
   const row = allRows.find((r) => r.releaseManagerId && r.manager?.trim());

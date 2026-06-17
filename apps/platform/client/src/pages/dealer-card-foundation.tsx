@@ -39,13 +39,13 @@ import { resolveEffectiveClientCategory } from "@/lib/effective-client-category"
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useDealerUnloadingOrder, useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
-  DEALER_BASE_ROWS,
   getDealerManagerDisplay,
   normalizeDealerId,
   type DealerRow,
   type DealerStatus,
 } from "@/lib/dealer-base-mock-data";
 import { getCatalogDealerById, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { dealerRowStatusForProduct, getDealerProductPreview } from "@/lib/catalog-data";
 import { DealerShowcaseDistributionSection, type ShowcaseCategoryListMode } from "@/components/dealer-showcase-distribution-section";
 import { DealerShowcaseMatrixSummarySection } from "@/components/dealer-showcase-matrix-summary-section";
@@ -2646,7 +2646,13 @@ function TrashedDealerCardBanner(): React.ReactElement {
 /** Маршрут `/dealer-card-foundation` — превью карточки первого клиента из базы. */
 export default function DealerCardFoundation() {
   const catalogQ = useDealerBaseRows();
-  const first = catalogQ.data?.[0] ?? DEALER_BASE_ROWS[0];
+  if (catalogQ.isPending && !catalogQ.data) {
+    return <DealerCardSkeleton />;
+  }
+  if (catalogQ.isError) {
+    return <DealerCatalogLoadError catalogQ={catalogQ} />;
+  }
+  const first = catalogQ.data?.[0];
   if (!first) return <DealerNotFound />;
   return <DealerCardContent baseRow={first} />;
 }

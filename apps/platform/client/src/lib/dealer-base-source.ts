@@ -1,13 +1,10 @@
 /**
- * Единый источник каталога клиентов: API (БД) или TS-seed fallback.
- * Промт 376.
+ * Единый источник каталога клиентов из API (БД).
+ * Промт 376, 377.
  */
 
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import {
-  DEALER_BASE_ROWS,
-  type DealerRow,
-} from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { fetchAllDealers } from "@/lib/dealers-trade-points-api";
 import { queryClient } from "@/lib/queryClient";
 
@@ -51,18 +48,18 @@ export async function fetchDealerBaseRows(): Promise<DealerRow[]> {
         return r.dealers;
       }
     } catch {
-      /* fallback to seed */
+      /* no hardcode fallback */
     }
   }
-  setDealerBaseRowsCache(DEALER_BASE_ROWS);
-  return DEALER_BASE_ROWS;
+  setDealerBaseRowsCache([]);
+  return [];
 }
 
 export function getCatalogDealerRows(): DealerRow[] {
   const fromQuery = queryClient.getQueryData<DealerRow[]>(DEALER_BASE_ROWS_QUERY_KEY);
-  if (fromQuery && fromQuery.length > 0) return fromQuery;
-  if (cachedCatalogRows && cachedCatalogRows.length > 0) return cachedCatalogRows;
-  return DEALER_BASE_ROWS;
+  if (fromQuery) return fromQuery;
+  if (cachedCatalogRows) return cachedCatalogRows;
+  return [];
 }
 
 /** @deprecated Prefer getCatalogDealerRows — alias для совместимости с промтом. */

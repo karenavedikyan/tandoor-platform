@@ -27,8 +27,9 @@ import {
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
 import { fetchShowcaseMatrixDeficitTasksForDealers } from "@/lib/showcase-matrix-deficit-tasks";
-import { DEALER_BASE_ROWS, type DealerRow } from "@/lib/dealer-base-mock-data";
+import { type DealerRow } from "@/lib/dealer-base-mock-data";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
+import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import {
   getManagersForRopTeam,
   getRopOptions,
@@ -705,7 +706,7 @@ function ShowcaseTaskListRow({
 
 export default function TasksPage() {
   const catalogQ = useDealerBaseRows();
-  const catalogRows = catalogQ.data ?? DEALER_BASE_ROWS;
+  const catalogRows = catalogQ.data ?? [];
   const { profile } = useReleaseDemoProfile();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
   const actx = useClientBaseActualization();
@@ -825,6 +826,7 @@ export default function TasksPage() {
   const allowedDealerIds = useMemo(() => new Set(scopedDealerRows.map((d) => d.id)), [scopedDealerRows]);
 
   const actualizationLoading =
+    (catalogQ.isPending && !catalogQ.data) ||
     (actx.enabled && actx.loading) ||
     (actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && managementPlane.teamFetchLoading);
 
@@ -955,6 +957,22 @@ export default function TasksPage() {
 
   if (actualizationLoading) {
     return <TasksSkeleton />;
+  }
+
+  if (catalogQ.isError) {
+    return (
+      <div data-testid="page-showcase-tasks">
+        <DealerCatalogLoadError catalogQ={catalogQ} />
+      </div>
+    );
+  }
+
+  if (!catalogQ.isPending && catalogRows.length === 0) {
+    return (
+      <div data-testid="page-showcase-tasks">
+        <DealerCatalogEmpty />
+      </div>
+    );
   }
 
   return (
