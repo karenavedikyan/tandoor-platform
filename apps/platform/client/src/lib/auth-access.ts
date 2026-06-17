@@ -159,6 +159,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/sync-health") {
     return role === "admin" || role === "director" || role === "analyst";
   }
+  if (p === "/admin/performance") {
+    return role === "admin" || role === "director";
+  }
   if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
     return role === "admin" || role === "director" || role === "rop" || role === "analyst";
   }
@@ -426,6 +429,16 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       testId: "nav-item-admin-sync-health",
       navBehaviorId: "nav-admin-sync-health",
     });
+  }
+  if (platformUserRole === "admin" || platformUserRole === "director") {
+    items.push({
+      href: "/admin/performance",
+      label: "Производительность",
+      testId: "nav-item-admin-performance",
+      navBehaviorId: "nav-admin-performance",
+    });
+  }
+  if (platformUserRole === "admin") {
     items.push({
       href: "/admin/actualization/dedupe",
       label: "Дедуп актуализации",
