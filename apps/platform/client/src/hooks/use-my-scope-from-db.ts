@@ -74,13 +74,15 @@ export function sidebarCountsFromDbScope(scope: MyScopeFromDB): {
   dealers: number | null;
   tradePoints: number | null;
   trash: number | null;
+  adminPurgeQueue: number | null;
 } {
   if (!scope.ready) {
-    return { dealers: null, tradePoints: null, trash: null };
+    return { dealers: null, tradePoints: null, trash: null, adminPurgeQueue: null };
   }
   return {
     dealers: scope.totals.active_dealers,
     tradePoints: scope.totals.active_trade_points,
     trash: scope.totals.trashed_dealers,
+    adminPurgeQueue: scope.totals.admin_purge_queue_dealers ?? 0,
   };
 }

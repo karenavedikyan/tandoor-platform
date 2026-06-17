@@ -334,18 +334,9 @@ export async function handleTradePointOverridesUntrash(
   pool: PoolLike,
   me: SessionUser,
 ): Promise<void> {
-  if (!assertCanWrite(me, res)) return;
-  const tpId = typeof (req.body as Record<string, unknown>)?.tp_id === "string"
-    ? String((req.body as Record<string, unknown>).tp_id).trim()
-    : "";
-  if (!tpId) {
-    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
-    return;
-  }
-  const check = await canUserTrashTradePoint(pool, me.id, me.role, tpId);
-  if (!check.allowed) {
-    denyTrashOutOfScope(res, check.reason);
-    return;
-  }
-  await setTrash(pool, me, tpId, false, res);
+  const { handleTradePointOverridesRestore } = await import("./trade-point-purge-handlers.js");
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (body.target === undefined) body.target = "active";
+  req.body = body;
+  await handleTradePointOverridesRestore(req, res, pool, me);
 }

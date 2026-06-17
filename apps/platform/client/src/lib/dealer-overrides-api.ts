@@ -17,6 +17,7 @@ export {
 } from "./overrides-api-result.js";
 import { sanitizeDealerOverrideFieldsForApi } from "./overrides-persona-fields.js";
 import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
+import { invalidateMyDealerScope } from "./dealers-my-scope-api.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -175,6 +176,76 @@ export async function untrashDealerStrict(dealerId: string): Promise<OverridesAp
 
 export async function untrashDealer(dealerId: string): Promise<DealerOverrideRow | null> {
   const r = await untrashDealerStrict(dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+async function postDealerPurgeAction<T>(
+  action: string,
+  body: Record<string, unknown>,
+  traceFn: string,
+): Promise<OverridesApiResult<T>> {
+  const dealerId = typeof body.dealer_id === "string" ? body.dealer_id : undefined;
+  const r = await overridesApiPost<T>({
+    scope: "dealer",
+    action,
+    url: `/api/dealer-overrides/${action}`,
+    entityId: dealerId,
+    body,
+    traceFn,
+  });
+  if (r.ok) invalidateMyDealerScope();
+  return r;
+}
+
+export async function requestPurgeDealerStrict(
+  dealerId: string,
+): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("requestPurgeDealerStrict", { dealerId });
+  return postDealerPurgeAction("request-purge", { dealer_id: dealerId }, "requestPurgeDealerStrict");
+}
+
+export async function requestPurgeDealer(dealerId: string): Promise<DealerOverrideRow | null> {
+  const r = await requestPurgeDealerStrict(dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function restoreDealerStrict(
+  dealerId: string,
+  target: "employee_trash" | "active" = "employee_trash",
+): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("restoreDealerStrict", { dealerId, target });
+  return postDealerPurgeAction("restore", { dealer_id: dealerId, target }, "restoreDealerStrict");
+}
+
+export async function restoreDealer(
+  dealerId: string,
+  target: "employee_trash" | "active" = "employee_trash",
+): Promise<DealerOverrideRow | null> {
+  const r = await restoreDealerStrict(dealerId, target);
+  return r.ok ? r.data.override : null;
+}
+
+export async function purgeDealerStrict(
+  dealerId: string,
+): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("purgeDealerStrict", { dealerId });
+  return postDealerPurgeAction("purge", { dealer_id: dealerId }, "purgeDealerStrict");
+}
+
+export async function purgeDealer(dealerId: string): Promise<DealerOverrideRow | null> {
+  const r = await purgeDealerStrict(dealerId);
+  return r.ok ? r.data.override : null;
+}
+
+export async function adminRestoreDealerStrict(
+  dealerId: string,
+): Promise<OverridesApiResult<{ override: DealerOverrideRow | null }>> {
+  traceOverridesStrictCalled("adminRestoreDealerStrict", { dealerId });
+  return postDealerPurgeAction("admin-restore", { dealer_id: dealerId }, "adminRestoreDealerStrict");
+}
+
+export async function adminRestoreDealer(dealerId: string): Promise<DealerOverrideRow | null> {
+  const r = await adminRestoreDealerStrict(dealerId);
   return r.ok ? r.data.override : null;
 }
 

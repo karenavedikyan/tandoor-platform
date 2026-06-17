@@ -165,6 +165,9 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   if (p === "/admin/tp-count-diag" || p === "/admin/counts-diag") {
     return role === "admin" || role === "director" || role === "rop" || role === "analyst";
   }
+  if (p === "/admin/purge-queue") {
+    return userHas(role, "admin.purge_dealer");
+  }
   if (p === "/profile" || isUnder(p, "/profile")) {
     return userHas(role, "profile.read_self");
   }
@@ -352,7 +355,10 @@ export function canAccessClientBaseActivityDashboard(role: SalesRole): boolean {
 }
 
 
-function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefined): PilotNavGroup | null {
+function buildAdministrationNavGroup(
+  platformUserRole: UserRole | null | undefined,
+  adminPurgeQueueCount?: number | null,
+): PilotNavGroup | null {
   if (!platformUserRole) return null;
   if (platformUserRole === "analyst") {
     return {
@@ -438,6 +444,21 @@ function buildAdministrationNavGroup(platformUserRole: UserRole | null | undefin
       navBehaviorId: "nav-admin-performance",
     });
   }
+  if (userHas(platformUserRole, "admin.purge_dealer")) {
+    const purgeExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
+      if (adminPurgeQueueCount === undefined) return {};
+      if (adminPurgeQueueCount === null) return { badgeLoading: true };
+      if (adminPurgeQueueCount <= 0) return {};
+      return { badge: adminPurgeQueueCount };
+    };
+    items.push({
+      href: "/admin/purge-queue",
+      label: "Корзина админа",
+      testId: "nav-item-admin-purge-queue",
+      navBehaviorId: "nav-admin-purge-queue",
+      ...purgeExtras(),
+    });
+  }
   if (platformUserRole === "admin") {
     items.push({
       href: "/admin/actualization/dedupe",
@@ -513,8 +534,9 @@ function withAdminBriefMigrateTopShortcut(
 function withOptionalAdminGroup(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+  adminPurgeQueueCount?: number | null,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
-  const g = buildAdministrationNavGroup(platformUserRole);
+  const g = buildAdministrationNavGroup(platformUserRole, adminPurgeQueueCount);
   if (!g) return model;
   return { ...model, groups: [g, ...model.groups] };
 }
@@ -523,8 +545,13 @@ function finalizeGroupedPilotNavigation(
   platformUserRole: UserRole | null | undefined,
   role: SalesRole,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+  adminPurgeQueueCount?: number | null,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
-  return withOptionalAdminGroup(platformUserRole, withAdminBriefMigrateTopShortcut(platformUserRole, role, model));
+  return withOptionalAdminGroup(
+    platformUserRole,
+    withAdminBriefMigrateTopShortcut(platformUserRole, role, model),
+    adminPurgeQueueCount,
+  );
 }
 
 export function getPilotNavigation(
@@ -533,6 +560,7 @@ export function getPilotNavigation(
   tradePointCount?: number | null,
   platformUserRole?: UserRole | null,
   trashCount?: number | null,
+  adminPurgeQueueCount?: number | null,
 ): PilotNavigationModel {
   const sch = salesControlHomeHref(role);
 
@@ -654,11 +682,11 @@ export function getPilotNavigation(
   });
 
   if (role === "sales_director" || role === "team_lead") {
-    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"));
+    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"), adminPurgeQueueCount);
   }
 
   if (role === "sales_manager") {
-    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"));
+    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"), adminPurgeQueueCount);
   }
 
   if (role === "marketer") {
@@ -676,6 +704,7 @@ export function getPilotNavigation(
           },
         ],
       }),
+      adminPurgeQueueCount,
     );
   }
 

@@ -110,6 +110,7 @@ const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminPerformance = lazy(() => import("@/pages/admin-performance"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
+const LazyAdminPurgeQueue = lazy(() => import("@/pages/admin-purge-queue"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
 const LazyListings = lazy(() => import("@/pages/listings"));
 const LazyAssignmentDetail = lazy(() => import("@/pages/assignment-detail"));
@@ -200,6 +201,7 @@ const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth))
 const AdminPerformanceRoute = wrapProfileShell(suspensePage(LazyAdminPerformance));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 const AdminCountsDiagRoute = wrapProfileShell(suspensePage(LazyAdminCountsDiag));
+const AdminPurgeQueueRoute = wrapProfileShell(suspensePage(LazyAdminPurgeQueue));
 
 function HashRedirect({ to }: { to: string }) {
   const [, setLoc] = useHashLocation();
@@ -304,9 +306,19 @@ function AuthenticatedShell({
   const dealerNavCount = dbSidebarCounts.dealers;
   const tradePointNavCount = showTradePointsNav ? dbSidebarCounts.tradePoints : undefined;
   const trashNavCount = dbSidebarCounts.trash;
+  const adminPurgeQueueNavCount =
+    user.role === "admin" || user.role === "director" ? dbSidebarCounts.adminPurgeQueue : undefined;
   const navigation = useMemo(
-    () => getPilotNavigation(salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount),
-    [salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount],
+    () =>
+      getPilotNavigation(
+        salesRole,
+        dealerNavCount,
+        tradePointNavCount,
+        user.role,
+        trashNavCount,
+        adminPurgeQueueNavCount,
+      ),
+    [salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount, adminPurgeQueueNavCount],
   );
 
   const showAuditLogLink = userHas(user.role, "audit.read");
@@ -396,6 +408,7 @@ function AuthenticatedShell({
         <Route path="/admin/performance" component={AdminPerformanceRoute} />
         <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/admin/counts-diag" component={AdminCountsDiagRoute} />
+        <Route path="/admin/purge-queue" component={AdminPurgeQueueRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
         <Route path="/users" component={UsersAndAccessRoute} />
         <Route path="/profile/change-password" component={ChangePasswordRoute} />
