@@ -68,6 +68,7 @@ async function main(): Promise<void> {
   } as Record<string, string>;
 
   // 1) admin login
+  let adminUserId = "";
   {
     const res = await fetch(`${base}/api/auth/login`, {
       method: "POST",
@@ -79,6 +80,23 @@ async function main(): Promise<void> {
     step(1, ok, ok ? "admin login" : `status=${res.status}`);
     if (!ok) process.exit(1);
     adminCookie = mergeCookieJar("", res.headers.get("set-cookie"));
+    const u = body.user as { id?: string } | undefined;
+    adminUserId = typeof u?.id === "string" ? u.id : "";
+  }
+
+  // 1b) cookie roundtrip: GET /api/auth/me сразу после login должен вернуть того же пользователя.
+  // Это страховка от регрессий в ридере сессии (см. инцидент 17.06.2026 с PR #751).
+  {
+    const res = await fetch(`${base}/api/auth/me`, {
+      method: "GET",
+      headers: { ...headersBase, Cookie: adminCookie },
+    });
+    const body = await readJson(res);
+    const u = body.user as { id?: string } | undefined;
+    const sameUser = typeof u?.id === "string" && (!adminUserId || u.id === adminUserId);
+    const ok = res.ok && body.success === true && sameUser;
+    step(101, ok, ok ? "cookie roundtrip /api/auth/me" : `status=${res.status} success=${body.success} user=${u?.id ?? "none"}`);
+    if (!ok) process.exit(1);
   }
 
   const ts = Date.now();
@@ -176,6 +194,7 @@ async function main(): Promise<void> {
   }
 
   // 7) login as smoke user with new password
+  let smokeUserSelfId = "";
   {
     const res = await fetch(`${base}/api/auth/login`, {
       method: "POST",
@@ -187,6 +206,22 @@ async function main(): Promise<void> {
     step(7, ok, ok ? "login smoke user" : `status=${res.status}`);
     if (!ok) process.exit(1);
     userCookie = mergeCookieJar("", res.headers.get("set-cookie"));
+    const u = body.user as { id?: string } | undefined;
+    smokeUserSelfId = typeof u?.id === "string" ? u.id : "";
+  }
+
+  // 7b) cookie roundtrip для смок-юзера: GET /api/auth/me должен вернуть его же.
+  {
+    const res = await fetch(`${base}/api/auth/me`, {
+      method: "GET",
+      headers: { ...headersBase, Cookie: userCookie },
+    });
+    const body = await readJson(res);
+    const u = body.user as { id?: string } | undefined;
+    const sameUser = typeof u?.id === "string" && (!smokeUserSelfId || u.id === smokeUserSelfId);
+    const ok = res.ok && body.success === true && sameUser;
+    step(107, ok, ok ? "cookie roundtrip smoke /api/auth/me" : `status=${res.status} success=${body.success}`);
+    if (!ok) process.exit(1);
   }
 
   // 8) change password self
