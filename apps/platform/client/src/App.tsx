@@ -42,7 +42,7 @@ import { resolveSidebarTrashCount, resolveSidebarWorkingDealerClientCount } from
 import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
-import { setRealScopeAuditUserId } from "@/lib/real-scope-audit";
+import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
