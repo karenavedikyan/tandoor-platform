@@ -98,7 +98,7 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
-import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { externalKeysToReleaseCodes, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { TradePointsSkeleton } from "@/components/skeletons/trade-points-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -331,12 +331,11 @@ export default function TradePointsPage({
   const effectiveVisPayload = useMemo(() => {
     if (!viewingOtherUserScope) return visPayload;
     if (!targetScopeQ.ready) return null;
-    return {
-      all: targetScopeQ.scope_explanation.full_catalog,
-      codes: targetScopeQ.scope_explanation.full_catalog
-        ? null
-        : Array.from(targetScopeQ.activeDealerExternalKeySet),
-    };
+    if (targetScopeQ.scope_explanation.full_catalog) {
+      return { all: true, codes: null };
+    }
+    const rawCodes = externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet);
+    return { all: false, codes: rawCodes };
   }, [viewingOtherUserScope, targetScopeQ, visPayload]);
 
   const useReal = Boolean(
@@ -474,7 +473,7 @@ export default function TradePointsPage({
                 all: targetScopeQ.scope_explanation.full_catalog,
                 codes: targetScopeQ.scope_explanation.full_catalog
                   ? null
-                  : Array.from(targetScopeQ.activeDealerExternalKeySet),
+                  : externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet),
                 assignments: null,
               }
             : undefined

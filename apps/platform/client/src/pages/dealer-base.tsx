@@ -44,7 +44,7 @@ import {
   type DealerStatus,
   type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
-import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { externalKeysToReleaseCodes, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { DealerBaseSkeleton } from "@/components/skeletons/dealer-base-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -1434,9 +1434,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
     if (targetScopeQ.scope_explanation.full_catalog) {
       return { all: true, codes: null };
     }
-    const rawCodes = Array.from(targetScopeQ.activeDealerExternalKeySet).map((k) =>
-      k.startsWith("client-") ? k.slice("client-".length) : k,
-    );
+    const rawCodes = externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet);
     return { all: false, codes: rawCodes };
   }, [viewingOtherUserScope, targetScopeQ, visPayload]);
 
