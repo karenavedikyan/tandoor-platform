@@ -39,6 +39,12 @@ import {
   ProductListRow,
   type CatalogListProduct,
 } from "@/components/catalog/ProductListRow";
+import { CatalogSkeleton } from "@/components/skeletons/catalog-skeleton";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import {
+  LARGE_LIST_VIRTUAL_THRESHOLD,
+  VirtualizedStackList,
+} from "@/lib/window-list-virtualizer";
 
 type CardSize = "xl" | "m" | "s" | "list";
 
@@ -83,7 +89,9 @@ type SyncLogRow = {
   error: string | null;
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
+const CATALOG_LIST_ROW_ESTIMATE = 56;
+const CATALOG_GRID_CARD_ESTIMATE = 220;
 const CARD_SIZE_KEY = "catalog-card-size";
 
 function readCardSize(): CardSize {
@@ -154,6 +162,7 @@ export default function CatalogPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const listingRef = useRef<HTMLDivElement | null>(null);
+  const catalogListRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     localStorage.setItem(CARD_SIZE_KEY, cardSize);
@@ -179,6 +188,11 @@ export default function CatalogPage() {
       return data;
     },
   });
+
+  const isCatalogInitialLoading =
+    (loading && items.length === 0) || (filtersQuery.isLoading && !filtersQuery.data);
+
+  useScrollRestoration({ enabled: !isCatalogInitialLoading });
 
   useEffect(() => {
     const p = filtersQuery.data?.price;
@@ -400,6 +414,12 @@ export default function CatalogPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, productsQueryKey);
 
+  useEffect(() => {
+    if (loading || total <= items.length || total < LARGE_LIST_VIRTUAL_THRESHOLD) return;
+    void loadProducts(items.length, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, items.length, total]);
+
   const selectedCategoryName = useMemo(() => {
     if (categoryId === "all") return null;
     return categories.find((c) => c.id === categoryId)?.name ?? null;
@@ -451,6 +471,10 @@ export default function CatalogPage() {
       hasPendingChanges={hasPendingChanges}
     />
   );
+
+  if (isCatalogInitialLoading) {
+    return <CatalogSkeleton />;
+  }
 
   return (
     <div className="catalog-font space-y-6 p-4 lg:p-6">
@@ -669,30 +693,37 @@ export default function CatalogPage() {
           <h2 className="text-sm font-semibold text-[#8f96b0]">
             {listingTitle}
           </h2>
-          {loading && items.length === 0 ? (
-            <div className="grid place-items-center py-16 text-sm text-muted-foreground">
-              Загружаю каталог…
-            </div>
-          ) : items.length === 0 ? (
+          {items.length === 0 ? (
             <div className="grid place-items-center py-16 text-sm text-muted-foreground">
               Ничего не найдено. Уточните запрос.
             </div>
           ) : cardSize === "list" ? (
             <div className="divide-y divide-border overflow-hidden rounded-lg border bg-card">
               <ProductListHeader />
-              {items.map((p) => (
-                <ProductListRow key={p.id} product={p} />
-              ))}
+              <VirtualizedStackList
+                listRef={catalogListRef}
+                items={items}
+                estimateSize={CATALOG_LIST_ROW_ESTIMATE}
+                data-testid="catalog-products-virtual-list"
+                getKey={(p) => p.id}
+                rowTestIdPrefix="row-catalog-product"
+                renderItem={(p) => <ProductListRow product={p} />}
+              />
             </div>
           ) : (
-            <div className={gridCls}>
-              {items.map((p) => (
-                <ProductCardGrid key={p.id} product={p} size={cardSize} />
-              ))}
-            </div>
+            <VirtualizedStackList
+              listRef={catalogListRef}
+              items={items}
+              estimateSize={CATALOG_GRID_CARD_ESTIMATE}
+              className={gridCls}
+              data-testid="catalog-products-virtual-list"
+              getKey={(p) => p.id}
+              rowTestIdPrefix="row-catalog-product"
+              renderItem={(p) => <ProductCardGrid product={p} size={cardSize} />}
+            />
           )}
 
-          {items.length < total ? (
+          {items.length < total && items.length < LARGE_LIST_VIRTUAL_THRESHOLD ? (
             <div className="flex justify-center pt-2">
               <Button
                 variant="outline"

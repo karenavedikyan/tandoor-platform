@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { LayoutGrid, Loader2, Table2 } from "lucide-react";
 import { BrandBriefView } from "@/components/marketing-brief/brand-brief-view";
+import { MarketingBriefsSkeleton } from "@/components/skeletons/marketing-briefs-skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -144,11 +145,7 @@ export function MarketingBriefPublishedPage() {
   }, [id, isPreview, canManage, profile.role]);
 
   if (loading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center" data-testid="page-marketing-brief-view">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    );
+    return <MarketingBriefsSkeleton />;
   }
 
   if (!brief || error) {
@@ -575,9 +572,7 @@ export default function MarketingBriefsPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-          </div>
+          <MarketingBriefsSkeleton />
         ) : (
           <div className="space-y-3" data-testid="section-marketing-briefs-list">
             {viewMode === "cards" ? (

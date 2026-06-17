@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useLocation, useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BackNav } from "@/components/navigation/back-nav";
+import { AssignmentDetailSkeleton } from "@/components/skeletons/assignment-detail-skeleton";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import {
   AlertTriangle,
@@ -1382,11 +1382,7 @@ export default function AssignmentDetailPage() {
   }
 
   if (q.isLoading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center" data-testid="page-assignment-loading">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-      </div>
-    );
+    return <AssignmentDetailSkeleton />;
   }
 
   if (q.isError || !q.data) {

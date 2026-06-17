@@ -23,6 +23,8 @@ const pagesWithScroll = [
   "pages/trade-points.tsx",
   "pages/trash-bin.tsx",
   "pages/dealer-base-management-cockpit.tsx",
+  "pages/tasks.tsx",
+  "pages/catalog.tsx",
 ];
 
 for (const p of pagesWithScroll) {

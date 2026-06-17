@@ -1,5 +1,5 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { Building2, ChevronRight, Clock, MapPin, Package, Store, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { ProductDetailSkeleton } from "@/components/skeletons/product-detail-skeleton";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
 import {
   getMatrixPresencesForProduct,
@@ -757,7 +758,15 @@ function ProductFound({ product }: { product: CatalogProduct }) {
 export function ProductDetailPage() {
   const params = useParams<{ productId: string }>();
   const raw = params.productId ?? "";
+  const [pageReady, setPageReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const product = getProductById(raw);
+  if (!pageReady) return <ProductDetailSkeleton />;
   if (!product) return <ProductNotFound />;
   return <ProductFound product={product} />;
 }

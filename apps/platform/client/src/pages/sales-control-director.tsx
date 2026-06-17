@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
+import { SalesControlDirectorSkeleton } from "@/components/skeletons/sales-control-director-skeleton";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useSalesControlStoredState } from "@/hooks/use-sales-control-stored-state";
 import {
@@ -63,6 +64,13 @@ function directorTeamStatusBadgeVariant(
 export default function SalesControlDirectorPage() {
   const [stored, setStored] = useSalesControlStoredState();
   const { profile } = useReleaseDemoProfile();
+  const [pageReady, setPageReady] = useState(false);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setPageReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   const actorUserId =
     profile.role === "sales_director" ? profile.personaUserId : SALES_DIRECTOR_USER_ID;
   const [periodId, setPeriodId] = useState(getDefaultSalesPeriodId());
@@ -233,6 +241,10 @@ export default function SalesControlDirectorPage() {
       )
       .filter(Boolean) as { managerId: string; managerName: string; teamName: string; text: string }[];
   }, [managersRows, periodId, stored]);
+
+  if (!pageReady) {
+    return <SalesControlDirectorSkeleton />;
+  }
 
   return (
     <div className="mx-auto min-w-0 max-w-6xl space-y-6 overflow-x-hidden pb-24" data-testid="page-sales-director-dashboard">

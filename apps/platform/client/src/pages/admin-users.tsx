@@ -32,6 +32,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Link } from "wouter";
 import { BackNav } from "@/components/navigation/back-nav";
+import { AdminUsersSkeleton } from "@/components/skeletons/admin-users-skeleton";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Database, LogIn, MoreHorizontal } from "lucide-react";
 import {
@@ -503,6 +504,10 @@ export default function AdminUsersPage() {
 
 
   const showBriefMigrateLink = user?.role === "admin";
+
+  if (listQ.isLoading && !listQ.data) {
+    return <AdminUsersSkeleton />;
+  }
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-6 pb-24" data-testid="page-admin-users">
