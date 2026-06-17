@@ -6,18 +6,15 @@ import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { buildSidebarNavRealScope, type SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
 /**
- * Real-scope для списков /dealer-base, /trade-points (Промт 384, 387).
+ * Real-scope для списков /dealer-base, /trade-points (Промт 384).
  * Строки каталога фильтруются по active_dealer_external_keys из GET /api/dealers/my-scope.
  */
-export function useSidebarNavRealScope(
-  enabled = true,
-  forUserId?: string,
-): SidebarNavRealScope {
+export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: enabled && isRealUser });
   const catalogQ = useDealerBaseRows();
-  const dbScope = useMyScopeFromDB({ enabled: enabled && isRealUser, forUserId });
+  const dbScope = useMyScopeFromDB(enabled && isRealUser);
 
   const scope = useMemo(
     () =>
