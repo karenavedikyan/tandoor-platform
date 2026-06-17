@@ -74,6 +74,7 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
+import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { assignmentsScopeIsActive, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
@@ -1400,18 +1401,43 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
   return "клиентов";
 }
 
-export default function DealerBase() {
+export type DealerBaseProps = {
+  /** Если задан — показываем scope этого пользователя, а не текущего me. */
+  scopeUserId?: string;
+  /** Если true — рендерим только таблицу/карточки + фильтры. */
+  embedListOnly?: boolean;
+};
+
+export default function DealerBase({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
+  const scopeUserIdResolved = scopeUserId?.trim() || undefined;
+  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
+  const readOnlyScope = viewingOtherUserScope;
+  const targetScopeQ = useMyScopeFromDB({
+    enabled: viewingOtherUserScope,
+    forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
+  });
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
-  const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
   const myCodesQ = useMyClientCodes({ enabled: isRealUser });
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
+
+  const effectiveVisPayload = useMemo(() => {
+    if (!viewingOtherUserScope) return visPayload;
+    if (!targetScopeQ.ready) return null;
+    return {
+      all: targetScopeQ.scope_explanation.full_catalog,
+      codes: targetScopeQ.scope_explanation.full_catalog
+        ? null
+        : Array.from(targetScopeQ.activeDealerExternalKeySet),
+    };
+  }, [viewingOtherUserScope, targetScopeQ, visPayload]);
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
     if (!myCodesQ.data) return undefined;
@@ -1427,9 +1453,8 @@ export default function DealerBase() {
       !authLoading &&
       !authError &&
       snap &&
-      visPayload &&
-      !orgSnapQ.isError &&
-      !visCodesQ.isError,
+      effectiveVisPayload &&
+      (viewingOtherUserScope ? !targetScopeQ.error : !orgSnapQ.isError && !visCodesQ.isError),
   );
 
   const realCtxForRoute = useMemo(
@@ -1438,9 +1463,12 @@ export default function DealerBase() {
   );
 
   const access = useMemo(() => {
+    if (viewingOtherUserScope && targetScopeQ.ready) {
+      return mapUserRoleToDealerBaseAccess(targetScopeQ.scopeSubject.role);
+    }
     if (isRealUser && me?.role) return mapUserRoleToDealerBaseAccess(me.role);
     return mapSalesRoleToDealerBaseAccess(profile.role);
-  }, [isRealUser, me?.role, profile.role]);
+  }, [viewingOtherUserScope, targetScopeQ.ready, targetScopeQ.scopeSubject.role, isRealUser, me?.role, profile.role]);
 
   const orgTeamCtxForCockpit = useMemo(
     () => (useReal && snap ? { snap, access } : undefined),
@@ -1506,10 +1534,13 @@ export default function DealerBase() {
 
   const isPageInitialLoading = useMemo(
     () =>
+      (viewingOtherUserScope && targetScopeQ.loading) ||
       (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
       (catalogQ.isPending && !catalogQ.data) ||
       (actx.enabled && actx.loading && !actx.meta.updatedAt),
     [
+      viewingOtherUserScope,
+      targetScopeQ.loading,
       isRealUser,
       authLoading,
       orgSnapQ.isLoading,
@@ -1562,8 +1593,8 @@ export default function DealerBase() {
   );
 
   const mergedRowsForDealerBase = useMemo(() => {
-    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
+    if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
       if (!actx.enabled) return releaseRows;
       const includeArchived = showArchivedDealers;
       const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1573,7 +1604,7 @@ export default function DealerBase() {
       const listed = !includeArchived ? merged : merged.filter((r) => Boolean((teamActualizationPlane.archivedDealersById ?? {})[r.id]));
       return !showArchivedDealers ? applyWorkingBaseTrashInvariant(listed) : listed;
     }
-    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
+    if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
     const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
@@ -1584,7 +1615,7 @@ export default function DealerBase() {
     authLoading,
     authError,
     snap,
-    visPayload,
+    effectiveVisPayload,
     orgSnapQ.isError,
     visCodesQ.isError,
     actx.enabled,
@@ -1624,6 +1655,9 @@ export default function DealerBase() {
   );
 
   const scopedRows = useMemo(() => {
+    if (viewingOtherUserScope && targetScopeQ.ready) {
+      return mergedRowsForDealerBase;
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsForDealerBase,
@@ -1634,12 +1668,21 @@ export default function DealerBase() {
       );
     }
     return roleScopedDealerRows(mergedRowsForDealerBase, profile);
-  }, [useReal, snap, mergedRowsForDealerBase, profile, access, assignmentsScope]);
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    useReal,
+    snap,
+    mergedRowsForDealerBase,
+    profile,
+    access,
+    assignmentsScope,
+  ]);
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
-    if (isRealUser && !authLoading && !authError && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
+    if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
+      const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
       if (!actx.enabled) return releaseRows;
       return applyWorkingBaseTrashInvariant(
         buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1648,7 +1691,7 @@ export default function DealerBase() {
         }),
       );
     }
-    if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
+    if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
     return applyWorkingBaseTrashInvariant(
       buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }),
@@ -1658,7 +1701,7 @@ export default function DealerBase() {
     authLoading,
     authError,
     snap,
-    visPayload,
+    effectiveVisPayload,
     orgSnapQ.isError,
     visCodesQ.isError,
     actx.enabled,
@@ -1669,6 +1712,9 @@ export default function DealerBase() {
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
+    if (viewingOtherUserScope && targetScopeQ.ready) {
+      return mergedRowsActivePortfolio;
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsActivePortfolio,
@@ -1679,7 +1725,7 @@ export default function DealerBase() {
       );
     }
     return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
-  }, [useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
+  }, [viewingOtherUserScope, targetScopeQ.ready, useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
 
   useEffect(() => {
     const DIAG_SCOPE_SHRINK_KEY = "tandoor-diag-scope-shrink-v2";
@@ -2235,8 +2281,9 @@ export default function DealerBase() {
   }, [manager, managerCatalogForRop, useReal, snap]);
 
   const hideManagerFilterInTeamView =
-    (access === "sales_director" || access === "team_lead") &&
-    DEALER_BASE_TEAM_WORK_VIEWS.includes(workView);
+    embedListOnly ||
+    ((access === "sales_director" || access === "team_lead") &&
+      DEALER_BASE_TEAM_WORK_VIEWS.includes(workView));
 
   const needsManagerSelection =
     (access === "sales_director" || access === "team_lead") &&
@@ -2991,7 +3038,7 @@ export default function DealerBase() {
   }, [rowsFinalForList]);
 
   const archivableDealerIdsInView = useMemo(() => {
-    if (!actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers) return new Set<string>();
+    if (readOnlyScope || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers) return new Set<string>();
     const s = new Set<string>();
     for (const r of rowsFinalForList) {
       if (teamActualizationPlane.archivedDealersById[r.id]) continue;
@@ -3000,6 +3047,7 @@ export default function DealerBase() {
     }
     return s;
   }, [
+    readOnlyScope,
     actx.enabled,
     teamActualizationPlane.archivedDealersById,
     teamActualizationPlane.trashedDealersById,
@@ -3174,7 +3222,7 @@ export default function DealerBase() {
   }, []);
 
   const archiveBulkListProps = useMemo((): DealerListArchiveBulkProps | undefined => {
-    if (isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) {
+    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) {
       return undefined;
     }
     return {
@@ -3183,6 +3231,7 @@ export default function DealerBase() {
       onToggle: toggleBulkArchiveDealer,
     };
   }, [
+    readOnlyScope,
     actx.enabled,
     profile,
     showArchivedDealers,
@@ -3285,14 +3334,14 @@ export default function DealerBase() {
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
-    if (isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) {
+    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) {
       return undefined;
     }
     return {
       canMoveDealerId: (id) => archivableDealerIdsInView.has(id),
       onTrash: (row) => void handleRowTrashDealer(row),
     };
-  }, [isTaskSelectMode, actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
+  }, [readOnlyScope, isTaskSelectMode, actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
 
   /** Bulk: мягкая архивация в `archivedDealersById` (Промт 70.6). */
   const confirmBulkSoftArchiveDealers = useCallback(async () => {
@@ -3552,11 +3601,19 @@ export default function DealerBase() {
   );
 
   const canShowBulkDeleteEntry =
-    !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
+    !readOnlyScope && !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
   const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
 
   if (!isTaskSelectMode && isPageInitialLoading) {
     return <DealerBaseSkeleton />;
+  }
+
+  if (viewingOtherUserScope && targetScopeQ.forbidden) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground" data-testid="dealer-base-scope-forbidden">
+        Нет доступа к scope этого сотрудника
+      </div>
+    );
   }
 
   if (!isTaskSelectMode && catalogQ.isError) {
@@ -3575,7 +3632,7 @@ export default function DealerBase() {
     );
   }
 
-  if (!isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
+  if (!embedListOnly && !isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <DealerBaseManagementCockpit
         profile={profile}
@@ -3590,7 +3647,10 @@ export default function DealerBase() {
   }
 
   return (
-    <div className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8" data-testid="page-dealer-base">
+    <div
+      className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8"
+      data-testid={embedListOnly ? "dealer-base-list-embed" : "page-dealer-base"}
+    >
       {isTaskSelectMode ? (
         <div
           className="sticky top-0 z-30 flex flex-col gap-3 rounded-xl border border-primary/35 bg-primary/5 p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
@@ -3621,6 +3681,7 @@ export default function DealerBase() {
           </div>
         </div>
       ) : null}
+      {!embedListOnly ? (
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           {isTaskSelectMode ? (
@@ -3643,7 +3704,7 @@ export default function DealerBase() {
         </div>
         {!isTaskSelectMode ? (
           <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
-            {canCreateDealerDuringActualization(profile) && actx.enabled ? (
+            {canCreateDealerDuringActualization(profile) && actx.enabled && !readOnlyScope ? (
               <Button
                 type="button"
                 variant="default"
@@ -3671,8 +3732,9 @@ export default function DealerBase() {
           </div>
         ) : null}
       </div>
+      ) : null}
 
-      {showActualizationSync ? (
+      {!embedListOnly && showActualizationSync ? (
         <div className="space-y-3">
           {actx.enabled && shouldUseTeamMergedActualizationPlane(profile) && teamCtx.teamFetchLoading ? (
             <Alert className="border-primary/30 bg-primary/5" data-testid="alert-dealer-base-team-state-loading">
@@ -3722,6 +3784,7 @@ export default function DealerBase() {
         </div>
       ) : null}
 
+      {!readOnlyScope ? (
       <DealerActualizationCreateDialog
         open={createDealerOpen}
         onOpenChange={setCreateDealerOpen}
@@ -3733,7 +3796,9 @@ export default function DealerBase() {
         }
         onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
       />
+      ) : null}
 
+      {!embedListOnly ? (
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
@@ -3764,6 +3829,7 @@ export default function DealerBase() {
           <span data-testid="text-dealer-stock-hardware-count">Склад фурнитуры: {stockFilterSummary.hardware}</span>
         </div>
       </section>
+      ) : null}
 
       <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
         <CardContent className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">
@@ -4153,6 +4219,7 @@ export default function DealerBase() {
                         ariaLabel="Категория клиента"
                       />
                     </div>
+                    {!embedListOnly ? (
                     <div className="min-w-0 space-y-1">
                       <Label className="text-xs font-medium text-muted-foreground">РОП</Label>
                       <Select value={ropTeam} onValueChange={onRopChange}>
@@ -4172,7 +4239,8 @@ export default function DealerBase() {
                         </SelectContent>
                       </Select>
                     </div>
-                    {!hideManagerFilterInTeamView ? (
+                    ) : null}
+                    {!embedListOnly && !hideManagerFilterInTeamView ? (
                       <div className="min-w-0 space-y-1">
                         <Label className="text-xs font-medium text-muted-foreground">Менеджер</Label>
                         <Select value={manager} onValueChange={handleManagerChange}>
@@ -4204,7 +4272,7 @@ export default function DealerBase() {
                   </p>
                 ) : null}
 
-                {!isTaskSelectMode ? (
+                {!isTaskSelectMode && !embedListOnly ? (
                   <div className="space-y-2 border-t border-border/60 pt-2">
                     <p className="text-xs font-semibold text-muted-foreground">Рабочий режим</p>
                     <section className="space-y-3" data-testid="section-dealer-base-role-views">
@@ -4549,7 +4617,7 @@ export default function DealerBase() {
             {resultsContextLine}
           </p>
         ) : null}
-        {teamSummaryForCompactBanner ? (
+        {teamSummaryForCompactBanner && !embedListOnly ? (
           <div className="mb-4 min-w-0 max-w-full" data-testid="section-dealer-base-team-compact-summary">
             <TeamSummaryCard
               variant="compact"

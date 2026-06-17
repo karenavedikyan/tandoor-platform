@@ -1,5 +1,5 @@
 /**
- * GET /api/dealers/my-scope — клиент (Промт 384).
+ * GET /api/dealers/my-scope — клиент (Промт 384, 388).
  */
 
 import type { QueryClient } from "@tanstack/react-query";
@@ -28,6 +28,7 @@ export type MyDealerScopeExplanation = {
 export type MyDealerScopePayload = {
   success: true;
   user: { id: string; email: string; role: UserRole; full_name?: string };
+  viewed_user?: { id: string; email: string; role: UserRole; full_name?: string };
   totals: MyDealerScopeTotals;
   active_dealer_ids: string[];
   active_dealer_external_keys: string[];
@@ -36,12 +37,23 @@ export type MyDealerScopePayload = {
   scope_explanation: MyDealerScopeExplanation;
 };
 
-export const MY_DEALER_SCOPE_QUERY_KEY = ["dealers", "my-scope"] as const;
+export const SCOPE_FORBIDDEN_ERROR = "SCOPE_FORBIDDEN";
 
-export async function fetchMyDealerScope(): Promise<MyDealerScopePayload> {
-  const res = await fetch("/api/dealers/my-scope", { method: "GET", credentials: "same-origin" });
+export function myDealerScopeQueryKey(forUserId?: string): readonly [string, string, ...string[]] {
+  return forUserId ? (["dealers", "my-scope", forUserId] as const) : (["dealers", "my-scope", "self"] as const);
+}
+
+/** @deprecated use myDealerScopeQueryKey() */
+export const MY_DEALER_SCOPE_QUERY_KEY = myDealerScopeQueryKey();
+
+export async function fetchMyDealerScope(forUserId?: string): Promise<MyDealerScopePayload> {
+  const q = forUserId ? `?for_user_id=${encodeURIComponent(forUserId)}` : "";
+  const res = await fetch(`/api/dealers/my-scope${q}`, { method: "GET", credentials: "same-origin" });
   if (res.status === 401) {
     throw new Error("UNAUTHENTICATED");
+  }
+  if (res.status === 403) {
+    throw new Error(SCOPE_FORBIDDEN_ERROR);
   }
   const json = (await res.json()) as MyDealerScopePayload & { success: boolean; message?: string };
   if (!res.ok || !json.success) {
@@ -50,6 +62,6 @@ export async function fetchMyDealerScope(): Promise<MyDealerScopePayload> {
   return json;
 }
 
-export function invalidateMyDealerScope(qc: QueryClient = queryClient): void {
-  void qc.invalidateQueries({ queryKey: MY_DEALER_SCOPE_QUERY_KEY });
+export function invalidateMyDealerScope(qc: QueryClient = queryClient, forUserId?: string): void {
+  void qc.invalidateQueries({ queryKey: myDealerScopeQueryKey(forUserId) });
 }
