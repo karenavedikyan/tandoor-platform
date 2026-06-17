@@ -35,6 +35,12 @@ export function resetDealerBaseSourceCache(): void {
   cachedCatalogRows = null;
 }
 
+/** Preload из GET /api/bootstrap (Промт 380-safe). */
+export function seedFeatureFlagsFromBootstrap(flags: { flags?: { USE_DB_DEALERS?: boolean } }): void {
+  if (flags.flags?.USE_DB_DEALERS === true) featureFlagUseDb = true;
+  else if (flags.flags?.USE_DB_DEALERS === false) featureFlagUseDb = false;
+}
+
 export function setDealerBaseRowsCache(rows: DealerRow[]): void {
   cachedCatalogRows = rows;
 }
