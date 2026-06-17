@@ -49,12 +49,12 @@ const FULL_CATALOG_ROLES: ReadonlySet<UserRole> = new Set([
 
 /** JOIN dealer_overrides по id / external_key / client-{release_code}. */
 export const DEALER_OVERRIDE_JOIN = `
-  LEFT JOIN dealer_overrides do ON (
-    do.dealer_id = d.id::text
-    OR do.dealer_id = d.external_key
+  LEFT JOIN dealer_overrides d_ov ON (
+    d_ov.dealer_id = d.id::text
+    OR d_ov.dealer_id = d.external_key
     OR (
       d.release_code IS NOT NULL
-      AND lower(do.dealer_id) = 'client-' || lower(d.release_code)
+      AND lower(d_ov.dealer_id) = 'client-' || lower(d.release_code)
     )
   )
 `;
@@ -167,7 +167,7 @@ export async function computeDbScopeForUser(
       external_key: string;
       is_trashed: boolean;
     }>(
-      `SELECT d.id::text AS id, d.external_key, (do.trashed_at IS NOT NULL) AS is_trashed
+      `SELECT d.id::text AS id, d.external_key, (d_ov.trashed_at IS NOT NULL) AS is_trashed
        FROM dealers d
        ${DEALER_OVERRIDE_JOIN}`,
     );
@@ -193,7 +193,7 @@ export async function computeDbScopeForUser(
        INNER JOIN dealers d ON d.id = tp.dealer_id
        ${DEALER_OVERRIDE_JOIN}
        ${TRADE_POINT_OVERRIDE_JOIN}
-       WHERE do.trashed_at IS NULL`,
+       WHERE d_ov.trashed_at IS NULL`,
     );
     const activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
     const trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
@@ -250,7 +250,7 @@ export async function computeDbScopeForUser(
     external_key: string;
     is_trashed: boolean;
   }>(
-    `SELECT d.id::text AS id, d.external_key, (do.trashed_at IS NOT NULL) AS is_trashed
+    `SELECT d.id::text AS id, d.external_key, (d_ov.trashed_at IS NOT NULL) AS is_trashed
      FROM dealers d
      ${DEALER_OVERRIDE_JOIN}
      WHERE d.release_code = ANY($1::text[])`,
