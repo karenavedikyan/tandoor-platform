@@ -79,6 +79,8 @@ import {
   canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { buildTradePointsWorkingRowsForCount } from "@/lib/trade-points-working-rows";
+import { buildTradePointListFromDb } from "@/lib/trade-point-list-from-db";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
 import { buildSidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import {
   buildTradePointListForActualization,
@@ -328,6 +330,16 @@ export default function TradePointsPage({
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
 
+  const scopedTpQ = useTradePointsScoped({
+    forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
+    enabled: isRealUser && !authLoading,
+  });
+  const useDbTradePointsList =
+    isRealUser &&
+    scopedTpQ.isSuccess &&
+    scopedTpQ.data?.success === true &&
+    scopedTpQ.data.source === "db";
+
   const effectiveVisPayload = useMemo(() => {
     if (!viewingOtherUserScope) return visPayload;
     if (!targetScopeQ.ready) return null;
@@ -510,6 +522,9 @@ export default function TradePointsPage({
   );
 
   const workingRows = useMemo(() => {
+    if (useDbTradePointsList && scopedTpQ.data?.success) {
+      return buildTradePointListFromDb(scopedTpQ.data.tradePoints, actState, catalogRows);
+    }
     return (
       buildTradePointsWorkingRowsForCount({
         profile,
@@ -518,7 +533,15 @@ export default function TradePointsPage({
         realScope: sidebarRealScope,
       }) ?? []
     );
-  }, [profile, actx.enabled, actState, sidebarRealScope]);
+  }, [
+    useDbTradePointsList,
+    scopedTpQ.data,
+    actState,
+    catalogRows,
+    profile,
+    actx.enabled,
+    sidebarRealScope,
+  ]);
 
   const baseRows = useMemo(() => {
     if (showArchived) {
