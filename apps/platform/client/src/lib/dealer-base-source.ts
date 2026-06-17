@@ -88,8 +88,8 @@ export function filterDealerRowsByVisibleCodes(
   codes: string[] | null,
 ): DealerRow[] {
   if (codes === null) return rows;
-  const allow = new Set(codes);
-  return rows.filter((r) => r.releaseCode != null && allow.has(r.releaseCode));
+  const allow = new Set(codes.map((c) => c.toLowerCase()));
+  return rows.filter((r) => r.releaseCode != null && allow.has(r.releaseCode.toLowerCase()));
 }
 
 /** Видимые строки каталога для real-scope (замена buildDealerRowsFromReleaseClients + codes). */

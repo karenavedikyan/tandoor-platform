@@ -1431,12 +1431,13 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
   const effectiveVisPayload = useMemo(() => {
     if (!viewingOtherUserScope) return visPayload;
     if (!targetScopeQ.ready) return null;
-    return {
-      all: targetScopeQ.scope_explanation.full_catalog,
-      codes: targetScopeQ.scope_explanation.full_catalog
-        ? null
-        : Array.from(targetScopeQ.activeDealerExternalKeySet),
-    };
+    if (targetScopeQ.scope_explanation.full_catalog) {
+      return { all: true, codes: null };
+    }
+    const rawCodes = Array.from(targetScopeQ.activeDealerExternalKeySet).map((k) =>
+      k.startsWith("client-") ? k.slice("client-".length) : k,
+    );
+    return { all: false, codes: rawCodes };
   }, [viewingOtherUserScope, targetScopeQ, visPayload]);
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
