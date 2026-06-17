@@ -1,6 +1,12 @@
 /**
- * GET /api/users/picker?role=rop|regional_manager
- * Список пользователей для dropdown (любой авторизованный active).
+ * GET /api/users/picker?role=rop|regional_manager|manager
+ * Список пользователей для dropdown.
+ *
+ * RBAC (Промт 390):
+ *   - admin / director: видят всех active пользователей с указанной ролью.
+ *   - rop: видит только пользователей из своей команды (через canViewerAccessUserScope).
+ *   - regional_manager: видит пользователей в той же команде.
+ *   - manager / marketer / analyst / category_manager: пустой список.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -10,6 +16,7 @@ import {
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
+import { canViewerAccessUserScope } from "../../shared/scope-for-user-access.js";
 
 const PICKER_ROLES = new Set(["rop", "regional_manager", "manager"]);
 
@@ -43,6 +50,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    // Роли которые в принципе не должны видеть список — defence-in-depth.
+    if (
+      me.role === "manager" ||
+      me.role === "marketer" ||
+      me.role === "analyst" ||
+      me.role === "category_manager"
+    ) {
+      sendJson(res, 200, { success: true, users: [] });
+      return;
+    }
+
     const r = await pool.query<{ id: string; full_name: string; role: string; status: string }>(
       `SELECT id, full_name, role, status FROM users
        WHERE role = $1 AND status = 'active'
@@ -50,15 +68,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       [role],
     );
 
-    sendJson(res, 200, {
-      success: true,
-      users: r.rows.map((row) => ({
-        id: String(row.id),
-        full_name: String(row.full_name),
-        role: String(row.role),
-        status: String(row.status),
-      })),
-    });
+    let users = r.rows.map((row) => ({
+      id: String(row.id),
+      full_name: String(row.full_name),
+      role: String(row.role),
+      status: String(row.status),
+    }));
+
+    // RBAC фильтрация для rop / regional_manager:
+    // оставляем только тех, чей scope viewer вправе видеть.
+    if (me.role === "rop" || me.role === "regional_manager") {
+      const allowed: typeof users = [];
+      for (const u of users) {
+        const ok = await canViewerAccessUserScope(pool, me.id, me.role, u.id);
+        if (ok) allowed.push(u);
+      }
+      users = allowed;
+    }
+
+    sendJson(res, 200, { success: true, users });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[users/picker]", m);
