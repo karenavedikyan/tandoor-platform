@@ -2286,6 +2286,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
       DEALER_BASE_TEAM_WORK_VIEWS.includes(workView));
 
   const needsManagerSelection =
+    !viewingOtherUserScope &&
     (access === "sales_director" || access === "team_lead") &&
     (workView === "my_clients" ||
       workView === "today" ||
@@ -4266,7 +4267,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
                   </div>
                 </div>
 
-                {hideManagerFilterInTeamView ? (
+                {hideManagerFilterInTeamView && !viewingOtherUserScope ? (
                   <p className="text-xs text-muted-foreground" data-testid="text-dealer-base-manager-filter-hint">
                     Выберите режим менеджера, чтобы смотреть клиентов конкретного менеджера.
                   </p>
