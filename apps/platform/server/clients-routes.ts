@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { getPool } from "../shared/admin/admin-auth.js";
 import { fetchMyClientCodes } from "../shared/my-client-codes-handlers.js";
+import { fetchMyDealerScope } from "../shared/dealers-my-scope-handlers.js";
 import { requireAuth } from "./auth/require-auth";
 
 const JSON_CT = "application/json; charset=utf-8";
@@ -32,6 +33,41 @@ export function registerClientsRoutes(app: Express): void {
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       console.error("[api/clients/my-codes]", m.slice(0, 200));
+      res.status(500).json({
+        success: false,
+        code: "INTERNAL_ERROR",
+        message: "Внутренняя ошибка сервера.",
+      });
+    }
+  });
+
+  app.get("/api/dealers/my-scope", requireAuth(), async (req: Request, res: Response) => {
+    try {
+      if (!req.auth) {
+        res.status(401).json({ success: false, code: "UNAUTHENTICATED" });
+        return;
+      }
+      const pool = getPool();
+      if (!pool) {
+        res.status(503).json({
+          success: false,
+          code: "DB_UNAVAILABLE",
+          message: "База данных недоступна.",
+        });
+        return;
+      }
+      const payload = await fetchMyDealerScope(pool, {
+        id: req.auth.userId,
+        email: req.auth.email,
+        role: req.auth.role,
+        full_name: req.auth.fullName,
+      });
+      res.setHeader("Content-Type", JSON_CT);
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json(payload);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/dealers/my-scope]", m.slice(0, 200));
       res.status(500).json({
         success: false,
         code: "INTERNAL_ERROR",

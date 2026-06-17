@@ -1,5 +1,8 @@
 /**
- * Единый расчёт счётчиков сайдбара (Промт 383) — тот же pipeline, что App.tsx → getPilotNavigation.
+ * Единый расчёт счётчиков сайдбара (Промт 383).
+ *
+ * @deprecated Промт 384: прод-счётчики из GET /api/dealers/my-scope (`useMyScopeFromDB`).
+ * Функции ниже сохранены для unit-тестов legacy pipeline.
  */
 
 import type { UserRole } from "@shared/auth";

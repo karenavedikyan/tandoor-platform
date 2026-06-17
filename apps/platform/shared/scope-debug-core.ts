@@ -1,30 +1,11 @@
 /**
  * Ядро GET /api/admin/scope-debug — без admin-auth (тестируемо без Neon).
+ * Промт 384: счётчики из computeDbScopeForUser (БД source of truth).
  */
 
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
-import {
-  fetchMyOrgSnapshotInternal,
-  fetchMyVisibleCodesInternal,
-  type VisibleClientsPayload,
-} from "./auth-bootstrap-handlers.js";
-import { fetchMyClientCodes } from "./my-client-codes-handlers.js";
-import type { DealerRow } from "../client/src/lib/dealer-base-mock-data.js";
-import type { OrgSnapshot } from "../client/src/lib/use-org-snapshot.js";
-import {
-  assignmentsScopeFromCodes,
-  computeSidebarScopeCountersFromRealScope,
-  profileForScopeCounters,
-  buildRealScopeForSidebarCounters,
-  visiblePayloadFromCodes,
-} from "../client/src/lib/sidebar-scope-counter-math.js";
-import { assignmentsScopeIsActive } from "../client/src/lib/dealer-base-real-scope.js";
-import {
-  createEmptyActualizationState,
-  type TrashedDealerInfo,
-  type TrashedTradePointInfo,
-} from "../client/src/lib/client-base-actualization-state.js";
+import { computeDbScopeForUser, resolveScopeCodesMeta } from "./db-scope-formula.js";
 
 export type ScopeDebugUserRow = {
   id: string;
@@ -63,55 +44,6 @@ export type ScopeDebugPayload = {
   explanation: string[];
 };
 
-function orgSnapshotFromInternal(
-  payload: Awaited<ReturnType<typeof fetchMyOrgSnapshotInternal>>,
-): OrgSnapshot {
-  const { success: _s, ...rest } = payload;
-  void _s;
-  return rest as OrgSnapshot;
-}
-
-async function loadTrashedForScope(pool: PoolLike): Promise<{
-  dealers: Record<string, TrashedDealerInfo>;
-  tradePoints: Record<string, TrashedTradePointInfo>;
-}> {
-  const dealers: Record<string, TrashedDealerInfo> = {};
-  const tradePoints: Record<string, TrashedTradePointInfo> = {};
-  const now = new Date().toISOString();
-  const dealerRows = await pool.query<{ dealer_id: string; trashed_at: string | null }>(
-    `SELECT dealer_id, trashed_at FROM dealer_overrides WHERE trashed_at IS NOT NULL`,
-  );
-  for (const row of dealerRows.rows) {
-    if (!row.dealer_id) continue;
-    dealers[row.dealer_id] = {
-      dealerId: row.dealer_id,
-      trashedAt: row.trashed_at ?? now,
-      trashedBy: "",
-      trashedByName: "",
-      expiresAt: now,
-      source: "manual_actualization",
-      snapshot: { fullName: null, city: null, inn: null, dealerCode: null, legalEntityName: null },
-    };
-  }
-  const tpRows = await pool.query<{ tp_id: string; dealer_id: string | null; trashed_at: string | null }>(
-    `SELECT tp_id, dealer_id, trashed_at FROM trade_point_overrides WHERE trashed_at IS NOT NULL`,
-  );
-  for (const row of tpRows.rows) {
-    if (!row.tp_id) continue;
-    tradePoints[row.tp_id] = {
-      tradePointId: row.tp_id,
-      dealerId: row.dealer_id,
-      trashedAt: row.trashed_at ?? now,
-      trashedBy: "",
-      trashedByName: "",
-      expiresAt: now,
-      source: "manual_actualization",
-      snapshot: { tradePointName: null, city: null, address: null, dealerName: null },
-    };
-  }
-  return { dealers, tradePoints };
-}
-
 export async function loadUserTeams(pool: PoolLike, userId: string): Promise<ScopeDebugTeamRow[]> {
   const r = await pool.query<{
     id: string;
@@ -129,92 +61,53 @@ export async function loadUserTeams(pool: PoolLike, userId: string): Promise<Sco
   return r.rows;
 }
 
-function buildExplanation(
+function buildDbScopeExplanation(
   role: UserRole,
-  vis: VisibleClientsPayload,
-  codes: { own: string[]; team: string[]; granted: string[] },
-  counts: { dealers: number; tps: number; trash: number; catalog: number },
+  meta: Awaited<ReturnType<typeof resolveScopeCodesMeta>>,
+  totals: Awaited<ReturnType<typeof computeDbScopeForUser>>["totals"],
 ): string[] {
   const lines: string[] = [];
-  if (
-    role === "director" ||
-    role === "admin" ||
-    role === "analyst" ||
-    role === "marketer" ||
-    role === "category_manager"
-  ) {
-    lines.push("director/admin scope: my-visible-codes.all=true → весь каталог API");
-    lines.push(`catalog=${counts.catalog} dealers → roleScopedDealerRowsForReal (sales_director) без сужения`);
+  lines.push("source of truth: shared/db-scope-formula.ts → computeDbScopeForUser (Промт 384)");
+  if (meta.fullCatalog) {
+    lines.push(`role=${role}: full catalog (all dealers table rows)`);
   } else if (role === "rop") {
-    lines.push("rop scope = client_assignments (own responsible) ∪ team (teams.rop_user_id=me) ∪ rop_client_grants");
+    lines.push("rop: own ∪ team(client_assignments.team_id ∈ my teams) ∪ rop_client_grants");
     lines.push(
-      `own=${codes.own.length} codes, team=${codes.team.length} codes, granted=${codes.granted.length} codes`,
+      `codes: own=${meta.ownCodes.length}, team=${meta.teamCodes.length}, granted=${meta.grantedCodes.length}, all=${meta.allCodes.length}`,
     );
-    lines.push("visible catalog = API dealers ∩ my-visible-codes; затем roleScopedDealerRowsForReal(team_lead) + assignmentsScope");
-  } else if (role === "manager") {
-    lines.push("manager scope = client_assignments WHERE responsible_user_id = me");
-    lines.push(`own=${codes.own.length} codes → assignmentsScope.ownCodes`);
-    lines.push("visible catalog ∩ assignmentsScope → roleScopedDealerRowsForReal(sales_manager)");
   } else if (role === "regional_manager") {
-    lines.push("regional_manager scope = dealer_overrides.regional_manager_id = me (client codes)");
-    lines.push(`own=${codes.own.length} codes из dealer_overrides, без team scope`);
-    lines.push("roleScopedDealerRowsForReal фильтрует releaseCode ∈ ownCodes");
+    lines.push("regional_manager: own ∪ team (user_team_memberships), без grants");
+    lines.push(`codes: own=${meta.ownCodes.length}, team=${meta.teamCodes.length}, all=${meta.allCodes.length}`);
+  } else if (role === "manager") {
+    lines.push("manager: client_assignments WHERE responsible_user_id = me");
+    lines.push(`codes: own=${meta.ownCodes.length}`);
   } else {
-    lines.push(`role=${role}: см. my-visible-codes и client_assignments`);
+    lines.push(`role=${role}: scoped via client_assignments`);
   }
-  if (vis.all) {
-    lines.push(`visible_codes: all (${counts.catalog} в каталоге)`);
-  } else {
-    lines.push(`visible_codes: ${vis.codes?.length ?? 0} client codes после my-visible-codes`);
-  }
-  lines.push(`sidebar dealers=${counts.dealers}, trade_points=${counts.tps}, trash=${counts.trash}`);
-  lines.push("trade_points: buildTradePointListForActualization(includeArchivedTradePoints=false) по scoped dealers");
-  lines.push("trash: dealer_overrides/trade_point_overrides trashed_at + buildTrashScopeFilter (симметрия dealer scope)");
+  lines.push(`teams: ${meta.teamIds.length} team_id(s)`);
+  lines.push(
+    `totals: active_dealers=${totals.active_dealers}, active_trade_points=${totals.active_trade_points}, trashed_dealers=${totals.trashed_dealers}`,
+  );
+  lines.push("dealers: dealers.release_code ∈ scope_codes; trash via dealer_overrides.trashed_at");
+  lines.push("trade_points: tp.dealer_id ∈ active_dealers AND trade_point_overrides.trashed_at IS NULL");
   return lines;
 }
 
 export async function buildScopeDebugPayload(
   pool: PoolLike,
   target: ScopeDebugUserRow,
-  catalogOverride?: DealerRow[],
+  _catalogOverride?: unknown,
 ): Promise<ScopeDebugPayload> {
+  void _catalogOverride;
   const role = target.role as UserRole;
-  const [orgInternal, visInternal, clientCodes, trashedDb, catalogFromDb] = await Promise.all([
-    fetchMyOrgSnapshotInternal(pool, target as Parameters<typeof fetchMyOrgSnapshotInternal>[1]),
-    fetchMyVisibleCodesInternal(pool, target as Parameters<typeof fetchMyVisibleCodesInternal>[1]),
-    fetchMyClientCodes(pool, { id: target.id, role: target.role }),
-    loadTrashedForScope(pool),
-    catalogOverride
-      ? Promise.resolve(null)
-      : import("../server/dealers/dealers-trade-points-source.js").then((m) =>
-          m.resolveDealersTradePointsList(pool, {}),
-        ),
+  const [meta, dbScope, teams, catalogCountQ] = await Promise.all([
+    resolveScopeCodesMeta(pool, target.id, role),
+    computeDbScopeForUser(pool, target.id, role),
+    loadUserTeams(pool, target.id),
+    pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM dealers`),
   ]);
 
-  const catalogRows: DealerRow[] = catalogOverride ?? (await catalogFromDb)!.dealers;
-  const snap = orgSnapshotFromInternal(orgInternal);
-  const visPayload = visiblePayloadFromCodes(visInternal);
-  const assignmentsScope = assignmentsScopeFromCodes({
-    ownCodes: clientCodes.ownCodes,
-    teamCodes: clientCodes.teamCodes,
-    grantedCodes: clientCodes.grantedCodes,
-  });
-
-  const realScope = buildRealScopeForSidebarCounters({
-    role,
-    snap,
-    visPayload,
-    assignmentsScope: assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
-    catalogRows,
-  });
-
-  const actState = createEmptyActualizationState();
-  actState.trashedDealersById = trashedDb.dealers;
-  actState.trashedTradePointsById = trashedDb.tradePoints;
-
-  const profile = profileForScopeCounters(target.id, role);
-  const counters = computeSidebarScopeCountersFromRealScope(profile, role, realScope, actState, true);
-  const teams = await loadUserTeams(pool, target.id);
+  const catalogCount = Number(catalogCountQ.rows[0]?.n ?? 0);
 
   return {
     success: true,
@@ -226,30 +119,16 @@ export async function buildScopeDebugPayload(
     },
     teams,
     scope: {
-      own_client_codes: clientCodes.ownCodes,
-      team_client_codes: clientCodes.teamCodes,
-      granted_client_codes: clientCodes.grantedCodes,
-      visible_dealer_count: counters.visibleDealerCount,
-      visible_trade_point_count: counters.visibleTradePointCount,
-      trashed_in_scope_count: counters.trashedInScopeCount,
-      catalog_dealer_count: catalogRows.length,
-      visible_codes_count: visInternal.all ? null : (visInternal.codes?.length ?? 0),
-      assignments_active: assignmentsScopeIsActive(assignmentsScope),
+      own_client_codes: meta.ownCodes,
+      team_client_codes: meta.teamCodes,
+      granted_client_codes: meta.grantedCodes,
+      visible_dealer_count: dbScope.totals.active_dealers,
+      visible_trade_point_count: dbScope.totals.active_trade_points,
+      trashed_in_scope_count: dbScope.totals.trashed_dealers,
+      catalog_dealer_count: catalogCount,
+      visible_codes_count: meta.fullCatalog ? null : meta.allCodes.length,
+      assignments_active: meta.allCodes.length > 0 || meta.fullCatalog,
     },
-    explanation: buildExplanation(
-      role,
-      visInternal,
-      {
-        own: clientCodes.ownCodes,
-        team: clientCodes.teamCodes,
-        granted: clientCodes.grantedCodes,
-      },
-      {
-        dealers: counters.visibleDealerCount,
-        tps: counters.visibleTradePointCount,
-        trash: counters.trashedInScopeCount,
-        catalog: catalogRows.length,
-      },
-    ),
+    explanation: buildDbScopeExplanation(role, meta, dbScope.totals),
   };
 }

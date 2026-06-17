@@ -34,6 +34,8 @@ export type BuildSidebarNavRealScopeInput = {
   assignmentsScope: AssignmentsScope | undefined;
   /** Каталог из API или seed (Промт 376). */
   catalogRows?: DealerRow[];
+  /** Промт 384: фильтр каталога по external_key из /api/dealers/my-scope. */
+  dbScopedExternalKeys?: Set<string>;
 };
 
 export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): SidebarNavRealScope {
@@ -71,7 +73,12 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
     return { isRealUser: true, loading, ready: false };
   }
 
-  const releaseDealerRows = getVisibleDealerRows(catalog, visPayload!.all, visPayload!.codes);
+  let releaseDealerRows: DealerRow[];
+  if (input.dbScopedExternalKeys) {
+    releaseDealerRows = catalog.filter((r) => input.dbScopedExternalKeys!.has(r.id));
+  } else {
+    releaseDealerRows = getVisibleDealerRows(catalog, visPayload!.all, visPayload!.codes);
+  }
   const access = role ? mapUserRoleToDealerBaseAccess(role) : ("sales_manager" as DealerBaseAccessRole);
 
   return {
