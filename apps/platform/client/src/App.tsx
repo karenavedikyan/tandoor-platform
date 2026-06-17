@@ -43,6 +43,7 @@ import { resolveSidebarTradePointsCount } from "@/lib/sidebar-trade-points-count
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { useBootstrap } from "@/hooks/use-bootstrap";
+import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -108,6 +109,7 @@ const LazyAdminMigrateMarketingBriefs = lazy(() => import("@/pages/admin-migrate
 const LazyAdminMigrateDealerTp = lazy(() => import("@/pages/admin-migrate-dealer-tp"));
 const LazyAdminMigrateCatalog1c = lazy(() => import("@/pages/admin-migrate-catalog-1c"));
 const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
+const LazyAdminPerformance = lazy(() => import("@/pages/admin-performance"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
 const LazyAdminCountsDiag = lazy(() => import("@/pages/admin-counts-diag"));
 const LazyFeatureInDevelopment = lazy(() => import("@/pages/feature-in-development"));
@@ -197,6 +199,7 @@ const AdminMigrateMarketingBriefsRoute = wrapProfileShell(suspensePage(LazyAdmin
 const AdminMigrateDealerTpRoute = wrapProfileShell(suspensePage(LazyAdminMigrateDealerTp));
 const AdminMigrateCatalog1cRoute = wrapProfileShell(suspensePage(LazyAdminMigrateCatalog1c));
 const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
+const AdminPerformanceRoute = wrapProfileShell(suspensePage(LazyAdminPerformance));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
 const AdminCountsDiagRoute = wrapProfileShell(suspensePage(LazyAdminCountsDiag));
 
@@ -422,6 +425,7 @@ function AuthenticatedShell({
         <Route path="/admin/migrate-catalog-1c" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/migrate" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/sync-health" component={AdminSyncHealthRoute} />
+        <Route path="/admin/performance" component={AdminPerformanceRoute} />
         <Route path="/admin/tp-count-diag" component={AdminTpCountDiagRoute} />
         <Route path="/admin/counts-diag" component={AdminCountsDiagRoute} />
         <Route path="/reset-requests" component={ResetRequestsRoute} />
@@ -478,6 +482,10 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   const [loc] = useLocation();
   const embeddedBitrix24 = useBitrix24EmbeddedFlag();
   const bootstrap = useBootstrap();
+
+  useEffect(() => {
+    initWebVitalsReporter(user.id, user.role);
+  }, [user.id, user.role]);
 
   const path = loc && loc.length > 0 ? loc : "/";
   const normPath = normRoutePath(path);
