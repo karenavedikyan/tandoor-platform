@@ -10,8 +10,8 @@ import {
   resolveCurrentUser,
   sendJson,
   vercelHeaders,
-} from "../../shared/admin/admin-auth.js";
-import { runDealersShadowAudit } from "../../server/api/dealers-shadow-audit-api.js";
+} from "../shared/admin/admin-auth.js";
+import { runDealersShadowAudit } from "../server/api/dealers-shadow-audit-api.js";
 
 const AUDIT_ROLES = new Set(["admin", "category_manager"]);
 
