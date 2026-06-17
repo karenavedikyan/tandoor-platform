@@ -23,6 +23,7 @@ import {
   type ContactMigrationPlan,
 } from "../../shared/admin/contacts-migration.js";
 import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
+import { buildTradePointsOverviewFromDb } from "../../shared/trade-points-overview-db.js";
 
 type UserRole =
   | "director"
@@ -3395,6 +3396,31 @@ async function handleManagerActivityDetail(
   });
 }
 
+async function loadShowcaseStatsForOverview(
+  pool: PoolLike,
+): Promise<Map<string, { withoutPhoto: boolean; notFilled: boolean }>> {
+  const rows = await pool.query<{ state: unknown }>(
+    `SELECT state FROM client_base_actualization_state WHERE scope_key LIKE 'user:%'`,
+  );
+  const map = new Map<string, { withoutPhoto: boolean; notFilled: boolean }>();
+  for (const row of rows.rows) {
+    const s = coerceActualizationState(row.state);
+    const photos = stateRecord(s.tradePointPhotosByTradePointId);
+    for (const [id, raw] of Object.entries(stateRecord(s.manuallyCreatedTradePointsById))) {
+      const tp = stateRecord(raw);
+      const fields = stateRecord(tp.fields);
+      const photoArr = Array.isArray(photos[id]) ? (photos[id] as unknown[]) : [];
+      const photoUrl = stateString(fields.photoUrl);
+      const hasPhotoFlag = fields.hasPhoto === true;
+      const hasPhoto = photoArr.length > 0 || photoUrl.length > 0 || hasPhotoFlag;
+      const address = stateString(fields.address);
+      const city = stateString(fields.city);
+      map.set(id, { withoutPhoto: !hasPhoto, notFilled: !address || !city });
+    }
+  }
+  return map;
+}
+
 async function handleTradePointsOverview(
   req: VercelRequest,
   res: VercelResponse,
@@ -3411,275 +3437,16 @@ async function handleTradePointsOverview(
     return;
   }
 
-  const users = await pool.query<ActualizationStatsUserRow>(
-    `SELECT u.id, u.full_name, u.role, t.id AS team_id, t.name AS team_name, t.rop_user_id, ropu.full_name AS rop_full_name
-       FROM users u
-       LEFT JOIN user_team_memberships m ON m.user_id = u.id
-       LEFT JOIN teams t ON t.id = m.team_id
-       LEFT JOIN users ropu ON ropu.id = t.rop_user_id
-      WHERE u.status = 'active'`,
+  const showcaseMap = await loadShowcaseStatsForOverview(pool);
+  const payload = await buildTradePointsOverviewFromDb(
+    pool,
+    me.id,
+    me.role as import("../../shared/auth.js").UserRole,
+    showcaseMap,
   );
-  const usersById = new Map<string, ActualizationStatsUserRow>();
-  for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
-
-  let allowed = new Set(users.rows.map((u) => u.id));
-  if (me.role === "rop") {
-    allowed = new Set(users.rows.filter((u) => u.rop_user_id === me.id || u.id === me.id).map((u) => u.id));
-    allowed.add(me.id);
-  } else if (me.role === "regional_manager") {
-    const rmCodes = await pool.query<{ client_code: string }>(
-      `SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
-         FROM dealer_overrides
-        WHERE regional_manager_id = $1::uuid
-          AND trashed_at IS NULL`,
-      [me.id],
-    );
-    const rmCodeSet = new Set(rmCodes.rows.map((r) => r.client_code).filter(Boolean));
-    const rmAllowed = new Set<string>();
-    if (rmCodeSet.size > 0) {
-      const ca = await pool.query<{ responsible_user_id: string | null }>(
-        `SELECT DISTINCT responsible_user_id
-           FROM client_assignments
-          WHERE client_code = ANY($1::text[])
-            AND responsible_user_id IS NOT NULL`,
-        [Array.from(rmCodeSet)],
-      );
-      for (const r of ca.rows) {
-        if (r.responsible_user_id && UUID_RE.test(r.responsible_user_id)) rmAllowed.add(r.responsible_user_id);
-      }
-    }
-    allowed = rmAllowed;
-  } else if (me.role === "manager") {
-    allowed = new Set([me.id]);
-  }
-
-  const rows = await pool.query<ActualizationDedupeStateRow>(
-    `SELECT scope_key, user_id, role, state, updated_at
-       FROM client_base_actualization_state
-      WHERE scope_key LIKE 'user:%'`,
-  );
-  const statesByUser = new Map<string, Record<string, unknown>[]>();
-  for (const row of rows.rows) {
-    const scopeId = scopeUserId(String(row.scope_key));
-    const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
-    if (!owner || !allowed.has(owner)) continue;
-    const arr = statesByUser.get(owner) ?? [];
-    arr.push(coerceActualizationState(row.state));
-    statesByUser.set(owner, arr);
-  }
-
-  type PerUser = {
-    userId: string;
-    tradePoints: TradePointAggRow[];
-    clients: TradePointOwnerClient[];
-  };
-  const perUser: PerUser[] = [];
-  const allClientsById = new Map<string, TradePointOwnerClient>();
-  for (const userId of Array.from(allowed)) {
-    const states = statesByUser.get(userId) ?? [];
-    const { tradePoints, clientsById } = collectTradePointsForUser(userId, states);
-    const clients = Array.from(clientsById.values());
-    clientsById.forEach((c, id) => {
-      if (!allClientsById.has(id)) allClientsById.set(id, c);
-    });
-    perUser.push({ userId, tradePoints, clients });
-  }
-
-  const rawAllTradePoints: TradePointAggRow[] = perUser.flatMap((p) => p.tradePoints);
-  const assignmentByClient = await loadActiveClientAssignmentsByClient(pool);
-
-  const winnerByTpId = new Map<string, TradePointAggRow>();
-  const dupCounts = new Map<string, number>();
-  for (const tp of rawAllTradePoints) {
-    dupCounts.set(tp.id, (dupCounts.get(tp.id) ?? 0) + 1);
-    const cur = winnerByTpId.get(tp.id);
-    if (!cur) {
-      winnerByTpId.set(tp.id, tp);
-      continue;
-    }
-    winnerByTpId.set(tp.id, pickTradePointWinner(cur, tp, assignmentByClient, allowed));
-  }
-
-  const allTradePoints: TradePointAggRow[] = Array.from(winnerByTpId.values());
-
-  const totalDupIds = Array.from(dupCounts.values()).filter((n) => n > 1).length;
-  if (totalDupIds > 0) {
-    console.warn("[trade-points-overview] tp.id duplicates resolved", {
-      rawCount: rawAllTradePoints.length,
-      uniqueCount: allTradePoints.length,
-      duplicatedTpIds: totalDupIds,
-    });
-  }
-
-  const winnerUserByTpId = new Map<string, string>();
-  for (const tp of allTradePoints) winnerUserByTpId.set(tp.id, tp.userId);
-
-  const dedupedPerUser = perUser.map((p) => ({
-    ...p,
-    tradePoints: p.tradePoints.filter((tp) => winnerUserByTpId.get(tp.id) === p.userId),
-  }));
-
-  const tpOwnerCity = (tp: TradePointAggRow): string | null => {
-    const owner = allClientsById.get(tp.clientId);
-    return (owner?.city ?? tp.city) || null;
-  };
-
-  const activeTradePoints = allTradePoints.length;
-  const clientsWithTpSet = new Set(allTradePoints.map((tp) => tp.clientId));
-  const citiesSet = new Set<string>();
-  for (const tp of allTradePoints) {
-    const c = tpOwnerCity(tp);
-    if (c) citiesSet.add(c);
-  }
-  const withoutPhoto = allTradePoints.filter((tp) => !tp.hasPhoto).length;
-  const notFilled = allTradePoints.filter((tp) => tp.notFilled).length;
-  const withPhoto = activeTradePoints - withoutPhoto;
-  const totalActiveClients = allClientsById.size;
-  const clientsWithoutTp = Math.max(0, totalActiveClients - clientsWithTpSet.size);
-
-  const structure = {
-    activeTradePoints,
-    clientsWithTp: clientsWithTpSet.size,
-    cities: citiesSet.size,
-    withoutPhoto,
-    notFilled,
-    withPhoto,
-    clientsWithoutTp,
-    totalActiveClients,
-  };
-
-  const NO_CITY_KEY = "__no_city__";
-  const cityAgg = new Map<string, { cityKey: string; cityName: string; tpCount: number; clientIds: Set<string> }>();
-  for (const tp of allTradePoints) {
-    const cityRaw = tpOwnerCity(tp);
-    const cityKey = cityRaw ? cityRaw : NO_CITY_KEY;
-    const cityName = cityRaw ? cityRaw : "Без города";
-    const cur = cityAgg.get(cityKey) ?? { cityKey, cityName, tpCount: 0, clientIds: new Set<string>() };
-    cur.tpCount += 1;
-    cur.clientIds.add(tp.clientId);
-    cityAgg.set(cityKey, cur);
-  }
-  const cities = Array.from(cityAgg.values())
-    .map((c) => ({
-      cityKey: c.cityKey,
-      cityName: c.cityName,
-      tradePointsCount: c.tpCount,
-      clientsCount: c.clientIds.size,
-    }))
-    .sort((a, b) => b.tradePointsCount - a.tradePointsCount)
-    .slice(0, 50);
-
-  const teamAgg = new Map<
-    string,
-    {
-      teamId: string | null;
-      teamName: string;
-      ropUserId: string | null;
-      ropFullName: string;
-      managers: Map<string, { meta: ReturnType<typeof userMeta>; tps: TradePointAggRow[] }>;
-    }
-  >();
-  for (const pu of dedupedPerUser) {
-    const meta = userMeta(pu.userId, usersById);
-    const key = meta.teamId ?? "__no_rop__";
-    let group = teamAgg.get(key);
-    if (!group) {
-      group = {
-        teamId: meta.teamId,
-        teamName: meta.teamName,
-        ropUserId: meta.ropUserId,
-        ropFullName: meta.ropFullName,
-        managers: new Map(),
-      };
-      teamAgg.set(key, group);
-    }
-    group.managers.set(pu.userId, { meta, tps: pu.tradePoints });
-  }
-
-  const managerSummary = (
-    meta: ReturnType<typeof userMeta>,
-    tps: TradePointAggRow[],
-    userId: string,
-  ): {
-    userId: string;
-    fullName: string;
-    tradePoints: number;
-    clientsWithTp: number;
-    cities: number;
-    withoutPhoto: number;
-    notFilled: number;
-  } => {
-    const clientSet = new Set(tps.map((tp) => tp.clientId));
-    const citySet = new Set<string>();
-    for (const tp of tps) {
-      const c = tpOwnerCity(tp);
-      if (c) citySet.add(c);
-    }
-    return {
-      userId,
-      fullName: meta.fullName,
-      tradePoints: tps.length,
-      clientsWithTp: clientSet.size,
-      cities: citySet.size,
-      withoutPhoto: tps.filter((tp) => !tp.hasPhoto).length,
-      notFilled: tps.filter((tp) => tp.notFilled).length,
-    };
-  };
-
-  const ropGroups = Array.from(teamAgg.values()).map((g) => {
-    const managersArr = Array.from(g.managers.entries()).map(([userId, { meta, tps }]) =>
-      managerSummary(meta, tps, userId),
-    );
-    const groupTps = Array.from(g.managers.values()).flatMap((m) => m.tps);
-    const groupClientSet = new Set(groupTps.map((tp) => tp.clientId));
-    const groupCitySet = new Set<string>();
-    for (const tp of groupTps) {
-      const c = tpOwnerCity(tp);
-      if (c) groupCitySet.add(c);
-    }
-    return {
-      teamId: g.teamId,
-      teamName: g.teamName,
-      ropUserId: g.ropUserId,
-      ropFullName: g.ropFullName,
-      managerCount: managersArr.length,
-      tradePoints: groupTps.length,
-      clientsWithTp: groupClientSet.size,
-      cities: groupCitySet.size,
-      withoutPhoto: groupTps.filter((tp) => !tp.hasPhoto).length,
-      notFilled: groupTps.filter((tp) => tp.notFilled).length,
-      managers: managersArr.sort((a, b) => b.tradePoints - a.tradePoints || a.fullName.localeCompare(b.fullName, "ru")),
-    };
-  });
-  ropGroups.sort((a, b) => b.tradePoints - a.tradePoints || a.teamName.localeCompare(b.teamName, "ru"));
-
-  const ropSum = ropGroups.reduce((s, g) => s + g.tradePoints, 0);
-  if (ropSum !== structure.activeTradePoints) {
-    console.warn("[trade-points-overview] active trade-point invariant mismatch", {
-      activeTradePoints: structure.activeTradePoints,
-      ropSum,
-    });
-  }
-
-  const topRopTeams = [...ropGroups]
-    .sort((a, b) => b.tradePoints - a.tradePoints)
-    .slice(0, 5)
-    .map((g) => ({
-      teamId: g.teamId,
-      teamName: g.teamName,
-      ropFullName: g.ropFullName,
-      tradePoints: g.tradePoints,
-      clientsWithTp: g.clientsWithTp,
-    }));
-
-  sendJson(res, 200, {
-    success: true,
-    structure,
-    cities,
-    ropGroups,
-    topRopTeams,
-  });
+  sendJson(res, 200, payload);
 }
+
 
 /** Сумма TP-объектов по всем state-записям пользователя без merge/dedup между записями. */
 function countRawTpObjectsAcrossStates(states: Record<string, unknown>[]): number {

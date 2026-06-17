@@ -276,7 +276,7 @@ export async function computeDbScopeForUser(
 
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
+         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
          COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
        FROM trade_points tp
        INNER JOIN dealers d ON d.id = tp.dealer_id
@@ -369,7 +369,7 @@ export async function computeDbScopeForUser(
   if (activeIds.length > 0) {
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
+         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
          COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
        FROM trade_points tp
        ${TRADE_POINT_OVERRIDE_JOIN}
