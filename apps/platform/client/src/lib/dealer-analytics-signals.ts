@@ -1,4 +1,4 @@
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 import {
   OPERATIONAL_DEFAULT_GLOBAL_FILTERS,
   filterEquipmentRows,
@@ -7,7 +7,7 @@ import {
   type OperationalEquipmentRow,
   type OperationalHardwareConversionRow,
   type OperationalShowcaseProfitabilityRow,
-} from "@/lib/analytics-operational-data";
+} from "./analytics-operational-data.js";
 
 export type DealerAnalyticsSignalKind = "showcase" | "hardware" | "equipment";
 

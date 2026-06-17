@@ -12,8 +12,8 @@
  * Все значения — обезличенные, но в структуре и стиле, идентичных рабочему контуру дилера.
  */
 
-import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
+import { type DealerRow, type DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
 
 export type DealerWarehouseType = "региональный" | "точечный" | "транзитный";
 export type DealerWarehouseStatus = "активен" | "ограничен" | "на инвентаризации";

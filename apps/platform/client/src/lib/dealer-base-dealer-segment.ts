@@ -2,17 +2,17 @@
  * Сегментация клиентов для drill-down (город, менеджер) — единая логика.
  */
 
-import { isClientTopTier, type ClientCategoryId } from "@/lib/client-category";
-import { dealerNeedsAttention } from "@/lib/dealer-base-role-views";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { isClientTopTier, type ClientCategoryId } from "./client-category.js";
+import { dealerNeedsAttention } from "./dealer-base-role-views.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 import {
   getReleaseClients,
   getReleaseClientTypeLabel,
   getReleaseClientTypeTone,
   type ReleaseClient,
   type ReleaseClientTypeTone,
-} from "@/lib/release-client-data";
-import type { ReleaseClientNormalizedType } from "@/lib/release-client-seed.generated";
+} from "./release-client-data.js";
+import type { ReleaseClientNormalizedType } from "./release-client-seed.generated.js";
 
 export type DealerBaseSegmentKey =
   | ReleaseClientNormalizedType

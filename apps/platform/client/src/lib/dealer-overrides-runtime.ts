@@ -3,13 +3,13 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { DEALER_OVERRIDES_HYDRATED_EVENT } from "@/lib/dealer-overrides-api";
-import { TRADE_POINT_OVERRIDES_HYDRATED_EVENT } from "@/lib/trade-point-overrides-api";
-import type { ClientCategoryId } from "@/lib/client-category";
-import { normalizeClientCategory } from "@/lib/client-category";
-import type { ActualizationState, TrashedDealerInfo, TrashedTradePointInfo } from "@/lib/client-base-actualization-state";
-import { computeTrashExpiresAt } from "@/lib/client-base-actualization-state";
-import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
+import { DEALER_OVERRIDES_HYDRATED_EVENT } from "./dealer-overrides-api.js";
+import { TRADE_POINT_OVERRIDES_HYDRATED_EVENT } from "./trade-point-overrides-api.js";
+import type { ClientCategoryId } from "./client-category.js";
+import { normalizeClientCategory } from "./client-category.js";
+import type { ActualizationState, TrashedDealerInfo, TrashedTradePointInfo } from "./client-base-actualization-state.js";
+import { computeTrashExpiresAt } from "./client-base-actualization-state.js";
+import { isPrompt113BlobFallbackActive } from "./dealer-overrides-fallback.js";
 import type { DealerOverrideRow, DealerTrainingRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
 

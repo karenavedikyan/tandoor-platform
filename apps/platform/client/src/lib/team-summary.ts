@@ -1,12 +1,12 @@
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { dealerNeedsAttention, isDealerTop } from "./dealer-base-role-views.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
 import { logRealScopeAudit } from "./real-scope-audit";
-import { getRopOptions } from "@/lib/rop-manager-filters";
-import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import { getTeamLeadForTeam, getTeamManagers, SALES_TEAMS } from "@/lib/sales-control-data";
+import { getRopOptions } from "./rop-manager-filters.js";
+import { managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import { getTeamLeadForTeam, getTeamManagers, SALES_TEAMS } from "./sales-control-data.js";
 
 export type TeamAttentionLevel = "critical" | "warning" | "neutral";
 

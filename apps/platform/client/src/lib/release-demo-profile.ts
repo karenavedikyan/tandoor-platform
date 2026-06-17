@@ -8,15 +8,15 @@ import {
   LEADERS_UUID_TO_PERSONA,
   UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE,
 } from "@shared/admin/actualization-dedupe";
-import type { SalesRole } from "@/lib/sales-control-data";
+import type { SalesRole } from "./sales-control-data.js";
 import {
   getAllSalesManagers,
   getSalesUserById,
   getTeamManagers,
   SALES_USERS,
-} from "@/lib/sales-control-data";
-import { isDemoAuthBypassEnabled } from "@/lib/release-demo-bypass";
-import { userRoleToSalesRole } from "@/lib/role-mapping";
+} from "./sales-control-data.js";
+import { isDemoAuthBypassEnabled } from "./release-demo-bypass.js";
+import { userRoleToSalesRole } from "./role-mapping.js";
 
 export const RELEASE_DEMO_PROFILE_KEY = "tandoor-release-demo-profile-v1";
 export const RELEASE_DEMO_PROFILE_EVENT = "release-demo-profile-changed";

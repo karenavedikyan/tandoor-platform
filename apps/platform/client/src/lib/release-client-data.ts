@@ -1,14 +1,14 @@
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { hasManagerActualization } from "@/lib/client-base-actualization-visibility";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { deriveReleaseClientCategory, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
-import { getSalesUserById } from "@/lib/sales-control-data";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { hasManagerActualization } from "./client-base-actualization-visibility.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import { deriveReleaseClientCategory, getClientCategoryLabel, type ClientCategoryId } from "./client-category.js";
+import { getSalesUserById } from "./sales-control-data.js";
 import {
   RELEASE_CLIENT_ROWS,
   type ReleaseClientNormalizedType,
   type ReleaseClientSeedRow,
-} from "@/lib/release-client-seed.generated";
-import { RELEASE_CLIENT_ROWS_KOTENEVA, type KotenevaTradePointStop } from "@/lib/release-client-seed-koteneva.generated";
+} from "./release-client-seed.generated.js";
+import { RELEASE_CLIENT_ROWS_KOTENEVA, type KotenevaTradePointStop } from "./release-client-seed-koteneva.generated.js";
 
 const kotenevaCodes = new Set(RELEASE_CLIENT_ROWS_KOTENEVA.map((r) => r.code).filter(Boolean));
 /** Основной сид без кодов, переопределённых импортом Котеневой (одна запись на код в объединённом списке). */

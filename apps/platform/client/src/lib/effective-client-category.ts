@@ -2,11 +2,11 @@ import {
   isClientTopTier,
   normalizeClientCategory,
   type ClientCategoryId,
-} from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { getDbClientCategoryOverride } from "@/lib/dealer-overrides-runtime";
-import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
+} from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import { getDbClientCategoryOverride } from "./dealer-overrides-runtime.js";
+import { isPrompt113BlobFallbackActive } from "./dealer-overrides-fallback.js";
 
 export const NEW_CLIENT_GRACE_DAYS = 90;
 

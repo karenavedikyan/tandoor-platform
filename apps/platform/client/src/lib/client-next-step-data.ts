@@ -3,10 +3,10 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import type { SalesRole } from "@/lib/sales-control-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
+import type { SalesRole } from "./sales-control-data.js";
 
 type ProfileSalesRole = SalesRole | "admin";
 

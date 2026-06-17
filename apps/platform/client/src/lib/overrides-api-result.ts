@@ -2,7 +2,7 @@
  * Общие типы Result и журнал ошибок overrides API (Промт 113.1 / 113.2).
  */
 
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+import { pushOverridesTrace } from "./overrides-trace-log.js";
 
 export type OverridesApiOk<T> = { ok: true; data: T };
 export type OverridesApiFail = {

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useLocation } from "wouter";
-import { buildBrowserHashAppHref, readRouteQuery, useRouteSearchParams } from "@/lib/hash-route-utils";
+import { buildBrowserHashAppHref, readRouteQuery, useRouteSearchParams } from "./hash-route-utils.js";
 
 /** Состояние интеграции с Bitrix24 (без секретов в клиенте). */
 export type Bitrix24IntegrationStatus = "inactive" | "backend_ready" | "awaiting_webhook";

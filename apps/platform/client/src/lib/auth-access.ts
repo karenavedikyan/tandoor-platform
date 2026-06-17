@@ -4,10 +4,10 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { SalesRole } from "@/lib/sales-control-data";
+import type { SalesRole } from "./sales-control-data.js";
 import { canCreatePasswordResetLink } from "@shared/auth-rbac";
-import { userRoleToSalesRole } from "@/lib/role-mapping";
-import { userCanManageInvitations, userHas } from "@/lib/auth-rbac";
+import { userRoleToSalesRole } from "./role-mapping.js";
+import { userCanManageInvitations, userHas } from "./auth-rbac.js";
 
 /**
  * Кнопка «Ссылка для смены пароля»: матрица ролей как на сервере, плюс запрет для собственной строки.

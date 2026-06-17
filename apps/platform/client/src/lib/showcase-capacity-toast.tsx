@@ -1,11 +1,11 @@
 import * as React from "react";
-import { ToastAction } from "@/components/ui/toast";
-import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "../components/ui/toast.js";
+import { toast } from "../hooks/use-toast.js";
 import {
   focusShowcaseCapacityField,
   SHOWCASE_TYPE_LABEL_RU,
   type ShowcaseTypeKey,
-} from "@/lib/showcase-type-capacity";
+} from "./showcase-type-capacity.js";
 
 const DEBOUNCE_MS = 2000;
 

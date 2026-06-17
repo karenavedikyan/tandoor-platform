@@ -9,9 +9,9 @@ import {
   type ShowcasePlacementType,
   type ShowcaseMatrixStatus,
   type ShowcaseMatrixTargetKind,
-} from "@/lib/showcase-matrix-api";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
-import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker";
+} from "./showcase-matrix-api.js";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
+import { runOverridesPendingSyncOnce } from "./overrides-pending-sync-worker.js";
 
 export const SHOWCASE_MATRIX_STORE_CACHE_KEY = "tandoor:showcase-matrix:cache-v1";
 export const SHOWCASE_MATRIX_STORE_CHANGED_EVENT = "tandoor:showcase-matrix:changed";

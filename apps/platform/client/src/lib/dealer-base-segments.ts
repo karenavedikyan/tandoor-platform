@@ -3,7 +3,7 @@
  * Источник правды — `DealerRow.clientCategory` (та же модель, что бейдж и фильтры по категории).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type DealerBaseSegmentId = "top150" | "top350" | "top500" | "top500_plus" | "new" | "other";
 

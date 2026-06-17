@@ -4,12 +4,12 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { countDealerBaseHeaderTotal } from "@/lib/dealer-base-working-rows";
-import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "@/lib/dealer-overrides-runtime";
-import { buildTrashScopeFilter, countScopedTrashItems } from "@/lib/dealer-trash-scope";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { countDealerBaseHeaderTotal } from "./dealer-base-working-rows.js";
+import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "./dealer-overrides-runtime.js";
+import { buildTrashScopeFilter, countScopedTrashItems } from "./dealer-trash-scope.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
 
 export type SidebarDealerClientCountContext = {
   /** Как в ClientBaseActualizationProvider: false для маркетолога/аналитика и при выключенной фиче. */

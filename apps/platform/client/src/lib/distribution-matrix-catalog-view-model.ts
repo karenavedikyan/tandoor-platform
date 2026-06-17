@@ -1,13 +1,13 @@
-import type { ClientCategoryId } from "@/lib/client-category";
-import { CLIENT_CATEGORY_META, getClientCategoryMeta } from "@/lib/client-category";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
+import type { ClientCategoryId } from "./client-category.js";
+import { CLIENT_CATEGORY_META, getClientCategoryMeta } from "./client-category.js";
+import type { CatalogProduct } from "./catalog-product-type.js";
 import type {
   ShowcaseMatrixCatalogClientCategory,
   ShowcaseMatrixCatalogScopeKind,
   ShowcaseMatrixCatalogSegment,
   ShowcaseMatrixCatalogStatus,
   ShowcaseMatrixDefDto,
-} from "@/lib/showcase-matrix-catalog-api";
+} from "./showcase-matrix-catalog-api.js";
 
 export type MatrixCatalogListFilters = {
   clientCategory: ClientCategoryId | "all";

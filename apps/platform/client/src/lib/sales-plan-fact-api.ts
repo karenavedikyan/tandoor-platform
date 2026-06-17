@@ -2,13 +2,13 @@
  * Клиентский слой GET/POST /api/sales-plan-fact/state (организационный persisted документ).
  */
 
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   createEmptySalesPlanFactState,
   normalizeSalesPlanFactState,
   type SalesPlanFactPersistedState,
   type SalesPlanFactStorageMode,
-} from "@/lib/sales-plan-fact-types";
+} from "./sales-plan-fact-types.js";
 
 export type SalesPlanFactApiMeta = {
   success: boolean;

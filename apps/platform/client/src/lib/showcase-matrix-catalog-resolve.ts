@@ -9,7 +9,7 @@ import {
   type ShowcaseMatrixDefDto,
   type ShowcaseMatrixDefWithModelsDto,
 } from "@shared/showcase-matrix-catalog-handlers.js";
-import { loadCachedMatrixDef, loadCachedMatrixDefs } from "@/lib/showcase-matrix-catalog-store";
+import { loadCachedMatrixDef, loadCachedMatrixDefs } from "./showcase-matrix-catalog-store.js";
 
 export function todayIsoDateLocal(): string {
   const d = new Date();

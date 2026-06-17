@@ -1,10 +1,10 @@
 import {
   buildDealerBaseRowsWithActualization,
   mergeTradePointsForActualization,
-} from "@/lib/client-base-actualization-data-merge";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+} from "./client-base-actualization-data-merge.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 
 export type MainDashboardScopeMetrics = {
   activeClients: number;

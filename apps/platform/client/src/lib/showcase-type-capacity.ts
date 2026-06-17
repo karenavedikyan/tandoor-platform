@@ -1,12 +1,12 @@
 import type {
   TradePointShowcaseActualization,
   TradePointShowcaseSelectedModel,
-} from "@/lib/client-base-actualization-state";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
+} from "./client-base-actualization-state.js";
+import type { CatalogProduct } from "./catalog-product-type.js";
 import {
   effectivePortalTypeForSelectedModel,
   inferShowcasePortalTypeFromCatalogProduct,
-} from "@/lib/trade-point-showcase-matrix-required";
+} from "./trade-point-showcase-matrix-required.js";
 
 export type ShowcaseTypeKey = "entrance" | "interior" | "hardware";
 

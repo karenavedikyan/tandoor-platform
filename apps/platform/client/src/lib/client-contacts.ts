@@ -3,12 +3,12 @@
  * Чтение: Postgres (кеш) → fallback localStorage. Запись: API.
  */
 
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import { getMergedDealerLegalEntities } from "@/lib/dealer-legal-entities";
-import { canEditDealerLegalEntities } from "@/lib/dealer-legal-entities";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
+import { getMergedDealerLegalEntities } from "./dealer-legal-entities.js";
+import { canEditDealerLegalEntities } from "./dealer-legal-entities.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { userLabelFromProfile } from "./showcase-distribution-data.js";
 import {
   apiCopyContactToScopes,
   apiCreateContact,
@@ -17,8 +17,8 @@ import {
   apiSetPrimaryContact,
   fetchClientContactsList,
   scopeApiFields,
-} from "@/lib/client-contacts-api";
-import { refreshDbContactsForDealer, resolveContactsStateForDealer } from "@/lib/client-contacts-db-cache";
+} from "./client-contacts-api.js";
+import { refreshDbContactsForDealer, resolveContactsStateForDealer } from "./client-contacts-db-cache.js";
 
 export const CLIENT_CONTACTS_STORAGE_KEY = "tandoor-client-contacts-v1";
 export const CLIENT_CONTACTS_EVENT = "tandoor-client-contacts-changed";

@@ -8,15 +8,15 @@ import {
   type DealerCardCommentsState,
   loadDealerCardCommentsState,
   saveDealerCardCommentsState,
-} from "@/lib/dealer-card-comments";
+} from "./dealer-card-comments.js";
 import {
   TRADE_POINT_COMMENTS_EVENT,
   type TradePointComment,
   type TradePointCommentsState,
   loadTradePointCommentsState,
   saveTradePointCommentsState,
-} from "@/lib/trade-point-comments";
-import { bundleItemsToCache, fetchClientComments, type ClientCommentsBundle } from "@/lib/client-comments-api";
+} from "./trade-point-comments.js";
+import { bundleItemsToCache, fetchClientComments, type ClientCommentsBundle } from "./client-comments-api.js";
 
 const cacheByClientId: Record<string, ClientCommentsBundle> = {};
 

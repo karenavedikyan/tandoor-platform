@@ -7,8 +7,8 @@ import {
   type DealerLegalEntity,
   type DealerLegalEntitiesState,
   loadDealerLegalEntitiesState,
-} from "@/lib/dealer-legal-entities";
-import { bundleListFullToState, fetchListFull } from "@/lib/dealer-legal-entities-api";
+} from "./dealer-legal-entities.js";
+import { bundleListFullToState, fetchListFull } from "./dealer-legal-entities-api.js";
 
 const dbCacheByDealerId: Record<string, DealerLegalEntitiesState> = {};
 

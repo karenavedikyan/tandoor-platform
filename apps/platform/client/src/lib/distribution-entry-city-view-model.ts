@@ -2,8 +2,8 @@
  * View-model разреза «Ввод → по городу».
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
 
 export type EntryCityRow = {
   city: string;

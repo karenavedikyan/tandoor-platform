@@ -6,11 +6,11 @@ import {
   CLIENT_CONTACTS_EVENT,
   type ClientContactsState,
   loadClientContactsState,
-} from "@/lib/client-contacts";
+} from "./client-contacts.js";
 import {
   bundleListPayloadToState,
   fetchClientContactsList,
-} from "@/lib/client-contacts-api";
+} from "./client-contacts-api.js";
 
 const dbCacheByDealerId: Record<string, ClientContactsState> = {};
 

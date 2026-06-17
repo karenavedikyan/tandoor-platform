@@ -1,4 +1,4 @@
-import type { MarketingBriefBlockType } from "@/lib/marketing-briefs-api";
+import type { MarketingBriefBlockType } from "./marketing-briefs-api.js";
 
 export type TemplateBlock = {
   type: MarketingBriefBlockType;

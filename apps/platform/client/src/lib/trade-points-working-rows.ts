@@ -2,13 +2,13 @@
  * Рабочие строки ТТ для счётчиков — тот же источник, что `workingRows` / `summary.total` на /trade-points.
  */
 
-import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { createEmptyActualizationState, type ActualizationState } from "./client-base-actualization-state.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   buildTradePointListForActualization,
   type TradePointListRow,
-} from "@/lib/trade-point-list-for-actualization";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+} from "./trade-point-list-for-actualization.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
 
 export type BuildTradePointsWorkingRowsInput = {
   profile: ReleaseDemoProfile;

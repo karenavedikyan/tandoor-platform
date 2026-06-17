@@ -1,10 +1,10 @@
-import { getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
-import { isClientTopTier } from "@/lib/client-category";
-import { dealerNeedsAttention, isDealerTop } from "@/lib/dealer-base-role-views";
-import type { getManagersForRopTeam } from "@/lib/rop-manager-filters";
-import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import { isCoordinateConsistentWithAddress, tryResolveFallbackCoordinate } from "@/lib/client-map-location";
-import { RELEASE_CLIENT_ADDRESS_COORDINATES } from "@/lib/release-client-address-coordinates.generated";
+import { getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
+import { isClientTopTier } from "./client-category.js";
+import { dealerNeedsAttention, isDealerTop } from "./dealer-base-role-views.js";
+import type { getManagersForRopTeam } from "./rop-manager-filters.js";
+import { isRopOrManagerAllFilter, managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import { isCoordinateConsistentWithAddress, tryResolveFallbackCoordinate } from "./client-map-location.js";
+import { RELEASE_CLIENT_ADDRESS_COORDINATES } from "./release-client-address-coordinates.generated.js";
 
 export const CLIENT_MAP_MAX_MARKERS = 1000;
 export const CLIENT_MAP_LIST_LIMIT = 20;
@@ -144,8 +144,8 @@ export function resolveDealerMapCoordinate(dealer: DealerRow): ResolveDealerMapC
   return { source: "missing" };
 }
 
-export { buildLocationFallbackKey, buildLocationFallbackKeys, normalizeSettlementName } from "@/lib/client-map-location";
-export { isCoordinateConsistentWithAddress } from "@/lib/client-map-location";
+export { buildLocationFallbackKey, buildLocationFallbackKeys, normalizeSettlementName } from "./client-map-location.js";
+export { isCoordinateConsistentWithAddress } from "./client-map-location.js";
 
 /** Подпись внутреннего источника (для отладки / не для карты релиза 1). */
 export function coordinateSourceLabel(source: ClientMapCoordinateSource): string {

@@ -2,8 +2,8 @@ import {
   deriveReleaseClientCategory,
   isClientTopTier,
   type ClientCategoryId,
-} from "@/lib/client-category";
-import { getReleaseClients, getReleaseClientTypeLabel, type ReleaseClient } from "@/lib/release-client-data";
+} from "./client-category.js";
+import { getReleaseClients, getReleaseClientTypeLabel, type ReleaseClient } from "./release-client-data.js";
 
 /** @deprecated Используйте ClientCategoryId из client-category.ts */
 export type DealerCategory = ClientCategoryId;

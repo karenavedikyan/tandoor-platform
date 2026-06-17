@@ -4,15 +4,15 @@
 
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
 import type { TradePointOverrideField } from "../../../shared/trade-point-overrides-types";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
-import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
+import { overridesApiPost, type OverridesApiResult } from "./overrides-api-result.js";
 export {
   OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE,
   OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE,
   isForbiddenOutOfScopeResult,
-} from "@/lib/overrides-api-result";
-import { sanitizeTradePointOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
-import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
+} from "./overrides-api-result.js";
+import { sanitizeTradePointOverrideFieldsForApi } from "./overrides-persona-fields.js";
+import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };

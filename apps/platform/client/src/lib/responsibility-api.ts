@@ -2,7 +2,7 @@
  * HTTP API матрицы ответственных (Промт 234).
  */
 
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "./queryClient.js";
 
 export type ResponsibleRole = "manager" | "regional_manager" | "rop";
 

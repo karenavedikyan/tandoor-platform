@@ -2,18 +2,18 @@
  * Ролевые «рабочие режимы» страницы клиентской базы (/#/dealer-base).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { isClientTopTier } from "@/lib/client-category";
-import type { SalesRole, SalesUser } from "@/lib/sales-control-data";
-import { getAllSalesManagers, getSalesUserById, getTeamManagers } from "@/lib/sales-control-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { isClientTopTier } from "./client-category.js";
+import type { SalesRole, SalesUser } from "./sales-control-data.js";
+import { getAllSalesManagers, getSalesUserById, getTeamManagers } from "./sales-control-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
 import { logRealScopeAudit } from "./real-scope-audit";
 import {
   getRopOptions,
   isRopOrManagerAllFilter,
   managerDisplayMatchesCatalogName,
-} from "@/lib/rop-manager-filters";
+} from "./rop-manager-filters.js";
 
 export type DealerBaseAccessRole = "sales_director" | "team_lead" | "sales_manager";
 

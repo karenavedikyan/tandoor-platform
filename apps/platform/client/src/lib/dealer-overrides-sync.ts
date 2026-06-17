@@ -4,51 +4,51 @@
 
 import type { DealerOverrideRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow } from "../../../shared/trade-point-overrides-types";
-import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import type { DealerShipmentDayId } from "./dealer-shipment-days.js";
 import {
   DEALER_PROFILE_OVERRIDES_EVENT,
   DEALER_PROFILE_OVERRIDES_STORAGE_KEY,
   type DealerProfileOverride,
   type DealerProfileOverridesState,
-} from "@/lib/dealer-profile-overrides";
+} from "./dealer-profile-overrides.js";
 import {
   DEALER_UNLOADING_ORDER_EVENT,
   DEALER_UNLOADING_ORDER_STORAGE_KEY,
-} from "@/lib/dealer-unloading-order-storage";
+} from "./dealer-unloading-order-storage.js";
 import {
   DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT,
   DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY,
   type DealerRegionalManagerOverridesState,
-} from "@/lib/dealer-regional-manager-overrides";
+} from "./dealer-regional-manager-overrides.js";
 import {
   DEALER_ROP_OVERRIDES_EVENT,
   DEALER_ROP_OVERRIDES_STORAGE_KEY,
   type DealerRopOverridesState,
-} from "@/lib/dealer-rop-overrides";
+} from "./dealer-rop-overrides.js";
 import {
   TP_ROP_RM_OVERRIDES_EVENT,
   TP_ROP_RM_OVERRIDES_STORAGE_KEY,
   type TradePointRopRmOverridesState,
-} from "@/lib/trade-point-rop-rm-overrides";
+} from "./trade-point-rop-rm-overrides.js";
 import {
   DEALER_TRADE_POINTS_EVENT,
   DEALER_TRADE_POINTS_STORAGE_KEY,
   tradePointKey,
   type DealerTradePointsState,
   type TradePointEditRecord,
-} from "@/lib/dealer-trade-points-overrides";
-import { dealerProductTrainingStorageKey } from "@/lib/training-attention";
-import { tradePointProductTrainingStorageKey } from "@/lib/training-attention";
+} from "./dealer-trade-points-overrides.js";
+import { dealerProductTrainingStorageKey } from "./training-attention.js";
+import { tradePointProductTrainingStorageKey } from "./training-attention.js";
 import {
   fetchDealerOverridesList,
   notifyDealerOverridesHydrated,
-} from "@/lib/dealer-overrides-api";
+} from "./dealer-overrides-api.js";
 import {
   fetchTradePointOverridesList,
   notifyTradePointOverridesHydrated,
-} from "@/lib/trade-point-overrides-api";
-import { applyDealerOverridesRuntime, applyTradePointOverridesRuntime } from "@/lib/dealer-overrides-runtime";
-import { pushOverridesTrace } from "@/lib/overrides-trace-log";
+} from "./trade-point-overrides-api.js";
+import { applyDealerOverridesRuntime, applyTradePointOverridesRuntime } from "./dealer-overrides-runtime.js";
+import { pushOverridesTrace } from "./overrides-trace-log.js";
 
 function profileFromOverride(row: DealerOverrideRow): DealerProfileOverride | null {
   const has =

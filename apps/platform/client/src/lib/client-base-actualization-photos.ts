@@ -2,7 +2,7 @@
  * Фото дилеров и ТТ в ActualizationState (URL + метаданные, без base64).
  */
 
-import type { ActualizationEntityPhoto, ActualizationState } from "@/lib/client-base-actualization-state";
+import type { ActualizationEntityPhoto, ActualizationState } from "./client-base-actualization-state.js";
 
 export function isPhotoActive(p: ActualizationEntityPhoto): boolean {
   return !p.archivedAt?.trim();

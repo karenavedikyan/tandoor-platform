@@ -6,17 +6,17 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { normalizeDealerId } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { normalizeDealerId } from "./dealer-base-mock-data.js";
 import {
   assignmentsScopeIsActive,
   roleScopedDealerRowsForReal,
   type AssignmentsScope,
-} from "@/lib/dealer-base-real-scope";
-import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-import type { TrashedDealerInfo, TrashedTradePointInfo } from "@/lib/client-base-actualization-state";
+} from "./dealer-base-real-scope.js";
+import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
+import type { TrashedDealerInfo, TrashedTradePointInfo } from "./client-base-actualization-state.js";
 
 export type TrashScopeFilter = {
   isDealerInScope: (dealerId: string) => boolean;

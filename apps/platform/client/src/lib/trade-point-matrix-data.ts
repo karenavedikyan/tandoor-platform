@@ -1,7 +1,7 @@
 import type { CatalogProduct } from "./catalog-product-type";
 import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
 import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
-import { isManualActualizationTradePointId } from "@/lib/client-base-actualization-stable-ids";
+import { isManualActualizationTradePointId } from "./client-base-actualization-stable-ids.js";
 
 export type ShowcaseZone = "A" | "B" | "C";
 

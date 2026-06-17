@@ -1,6 +1,6 @@
 import type { UserRole } from "@shared/auth";
-import { canAccessPathForUser } from "@/lib/auth-access";
-import { multiWordSearchMatches } from "@/lib/search/search-query-utils";
+import { canAccessPathForUser } from "./auth-access.js";
+import { multiWordSearchMatches } from "./search/search-query-utils.js";
 
 export type GlobalSearchQuickLink = {
   id: string;

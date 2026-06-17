@@ -1,5 +1,5 @@
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { ClientCategoryId } from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type EntityListFilterOption = { value: string; label: string };
 

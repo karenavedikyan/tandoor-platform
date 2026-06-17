@@ -1,11 +1,11 @@
 /**
  * Видимость клиентов в клиентской базе с учётом актуализации (Промт 349).
  */
-import type { DealerStatus } from "@/lib/dealer-base-mock-data";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { ReleaseClient } from "@/lib/release-client-data";
-import type { TrashedDealerInfo } from "@/lib/client-base-actualization-state";
-import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
+import type { DealerStatus } from "./dealer-base-mock-data.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { ReleaseClient } from "./release-client-data.js";
+import type { TrashedDealerInfo } from "./client-base-actualization-state.js";
+import { getManualDealerDisplayCode } from "./client-base-actualization-stable-ids.js";
 
 function fieldStr(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";

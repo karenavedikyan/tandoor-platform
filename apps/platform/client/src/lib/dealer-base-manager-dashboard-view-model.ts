@@ -2,12 +2,12 @@
  * Дашборд менеджера для карточки в командном обзоре и страницы «штаб менеджера».
  */
 
-import { buildCityModels } from "@/lib/dealer-base-management-view-model";
-import { buildDealerRowSegments, type DealerBaseSegmentRow } from "@/lib/dealer-base-dealer-segment";
-import { dealerNeedsAttention } from "@/lib/dealer-base-role-views";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ManagerHeatLevel } from "@/lib/manager-load-heat";
-import type { ManagerRowModel } from "@/lib/dealer-base-management-view-model";
+import { buildCityModels } from "./dealer-base-management-view-model.js";
+import { buildDealerRowSegments, type DealerBaseSegmentRow } from "./dealer-base-dealer-segment.js";
+import { dealerNeedsAttention } from "./dealer-base-role-views.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ManagerHeatLevel } from "./manager-load-heat.js";
+import type { ManagerRowModel } from "./dealer-base-management-view-model.js";
 
 export type ManagerCitySummary = {
   cityKey: string;

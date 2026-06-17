@@ -3,13 +3,13 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   CLIENT_BASE_ACTUALIZATION_ARCHIVE_TRADE_POINT_ENABLED,
   CLIENT_BASE_ACTUALIZATION_ENABLED,
-} from "@/lib/client-base-actualization-config";
+} from "./client-base-actualization-config.js";
 
 function actualizationUnlocked(): boolean {
   return CLIENT_BASE_ACTUALIZATION_ENABLED;

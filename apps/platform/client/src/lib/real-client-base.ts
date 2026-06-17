@@ -1,5 +1,5 @@
-import { getReleaseClients, type ReleaseClient } from "@/lib/release-client-data";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+import { getReleaseClients, type ReleaseClient } from "./release-client-data.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
 
 export type ClientAssignmentLite = {
   code: string;

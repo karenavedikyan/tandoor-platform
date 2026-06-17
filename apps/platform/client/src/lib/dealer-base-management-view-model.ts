@@ -3,23 +3,23 @@
  * Только рабочие строки без архивных клиентов/ТТ — см. buildDealerBaseRowsWithActualization(..., includeArchivedDealers: false).
  */
 
-import { computeManagementDealerPickerKpis } from "@/lib/client-base-management-scope";
+import { computeManagementDealerPickerKpis } from "./client-base-management-scope.js";
 import {
   CLIENT_CATEGORY_META,
   getClientCategoryLabel,
   isClientTopTier,
   type ClientCategoryId,
-} from "@/lib/client-category";
-import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
-import { getRopOptions, managerDisplayMatchesCatalogName, resolveTeamIdFromRopDisplayName } from "@/lib/rop-manager-filters";
-import { getTeamLeadForTeam, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
-import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from "@/lib/real-org-adapter";
-import { catalogTeamIdForRopUserId } from "@/lib/dealer-base-real-scope";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
+} from "./client-category.js";
+import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
+import { getRopOptions, managerDisplayMatchesCatalogName, resolveTeamIdFromRopDisplayName } from "./rop-manager-filters.js";
+import { getTeamLeadForTeam, getTeamManagers, type SalesUser } from "./sales-control-data.js";
+import { normalizeTerritoryCityName } from "./territory-city-normalize.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
+import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from "./real-org-adapter.js";
+import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 
 export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;

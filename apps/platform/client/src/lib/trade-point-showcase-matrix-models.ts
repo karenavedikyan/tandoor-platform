@@ -1,4 +1,4 @@
-import { TANDOOR_REAL_CATALOG_SEED } from "@/lib/tandoor-real-catalog-seed.generated";
+import { TANDOOR_REAL_CATALOG_SEED } from "./tandoor-real-catalog-seed.generated.js";
 
 export type ShowcaseMatrixModelType = "entrance" | "interior" | "hardware";
 

@@ -1,4 +1,4 @@
-import type { LegalEntityInnLookupResult } from "@/lib/legal-entity-directory";
+import type { LegalEntityInnLookupResult } from "./legal-entity-directory.js";
 
 export type DadataPartyLookupResponse =
   | { success: true; items: LegalEntityInnLookupResult[] }

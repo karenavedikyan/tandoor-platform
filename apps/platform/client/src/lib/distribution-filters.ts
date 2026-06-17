@@ -2,14 +2,14 @@
  * Фильтры раздела «Дистрибуция» (чистый view-model, без сервера).
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import { CLIENT_CATEGORY_META, getClientCategoryLabel } from "@/lib/client-category";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
-import { PLACEMENT_TYPE_LABEL_RU } from "@/lib/showcase-placement-labels";
-import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
-import { statusLabelRu } from "@/lib/trade-point-showcase-matrix-storage";
+import type { ClientCategoryId } from "./client-category.js";
+import { CLIENT_CATEGORY_META, getClientCategoryLabel } from "./client-category.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
+import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus, ShowcasePlacementType } from "./showcase-matrix-api.js";
+import { PLACEMENT_TYPE_LABEL_RU } from "./showcase-placement-labels.js";
+import type { ShowcaseMatrixModelDefinition } from "./trade-point-showcase-matrix-models.js";
+import { statusLabelRu } from "./trade-point-showcase-matrix-storage.js";
 
 export type DistributionPeriodKind = "all" | "last7" | "last30" | "last90" | "custom";
 

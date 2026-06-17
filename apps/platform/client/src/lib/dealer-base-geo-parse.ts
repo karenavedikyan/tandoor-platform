@@ -3,7 +3,7 @@
  * Используется только для фильтров клиентской базы.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type DealerGeoParts = {
   /** Край / область / республика */

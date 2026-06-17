@@ -12,9 +12,9 @@ import {
   type ShowcaseMatrixDefModelInput,
   type ShowcaseMatrixDefUpsertInput,
   type ShowcaseMatrixDefWithModelsDto,
-} from "@/lib/showcase-matrix-catalog-api";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
-import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker";
+} from "./showcase-matrix-catalog-api.js";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
+import { runOverridesPendingSyncOnce } from "./overrides-pending-sync-worker.js";
 
 export const SHOWCASE_MATRIX_CATALOG_CACHE_KEY = "tandoor:showcase-matrix-catalog:cache-v1";
 export const SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT = "tandoor:showcase-matrix-catalog:changed";

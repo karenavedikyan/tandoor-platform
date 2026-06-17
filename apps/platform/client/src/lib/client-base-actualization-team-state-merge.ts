@@ -3,7 +3,7 @@
  * Конфликты по одному id: остаётся запись с более поздним updatedAt / createdAt / archivedAt.
  */
 
-import type { ActualizationEntityPhoto } from "@/lib/client-base-actualization-state";
+import type { ActualizationEntityPhoto } from "./client-base-actualization-state.js";
 import {
   createEmptyActualizationState,
   mergeActualizationState,
@@ -22,16 +22,16 @@ import {
   type TradePointShowcaseActualization,
   type TrashedDealerInfo,
   type TrashedTradePointInfo,
-} from "@/lib/client-base-actualization-state";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+} from "./client-base-actualization-state.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import {
   getTeamLeadForTeam,
   getTeamManagers,
   SALES_USERS,
   getSalesUserById,
-} from "@/lib/sales-control-data";
-import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
-import { isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
+} from "./sales-control-data.js";
+import { getEffectiveTeamLeadTeamId } from "./release-demo-profile.js";
+import { isRopOrManagerAllFilter } from "./rop-manager-filters.js";
 
 function isoMs(iso: string | null | undefined): number {
   if (!iso || typeof iso !== "string") return Number.NEGATIVE_INFINITY;

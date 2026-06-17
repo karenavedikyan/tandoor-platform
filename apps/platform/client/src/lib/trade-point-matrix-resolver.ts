@@ -2,10 +2,10 @@
  * Единый резолвер состава матрицы для торговой точки: только managed-матрица из каталога.
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { ShowcaseMatrixCatalogPriority, ShowcaseMatrixDefModelDto } from "@/lib/showcase-matrix-catalog-api";
-import { resolveActiveMatrixDefFromCache, todayIsoDateLocal } from "@/lib/showcase-matrix-catalog-resolve";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+import type { ClientCategoryId } from "./client-category.js";
+import type { ShowcaseMatrixCatalogPriority, ShowcaseMatrixDefModelDto } from "./showcase-matrix-catalog-api.js";
+import { resolveActiveMatrixDefFromCache, todayIsoDateLocal } from "./showcase-matrix-catalog-resolve.js";
+import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
@@ -13,7 +13,7 @@ import {
   type ShowcaseMatrixPriorityRank,
   type ShowcaseMatrixTypeLabelRu,
   showcaseMatrixTypeLabelRu,
-} from "@/lib/trade-point-showcase-matrix-models";
+} from "./trade-point-showcase-matrix-models.js";
 
 export type ResolveTradePointMatrixParams = {
   dealerId: string;

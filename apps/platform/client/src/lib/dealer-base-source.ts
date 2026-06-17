@@ -4,9 +4,9 @@
  */
 
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { fetchAllDealers } from "@/lib/dealers-trade-points-api";
-import { queryClient } from "@/lib/queryClient";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { fetchAllDealers } from "./dealers-trade-points-api.js";
+import { queryClient } from "./queryClient.js";
 
 export const DEALER_BASE_ROWS_QUERY_KEY = ["dealer-base-rows"] as const;
 

@@ -1,5 +1,5 @@
-import type { SalesPlanFactLine, SalesPlanFactLineStatus, SalesPlanFactPersistedState } from "@/lib/sales-plan-fact-types";
-import { upsertSalesPlanFactLine } from "@/lib/sales-plan-fact-types";
+import type { SalesPlanFactLine, SalesPlanFactLineStatus, SalesPlanFactPersistedState } from "./sales-plan-fact-types.js";
+import { upsertSalesPlanFactLine } from "./sales-plan-fact-types.js";
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();

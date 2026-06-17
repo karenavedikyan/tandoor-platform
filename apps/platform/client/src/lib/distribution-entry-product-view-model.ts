@@ -2,15 +2,15 @@
  * View-model разреза «Ввод → по продукту»: модели матрицы и статус ТТ для выбранной модели.
  */
 
-import type { CatalogListProduct } from "@/components/catalog/ProductListRow";
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
-import type { DistributionSegmentFilter } from "@/lib/distribution-filters";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
+import type { CatalogListProduct } from "../components/catalog/ProductListRow.js";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
+import type { DistributionSegmentFilter } from "./distribution-filters.js";
+import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
+import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
 import {
   type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
+} from "./trade-point-showcase-matrix-models.js";
 
 export type EntryProductTpPresence = "installed" | "recommended" | "not_in_plan";
 

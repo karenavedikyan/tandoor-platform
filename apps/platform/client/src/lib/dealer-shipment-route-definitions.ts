@@ -2,15 +2,15 @@
  * Описания маршрутов по дню отгрузки: LS-кеш + Postgres (Промт 114).
  */
 
-import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import type { DealerShipmentDayId } from "./dealer-shipment-days.js";
 import {
   apiBulkImportShipmentRoutes,
   apiDeleteShipmentRoute,
   apiUpsertShipmentRoute,
   dtoToLocalRoute,
   fetchShipmentRoutesList,
-} from "@/lib/dealer-shipment-routes-api";
-import { enqueuePendingSync, makePendingId } from "@/lib/overrides-pending-sync";
+} from "./dealer-shipment-routes-api.js";
+import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
 
 export const DEALER_SHIPMENT_ROUTE_DEFS_STORAGE_KEY = "tandoor-dealer-shipment-route-defs-v1";
 export const DEALER_SHIPMENT_ROUTE_DEFS_EVENT = "tandoor-dealer-shipment-route-defs-changed";

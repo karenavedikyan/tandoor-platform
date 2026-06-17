@@ -1,14 +1,14 @@
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
-import type { ClientCategoryId } from "@/lib/client-category";
-import { CATALOG_PRODUCTS } from "@/lib/catalog-data";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
-import { inferShowcasePortalTypeFromCatalogProduct } from "@/lib/trade-point-showcase-matrix-required";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-import type { ShowcaseTypeKey } from "@/lib/showcase-type-capacity";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { CatalogProduct } from "./catalog-product-type.js";
+import type { ClientCategoryId } from "./client-category.js";
+import { CATALOG_PRODUCTS } from "./catalog-data.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { buildTradePointListForActualization, type TradePointListRow } from "./trade-point-list-for-actualization.js";
+import { inferShowcasePortalTypeFromCatalogProduct } from "./trade-point-showcase-matrix-required.js";
+import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
+import type { ShowcaseTypeKey } from "./showcase-type-capacity.js";
 import {
   aggregateDistribution,
   computeDistributionForTradePoint,

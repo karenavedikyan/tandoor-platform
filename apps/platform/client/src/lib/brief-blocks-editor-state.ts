@@ -1,4 +1,4 @@
-import type { MarketingBriefBlockRow } from "@/lib/marketing-briefs-api";
+import type { MarketingBriefBlockRow } from "./marketing-briefs-api.js";
 
 /** Слияние ответа listBlocks с локальным стейтом без потери несохранённого payload. */
 export function mergeBlocksFromServer(

@@ -4,10 +4,10 @@
  * программ (спецусловия, Tandoor Club, Тандор Бонус) на странице карточки и в дилерской базе.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { userLabelFromProfile } from "./showcase-distribution-data.js";
 
 export const DEALER_CHARACTERISTICS_STORAGE_KEY = "tandoor-dealer-characteristics-v1";
 export const DEALER_CHARACTERISTICS_EVENT = "tandoor-dealer-characteristics-changed";

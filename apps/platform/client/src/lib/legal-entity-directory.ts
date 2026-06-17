@@ -2,10 +2,10 @@
  * Локальный справочник юрлиц / клиентов для подсказок и поиска по ИНН (без внешних API).
  */
 
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getMergedDealerLegalEntities, loadDealerLegalEntitiesState } from "@/lib/dealer-legal-entities";
-import { getPassportLegalEntities } from "@/lib/dealer-card-release-signals";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getMergedDealerLegalEntities, loadDealerLegalEntitiesState } from "./dealer-legal-entities.js";
+import { getPassportLegalEntities } from "./dealer-card-release-signals.js";
 
 export type LegalEntitySuggestion = {
   id: string;

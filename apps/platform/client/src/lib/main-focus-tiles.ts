@@ -2,17 +2,17 @@
  * Фокус-срезы на главной (РОП / директор): подсчёт активных клиентов и ссылки в клиентскую базу.
  */
 
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import { getDealerBaseSegment, type DealerBaseSegmentId } from "@/lib/dealer-base-segments";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import { getDealerBaseSegment, type DealerBaseSegmentId } from "./dealer-base-segments.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
 import {
   DEALER_CHARACTERISTIC_LABELS,
   getDealerCharacteristicValue,
   type DealerCharacteristicId,
-} from "@/lib/dealer-characteristics";
-import { DEALER_BASE_SEGMENT_LABELS } from "@/lib/dealer-base-segments";
-import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
-import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
+} from "./dealer-characteristics.js";
+import { DEALER_BASE_SEGMENT_LABELS } from "./dealer-base-segments.js";
+import { getClientCategoryLabel, type ClientCategoryId } from "./client-category.js";
+import { buildBrowserHashAppHref } from "./hash-route-utils.js";
 
 /** Категории из URL `category=`, при которых включается фокус-просмотр (ссылки с главной, Промт 58). */
 const FOCUS_VIEW_CATEGORY_IDS: readonly ClientCategoryId[] = [

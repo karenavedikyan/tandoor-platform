@@ -2,9 +2,9 @@
  * Назначение регионального менеджера на карточке дилера (overrides: regional_manager_id + name).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getDealerRegionalManagerDisplay } from "@/lib/dealer-base-mock-data";
-import { saveDealerFields } from "@/lib/use-dealer-field-saver";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getDealerRegionalManagerDisplay } from "./dealer-base-mock-data.js";
+import { saveDealerFields } from "./use-dealer-field-saver.js";
 
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY = "tandoor-dealer-regional-manager-overrides-v1";
 export const DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT = "tandoor-dealer-regional-manager-overrides-changed";

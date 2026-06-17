@@ -9,13 +9,13 @@ import {
   resolveDealerRowTeamId,
   resolveManagementCatalogTeamId,
   teamsForManagementView,
-} from "@/lib/dealer-base-management-view-model";
-import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
-import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import { normalizeTerritoryCityName } from "@/lib/territory-city-normalize";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
+} from "./dealer-base-management-view-model.js";
+import { getDealerManagerDisplay, type DealerRow } from "./dealer-base-mock-data.js";
+import { managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import { normalizeTerritoryCityName } from "./territory-city-normalize.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { TradePointListRow } from "./trade-point-list-for-actualization.js";
 
 export type TradePointsManagementMode = "overview" | "by_rop" | "cities";
 

@@ -4,7 +4,7 @@
  */
 
 import type { UserRole } from "@shared/auth";
-import type { SalesRole } from "@/lib/sales-control-data";
+import type { SalesRole } from "./sales-control-data.js";
 
 export function userRoleToSalesRole(role: UserRole): SalesRole {
   switch (role) {

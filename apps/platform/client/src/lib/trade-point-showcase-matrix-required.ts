@@ -1,11 +1,11 @@
-import type { ClientCategoryId } from "@/lib/client-category";
-import type { CatalogProduct } from "@/lib/catalog-product-type";
-import type { ShowcaseSelectedPortalType, TradePointShowcaseSelectedModel } from "@/lib/client-base-actualization-state";
-import type { ShowcaseMatrixModelDefinition } from "@/lib/trade-point-showcase-matrix-models";
+import type { ClientCategoryId } from "./client-category.js";
+import type { CatalogProduct } from "./catalog-product-type.js";
+import type { ShowcaseSelectedPortalType, TradePointShowcaseSelectedModel } from "./client-base-actualization-state.js";
+import type { ShowcaseMatrixModelDefinition } from "./trade-point-showcase-matrix-models.js";
 import {
   resolveRequiredTradePointMatrixModels,
   type ResolveTradePointMatrixParams,
-} from "@/lib/trade-point-matrix-resolver";
+} from "./trade-point-matrix-resolver.js";
 
 /** Обязательные позиции матрицы для торговой точки (high в активной managed-матрице). */
 export function getRequiredShowcaseMatrixDefinitions(

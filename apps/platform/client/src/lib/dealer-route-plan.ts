@@ -3,14 +3,14 @@
  * Ключ записи клиентов: shipment:{dayId}:{slotId}. Совместимость: старый ключ shipment:{dayId} → slot1.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { DealerShipmentDayId } from "./dealer-shipment-days.js";
 import {
   DEALER_SHIPMENT_DAY_LABELS,
   DEALER_SHIPMENT_DAY_ORDER,
   getDealerShipmentDays,
-} from "@/lib/dealer-shipment-days";
-import { getDealerUnloadingOrder } from "@/lib/dealer-unloading-order-storage";
+} from "./dealer-shipment-days.js";
+import { getDealerUnloadingOrder } from "./dealer-unloading-order-storage.js";
 
 export const DEALER_ROUTE_PLAN_STORAGE_KEY = "tandoor-dealer-route-plan-v1";
 export const DEALER_ROUTE_PLAN_EVENT = "tandoor-dealer-route-plan-changed";

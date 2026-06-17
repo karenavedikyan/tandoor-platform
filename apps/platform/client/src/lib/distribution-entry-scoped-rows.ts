@@ -1,10 +1,10 @@
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { distributionEntryScopedDealerRows } from "@/lib/distribution-entry-dealer-scope";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+import { buildDealerBaseRowsWithActualization } from "./client-base-actualization-data-merge.js";
+import type { ActualizationState } from "./client-base-actualization-state.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { distributionEntryScopedDealerRows } from "./distribution-entry-dealer-scope.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
 
 export function buildDistributionWorkingDealerRows(
   profile: ReleaseDemoProfile,

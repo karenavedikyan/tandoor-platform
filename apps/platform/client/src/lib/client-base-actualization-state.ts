@@ -3,7 +3,7 @@
  * Расширяется в следующих PR формами и UI.
  */
 
-import type { ClientCategoryId } from "@/lib/client-category";
+import type { ClientCategoryId } from "./client-category.js";
 
 export const ACTUALIZATION_STATE_VERSION = 1;
 

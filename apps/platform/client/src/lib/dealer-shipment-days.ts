@@ -3,16 +3,16 @@
  * Не отражает фактическую отгрузку — только подготовку к визиту/работе в этот день.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { getClientNextStepForDealer, loadClientNextStepsStorage } from "@/lib/client-next-step-data";
-import { getDistributionSnapshotForCard } from "@/lib/dealer-card-release-signals";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { getClientNextStepForDealer, loadClientNextStepsStorage } from "./client-next-step-data.js";
+import { getDistributionSnapshotForCard } from "./dealer-card-release-signals.js";
 import {
   getShowcaseKpis,
   getShowcaseTasksForDealerDisplay,
   loadShowcaseStorage,
   mergeDistributionWithOverrides,
-} from "@/lib/showcase-distribution-data";
-import { isDealerHiddenForUser, loadDealerWorkPlanState, type DealerWorkPlanState } from "@/lib/dealer-work-plan";
+} from "./showcase-distribution-data.js";
+import { isDealerHiddenForUser, loadDealerWorkPlanState, type DealerWorkPlanState } from "./dealer-work-plan.js";
 
 export type DealerShipmentDayId =
   | "monday"

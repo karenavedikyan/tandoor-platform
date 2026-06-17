@@ -8,15 +8,15 @@ import {
   enqueuePendingSync,
   makePendingId,
   type PendingSyncKind,
-} from "@/lib/overrides-pending-sync";
-import { overridesApiPost, type OverridesApiResult } from "@/lib/overrides-api-result";
+} from "./overrides-pending-sync.js";
+import { overridesApiPost, type OverridesApiResult } from "./overrides-api-result.js";
 export {
   OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_CODE,
   OVERRIDES_FORBIDDEN_OUT_OF_SCOPE_MESSAGE,
   isForbiddenOutOfScopeResult,
-} from "@/lib/overrides-api-result";
-import { sanitizeDealerOverrideFieldsForApi } from "@/lib/overrides-persona-fields";
-import { traceOverridesStrictCalled } from "@/lib/overrides-strict-trace";
+} from "./overrides-api-result.js";
+import { sanitizeDealerOverrideFieldsForApi } from "./overrides-persona-fields.js";
+import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };

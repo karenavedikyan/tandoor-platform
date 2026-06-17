@@ -2,47 +2,47 @@
  * Однократный бэкфил localStorage → API при логине (Промт 113.1).
  */
 
-import { fetchDealerOverridesList } from "@/lib/dealer-overrides-api";
-import { fetchTradePointOverridesList } from "@/lib/trade-point-overrides-api";
-import { hydrateAllDealerAndTradePointOverrides } from "@/lib/dealer-overrides-sync";
+import { fetchDealerOverridesList } from "./dealer-overrides-api.js";
+import { fetchTradePointOverridesList } from "./trade-point-overrides-api.js";
+import { hydrateAllDealerAndTradePointOverrides } from "./dealer-overrides-sync.js";
 import {
   DEALER_PROFILE_OVERRIDES_STORAGE_KEY,
   type DealerProfileOverride,
   type DealerProfileOverridesState,
-} from "@/lib/dealer-profile-overrides";
-import { DEALER_UNLOADING_ORDER_STORAGE_KEY } from "@/lib/dealer-unloading-order-storage";
+} from "./dealer-profile-overrides.js";
+import { DEALER_UNLOADING_ORDER_STORAGE_KEY } from "./dealer-unloading-order-storage.js";
 import {
   DEALER_REGIONAL_MANAGER_OVERRIDES_STORAGE_KEY,
   type DealerRegionalManagerOverridesState,
-} from "@/lib/dealer-regional-manager-overrides";
+} from "./dealer-regional-manager-overrides.js";
 import {
   DEALER_ROP_OVERRIDES_STORAGE_KEY,
   type DealerRopOverridesState,
-} from "@/lib/dealer-rop-overrides";
+} from "./dealer-rop-overrides.js";
 import {
   DEALER_TRADE_POINTS_STORAGE_KEY,
   tradePointKey,
   type DealerTradePointsState,
-} from "@/lib/dealer-trade-points-overrides";
-import { dealerProductTrainingStorageKey, tradePointProductTrainingStorageKey } from "@/lib/training-attention";
-import { DEALER_TRAINING_FLAGS_KEY, loadDealerTrainingFlagsStorage } from "@/lib/dealer-card-release-signals";
+} from "./dealer-trade-points-overrides.js";
+import { dealerProductTrainingStorageKey, tradePointProductTrainingStorageKey } from "./training-attention.js";
+import { DEALER_TRAINING_FLAGS_KEY, loadDealerTrainingFlagsStorage } from "./dealer-card-release-signals.js";
 import {
   enqueuePendingSync,
   makePendingId,
-} from "@/lib/overrides-pending-sync";
+} from "./overrides-pending-sync.js";
 import type { DealerOverrideRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow } from "../../../shared/trade-point-overrides-types";
-import { buildBulkImportItemsFromLocalState } from "@/lib/dealer-shipment-route-definitions";
+import { buildBulkImportItemsFromLocalState } from "./dealer-shipment-route-definitions.js";
 import {
   apiBulkImportShipmentRoutes,
   fetchShipmentRoutesList,
   SHIPMENT_ROUTES_BACKFILL_DONE_PREFIX,
-} from "@/lib/dealer-shipment-routes-api";
-import { DEALER_CARD_COMMENTS_STORAGE_KEY } from "@/lib/dealer-card-comments";
-import { TRADE_POINT_COMMENTS_STORAGE_KEY } from "@/lib/trade-point-comments";
-import { apiBulkImport, buildBulkImportPayloadFromLocal, fetchClientComments } from "@/lib/client-comments-api";
-import { loadDealerCardCommentsState } from "@/lib/dealer-card-comments";
-import { loadTradePointCommentsState } from "@/lib/trade-point-comments";
+} from "./dealer-shipment-routes-api.js";
+import { DEALER_CARD_COMMENTS_STORAGE_KEY } from "./dealer-card-comments.js";
+import { TRADE_POINT_COMMENTS_STORAGE_KEY } from "./trade-point-comments.js";
+import { apiBulkImport, buildBulkImportPayloadFromLocal, fetchClientComments } from "./client-comments-api.js";
+import { loadDealerCardCommentsState } from "./dealer-card-comments.js";
+import { loadTradePointCommentsState } from "./trade-point-comments.js";
 
 export const CLIENT_COMMENTS_BACKFILL_DONE_PREFIX = "tandoor-client-comments-backfill-done-v1-";
 

@@ -2,7 +2,7 @@
  * Контакты актуализации: выборка, primary, генерация id.
  */
 
-import type { ActualizationState, DealerActualizationContact } from "@/lib/client-base-actualization-state";
+import type { ActualizationState, DealerActualizationContact } from "./client-base-actualization-state.js";
 
 export function listActiveActualizationContactsForDealer(
   act: ActualizationState,

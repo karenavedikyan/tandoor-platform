@@ -2,10 +2,10 @@
  * РОП / менеджер строки клиентской базы для фокус-просмотра (drilldown /main/rop, /main/manager).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { ropUserForManager } from "@/lib/dealer-base-real-scope";
-import { managerDisplayMatchesCatalogName } from "@/lib/rop-manager-filters";
-import type { OrgSnapshot, OrgSnapshotUser } from "@/lib/use-org-snapshot";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { ropUserForManager } from "./dealer-base-real-scope.js";
+import { managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
+import type { OrgSnapshot, OrgSnapshotUser } from "./use-org-snapshot.js";
 import { MGR_TO_UUID_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 
 export type RowHierarchyMeta = {

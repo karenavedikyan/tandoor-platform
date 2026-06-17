@@ -2,11 +2,11 @@
  * Рабочие правки карточки дилера (localStorage, без backend).
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { saveDealerFields } from "@/lib/use-dealer-field-saver";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import { saveDealerFields } from "./use-dealer-field-saver.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { userLabelFromProfile } from "./showcase-distribution-data.js";
 
 export const DEALER_PROFILE_OVERRIDES_STORAGE_KEY = "tandoor-dealer-profile-overrides-v1";
 export const DEALER_PROFILE_OVERRIDES_EVENT = "tandoor-dealer-profile-overrides-changed";

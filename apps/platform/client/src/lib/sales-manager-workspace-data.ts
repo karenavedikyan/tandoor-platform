@@ -1,7 +1,7 @@
-import { CATALOG_PRODUCTS, type CatalogProduct } from "@/lib/catalog-data";
-import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { getAllMatrixTasks, type MatrixTaskWithContext } from "@/lib/trade-point-task-data";
+import { CATALOG_PRODUCTS, type CatalogProduct } from "./catalog-data.js";
+import { type DealerRow, type DealerTradePoint } from "./dealer-base-mock-data.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { getAllMatrixTasks, type MatrixTaskWithContext } from "./trade-point-task-data.js";
 
 /** Имя менеджера продаж для привязки «моих» клиентов в публичном сценарии (Release 1 / Excel). */
 export const SALES_MANAGER_PUBLIC_NAME = "Бойко Екатерина Михайловна";

@@ -1,15 +1,15 @@
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { canEditClientNextStep } from "@/lib/client-next-step-data";
-import { canViewShowcaseDistribution } from "@/lib/showcase-distribution-data";
-import { getEffectiveDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { canEditClientNextStep } from "./client-next-step-data.js";
+import { canViewShowcaseDistribution } from "./showcase-distribution-data.js";
+import { getEffectiveDealerTradePoints } from "./dealer-trade-points-overrides.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
-} from "@/lib/trade-point-showcase-matrix-models";
-import { resolveTradePointMatrixModels } from "@/lib/trade-point-matrix-resolver";
-import { normalizeShowcaseMatrixModelId, setMatrixStatus } from "@/lib/showcase-matrix-store";
-import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
+} from "./trade-point-showcase-matrix-models.js";
+import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+import { normalizeShowcaseMatrixModelId, setMatrixStatus } from "./showcase-matrix-store.js";
+import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 
 export const SHOWCASE_MATRIX_STORAGE_KEY = "tandoor-trade-point-showcase-matrix-v1";
 

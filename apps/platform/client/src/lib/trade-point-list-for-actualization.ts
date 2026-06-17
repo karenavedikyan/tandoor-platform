@@ -5,28 +5,28 @@
  * плюс все ТТ клиентов из `archivedDealersById` (без смешения с рабочим списком).
  */
 
-import type { ActualizationState, TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
-import { normalizeHasShowcase } from "@/lib/client-base-actualization-state";
-import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
-import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
-import { getManualDealerDisplayCode, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
-import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { roleScopedDealerRows, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
-import { assignmentsScopeIsActive, roleScopedDealerRowsForReal, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
-import type { OrgSnapshot } from "@/lib/use-org-snapshot";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import { getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
+import type { ActualizationState, TradePointShowcaseActualization } from "./client-base-actualization-state.js";
+import { normalizeHasShowcase } from "./client-base-actualization-state.js";
+import { computePortalSummary } from "./client-base-actualization-portal-math.js";
+import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
+import { getManualDealerDisplayCode, getTradePointDisplayCodeForActualization } from "./client-base-actualization-stable-ids.js";
+import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
+import { roleScopedDealerRows, type DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { assignmentsScopeIsActive, roleScopedDealerRowsForReal, type AssignmentsScope } from "./dealer-base-real-scope.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import { getClientCategoryLabel, type ClientCategoryId } from "./client-category.js";
 import {
   computeShowcasePortalOverfill,
   getRequiredShowcaseMatrixDefinitions,
   resolveShowcaseMatrixClientCategory,
   type ShowcasePortalCaps,
-} from "@/lib/trade-point-showcase-matrix-required";
-import { getProductById } from "@/lib/catalog-data";
-import type { MergedTradePointEntry } from "@/lib/dealer-trade-points-overrides";
-import { isVirtualDefaultTradePointId } from "@/lib/dealer-trade-points-overrides";
-import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "@/lib/dealer-base-mock-data";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
+} from "./trade-point-showcase-matrix-required.js";
+import { getProductById } from "./catalog-data.js";
+import type { MergedTradePointEntry } from "./dealer-trade-points-overrides.js";
+import { isVirtualDefaultTradePointId } from "./dealer-trade-points-overrides.js";
+import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "./dealer-base-mock-data.js";
+import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "./archive-record-visual.js";
 
 export type TradePointShowcaseBucket =
   | "not_filled"

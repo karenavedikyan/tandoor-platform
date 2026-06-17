@@ -2,8 +2,8 @@
  * HTTP API маршрутов отгрузки (Postgres) — Промт 114.
  */
 
-import type { DealerShipmentDayId } from "@/lib/dealer-shipment-days";
-import type { DealerShipmentRouteDefinition } from "@/lib/dealer-shipment-route-definitions";
+import type { DealerShipmentDayId } from "./dealer-shipment-days.js";
+import type { DealerShipmentRouteDefinition } from "./dealer-shipment-route-definitions.js";
 
 export const SHIPMENT_ROUTES_BACKFILL_DONE_PREFIX = "tandoor-shipment-routes-backfill-done-v1-";
 

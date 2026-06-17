@@ -3,10 +3,10 @@
  * Без backend: данные выводятся из DealerRow и хэша id.
  */
 
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import type { ShowcaseCategoryId } from "@/lib/showcase-distribution-data";
-import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { saveDealerTrainingField } from "@/lib/use-dealer-field-saver";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ShowcaseCategoryId } from "./showcase-distribution-data.js";
+import { isManualActualizationDealerId } from "./client-base-actualization-stable-ids.js";
+import { saveDealerTrainingField } from "./use-dealer-field-saver.js";
 
 export function charSumId(id: string): number {
   let sum = 0;

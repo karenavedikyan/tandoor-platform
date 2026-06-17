@@ -2,20 +2,20 @@
  * Рабочие строки клиентской базы для счётчиков — тот же источник, что `pickerFiltered` / KPI «Всего» на /dealer-base.
  */
 
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
-import { getCatalogDealerRows } from "@/lib/dealer-base-source";
-import { applyDealerBasePickerFilters, type DealerBasePickerArgs } from "@/lib/dealer-base-picker-filters";
+import { buildDealerBaseRowsWithActualization } from "./client-base-actualization-data-merge.js";
+import { createEmptyActualizationState, type ActualizationState } from "./client-base-actualization-state.js";
+import { getCatalogDealerRows } from "./dealer-base-source.js";
+import { applyDealerBasePickerFilters, type DealerBasePickerArgs } from "./dealer-base-picker-filters.js";
 import {
   initialRopManagerForProfile,
   mapSalesRoleToDealerBaseAccess,
   roleScopedDealerRows,
   type DealerBaseAccessRole,
-} from "@/lib/dealer-base-role-views";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
-import { getManagersForRopTeam } from "@/lib/rop-manager-filters";
-import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+} from "./dealer-base-role-views.js";
+import { roleScopedDealerRowsForReal } from "./dealer-base-real-scope.js";
+import { getManagersForRopTeam } from "./rop-manager-filters.js";
+import type { ReleaseDemoProfile } from "./release-demo-profile.js";
+import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
 
 export type BuildDealerBaseWorkingRowsInput = {
   profile: ReleaseDemoProfile;

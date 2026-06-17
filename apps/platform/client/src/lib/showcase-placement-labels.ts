@@ -1,4 +1,4 @@
-import type { ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
+import type { ShowcasePlacementSegment, ShowcasePlacementType } from "./showcase-matrix-api.js";
 
 export const PLACEMENT_TYPE_LABEL_RU: Record<ShowcasePlacementType, string> = {
   portal: "Портал",
