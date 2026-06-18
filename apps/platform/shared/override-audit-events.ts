@@ -11,6 +11,8 @@ export type DealerAuditEventKind =
   | "dealer_purged"
   | "dealer_admin_restored"
   | "dealer_archive_to_trash_bulk"
+  | "dealer_trash_restore_bulk"
+  | "dealer_trash_request_purge_bulk"
   | "field_change";
 
 export type TradePointAuditEventKind =
@@ -20,6 +22,8 @@ export type TradePointAuditEventKind =
   | "tp_purged"
   | "tp_admin_restored"
   | "tp_archive_to_trash_bulk"
+  | "tp_trash_restore_bulk"
+  | "tp_trash_request_purge_bulk"
   | "field_change";
 
 export async function logDealerAuditEvent(

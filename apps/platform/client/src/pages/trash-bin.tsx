@@ -84,6 +84,8 @@ type ConfirmKind =
   | { kind: "request-purge-tp"; tradePointId: string; name: string }
   | { kind: "request-purge-all-dealers"; count: number; ids: string[] }
   | { kind: "request-purge-all-tps"; count: number; ids: string[] }
+  | { kind: "request-purge-selected-dealers"; count: number; ids: string[] }
+  | { kind: "request-purge-selected-tps"; count: number; ids: string[] }
   | { kind: "restore-all-archived-dealers"; count: number }
   | { kind: "restore-all-archived-tps"; count: number }
   | { kind: "move-archived-dealers-to-trash"; count: number; ids: string[] }
@@ -126,6 +128,9 @@ export function TrashBinPage(): ReactElement {
   const [archiveTpSort, setArchiveTpSort] = useState<ArchiveDealerSort>("archived_desc");
   const [archiveTpPage, setArchiveTpPage] = useState(0);
   const [selectedArchivedTpIds, setSelectedArchivedTpIds] = useState<Set<string>>(() => new Set());
+
+  const [selectedTrashDealerIds, setSelectedTrashDealerIds] = useState<Set<string>>(() => new Set());
+  const [selectedTrashTpIds, setSelectedTrashTpIds] = useState<Set<string>>(() => new Set());
 
   const canForceDelete = user?.role === "admin" || user?.role === "director";
   const canRunPurge = user?.role === "admin";
@@ -287,6 +292,37 @@ export function TrashBinPage(): ReactElement {
     });
   }, [filteredArchivedTps]);
 
+  useEffect(() => {
+    setSelectedTrashDealerIds(new Set());
+    setSelectedTrashTpIds(new Set());
+  }, [trashTab]);
+
+  useEffect(() => {
+    const allowed = new Set(trashedDealerDisplays.map((d) => d.info.dealerId));
+    setSelectedTrashDealerIds((prev) => {
+      const n = new Set<string>();
+      let changed = false;
+      prev.forEach((id) => {
+        if (allowed.has(id)) n.add(id);
+        else changed = true;
+      });
+      return changed || n.size !== prev.size ? n : prev;
+    });
+  }, [trashedDealerDisplays]);
+
+  useEffect(() => {
+    const allowed = new Set(trashedTps.map((t) => t.tradePointId));
+    setSelectedTrashTpIds((prev) => {
+      const n = new Set<string>();
+      let changed = false;
+      prev.forEach((id) => {
+        if (allowed.has(id)) n.add(id);
+        else changed = true;
+      });
+      return changed || n.size !== prev.size ? n : prev;
+    });
+  }, [trashedTps]);
+
   const earliestExpires = useMemo(() => {
     const all = [...trashedDealers, ...trashedTps];
     if (all.length === 0) return null;
@@ -434,6 +470,174 @@ export function TrashBinPage(): ReactElement {
       });
       void actx.refresh();
       void teamPlane.refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onBulkRestoreTrashDealers = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("bulk-restore-trash-dealers");
+    try {
+      for (const id of ids) patchDealerTrashRuntime(id, null);
+      const res = await fetch("/api/dealer-overrides/bulk-restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ dealer_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { restored?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.message ?? `HTTP ${res.status}`);
+      }
+      const restored = json.data?.restored ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title: "Восстановлено",
+        description: skipped > 0 ? `Восстановлено: ${restored}, пропущено: ${skipped}` : `Восстановлено: ${restored}`,
+      });
+      setSelectedTrashDealerIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onBulkRequestPurgeTrashDealers = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("bulk-request-purge-trash-dealers");
+    try {
+      for (const id of ids) {
+        patchDealerTrashRuntime(id, null);
+        patchDealerPurgePendingRuntime(id, true);
+      }
+      const res = await fetch("/api/dealer-overrides/bulk-request-purge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ dealer_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { requestedPurge?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.message ?? `HTTP ${res.status}`);
+      }
+      const requestedPurge = json.data?.requestedPurge ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title: "Отправлено на удаление",
+        description:
+          skipped > 0
+            ? `Отправлено: ${requestedPurge}, пропущено: ${skipped}`
+            : `Отправлено на удаление: ${requestedPurge}`,
+      });
+      setSelectedTrashDealerIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onBulkRestoreTrashTps = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("bulk-restore-trash-tps");
+    try {
+      for (const id of ids) patchTradePointTrashRuntime(id, null);
+      const res = await fetch("/api/trade-point-overrides/bulk-restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ trade_point_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { restored?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.message ?? `HTTP ${res.status}`);
+      }
+      const restored = json.data?.restored ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title: "Восстановлено",
+        description: skipped > 0 ? `Восстановлено: ${restored}, пропущено: ${skipped}` : `Восстановлено: ${restored}`,
+      });
+      setSelectedTrashTpIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onBulkRequestPurgeTrashTps = async (ids: string[]): Promise<void> => {
+    if (busy || ids.length === 0) return;
+    setBusy("bulk-request-purge-trash-tps");
+    try {
+      for (const id of ids) {
+        patchTradePointTrashRuntime(id, null);
+        patchTradePointPurgePendingRuntime(id, true);
+      }
+      const res = await fetch("/api/trade-point-overrides/bulk-request-purge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ trade_point_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { requestedPurge?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        throw new Error(json.message ?? `HTTP ${res.status}`);
+      }
+      const requestedPurge = json.data?.requestedPurge ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title: "Отправлено на удаление",
+        description:
+          skipped > 0
+            ? `Отправлено: ${requestedPurge}, пропущено: ${skipped}`
+            : `Отправлено на удаление: ${requestedPurge}`,
+      });
+      setSelectedTrashTpIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
+    } catch (e: unknown) {
+      toast({
+        title: "Ошибка",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
     } finally {
       setBusy(null);
     }
@@ -665,6 +869,40 @@ export function TrashBinPage(): ReactElement {
 
   const selectedDealerCount = selectedArchivedDealerIds.size;
   const selectedTpCount = selectedArchivedTpIds.size;
+  const selectedTrashDealerCount = selectedTrashDealerIds.size;
+  const selectedTrashTpCount = selectedTrashTpIds.size;
+
+  const toggleTrashDealer = (dealerId: string, checked: boolean) => {
+    setSelectedTrashDealerIds((prev) => {
+      const n = new Set(prev);
+      if (checked) n.add(dealerId);
+      else n.delete(dealerId);
+      return n;
+    });
+  };
+
+  const toggleTrashTp = (tradePointId: string, checked: boolean) => {
+    setSelectedTrashTpIds((prev) => {
+      const n = new Set(prev);
+      if (checked) n.add(tradePointId);
+      else n.delete(tradePointId);
+      return n;
+    });
+  };
+
+  const toggleSelectAllTrashDealers = (checked: boolean) => {
+    setSelectedTrashDealerIds(checked ? new Set(trashedDealerDisplays.map((d) => d.info.dealerId)) : new Set());
+  };
+
+  const toggleSelectAllTrashTps = (checked: boolean) => {
+    setSelectedTrashTpIds(checked ? new Set(trashedTps.map((t) => t.tradePointId)) : new Set());
+  };
+
+  const allTrashDealersSelected =
+    trashedDealerDisplays.length > 0 &&
+    trashedDealerDisplays.every((d) => selectedTrashDealerIds.has(d.info.dealerId));
+  const allTrashTpsSelected =
+    trashedTps.length > 0 && trashedTps.every((t) => selectedTrashTpIds.has(t.tradePointId));
 
   const toggleSelectAllFilteredDealers = (checked: boolean) => {
     setSelectedArchivedDealerIds(checked ? new Set(filteredArchivedDealers.map((r) => r.dealerId)) : new Set());
@@ -678,6 +916,104 @@ export function TrashBinPage(): ReactElement {
     filteredArchivedDealers.length > 0 && filteredArchivedDealers.every((r) => selectedArchivedDealerIds.has(r.dealerId));
   const allFilteredTpsSelected =
     filteredArchivedTps.length > 0 && filteredArchivedTps.every((r) => selectedArchivedTpIds.has(r.tradePointId));
+
+  const renderTrashDealerToolbar = () => {
+    if (trashedDealers.length === 0) return null;
+    return (
+      <div className="sticky top-0 z-10 flex flex-col gap-3 rounded-lg border border-border/80 bg-card/95 p-3 backdrop-blur-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={allTrashDealersSelected}
+                onCheckedChange={(v) => toggleSelectAllTrashDealers(v === true)}
+                data-testid="checkbox-trash-dealer-select-all"
+              />
+              Выбрать всех
+            </label>
+            <span className="text-sm text-muted-foreground">Выбрано: {selectedTrashDealerCount}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selectedTrashDealerCount === 0 || Boolean(busy)}
+              onClick={() => void onBulkRestoreTrashDealers(Array.from(selectedTrashDealerIds))}
+              data-testid="button-trash-restore-selected-dealers"
+            >
+              Восстановить выбранных ({selectedTrashDealerCount})
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={selectedTrashDealerCount === 0 || Boolean(busy)}
+              onClick={() =>
+                setConfirmFD({
+                  kind: "request-purge-selected-dealers",
+                  count: selectedTrashDealerCount,
+                  ids: Array.from(selectedTrashDealerIds),
+                })
+              }
+              data-testid="button-trash-request-purge-selected-dealers"
+            >
+              Удалить выбранных навсегда ({selectedTrashDealerCount})
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTrashTpToolbar = () => {
+    if (trashedTps.length === 0) return null;
+    return (
+      <div className="sticky top-0 z-10 flex flex-col gap-3 rounded-lg border border-border/80 bg-card/95 p-3 backdrop-blur-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox
+                checked={allTrashTpsSelected}
+                onCheckedChange={(v) => toggleSelectAllTrashTps(v === true)}
+                data-testid="checkbox-trash-tp-select-all"
+              />
+              Выбрать всех
+            </label>
+            <span className="text-sm text-muted-foreground">Выбрано: {selectedTrashTpCount}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={selectedTrashTpCount === 0 || Boolean(busy)}
+              onClick={() => void onBulkRestoreTrashTps(Array.from(selectedTrashTpIds))}
+              data-testid="button-trash-restore-selected-tps"
+            >
+              Восстановить выбранных ({selectedTrashTpCount})
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={selectedTrashTpCount === 0 || Boolean(busy)}
+              onClick={() =>
+                setConfirmFD({
+                  kind: "request-purge-selected-tps",
+                  count: selectedTrashTpCount,
+                  ids: Array.from(selectedTrashTpIds),
+                })
+              }
+              data-testid="button-trash-request-purge-selected-tps"
+            >
+              Удалить выбранных навсегда ({selectedTrashTpCount})
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderArchivePagination = (
     total: number,
@@ -1065,6 +1401,10 @@ export function TrashBinPage(): ReactElement {
         return `Очистить корзину (${confirmFD.count} клиентов)?`;
       case "request-purge-all-tps":
         return `Очистить корзину (${confirmFD.count} торговых точек)?`;
+      case "request-purge-selected-dealers":
+        return `Удалить выбранных навсегда (${confirmFD.count} клиентов)?`;
+      case "request-purge-selected-tps":
+        return `Удалить выбранных навсегда (${confirmFD.count} торговых точек)?`;
       default:
         return "Подтвердите действие";
     }
@@ -1077,6 +1417,9 @@ export function TrashBinPage(): ReactElement {
         return `Клиент «${confirmFD.name}» будет удалён окончательно. Восстановить будет невозможно.`;
       case "force-delete-tp":
         return `Торговая точка «${confirmFD.name}» будет удалена окончательно. Восстановить будет невозможно.`;
+      case "request-purge-selected-dealers":
+      case "request-purge-selected-tps":
+        return `Будут отправлены на удаление навсегда ${confirmFD.count} записей. Продолжить?`;
       case "request-purge-dealer":
       case "request-purge-tp":
       case "request-purge-all-dealers":
@@ -1117,6 +1460,8 @@ export function TrashBinPage(): ReactElement {
       case "request-purge-tp":
       case "request-purge-all-dealers":
       case "request-purge-all-tps":
+      case "request-purge-selected-dealers":
+      case "request-purge-selected-tps":
         return "Продолжить";
       default:
         return "Подтвердить";
@@ -1131,7 +1476,9 @@ export function TrashBinPage(): ReactElement {
     confirmFD?.kind === "request-purge-dealer" ||
     confirmFD?.kind === "request-purge-tp" ||
     confirmFD?.kind === "request-purge-all-dealers" ||
-    confirmFD?.kind === "request-purge-all-tps";
+    confirmFD?.kind === "request-purge-all-tps" ||
+    confirmFD?.kind === "request-purge-selected-dealers" ||
+    confirmFD?.kind === "request-purge-selected-tps";
 
   if (actx.loading) {
     return <TrashBinSkeleton />;
@@ -1157,6 +1504,12 @@ export function TrashBinPage(): ReactElement {
         break;
       case "request-purge-all-tps":
         void onRequestPurgeAllTps(confirmFD.ids);
+        break;
+      case "request-purge-selected-dealers":
+        void onBulkRequestPurgeTrashDealers(confirmFD.ids);
+        break;
+      case "request-purge-selected-tps":
+        void onBulkRequestPurgeTrashTps(confirmFD.ids);
         break;
       case "restore-all-archived-dealers":
         void onRestoreAllArchivedDealers(confirmFD.count);
@@ -1322,6 +1675,7 @@ export function TrashBinPage(): ReactElement {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="clients" className="mt-3 space-y-2">
+            {renderTrashDealerToolbar()}
             {trashedDealers.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 В корзине пусто. Удалённые клиенты будут появляться здесь.
@@ -1343,6 +1697,11 @@ export function TrashBinPage(): ReactElement {
                     >
                       <CardContent className="flex items-start justify-between gap-2 p-3">
                         <div className="flex min-w-0 items-start gap-3">
+                          <Checkbox
+                            checked={selectedTrashDealerIds.has(t.dealerId)}
+                            onCheckedChange={(v) => toggleTrashDealer(t.dealerId, v === true)}
+                            data-testid={`checkbox-trash-dealer-${t.dealerId}`}
+                          />
                           <ClientAvatar size={36} shape="circle" name={display.name} seed={t.dealerId} />
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-foreground">{display.name}</p>
@@ -1389,6 +1748,7 @@ export function TrashBinPage(): ReactElement {
             )}
           </TabsContent>
           <TabsContent value="tps" className="mt-3 space-y-2">
+            {renderTrashTpToolbar()}
             {trashedTps.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 В корзине пусто. Удалённые торговые точки будут появляться здесь.
@@ -1408,6 +1768,11 @@ export function TrashBinPage(): ReactElement {
                   >
                     <CardContent className="flex items-start justify-between gap-2 p-3">
                       <div className="flex min-w-0 items-start gap-3">
+                        <Checkbox
+                          checked={selectedTrashTpIds.has(t.tradePointId)}
+                          onCheckedChange={(v) => toggleTrashTp(t.tradePointId, v === true)}
+                          data-testid={`checkbox-trash-tp-${t.tradePointId}`}
+                        />
                         <ClientAvatar
                           size={32}
                           shape="circle"
