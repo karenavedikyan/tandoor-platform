@@ -94,7 +94,7 @@ function cleanupPatches() {
   patchedTpIds.length = 0;
 }
 
-// manager: 5 удалённых, 2 в scope → счётчик = 2
+// manager: 5 удалённых в персональном state → счётчик = 5 (Промт 396)
 {
   const inScope = allRows.filter((r) => r.releaseCode?.trim()).slice(0, 2);
   const outScope = allRows.filter((r) => r.releaseCode?.trim()).slice(5, 8);
@@ -110,11 +110,11 @@ function cleanupPatches() {
       ownCodes: inScope.map((r) => r.releaseCode!.trim()),
     }),
   });
-  assert.equal(count, 2, "manager: 2 из 5 в scope");
+  assert.equal(count, 5, "manager: все 5 в персональной корзине");
   cleanupPatches();
 }
 
-// rop: 10 в команде + 3 вне → счётчик = 10
+// rop: персональная корзина — все удалённые, не только команда (Промт 396)
 {
   const teamRows = allRows.filter((r) => r.releaseTeamId === "team-kupiansky" && r.releaseCode?.trim()).slice(0, 10);
   const otherRows = allRows.filter((r) => r.releaseTeamId !== "team-kupiansky" && r.releaseCode?.trim()).slice(0, 3);
@@ -131,7 +131,7 @@ function cleanupPatches() {
       teamCodes: teamRows.map((r) => r.releaseCode!.trim()),
     }),
   });
-  assert.equal(count, 10, "rop: только команда");
+  assert.equal(count, 13, "rop: все удаления в персональной корзине");
   cleanupPatches();
 }
 
