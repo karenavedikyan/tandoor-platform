@@ -75,7 +75,7 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
-import { assignmentsScopeIsActive, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
+import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   buildDayPlanTeamRows,
@@ -1417,6 +1417,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
     enabled: viewingOtherUserScope,
     forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
   });
+  const selfDbScopeQ = useMyScopeFromDB({ enabled: isRealUser && !viewingOtherUserScope });
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
@@ -1439,13 +1440,43 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
   }, [viewingOtherUserScope, targetScopeQ, visPayload]);
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
-    if (!myCodesQ.data) return undefined;
-    return {
-      ownCodes: myCodesQ.data.ownCodes,
-      teamCodes: myCodesQ.data.teamCodes,
-      grantedCodes: myCodesQ.data.grantedCodes,
-    };
-  }, [myCodesQ.data]);
+    return buildAssignmentsScopeFromSources({
+      ownCodes: myCodesQ.data?.ownCodes,
+      teamCodes: myCodesQ.data?.teamCodes,
+      grantedCodes: myCodesQ.data?.grantedCodes,
+      visibleCodes: visPayload?.codes,
+      visibleAll: visPayload?.all,
+    });
+  }, [myCodesQ.data, visPayload]);
+
+  const dbScopedExternalKeys = useMemo((): Set<string> | null => {
+    if (viewingOtherUserScope) {
+      if (!targetScopeQ.ready || targetScopeQ.scope_explanation.full_catalog) return null;
+      return targetScopeQ.activeDealerExternalKeySet;
+    }
+    if (selfDbScopeQ.ready && !selfDbScopeQ.scope_explanation.full_catalog) {
+      return selfDbScopeQ.activeDealerExternalKeySet;
+    }
+    return null;
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    targetScopeQ.scope_explanation.full_catalog,
+    targetScopeQ.activeDealerExternalKeySet,
+    selfDbScopeQ.ready,
+    selfDbScopeQ.scope_explanation.full_catalog,
+    selfDbScopeQ.activeDealerExternalKeySet,
+  ]);
+
+  const releaseDealerRowsForScope = useMemo(() => {
+    if (!effectiveVisPayload) return [];
+    return getVisibleDealerRows(
+      catalogRows,
+      effectiveVisPayload.all,
+      effectiveVisPayload.codes,
+      dbScopedExternalKeys,
+    );
+  }, [catalogRows, effectiveVisPayload, dbScopedExternalKeys]);
 
   const useReal = Boolean(
     isRealUser &&
@@ -1593,7 +1624,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
 
   const mergedRowsForDealerBase = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
+      const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
       const includeArchived = showArchivedDealers;
       const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1624,6 +1655,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
     hydrationVersion,
     catalogRows,
     applyWorkingBaseTrashInvariant,
+    releaseDealerRowsForScope,
   ]);
 
   useEffect(() => {
@@ -1681,7 +1713,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
-      const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
+      const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
       return applyWorkingBaseTrashInvariant(
         buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
@@ -1708,6 +1740,7 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
     profile,
     catalogRows,
     applyWorkingBaseTrashInvariant,
+    releaseDealerRowsForScope,
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
@@ -1942,7 +1975,8 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
   // с mock-строками release_team_id/release_manager_id в dealers.
   const ropTeamForPicker = viewingOtherUserScope ? "all" : ropTeam;
   const ropTeamLabelForPicker = viewingOtherUserScope ? undefined : ropTeamLabel;
-  const managerForPicker = viewingOtherUserScope ? "all" : manager;
+  const managerForPicker =
+    viewingOtherUserScope || (useReal && access === "sales_manager") ? "all" : manager;
 
   const pickerArgs = useMemo(
     () => ({
@@ -2340,6 +2374,38 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
       return Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
     });
   }, [pickerFiltered, manager, managerCatalogForRop]);
+
+  useEffect(() => {
+    try {
+      if (typeof localStorage === "undefined" || localStorage.getItem("tandoor-debug-scope") !== "1") return;
+      if (!useReal || access !== "sales_manager") return;
+      console.debug("[dealer-base-trace]", {
+        stage: "pipeline",
+        releaseDealerRowsForScopeLen: releaseDealerRowsForScope.length,
+        mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
+        scopedRowsLen: scopedRows.length,
+        pickerFilteredLen: pickerFiltered.length,
+        managerScopedRowsLen: managerScopedRows.length,
+        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
+        assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
+        dbScopedExternalKeysSize: dbScopedExternalKeys?.size ?? null,
+        managerForPicker,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [
+    useReal,
+    access,
+    releaseDealerRowsForScope.length,
+    mergedRowsForDealerBase.length,
+    scopedRows.length,
+    pickerFiltered.length,
+    managerScopedRows.length,
+    assignmentsScope,
+    dbScopedExternalKeys,
+    managerForPicker,
+  ]);
 
   const teamTablePickerRows = useMemo(
     () => applyDealerBasePickerFilters(teamRowsForModes, pickerArgs),

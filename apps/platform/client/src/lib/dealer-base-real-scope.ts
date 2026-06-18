@@ -1,5 +1,6 @@
 import type { DealerRow } from "./dealer-base-mock-data.js";
 import type { DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { externalKeyToReleaseCode } from "./dealer-base-source.js";
 import { managerDisplayMatchesCatalogName } from "./rop-manager-filters.js";
 import type { OrgSnapshot, OrgSnapshotUser } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
@@ -31,28 +32,74 @@ export function assignmentsScopeIsActive(scope: AssignmentsScope | undefined): b
   return scope.ownCodes.size > 0 || scope.teamCodes.size > 0 || (scope.grantedCodes?.size ?? 0) > 0;
 }
 
-function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
+/** Нормализация client_code / release_code / external_key для сравнения (Промт 394). */
+export function normalizeAssignmentLookupCode(raw: string): string {
+  return externalKeyToReleaseCode(raw.trim()).toUpperCase();
+}
+
+function normalizedAssignmentCodeSet(codes: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const c of codes) {
+    const n = normalizeAssignmentLookupCode(c);
+    if (n) out.add(n);
+  }
+  return out;
+}
+
+function rowCodeCandidates(r: DealerRow): string[] {
+  const out: string[] = [];
   const catalog = r.releaseCode?.trim();
-  if (catalog && codes.has(catalog)) return true;
+  if (catalog) out.push(catalog);
   const external = r.external1cCode?.trim();
-  if (external && codes.has(external)) return true;
-  return codes.has(r.id);
+  if (external) out.push(external);
+  out.push(r.id);
+  return out;
+}
+
+function rowMatchesNormalizedCodes(r: DealerRow, normalizedCodes: Set<string>): boolean {
+  for (const candidate of rowCodeCandidates(r)) {
+    if (normalizedCodes.has(normalizeAssignmentLookupCode(candidate))) return true;
+  }
+  return false;
+}
+
+function rowMatchesAssignmentCodes(r: DealerRow, codes: Set<string>): boolean {
+  return rowMatchesNormalizedCodes(r, normalizedAssignmentCodeSet(codes));
 }
 
 export function rowInAssignmentsScope(r: DealerRow, scope: AssignmentsScope | undefined): boolean {
   if (!assignmentsScopeIsActive(scope)) return false;
-  const catalog = r.releaseCode?.trim();
-  const external = r.external1cCode?.trim();
-  const granted = scope!.grantedCodes;
-  if (catalog && (scope!.ownCodes.has(catalog) || scope!.teamCodes.has(catalog) || (granted?.has(catalog) ?? false)))
-    return true;
-  if (external && (scope!.ownCodes.has(external) || scope!.teamCodes.has(external) || (granted?.has(external) ?? false)))
-    return true;
-  return (
-    scope!.ownCodes.has(r.id) ||
-    scope!.teamCodes.has(r.id) ||
-    (granted?.has(r.id) ?? false)
-  );
+  const own = normalizedAssignmentCodeSet(scope!.ownCodes);
+  const team = normalizedAssignmentCodeSet(scope!.teamCodes);
+  const granted = scope!.grantedCodes ? normalizedAssignmentCodeSet(scope.grantedCodes) : null;
+  if (rowMatchesNormalizedCodes(r, own) || rowMatchesNormalizedCodes(r, team)) return true;
+  if (granted && rowMatchesNormalizedCodes(r, granted)) return true;
+  return false;
+}
+
+/** Собрать assignmentsScope из my-codes или my-visible-codes (пока my-codes грузится). */
+export function buildAssignmentsScopeFromSources(input: {
+  ownCodes?: Set<string>;
+  teamCodes?: Set<string>;
+  grantedCodes?: Set<string>;
+  visibleCodes?: string[] | null;
+  visibleAll?: boolean;
+}): AssignmentsScope | undefined {
+  if (input.ownCodes || input.teamCodes || input.grantedCodes) {
+    const ownCodes = input.ownCodes ?? new Set<string>();
+    const teamCodes = input.teamCodes ?? new Set<string>();
+    const grantedCodes = input.grantedCodes ?? new Set<string>();
+    const scope: AssignmentsScope = { ownCodes, teamCodes, grantedCodes };
+    if (assignmentsScopeIsActive(scope)) return scope;
+  }
+  if (!input.visibleAll && input.visibleCodes && input.visibleCodes.length > 0) {
+    return {
+      ownCodes: new Set(input.visibleCodes),
+      teamCodes: new Set(),
+      grantedCodes: new Set(),
+    };
+  }
+  return undefined;
 }
 
 function rowsForAssignmentsScope(
