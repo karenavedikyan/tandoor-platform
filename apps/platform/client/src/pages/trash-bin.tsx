@@ -72,7 +72,7 @@ import {
   patchTradePointTrashRuntime,
 } from "@/lib/dealer-overrides-runtime";
 import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
-import { buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
+import { buildArchiveScopeFilter, buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
@@ -142,6 +142,11 @@ export function TrashBinPage(): ReactElement {
     [user?.role, profile, realScope],
   );
 
+  const archiveScopeFilter = useMemo(
+    () => buildArchiveScopeFilter({ role: user?.role ?? null, profile, realScope }),
+    [user?.role, profile, realScope],
+  );
+
   const trashDealersListRef = useRef<HTMLDivElement>(null);
   const trashTpsListRef = useRef<HTMLDivElement>(null);
 
@@ -168,13 +173,21 @@ export function TrashBinPage(): ReactElement {
 
   const archivedDealerDisplays = useMemo(() => {
     const map = stateForRead.archivedDealersById ?? {};
-    return Object.values(map).map((info) => buildArchivedDealerDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId]);
+    return Object.values(map)
+      .filter((d) => archiveScopeFilter.fullView || archiveScopeFilter.isDealerInScope(d.dealerId))
+      .map((info) => buildArchivedDealerDisplay(info, stateForRead, releaseByDealerId));
+  }, [stateForRead, releaseByDealerId, archiveScopeFilter]);
 
   const archivedTpDisplays = useMemo(() => {
     const map = stateForRead.archivedTradePointsById ?? {};
-    return Object.values(map).map((info) => buildArchivedTpDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId]);
+    return Object.values(map)
+      .filter(
+        (t) =>
+          archiveScopeFilter.fullView ||
+          archiveScopeFilter.isTradePointInScope(t.tradePointId, t.dealerId ?? null),
+      )
+      .map((info) => buildArchivedTpDisplay(info, stateForRead, releaseByDealerId));
+  }, [stateForRead, releaseByDealerId, archiveScopeFilter]);
 
   const filteredArchivedDealers = useMemo(() => {
     const q = archiveDealerSearch.trim().toLowerCase();
