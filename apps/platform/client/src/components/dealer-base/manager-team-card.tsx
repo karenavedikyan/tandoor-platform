@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Link } from "wouter";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import {
@@ -39,7 +40,20 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({ manager, ropName,
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate text-sm font-semibold text-foreground">{manager.name}</p>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <p className="truncate text-sm font-semibold text-foreground">{manager.name}</p>
+              {manager.isExternal ? (
+                <Badge
+                  variant="outline"
+                  className="shrink-0 text-[10px] font-normal"
+                  data-testid={`badge-external-manager-${manager.managerId}`}
+                >
+                  {manager.externalTeamName
+                    ? `Команда: ${manager.externalTeamName}`
+                    : "Внешний менеджер"}
+                </Badge>
+              ) : null}
+            </div>
             <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
               <span className="text-base font-semibold text-foreground">{manager.active}</span> · {manager.outlets} ТТ
             </p>

@@ -102,6 +102,8 @@ export type ManagerRowModel = {
   outlets: number;
   topSegmentLabel: string;
   rows: DealerRow[];
+  isExternal: boolean;
+  externalTeamName?: string | null;
 };
 
 export type RopGroupModel = {
@@ -266,6 +268,18 @@ function managerKeyForDealerRow(row: DealerRow): string {
   return display || row.id;
 }
 
+function resolveExternalTeamName(userKey: string, orgSnap?: OrgSnapshot | null): string | null {
+  if (!orgSnap) return null;
+  const catalogKey = catalogManagerIdFromUserRef(userKey);
+  const user =
+    orgSnap.users.find((u) => u.id === userKey) ??
+    orgSnap.users.find((u) => catalogManagerIdFromUserRef(u.id) === catalogKey);
+  const userTeamId = user?.teamId?.trim();
+  if (!userTeamId) return null;
+  const team = orgSnap.teams.find((t) => t.id === userTeamId);
+  return team?.name?.trim() || null;
+}
+
 function buildExternalManagerModelsFromRows(
   teamRows: DealerRow[],
   matchedRowIds: Set<string>,
@@ -298,6 +312,8 @@ function buildExternalManagerModelsFromRows(
       outlets: rows.reduce((a, r) => a + r.outlets, 0),
       topSegmentLabel: bestTopSegmentLabel(rows),
       rows,
+      isExternal: true,
+      externalTeamName: resolveExternalTeamName(key, orgSnap),
     });
   }
   return out.sort((a, b) => a.name.localeCompare(b.name, "ru"));
@@ -331,6 +347,8 @@ export function aggregateManagersForTeam(
       outlets,
       topSegmentLabel: bestTopSegmentLabel(rows),
       rows,
+      isExternal: false,
+      externalTeamName: null,
     };
   });
 
