@@ -105,17 +105,7 @@ export function filterDealerRowsByVisibleCodes(
 ): DealerRow[] {
   if (codes === null) return rows;
   const allow = new Set(codes.map((c) => c.toLowerCase()));
-  return rows.filter((r) => {
-    if (r.releaseCode != null && allow.has(r.releaseCode.toLowerCase())) return true;
-    const idNorm = externalKeyToReleaseCode(r.id).toLowerCase();
-    return idNorm.length > 0 && allow.has(idNorm);
-  });
-}
-
-/** Фильтр каталога по external_key из GET /api/dealers/my-scope (как сайдбар, Промт 394). */
-export function filterDealerRowsByExternalKeys(rows: DealerRow[], keys: Set<string> | null | undefined): DealerRow[] {
-  if (!keys || keys.size === 0) return rows;
-  return rows.filter((r) => keys.has(r.id));
+  return rows.filter((r) => r.releaseCode != null && allow.has(r.releaseCode.toLowerCase()));
 }
 
 /** Видимые строки каталога для real-scope (замена buildDealerRowsFromReleaseClients + codes). */
@@ -123,12 +113,8 @@ export function getVisibleDealerRows(
   catalogRows: DealerRow[],
   all: boolean,
   codes: string[] | null,
-  externalKeys?: Set<string> | null,
 ): DealerRow[] {
   if (all || codes === null) return catalogRows;
-  if (externalKeys && externalKeys.size > 0) {
-    return filterDealerRowsByExternalKeys(catalogRows, externalKeys);
-  }
   return filterDealerRowsByVisibleCodes(catalogRows, codes);
 }
 
