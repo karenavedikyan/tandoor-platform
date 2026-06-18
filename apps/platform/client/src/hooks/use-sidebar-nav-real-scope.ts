@@ -4,6 +4,7 @@ import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { buildSidebarNavRealScope, type SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
+import { buildAssignmentsScopeFromSources } from "@/lib/dealer-base-real-scope";
 
 /**
  * Real-scope для списков /dealer-base, /trade-points (Промт 384).
@@ -37,7 +38,11 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
         visCodesError: dbScope.error,
         orgSnapLoading: orgSnapQ.isLoading,
         visCodesLoading: dbScope.loading,
-        assignmentsScope: undefined,
+        assignmentsScope: dbScope.ready
+          ? buildAssignmentsScopeFromSources({
+              ownCodes: dbScope.activeDealerExternalKeySet,
+            })
+          : undefined,
         catalogRows: catalogQ.data,
         dbScopedExternalKeys: dbScope.ready ? dbScope.activeDealerExternalKeySet : undefined,
       }),

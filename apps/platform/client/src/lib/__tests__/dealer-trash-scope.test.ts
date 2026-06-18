@@ -93,10 +93,98 @@ for (const role of ["admin", "director"] as const) {
   assert.equal(f.fullView, true);
 }
 
-// demo без realScope
+// demo без realScope — не показываем чужое до загрузки scope
 {
   const f = buildTrashScopeFilter({ role: "manager", profile, realScope: undefined });
+  assert.equal(f.fullView, false);
+  assert.ok(!f.isDealerInScope("x", { trashedBy: MGR }));
+}
+
+// fail-safe: scope не готов + manager → пустой фильтр (не fullView)
+{
+  const loadingScope: SidebarNavRealScope = {
+    isRealUser: true,
+    loading: true,
+    ready: false,
+  };
+  const f = buildTrashScopeFilter({
+    role: "manager",
+    profile,
+    realScope: loadingScope,
+    userId: MGR,
+    teamContext: teamCtx,
+  });
+  assert.equal(f.fullView, false);
+  assert.ok(!f.isDealerInScope("x", { trashedBy: MGR }));
+}
+
+// fail-safe: scope не готов + admin → fullView
+{
+  const loadingScope: SidebarNavRealScope = { isRealUser: true, loading: true, ready: false };
+  const f = buildTrashScopeFilter({
+    role: "admin",
+    profile,
+    realScope: loadingScope,
+    userId: "admin-1",
+    teamContext: teamCtx,
+  });
   assert.equal(f.fullView, true);
+}
+
+// impersonate: isRealUser=false, но scope готов — RBAC по trashedBy
+{
+  const impersonateScope: SidebarNavRealScope = {
+    ...scopedRealScope("manager", MGR),
+    isRealUser: false,
+  };
+  const f = buildTrashScopeFilter({
+    role: "manager",
+    profile,
+    realScope: impersonateScope,
+    userId: MGR,
+    teamContext: teamCtx,
+  });
+  assert.equal(f.fullView, false);
+  assert.ok(f.isDealerInScope("x", { trashedBy: MGR }));
+  assert.ok(!f.isDealerInScope("x", { trashedBy: OTHER }));
+}
+
+// archive manager: 0 пересечений ownCodes → 0 видимых (regression 542)
+{
+  const sklyarovCodes = new Set(["MA-SK-001", "MA-SK-002"]);
+  const foreignArchive = {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    releaseDealerRows: [],
+    orgScope: scopedRealScope("manager", MGR).orgScope,
+    assignmentsScope: {
+      ownCodes: sklyarovCodes,
+      teamCodes: new Set<string>(),
+      grantedCodes: new Set<string>(),
+    },
+  } satisfies SidebarNavRealScope;
+  const f = buildArchiveScopeFilter({
+    role: "manager",
+    profile,
+    realScope: foreignArchive,
+    teamContext: teamCtx,
+  });
+  assert.equal(f.fullView, false);
+  assert.ok(!f.isDealerInScope("client-ma-999", { ownerCode: "MA-999", archivedBy: "other-mgr" }));
+  assert.ok(!f.isDealerInScope("client-ma-888", { ownerCode: "MA-888" }));
+  assert.ok(f.isDealerInScope("client-ma-sk-001", { ownerCode: "MA-SK-001" }));
+}
+
+// slug fallback для manager trash
+{
+  const f = buildTrashScopeFilterRbac({
+    role: "manager",
+    userId: "dc958e02-d80e-4615-bb8a-8a46be70daed",
+    userSlug: "mgr-sklyarov-dv",
+    teamContext: { teamId: TEAM, teamMemberIds: [MGR], teamCodes: [] },
+  });
+  assert.ok(f.isDealerInScope("x", { trashedBy: "mgr-sklyarov-dv", trashedBySlug: "mgr-sklyarov-dv" }));
 }
 
 // archive manager by ownerCode
@@ -140,4 +228,4 @@ for (const role of ["admin", "director"] as const) {
   assert.ok(!newRop.isDealerInScope("x", meta));
 }
 
-console.log("dealer-trash-scope: ok (398 RBAC)");
+console.log("dealer-trash-scope: ok (399 fail-safe RBAC)");

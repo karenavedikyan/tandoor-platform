@@ -5,6 +5,8 @@ import type { UserRole } from "./auth.js";
 
 export type TrashMeta = {
   trashedBy?: string | null;
+  /** Исторический slug менеджера (до backfill uuid). */
+  trashedBySlug?: string | null;
   ownerTeamAtTrash?: string | null;
   ownerCode?: string | null;
 };
@@ -69,12 +71,34 @@ function dealerIdMatchesCodes(dealerId: string, codes: Set<string>): boolean {
   return codeInSet(dealerId, codes);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuidLike(value: string): boolean {
+  return UUID_RE.test(value.trim());
+}
+
+function managerTrashMatchesUser(
+  meta: TrashMeta | undefined,
+  userId: string | null,
+  userSlug: string | null | undefined,
+): boolean {
+  if (!userId) return false;
+  if (meta?.trashedBy === userId) return true;
+  const slug = meta?.trashedBySlug?.trim();
+  if (slug && userSlug && slug === userSlug.trim()) return true;
+  if (meta?.trashedBy && !isUuidLike(meta.trashedBy) && userSlug && meta.trashedBy.trim() === userSlug.trim()) {
+    return true;
+  }
+  return false;
+}
+
 export function buildTrashScopeFilterRbac(opts: {
   role: UserRole | null;
   userId: string | null;
+  userSlug?: string | null;
   teamContext: TeamContext;
 }): TrashArchiveScopeFilter {
-  const { role, userId, teamContext } = opts;
+  const { role, userId, userSlug, teamContext } = opts;
 
   if (!role || FULL_VIEW_ROLES.has(role)) {
     return {
@@ -107,14 +131,9 @@ export function buildTrashScopeFilterRbac(opts: {
 
   return {
     fullView: false,
-    isDealerInScope: (_id, meta) => {
-      const m = meta as TrashMeta | undefined;
-      return Boolean(userId && m?.trashedBy === userId);
-    },
-    isTradePointInScope: (_tpId, _dealerId, meta) => {
-      const m = meta as TrashMeta | undefined;
-      return Boolean(userId && m?.trashedBy === userId);
-    },
+    isDealerInScope: (_id, meta) => managerTrashMatchesUser(meta as TrashMeta | undefined, userId, userSlug),
+    isTradePointInScope: (_tpId, _dealerId, meta) =>
+      managerTrashMatchesUser(meta as TrashMeta | undefined, userId, userSlug),
   };
 }
 
@@ -180,8 +199,12 @@ export function trashMetaFromRecord(rec: {
   ownerCode?: string | null;
   snapshot?: { dealerCode?: string | null };
 }): TrashMeta {
+  const trashedBy = rec.trashedBy ?? null;
+  const trashedBySlug =
+    trashedBy && !isUuidLike(trashedBy) ? trashedBy.trim() : null;
   return {
-    trashedBy: rec.trashedBy ?? null,
+    trashedBy,
+    trashedBySlug,
     ownerTeamAtTrash: rec.ownerTeamAtTrash ?? null,
     ownerCode: rec.ownerCode ?? rec.snapshot?.dealerCode ?? null,
   };
