@@ -7,6 +7,7 @@ import type { PoolLike } from "./admin/admin-auth.js";
 import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
 import { mapTradePointOverrideRow, type TradePointOverrideRow } from "./trade-point-overrides-types.js";
 import { logTradePointAuditEvent } from "./override-audit-events.js";
+import { removeTradePointFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { roleHasPermission } from "./auth-rbac.js";
 import type { UserRole } from "./auth.js";
@@ -92,6 +93,7 @@ export async function handleTradePointOverridesRequestPurge(
     );
     await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_purge_requested", userId: me.id });
   });
+  await removeTradePointFromActualizationTrashBlob(pool, me.id, tpId);
   sendJson(res, 200, { success: true, data: { override: await fetchOverride(pool, tpId) } });
 }
 

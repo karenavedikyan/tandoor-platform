@@ -7,6 +7,7 @@ import type { PoolLike } from "./admin/admin-auth.js";
 import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
 import { mapDealerOverrideRow, type DealerOverrideRow } from "./dealer-overrides-types.js";
 import { logDealerAuditEvent } from "./override-audit-events.js";
+import { removeDealerFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { roleHasPermission } from "./auth-rbac.js";
 import type { UserRole } from "./auth.js";
@@ -119,6 +120,8 @@ export async function handleDealerOverridesRequestPurge(
       });
     },
   );
+
+  await removeDealerFromActualizationTrashBlob(pool, me.id, dealerId);
 
   const override = await fetchOverride(pool, dealerId);
   sendJson(res, 200, { success: true, data: { override } });

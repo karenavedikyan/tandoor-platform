@@ -87,7 +87,7 @@ export function useTradePointOverride(tpId: string | undefined): TradePointOverr
 }
 
 function trashedDealerFromOverride(row: DealerOverrideRow): TrashedDealerInfo | null {
-  if (!row.trashed_at) return null;
+  if (!row.trashed_at || row.purge_requested_at) return null;
   const trashedAt = row.trashed_at;
   return {
     dealerId: row.dealer_id,
@@ -107,7 +107,7 @@ function trashedDealerFromOverride(row: DealerOverrideRow): TrashedDealerInfo | 
 }
 
 function trashedTpFromOverride(row: TradePointOverrideRow): TrashedTradePointInfo | null {
-  if (!row.trashed_at || !row.dealer_id) return null;
+  if (!row.trashed_at || row.purge_requested_at || !row.dealer_id) return null;
   const trashedAt = row.trashed_at;
   return {
     tradePointId: row.tp_id,

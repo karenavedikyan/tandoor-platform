@@ -17,6 +17,14 @@ import {
 const DIRECTOR_ID = "11111111-1111-1111-1111-111111111111";
 const MANAGER_ID = "44444444-4444-4444-4444-444444444444";
 const DEALER_ID = "d-trash-1";
+const MANAGER_SCOPE_KEY = `user:${MANAGER_ID}`;
+
+type ActualizationBlobRow = {
+  scope_key: string;
+  user_id: string;
+  state: Record<string, unknown>;
+  version: number;
+};
 
 type OverrideRow = {
   dealer_id: string;
@@ -61,9 +69,21 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
   pool: PoolLike;
   overrides: Map<string, OverrideRow>;
   events: AuditEvent[];
+  actualizationBlobs: Map<string, ActualizationBlobRow>;
 } {
   const overrides = new Map<string, OverrideRow>();
   const events: AuditEvent[] = [];
+  const actualizationBlobs = new Map<string, ActualizationBlobRow>();
+  actualizationBlobs.set(MANAGER_SCOPE_KEY, {
+    scope_key: MANAGER_SCOPE_KEY,
+    user_id: MANAGER_ID,
+    state: {
+      trashedDealersById: {
+        [DEALER_ID]: { dealerId: DEALER_ID, trashedBy: MANAGER_ID },
+      },
+    },
+    version: 1,
+  });
   const row: OverrideRow = {
     dealer_id: DEALER_ID,
     trashed_at: new Date().toISOString(),
@@ -124,6 +144,21 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
       if (s.includes("INSERT INTO overrides_write_errors")) {
         return { rows: [] };
       }
+      if (s.includes("UPDATE client_base_actualization_state") && s.includes("trashedDealersById")) {
+        const scopeKey = params?.[0] as string;
+        const dealerId = params?.[1] as string;
+        const userId = params?.[2] as string;
+        for (const [key, row] of actualizationBlobs) {
+          if (key !== scopeKey && row.user_id !== userId) continue;
+          const trash = (row.state.trashedDealersById ?? {}) as Record<string, unknown>;
+          const nextTrash = { ...trash };
+          delete nextTrash[dealerId];
+          row.state = { ...row.state, trashedDealersById: nextTrash };
+          row.version += 1;
+          actualizationBlobs.set(key, row);
+        }
+        return { rows: [] };
+      }
       if (s.includes("FROM client_assignments") && s.includes("responsible_user_id")) {
         const uid = params?.[0] as string;
         return { rows: uid === MANAGER_ID ? [{ c: "1" }] : [{ c: "0" }] };
@@ -162,11 +197,24 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
     },
   };
 
-  return { pool, overrides, events };
+  return { pool, overrides, events, actualizationBlobs };
 }
 
 const manager = { id: MANAGER_ID, role: "manager", status: "active" };
 const director = { id: DIRECTOR_ID, role: "director", status: "active" };
+
+// request-purge removes dealer from actualization blob trash map
+{
+  const { pool, overrides, actualizationBlobs } = createTrashPool();
+  const r = mockRes();
+  await handleDealerOverridesRequestPurge(mockReq({ dealer_id: DEALER_ID }), r.res, pool, manager);
+  assert.equal(r.getStatus(), 200);
+  assert.ok(overrides.get(DEALER_ID)?.purge_requested_at);
+  const blob = actualizationBlobs.get(MANAGER_SCOPE_KEY);
+  assert.ok(blob);
+  const trash = (blob!.state.trashedDealersById ?? {}) as Record<string, unknown>;
+  assert.equal(trash[DEALER_ID], undefined);
+}
 
 // happy path: request-purge → purge → admin-restore → restore to active
 {

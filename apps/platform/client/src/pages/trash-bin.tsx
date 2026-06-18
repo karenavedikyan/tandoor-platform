@@ -377,6 +377,7 @@ export function TrashBinPage(): ReactElement {
     setBusy(null);
     if (r.ok) {
       toast({ title: "Запись отправлена админу на окончательное удаление" });
+      void actx.refresh();
       void teamPlane.refresh();
     } else {
       toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
@@ -391,6 +392,7 @@ export function TrashBinPage(): ReactElement {
     setBusy(null);
     if (r.ok) {
       toast({ title: "Запись отправлена админу на окончательное удаление" });
+      void actx.refresh();
       void teamPlane.refresh();
     } else {
       toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
@@ -411,6 +413,7 @@ export function TrashBinPage(): ReactElement {
         title: ok === ids.length ? "Корзина очищена" : `Отправлено ${ok} из ${ids.length}`,
         variant: ok === 0 ? "destructive" : undefined,
       });
+      void actx.refresh();
       void teamPlane.refresh();
     } finally {
       setBusy(null);
@@ -431,6 +434,7 @@ export function TrashBinPage(): ReactElement {
         title: ok === ids.length ? "Корзина очищена" : `Отправлено ${ok} из ${ids.length}`,
         variant: ok === 0 ? "destructive" : undefined,
       });
+      void actx.refresh();
       void teamPlane.refresh();
     } finally {
       setBusy(null);
