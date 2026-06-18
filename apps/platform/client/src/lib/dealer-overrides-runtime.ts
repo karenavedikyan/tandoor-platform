@@ -20,6 +20,8 @@ let runtimeVersion = 0;
 
 const dbTrashedDealersById: Record<string, TrashedDealerInfo> = {};
 const dbTrashedTradePointsById: Record<string, TrashedTradePointInfo> = {};
+const dbPurgePendingDealersById: Record<string, true> = {};
+const dbPurgePendingTradePointsById: Record<string, true> = {};
 const dbClientCategoryByDealerId: Record<string, ClientCategoryId> = {};
 const dbDealerTrainingById: Record<string, DealerTrainingRow> = {};
 const dbTpTrainingById: Record<string, TradePointTrainingRow> = {};
@@ -133,6 +135,7 @@ export function applyDealerOverridesRuntime(
   manual: { dealer_id: string; payload: Record<string, unknown> }[],
 ): void {
   for (const k of Object.keys(dbTrashedDealersById)) delete dbTrashedDealersById[k];
+  for (const k of Object.keys(dbPurgePendingDealersById)) delete dbPurgePendingDealersById[k];
   for (const k of Object.keys(dbClientCategoryByDealerId)) delete dbClientCategoryByDealerId[k];
   for (const k of Object.keys(dbDealerTrainingById)) delete dbDealerTrainingById[k];
   for (const k of Object.keys(dbManualDealerPayloads)) delete dbManualDealerPayloads[k];
@@ -141,6 +144,9 @@ export function applyDealerOverridesRuntime(
 
   for (const row of overrides) {
     dbDealerOverridesById[row.dealer_id] = row;
+    if (row.purge_requested_at && !row.purged_at) {
+      dbPurgePendingDealersById[row.dealer_id] = true;
+    }
     const tr = trashedDealerFromOverride(row);
     if (tr) dbTrashedDealersById[row.dealer_id] = tr;
     if (row.client_category) {
@@ -162,11 +168,15 @@ export function applyTradePointOverridesRuntime(
   training: TradePointTrainingRow[],
 ): void {
   for (const k of Object.keys(dbTrashedTradePointsById)) delete dbTrashedTradePointsById[k];
+  for (const k of Object.keys(dbPurgePendingTradePointsById)) delete dbPurgePendingTradePointsById[k];
   for (const k of Object.keys(dbTpTrainingById)) delete dbTpTrainingById[k];
   for (const k of Object.keys(dbTradePointOverridesById)) delete dbTradePointOverridesById[k];
 
   for (const row of overrides) {
     dbTradePointOverridesById[row.tp_id] = row;
+    if (row.purge_requested_at && !row.purged_at) {
+      dbPurgePendingTradePointsById[row.tp_id] = true;
+    }
     const tr = trashedTpFromOverride(row);
     if (tr) dbTrashedTradePointsById[row.tp_id] = tr;
   }
@@ -184,6 +194,18 @@ export function patchDealerTrashRuntime(dealerId: string, info: TrashedDealerInf
 export function patchTradePointTrashRuntime(tpId: string, info: TrashedTradePointInfo | null): void {
   if (info) dbTrashedTradePointsById[tpId] = info;
   else delete dbTrashedTradePointsById[tpId];
+  bumpRuntimeVersion();
+}
+
+export function patchDealerPurgePendingRuntime(dealerId: string, pending: boolean): void {
+  if (pending) dbPurgePendingDealersById[dealerId] = true;
+  else delete dbPurgePendingDealersById[dealerId];
+  bumpRuntimeVersion();
+}
+
+export function patchTradePointPurgePendingRuntime(tpId: string, pending: boolean): void {
+  if (pending) dbPurgePendingTradePointsById[tpId] = true;
+  else delete dbPurgePendingTradePointsById[tpId];
   bumpRuntimeVersion();
 }
 
@@ -242,13 +264,19 @@ export function getDbManualDealerPayload(dealerId: string): Record<string, unkno
 }
 
 export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationState | null): boolean {
+  const ov = dbDealerOverridesById[dealerId];
+  if (ov?.purged_at) return false;
   if (dbTrashedDealersById[dealerId]) return true;
+  if (dbPurgePendingDealersById[dealerId]) return true;
   if (act?.trashedDealersById?.[dealerId]) return true;
   return false;
 }
 
 export function isTradePointTrashedInRuntime(tpId: string, act?: ActualizationState | null): boolean {
+  const ov = dbTradePointOverridesById[tpId];
+  if (ov?.purged_at) return false;
   if (dbTrashedTradePointsById[tpId]) return true;
+  if (dbPurgePendingTradePointsById[tpId]) return true;
   if (act?.trashedTradePointsById?.[tpId]) return true;
   return false;
 }
@@ -285,9 +313,17 @@ export function getRuntimeTrashedTradePointsById(): Readonly<Record<string, Tras
 
 /** Промт 397: jsonb-state (client_bulk_delete) + dealer_overrides.trashed_at. */
 export function mergeTrashedDealersForUi(act: ActualizationState): Record<string, TrashedDealerInfo> {
-  return mergeTrashedRecordMaps(act?.trashedDealersById ?? {}, dbTrashedDealersById);
+  const merged = mergeTrashedRecordMaps(act?.trashedDealersById ?? {}, dbTrashedDealersById);
+  for (const id of Object.keys(merged)) {
+    if (dbPurgePendingDealersById[id]) delete merged[id];
+  }
+  return merged;
 }
 
 export function mergeTrashedTradePointsForUi(act: ActualizationState): Record<string, TrashedTradePointInfo> {
-  return mergeTrashedRecordMaps(act?.trashedTradePointsById ?? {}, dbTrashedTradePointsById);
+  const merged = mergeTrashedRecordMaps(act?.trashedTradePointsById ?? {}, dbTrashedTradePointsById);
+  for (const id of Object.keys(merged)) {
+    if (dbPurgePendingTradePointsById[id]) delete merged[id];
+  }
+  return merged;
 }
