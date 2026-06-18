@@ -145,15 +145,6 @@ vi.mock("@/components/navigation/back-nav", () => ({
   BackNav: () => null,
 }));
 
-vi.mock("@/lib/dealer-overrides-runtime", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/dealer-overrides-runtime")>();
-  return {
-    ...actual,
-    mergeTrashedDealersForUi: (act: ActualizationState) => ({ ...(act.trashedDealersById ?? {}) }),
-    mergeTrashedTradePointsForUi: (act: ActualizationState) => ({ ...(act.trashedTradePointsById ?? {}) }),
-  };
-});
-
 import { TrashBinPage } from "../trash-bin";
 
 describe("trash-bin-shows-personal-deletions", () => {
