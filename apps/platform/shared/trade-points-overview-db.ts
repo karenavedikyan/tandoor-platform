@@ -53,6 +53,13 @@ export type TradePointsOverviewDbRopGroup = {
   managers: TradePointsOverviewDbManager[];
 };
 
+export type TradePointsOverviewViewerTeam = {
+  teamId: string;
+  teamName: string;
+  ropUserId: string | null;
+  ropFullName: string;
+};
+
 export type TradePointsOverviewDbPayload = {
   success: true;
   structure: TradePointsOverviewDbStructure;
@@ -94,6 +101,7 @@ export async function buildTradePointsOverviewFromDb(
   userId: string,
   role: UserRole,
   showcaseStatsByTpId?: Map<string, { withoutPhoto: boolean; notFilled: boolean }>,
+  viewerTeam?: TradePointsOverviewViewerTeam | null,
 ): Promise<TradePointsOverviewDbPayload> {
   const scope = await computeDbScopeForUser(pool, userId, role);
   const sqlRows =
@@ -168,26 +176,46 @@ export async function buildTradePointsOverviewFromDb(
     }
   >();
 
-  for (const tp of tradePoints) {
-    const tk = teamKey(tp);
-    let group = teamAgg.get(tk);
-    if (!group) {
-      group = {
-        teamId: tp.teamId,
-        teamName: tp.teamName?.trim() || "Без команды",
-        ropUserId: tp.ropUserId,
-        ropFullName: tp.ropFullName?.trim() || "—",
-        managers: new Map(),
-      };
-      teamAgg.set(tk, group);
+  if (viewerTeam) {
+    const single = {
+      teamId: viewerTeam.teamId,
+      teamName: viewerTeam.teamName,
+      ropUserId: viewerTeam.ropUserId,
+      ropFullName: viewerTeam.ropFullName,
+      managers: new Map<string, { fullName: string; tps: ScopedTradePointDto[] }>(),
+    };
+    teamAgg.set(viewerTeam.teamId, single);
+    for (const tp of tradePoints) {
+      const mk = managerKey(tp);
+      let mgr = single.managers.get(mk);
+      if (!mgr) {
+        mgr = { fullName: managerName(tp), tps: [] };
+        single.managers.set(mk, mgr);
+      }
+      mgr.tps.push(tp);
     }
-    const mk = managerKey(tp);
-    let mgr = group.managers.get(mk);
-    if (!mgr) {
-      mgr = { fullName: managerName(tp), tps: [] };
-      group.managers.set(mk, mgr);
+  } else {
+    for (const tp of tradePoints) {
+      const tk = teamKey(tp);
+      let group = teamAgg.get(tk);
+      if (!group) {
+        group = {
+          teamId: tp.teamId,
+          teamName: tp.teamName?.trim() || "Без команды",
+          ropUserId: tp.ropUserId,
+          ropFullName: tp.ropFullName?.trim() || "—",
+          managers: new Map(),
+        };
+        teamAgg.set(tk, group);
+      }
+      const mk = managerKey(tp);
+      let mgr = group.managers.get(mk);
+      if (!mgr) {
+        mgr = { fullName: managerName(tp), tps: [] };
+        group.managers.set(mk, mgr);
+      }
+      mgr.tps.push(tp);
     }
-    mgr.tps.push(tp);
   }
 
   const ropGroups: TradePointsOverviewDbRopGroup[] = Array.from(teamAgg.values()).map((g) => {
