@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
+import { useTeamContext } from "@/hooks/use-team-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
@@ -71,7 +72,7 @@ import {
   patchDealerTrashRuntime,
   patchTradePointTrashRuntime,
 } from "@/lib/dealer-overrides-runtime";
-import { buildArchiveScopeFilter, buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
+import { buildArchiveScopeFilter, buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo, archiveMetaFromDealerInfo, archiveMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
@@ -107,6 +108,7 @@ export function TrashBinPage(): ReactElement {
   const { user } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
   const realScope = useSidebarNavRealScope(true);
+  const { teamContext } = useTeamContext(true);
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const [trashTab, setTrashTab] = useState<"clients" | "tps">("clients");
@@ -137,13 +139,26 @@ export function TrashBinPage(): ReactElement {
   );
 
   const trashScopeFilter = useMemo(
-    () => buildTrashScopeFilter({ role: user?.role ?? null, profile, realScope }),
-    [user?.role, profile, realScope],
+    () =>
+      buildTrashScopeFilter({
+        role: user?.role ?? null,
+        profile,
+        realScope,
+        userId: user?.id ?? null,
+        teamContext,
+      }),
+    [user?.role, user?.id, profile, realScope, teamContext],
   );
 
   const archiveScopeFilter = useMemo(
-    () => buildArchiveScopeFilter({ role: user?.role ?? null, profile, realScope }),
-    [user?.role, profile, realScope],
+    () =>
+      buildArchiveScopeFilter({
+        role: user?.role ?? null,
+        profile,
+        realScope,
+        teamContext,
+      }),
+    [user?.role, profile, realScope, teamContext],
   );
 
   const trashDealersListRef = useRef<HTMLDivElement>(null);
@@ -154,7 +169,11 @@ export function TrashBinPage(): ReactElement {
   const trashedDealerDisplays = useMemo(() => {
     const map = mergeTrashedDealersForUi(stateForRead);
     return Object.values(map)
-      .filter((d) => trashScopeFilter.fullView || trashScopeFilter.isDealerInScope(d.dealerId))
+      .filter(
+        (d) =>
+          trashScopeFilter.fullView ||
+          trashScopeFilter.isDealerInScope(d.dealerId, trashMetaFromDealerInfo(d)),
+      )
       .map((info) => resolveTrashedDealerDisplayName(info, stateForRead, releaseByDealerId))
       .sort((a, b) => compareByExpires(a.info, b.info));
   }, [stateForRead, trashScopeFilter, releaseByDealerId]);
@@ -165,7 +184,11 @@ export function TrashBinPage(): ReactElement {
       .filter(
         (t) =>
           trashScopeFilter.fullView ||
-          trashScopeFilter.isTradePointInScope(t.tradePointId, t.dealerId ?? null),
+          trashScopeFilter.isTradePointInScope(
+            t.tradePointId,
+            t.dealerId ?? null,
+            trashMetaFromTradePointInfo(t),
+          ),
       )
       .sort(compareByExpires);
   }, [stateForRead, trashScopeFilter]);
@@ -173,7 +196,11 @@ export function TrashBinPage(): ReactElement {
   const archivedDealerDisplays = useMemo(() => {
     const map = stateForRead.archivedDealersById ?? {};
     return Object.values(map)
-      .filter((d) => archiveScopeFilter.fullView || archiveScopeFilter.isDealerInScope(d.dealerId))
+      .filter(
+        (d) =>
+          archiveScopeFilter.fullView ||
+          archiveScopeFilter.isDealerInScope(d.dealerId, archiveMetaFromDealerInfo(d)),
+      )
       .map((info) => buildArchivedDealerDisplay(info, stateForRead, releaseByDealerId));
   }, [stateForRead, releaseByDealerId, archiveScopeFilter]);
 
@@ -183,7 +210,11 @@ export function TrashBinPage(): ReactElement {
       .filter(
         (t) =>
           archiveScopeFilter.fullView ||
-          archiveScopeFilter.isTradePointInScope(t.tradePointId, t.dealerId ?? null),
+          archiveScopeFilter.isTradePointInScope(
+            t.tradePointId,
+            t.dealerId ?? null,
+            archiveMetaFromTradePointInfo(t),
+          ),
       )
       .map((info) => buildArchivedTpDisplay(info, stateForRead, releaseByDealerId));
   }, [stateForRead, releaseByDealerId, archiveScopeFilter]);

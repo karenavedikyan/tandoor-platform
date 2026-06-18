@@ -3387,22 +3387,24 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const handleRowTrashDealer = useCallback(
     async (row: DealerRow) => {
-      const uid = profile.personaUserId;
-      const uname = userLabelFromProfile(profile);
-      const rowById = new Map<string, DealerRow>([[row.id, row]]);
-      const r = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          trashedDealersById: {
-            ...prev.trashedDealersById,
-            [row.id]: makeTrashedDealerInfo({
-              dealerId: row.id,
-              by: { userId: uid, userName: uname },
-              snapshot: buildDealerTrashSnapshotForId(row.id, rowById),
-              source: "client_bulk_delete",
-            }),
-          },
-        }),
-      );
+    const uid = me?.id ?? profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const ownerTeamAtTrash = snap?.me.teamId ?? null;
+    const rowById = new Map<string, DealerRow>([[row.id, row]]);
+    const r = await actx.persist((prev) =>
+      mergeActualizationState(prev, {
+        trashedDealersById: {
+          ...prev.trashedDealersById,
+          [row.id]: makeTrashedDealerInfo({
+            dealerId: row.id,
+            by: { userId: uid, userName: uname },
+            snapshot: buildDealerTrashSnapshotForId(row.id, rowById),
+            source: "client_bulk_delete",
+            ownerTeamAtTrash,
+          }),
+        },
+      }),
+    );
       if (r.success) {
         toast({
           title: "Клиент перемещён в Корзину",
@@ -3412,7 +3414,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         toast({ title: "Не удалось сохранить", variant: "destructive" });
       }
     },
-    [actx, profile, buildDealerTrashSnapshotForId],
+    [actx, profile, buildDealerTrashSnapshotForId, me?.id, snap?.me.teamId],
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
@@ -3474,8 +3476,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       return;
     }
     setBulkArchiveDealerBusy(true);
-    const uid = profile.personaUserId;
+    const uid = me?.id ?? profile.personaUserId;
     const uname = userLabelFromProfile(profile);
+    const ownerTeamAtTrash = snap?.me.teamId ?? null;
     const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
     const r = await actx.persist((prev) => {
       const nextTrash = { ...prev.trashedDealersById };
@@ -3485,6 +3488,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           by: { userId: uid, userName: uname },
           snapshot: buildDealerTrashSnapshotForId(id, rowById),
           source: "client_bulk_delete",
+          ownerTeamAtTrash,
         });
       }
       return mergeActualizationState(prev, { trashedDealersById: nextTrash });

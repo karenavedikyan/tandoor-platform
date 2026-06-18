@@ -1,7 +1,7 @@
 /**
  * Запуск: `npm run test:sidebar-trash-count` из каталога apps/platform.
  *
- * Промт 336: счётчик корзины в сайдбаре учитывает тот же scope, что рабочая база.
+ * Промт 398: счётчик корзины учитывает RBAC (trashedBy / team).
  */
 import assert from "node:assert/strict";
 import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
@@ -20,45 +20,49 @@ import type { UserRole } from "@shared/auth";
 
 const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
 const act = createEmptyActualizationState();
+const MGR = "mgr-test-uuid";
+const TEAM = "team-kupiansky";
 
 const futureIso = new Date(Date.now() + 86400000).toISOString();
 
-function trashInfo(dealerId: string) {
+function trashInfo(dealerId: string, trashedBy: string) {
   return {
     dealerId,
     trashedAt: new Date().toISOString(),
-    trashedBy: "u1",
+    trashedBy,
     trashedByName: "Тест",
     expiresAt: futureIso,
-    source: "test",
+    source: "test" as const,
+    ownerTeamAtTrash: TEAM,
     snapshot: {},
   };
 }
 
-function trashTpInfo(tradePointId: string, dealerId: string) {
+function trashTpInfo(tradePointId: string, dealerId: string, trashedBy: string) {
   return {
     tradePointId,
     dealerId,
     trashedAt: new Date().toISOString(),
-    trashedBy: "u1",
+    trashedBy,
     trashedByName: "Тест",
     expiresAt: futureIso,
-    source: "test",
+    source: "test" as const,
+    ownerTeamAtTrash: TEAM,
     snapshot: {},
   };
 }
 
 function realScopeForRole(
   role: UserRole,
+  meId: string,
   assignments: { ownCodes?: string[]; teamCodes?: string[] },
 ): SidebarNavRealScope {
   const access = mapUserRoleToDealerBaseAccess(role);
-  const meId = "mgr-test-uuid";
   const snap = {
-    me: { id: meId, role, fullName: "Менеджер", teamId: null },
+    me: { id: meId, role, fullName: "Менеджер", teamId: TEAM },
     visibility: { all: false, clientCodes: [], teamIds: [], visibleUserIds: [] },
-    teams: [],
-    users: [{ id: meId, role, fullName: "Менеджер", teamId: null }],
+    teams: [{ id: TEAM, name: "Команда", ropUserId: "rop-uuid", ropName: "РОП" }],
+    users: [{ id: meId, role, fullName: "Менеджер", teamId: TEAM }],
   } as unknown as OrgSnapshot;
   return {
     isRealUser: true,
@@ -77,13 +81,13 @@ function realScopeForRole(
 const patchedDealerIds: string[] = [];
 const patchedTpIds: string[] = [];
 
-function patchTrashDealer(dealerId: string) {
-  patchDealerTrashRuntime(dealerId, trashInfo(dealerId));
+function patchTrashDealer(dealerId: string, trashedBy: string) {
+  patchDealerTrashRuntime(dealerId, trashInfo(dealerId, trashedBy));
   patchedDealerIds.push(dealerId);
 }
 
-function patchTrashTp(tpId: string, dealerId: string) {
-  patchTradePointTrashRuntime(tpId, trashTpInfo(tpId, dealerId));
+function patchTrashTp(tpId: string, dealerId: string, trashedBy: string) {
+  patchTradePointTrashRuntime(tpId, trashTpInfo(tpId, dealerId, trashedBy));
   patchedTpIds.push(tpId);
 }
 
@@ -94,60 +98,70 @@ function cleanupPatches() {
   patchedTpIds.length = 0;
 }
 
-// manager: 5 удалённых в персональном state → счётчик = 5 (Промт 396)
+// manager: только свои удаления (2 own + 0 foreign)
 {
   const inScope = allRows.filter((r) => r.releaseCode?.trim()).slice(0, 2);
   const outScope = allRows.filter((r) => r.releaseCode?.trim()).slice(5, 8);
-  for (const r of [...inScope, ...outScope]) patchTrashDealer(r.id);
+  for (const r of inScope) patchTrashDealer(r.id, MGR);
+  for (const r of outScope) patchTrashDealer(r.id, "other-mgr");
 
-  const profile = { role: "sales_manager", personaUserId: "mgr-boyko-em" } as ReleaseDemoProfile;
+  const profile = { role: "sales_manager", personaUserId: MGR } as ReleaseDemoProfile;
   const count = resolveSidebarTrashCount(profile, {
     enabled: true,
     loading: false,
     state: act,
     role: "manager",
-    realScope: realScopeForRole("manager", {
+    userId: MGR,
+    teamContext: { teamId: TEAM, teamMemberIds: [MGR], teamCodes: [] },
+    realScope: realScopeForRole("manager", MGR, {
       ownCodes: inScope.map((r) => r.releaseCode!.trim()),
     }),
   });
-  assert.equal(count, 5, "manager: все 5 в персональной корзине");
+  assert.equal(count, 2, "manager: только свои 2 удаления");
   cleanupPatches();
 }
 
-// rop: персональная корзина — все удалённые, не только команда (Промт 396)
+// rop: все удаления команды (10 + 3)
 {
   const teamRows = allRows.filter((r) => r.releaseTeamId === "team-kupiansky" && r.releaseCode?.trim()).slice(0, 10);
   const otherRows = allRows.filter((r) => r.releaseTeamId !== "team-kupiansky" && r.releaseCode?.trim()).slice(0, 3);
   assert.ok(teamRows.length === 10 && otherRows.length === 3, "rop fixture");
-  for (const r of [...teamRows, ...otherRows]) patchTrashDealer(r.id);
+  for (const r of [...teamRows, ...otherRows]) patchTrashDealer(r.id, MGR);
 
-  const profile = { role: "team_lead", personaUserId: "user-tl-kupiansky" } as ReleaseDemoProfile;
+  const profile = { role: "team_lead", personaUserId: "rop-uuid" } as ReleaseDemoProfile;
   const count = resolveSidebarTrashCount(profile, {
     enabled: true,
     loading: false,
     state: act,
     role: "rop",
-    realScope: realScopeForRole("rop", {
+    userId: "rop-uuid",
+    teamContext: {
+      teamId: TEAM,
+      teamMemberIds: [MGR, "rop-uuid"],
+      teamCodes: teamRows.map((r) => r.releaseCode!.trim()),
+    },
+    realScope: realScopeForRole("rop", "rop-uuid", {
       teamCodes: teamRows.map((r) => r.releaseCode!.trim()),
     }),
   });
-  assert.equal(count, 13, "rop: все удаления в персональной корзине");
+  assert.equal(count, 13, "rop: все удаления команды по trashedBy");
   cleanupPatches();
 }
 
-// admin: full view — все удалённые
+// admin: full view
 {
   const ids = allRows.slice(0, 5).map((r) => r.id);
-  for (const id of ids) patchTrashDealer(id);
-  patchTrashTp("tp-scope-test-1", ids[0]);
+  for (const id of ids) patchTrashDealer(id, MGR);
+  patchTrashTp("tp-scope-test-1", ids[0], MGR);
 
-  const profile = { role: "sales_director", personaUserId: "user-dir-goncharenko" } as ReleaseDemoProfile;
+  const profile = { role: "sales_director", personaUserId: "user-dir" } as ReleaseDemoProfile;
   const count = resolveSidebarTrashCount(profile, {
     enabled: true,
     loading: false,
     state: act,
     role: "admin",
-    realScope: realScopeForRole("admin", {}),
+    userId: "admin-uuid",
+    realScope: realScopeForRole("admin", "admin-uuid", {}),
   });
   assert.equal(count, 6, "admin: full view (5 дилеров + 1 ТТ)");
   cleanupPatches();

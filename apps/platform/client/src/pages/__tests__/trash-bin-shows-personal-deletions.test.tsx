@@ -20,7 +20,7 @@ function trashDealer(id: string) {
   return {
     dealerId: id,
     trashedAt: nowIso,
-    trashedBy: "mgr-test",
+    trashedBy: "mgr-test-uuid",
     trashedByName: "Менеджер",
     expiresAt: futureIso,
     source: "client_bulk_delete" as const,
@@ -95,6 +95,13 @@ vi.mock("@/hooks/use-release-demo-profile", () => ({
 
 vi.mock("@/hooks/use-sidebar-nav-real-scope", () => ({
   useSidebarNavRealScope: () => realScope,
+}));
+
+vi.mock("@/hooks/use-team-context", () => ({
+  useTeamContext: () => ({
+    teamContext: { teamId: null, teamMemberIds: ["mgr-test-uuid"], teamCodes: ["MA-001", "MA-002", "MA-003"] },
+    loading: false,
+  }),
 }));
 
 vi.mock("@/context/client-base-actualization-context", () => ({
