@@ -23,7 +23,7 @@ import {
   type ContactMigrationPlan,
 } from "../../shared/admin/contacts-migration.js";
 import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
-import { buildTradePointsOverviewFromDb } from "../../shared/trade-points-overview-db.js";
+import { buildTradePointsOverviewFromDb, type TradePointsOverviewViewerTeam } from "../../shared/trade-points-overview-db.js";
 
 type UserRole =
   | "director"
@@ -3421,6 +3421,38 @@ async function loadShowcaseStatsForOverview(
   return map;
 }
 
+async function resolveViewerOwnTeam(
+  pool: PoolLike,
+  userId: string,
+  role: string,
+): Promise<TradePointsOverviewViewerTeam | null> {
+  if (role !== "rop" && role !== "regional_manager") return null;
+  const r = await pool.query<{
+    team_id: string;
+    team_name: string;
+    rop_user_id: string | null;
+    rop_full_name: string | null;
+  }>(
+    `SELECT t.id::text AS team_id, t.name AS team_name,
+            t.rop_user_id::text AS rop_user_id, u.full_name AS rop_full_name
+       FROM user_team_memberships m
+       JOIN teams t ON t.id = m.team_id
+       LEFT JOIN users u ON u.id = t.rop_user_id
+      WHERE m.user_id = $1::uuid
+      ORDER BY (t.rop_user_id = $1::uuid) DESC, m.joined_at NULLS LAST
+      LIMIT 1`,
+    [userId],
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    teamId: row.team_id,
+    teamName: row.team_name?.trim() || "Моя команда",
+    ropUserId: row.rop_user_id,
+    ropFullName: row.rop_full_name?.trim() || "—",
+  };
+}
+
 async function handleTradePointsOverview(
   req: VercelRequest,
   res: VercelResponse,
@@ -3438,11 +3470,13 @@ async function handleTradePointsOverview(
   }
 
   const showcaseMap = await loadShowcaseStatsForOverview(pool);
+  const viewerTeam = await resolveViewerOwnTeam(pool, me.id, me.role);
   const payload = await buildTradePointsOverviewFromDb(
     pool,
     me.id,
     me.role as import("../../shared/auth.js").UserRole,
     showcaseMap,
+    viewerTeam,
   );
   sendJson(res, 200, payload);
 }
