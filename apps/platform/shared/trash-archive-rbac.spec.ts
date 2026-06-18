@@ -57,6 +57,17 @@ describe("trash RBAC", () => {
     }
   });
 
+  it("manager slug fallback for legacy trashedBy", () => {
+    const f = buildTrashScopeFilterRbac({
+      role: "manager",
+      userId: "dc958e02-d80e-4615-bb8a-8a46be70daed",
+      userSlug: "mgr-sklyarov-dv",
+      teamContext: { teamId: TEAM_A, teamMemberIds: [MGR_SELF], teamCodes: [] },
+    });
+    expect(f.isDealerInScope("x", { trashedBy: "mgr-sklyarov-dv", trashedBySlug: "mgr-sklyarov-dv" })).toBe(true);
+    expect(f.isDealerInScope("x", { trashedBy: MGR_OTHER })).toBe(false);
+  });
+
   it("manager team change: old ROP sees ownerTeamAtTrash, new ROP does not", () => {
     const oldRop = buildTrashScopeFilterRbac({
       role: "rop",

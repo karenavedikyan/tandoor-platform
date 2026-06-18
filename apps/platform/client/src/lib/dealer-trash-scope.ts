@@ -34,8 +34,18 @@ const FULL_VIEW_FILTER: TrashScopeFilter = {
   fullView: true,
 };
 
+const EMPTY_FILTER: TrashScopeFilter = {
+  isDealerInScope: () => false,
+  isTradePointInScope: () => false,
+  fullView: false,
+};
+
 function isRealScopeReadyForTrash(realScope: SidebarNavRealScope | undefined): boolean {
-  return Boolean(realScope?.isRealUser && realScope.ready && realScope.orgScope);
+  return Boolean(realScope?.ready && realScope.orgScope);
+}
+
+function isFullViewRole(role: UserRole | null): boolean {
+  return role === "admin" || role === "director";
 }
 
 export function teamContextFromOrgSnapshot(
@@ -78,16 +88,20 @@ export function buildTrashScopeFilter(opts: {
   userId?: string | null;
   teamContext?: TeamContext;
 }): TrashScopeFilter {
-  const { role, realScope, userId, teamContext } = opts;
+  const { role, profile, realScope, userId, teamContext } = opts;
 
-  if (!isRealScopeReadyForTrash(realScope)) {
+  if (isFullViewRole(role)) {
     return FULL_VIEW_FILTER;
+  }
+  if (!isRealScopeReadyForTrash(realScope)) {
+    return EMPTY_FILTER;
   }
 
   const uid = userId ?? realScope?.orgScope?.snap.me.id ?? null;
   return buildTrashScopeFilterRbac({
     role,
     userId: uid,
+    userSlug: profile.personaUserId.trim() || null,
     teamContext: resolveTeamContext(realScope, teamContext),
   });
 }
@@ -100,8 +114,11 @@ export function buildArchiveScopeFilter(opts: {
 }): TrashScopeFilter {
   const { role, realScope, teamContext } = opts;
 
-  if (!isRealScopeReadyForTrash(realScope)) {
+  if (isFullViewRole(role)) {
     return FULL_VIEW_FILTER;
+  }
+  if (!isRealScopeReadyForTrash(realScope)) {
+    return EMPTY_FILTER;
   }
 
   const assignments = realScope?.assignmentsScope;

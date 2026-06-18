@@ -73,6 +73,7 @@ import {
   patchTradePointTrashRuntime,
 } from "@/lib/dealer-overrides-runtime";
 import { buildArchiveScopeFilter, buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo, archiveMetaFromDealerInfo, archiveMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { VirtualizedStackList } from "@/lib/window-list-virtualizer";
@@ -130,7 +131,16 @@ export function TrashBinPage(): ReactElement {
   const canForceDelete = user?.role === "admin" || user?.role === "director";
   const canRunPurge = user?.role === "admin";
 
-  const stateForRead = teamPlane.mergedState;
+  const useTeamState = shouldUseTeamMergedActualizationPlane(profile, user?.role);
+  const stateForRead = useMemo(
+    () => (useTeamState ? teamPlane.mergedState : actx.state),
+    [useTeamState, teamPlane.mergedState, actx.state],
+  );
+
+  useEffect(() => {
+    if (!user?.id || !actx.enabled) return;
+    void actx.refresh();
+  }, [user?.id, actx.enabled, actx.refresh]);
   const releaseByDealerId = useMemo(() => buildReleaseClientByDealerId(getReleaseClients()), []);
 
   const trashActor: TrashActor = useMemo(

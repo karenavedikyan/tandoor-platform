@@ -28,6 +28,7 @@ import {
   loadTeamContextForUser,
 } from "../../shared/trash-archive-mutation-guard.js";
 import { normalizePlatformRole } from "../../shared/trash-archive-rbac.js";
+import { resolveSessionContext } from "../../shared/dealer-work-plan-handlers.js";
 import type { UserRole } from "../../shared/auth.js";
 
 const JSON_CT = "application/json; charset=utf-8";
@@ -39,8 +40,14 @@ const memoryStore = new Map<string, { state: unknown; updatedAt: string }>();
 const salesPlanFactMemoryStore = new Map<string, { state: unknown; updatedAt: string }>();
 const SALES_PLAN_FACT_ORG_SCOPE = "org:default";
 
-function sendJson(res: VercelResponse, status: number, body: Record<string, unknown>): void {
+function sendJson(
+  res: VercelResponse,
+  status: number,
+  body: Record<string, unknown>,
+  cacheControl?: string,
+): void {
   res.setHeader("Content-Type", JSON_CT);
+  if (cacheControl) res.setHeader("Cache-Control", cacheControl);
   res.status(status).json(body);
 }
 
@@ -133,6 +140,22 @@ function getRole(req: VercelRequest): string | null {
   const q = req.query?.role;
   const fromQuery = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
   return sanitizeRole(fromHeader) ?? sanitizeRole(fromQuery);
+}
+
+async function resolveEffectiveUserId(req: VercelRequest, requestedUserId: string): Promise<string> {
+  const pool = getPool();
+  if (!pool) return requestedUserId;
+  try {
+    const ctx = await resolveSessionContext(pool, req.headers as Record<string, string | string[] | undefined>);
+    if (!ctx || ctx.me.status !== "active") return requestedUserId;
+    const sessionRole = normalizePlatformRole(ctx.me.role);
+    const canReadOther =
+      ctx.impersonatorUserId != null || sessionRole === "admin" || sessionRole === "director";
+    if (canReadOther) return requestedUserId;
+    return ctx.me.id;
+  } catch {
+    return requestedUserId;
+  }
 }
 
 export function getBatchUserIds(req: VercelRequest): string[] | null {
@@ -884,8 +907,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const globallyDisabled = isActualizationGloballyDisabled();
     const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
-    const userId = getUserId(req);
-    if (!userId) {
+    const requestedUserId = getUserId(req);
+    if (!requestedUserId) {
       sendJson(res, 400, {
         success: false,
         storageMode: dbUrl ? "persistent" : "not_configured",
@@ -895,6 +918,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       });
       return;
     }
+    const userId = await resolveEffectiveUserId(req, requestedUserId);
 
     const scopeKey = scopeKeyForUser(userId);
     const role = getRole(req);
@@ -943,6 +967,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (req.method === "GET") {
+      res.setHeader("Cache-Control", "no-cache");
       const batchUserIds = getBatchUserIds(req);
       if (batchUserIds) {
         if (!dbUrl) {
