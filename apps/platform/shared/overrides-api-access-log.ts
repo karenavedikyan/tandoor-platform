@@ -146,6 +146,7 @@ const WRITE_ACTIONS = new Set([
   "restore",
   "purge",
   "admin-restore",
+  "bulk-move-archive-to-trash",
 ]);
 
 export function isOverridesWriteAction(action: string): boolean {

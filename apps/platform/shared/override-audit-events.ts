@@ -10,6 +10,7 @@ export type DealerAuditEventKind =
   | "dealer_restored_to_employee_trash"
   | "dealer_purged"
   | "dealer_admin_restored"
+  | "dealer_archive_to_trash_bulk"
   | "field_change";
 
 export type TradePointAuditEventKind =
@@ -18,6 +19,7 @@ export type TradePointAuditEventKind =
   | "tp_restored_to_employee_trash"
   | "tp_purged"
   | "tp_admin_restored"
+  | "tp_archive_to_trash_bulk"
   | "field_change";
 
 export async function logDealerAuditEvent(
