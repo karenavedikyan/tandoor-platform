@@ -51,8 +51,6 @@ import {
   buildReleaseClientByDealerId,
   forceDeleteArchivedDealersPatch,
   forceDeleteArchivedTpsPatch,
-  moveArchivedDealersToTrashPatch,
-  moveArchivedTpsToTrashPatch,
   restoreArchivedDealersPatch,
   restoreArchivedTpsPatch,
   sortArchivedDealers,
@@ -62,7 +60,6 @@ import {
   type ArchivedTpDisplay,
 } from "@/lib/trash-archive-helpers";
 import { resolveTrashedDealerDisplayName } from "@/lib/client-base-actualization-visibility";
-import type { TrashActor } from "@/lib/trash-dealer-helper";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { untrashDealer, requestPurgeDealerStrict } from "@/lib/dealer-overrides-api";
 import { untrashTradePoint, requestPurgeTradePointStrict } from "@/lib/trade-point-overrides-api";
@@ -144,11 +141,6 @@ export function TrashBinPage(): ReactElement {
     void actx.refresh();
   }, [user?.id, actx.enabled, actx.refresh]);
   const releaseByDealerId = useMemo(() => buildReleaseClientByDealerId(getReleaseClients()), []);
-
-  const trashActor: TrashActor = useMemo(
-    () => ({ userId: user?.id ?? "", userName: user?.fullName?.trim() || user?.email || "—" }),
-    [user?.id, user?.fullName, user?.email],
-  );
 
   const trashScopeFilter = useMemo(
     () =>
@@ -537,9 +529,36 @@ export function TrashBinPage(): ReactElement {
     if (busy || ids.length === 0) return;
     setBusy("move-archived-dealers-to-trash");
     try {
-      const r = await actx.persist((prev) => moveArchivedDealersToTrashPatch(prev, ids, trashActor, releaseByDealerId));
-      afterPersist(r, `Перемещено ${ids.length} клиентов в Корзину`, "Не удалось переместить");
+      const res = await fetch("/api/dealer-overrides/bulk-move-archive-to-trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ dealer_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { moved?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        toast({
+          title: "Не удалось переместить",
+          description: json.message ?? `HTTP ${res.status}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const moved = json.data?.moved ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title:
+          skipped > 0
+            ? `Перемещено ${moved}, пропущено ${skipped} (вне вашей зоны ответственности)`
+            : `Перемещено ${moved} клиентов в Корзину`,
+      });
       setSelectedArchivedDealerIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
     } finally {
       setBusy(null);
     }
@@ -549,9 +568,36 @@ export function TrashBinPage(): ReactElement {
     if (busy || ids.length === 0) return;
     setBusy("move-archived-tps-to-trash");
     try {
-      const r = await actx.persist((prev) => moveArchivedTpsToTrashPatch(prev, ids, trashActor, releaseByDealerId));
-      afterPersist(r, `Перемещено ${ids.length} торговых точек в Корзину`, "Не удалось переместить");
+      const res = await fetch("/api/trade-point-overrides/bulk-move-archive-to-trash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ trade_point_ids: ids }),
+      });
+      const json = (await res.json()) as {
+        success?: boolean;
+        message?: string;
+        data?: { moved?: number; skipped?: number };
+      };
+      if (!res.ok || json.success !== true) {
+        toast({
+          title: "Не удалось переместить",
+          description: json.message ?? `HTTP ${res.status}`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const moved = json.data?.moved ?? ids.length;
+      const skipped = json.data?.skipped ?? 0;
+      toast({
+        title:
+          skipped > 0
+            ? `Перемещено ${moved}, пропущено ${skipped} (вне вашей зоны ответственности)`
+            : `Перемещено ${moved} торговых точек в Корзину`,
+      });
       setSelectedArchivedTpIds(new Set());
+      await actx.refresh();
+      void teamPlane.refresh();
     } finally {
       setBusy(null);
     }

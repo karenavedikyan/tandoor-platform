@@ -26,6 +26,7 @@ import {
   handleTradePointOverridesRequestPurge,
   handleTradePointOverridesRestore,
 } from "../../shared/trade-point-purge-handlers.js";
+import { handleBulkMoveArchiveToTrash as handleTpBulkMoveArchiveToTrash } from "../../shared/trade-point-bulk-archive-handlers.js";
 import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
@@ -111,6 +112,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "admin-restore" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesAdminRestore(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "bulk-move-archive-to-trash" && req.method === "POST") {
+      await runLogged(() => handleTpBulkMoveArchiveToTrash(req, res, pool, sessionUser));
       return;
     }
 
