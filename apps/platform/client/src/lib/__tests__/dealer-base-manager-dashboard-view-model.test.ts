@@ -36,6 +36,8 @@ const manager: ManagerRowModel = {
   attention: 1,
   outlets: 3,
   topSegmentLabel: "ТОП 150",
+  isExternal: false,
+  externalTeamName: null,
   rows: [
     row({ id: "1", name: "A", city: "Ростов", status: "активный", clientCategory: "top150" }),
     row({ id: "2", name: "B", city: "Ростов", status: "потенциальный" }),
