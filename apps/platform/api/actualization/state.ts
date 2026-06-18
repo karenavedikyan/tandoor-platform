@@ -29,6 +29,11 @@ import {
 } from "../../shared/trash-archive-mutation-guard.js";
 import { normalizePlatformRole } from "../../shared/trash-archive-rbac.js";
 import { resolveSessionContext } from "../../shared/dealer-work-plan-handlers.js";
+import {
+  getExplicitActualizationUserId,
+  resolveRequestUserId,
+  type RequestUserResolution,
+} from "../../shared/actualization-request-user.js";
 import type { UserRole } from "../../shared/auth.js";
 
 const JSON_CT = "application/json; charset=utf-8";
@@ -127,11 +132,7 @@ function sanitizeRole(raw: string | undefined): string | null {
 }
 
 function getUserId(req: VercelRequest): string | null {
-  const h = req.headers["x-tandoor-demo-user-id"];
-  const fromHeader = Array.isArray(h) ? h[0] : h;
-  const q = req.query?.userId;
-  const fromQuery = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
-  return sanitizeUserId(fromHeader) ?? sanitizeUserId(fromQuery);
+  return getExplicitActualizationUserId(req);
 }
 
 function getRole(req: VercelRequest): string | null {
@@ -141,6 +142,9 @@ function getRole(req: VercelRequest): string | null {
   const fromQuery = typeof q === "string" ? q : Array.isArray(q) ? q[0] : "";
   return sanitizeRole(fromHeader) ?? sanitizeRole(fromQuery);
 }
+
+export type { RequestUserResolution };
+export { resolveRequestUserId };
 
 async function resolveEffectiveUserId(req: VercelRequest, requestedUserId: string): Promise<string> {
   const pool = getPool();
@@ -907,21 +911,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     const globallyDisabled = isActualizationGloballyDisabled();
     const dbUrl = globallyDisabled ? null : resolvePostgresUrl();
-    const requestedUserId = getUserId(req);
+    const { userId: requestedUserId, fromSession, sessionRole } = await resolveRequestUserId(req);
     if (!requestedUserId) {
-      sendJson(res, 400, {
+      sendJson(res, 401, {
         success: false,
         storageMode: dbUrl ? "persistent" : "not_configured",
         state: emptyState(),
         updatedAt: null,
-        message: "Укажите userId (query) или заголовок X-Tandoor-Demo-User-Id (демо MVP).",
+        message: "Не авторизован",
       });
       return;
     }
-    const userId = await resolveEffectiveUserId(req, requestedUserId);
+    const userId = fromSession ? requestedUserId : await resolveEffectiveUserId(req, requestedUserId);
 
     const scopeKey = scopeKeyForUser(userId);
-    const role = getRole(req);
+    let role = getRole(req);
+    if (!role && sessionRole) {
+      role = sanitizeRole(sessionRole) ?? sanitizeRole(canonicalizeRole(sessionRole));
+    }
 
     if (globallyDisabled) {
       if (req.method === "GET") {

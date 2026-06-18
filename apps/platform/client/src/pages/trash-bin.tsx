@@ -177,6 +177,7 @@ export function TrashBinPage(): ReactElement {
   useScrollRestoration({ enabled: !actx.loading });
 
   const trashedDealerDisplays = useMemo(() => {
+    if (!stateForRead.updatedAt && user?.role === "manager") return [];
     const map = mergeTrashedDealersForUi(stateForRead);
     return Object.values(map)
       .filter(
@@ -186,9 +187,10 @@ export function TrashBinPage(): ReactElement {
       )
       .map((info) => resolveTrashedDealerDisplayName(info, stateForRead, releaseByDealerId))
       .sort((a, b) => compareByExpires(a.info, b.info));
-  }, [stateForRead, trashScopeFilter, releaseByDealerId]);
+  }, [stateForRead, trashScopeFilter, releaseByDealerId, user?.role]);
   const trashedDealers = useMemo(() => trashedDealerDisplays.map((d) => d.info), [trashedDealerDisplays]);
   const trashedTps = useMemo(() => {
+    if (!stateForRead.updatedAt && user?.role === "manager") return [];
     const map = mergeTrashedTradePointsForUi(stateForRead);
     return Object.values(map)
       .filter(
@@ -201,9 +203,10 @@ export function TrashBinPage(): ReactElement {
           ),
       )
       .sort(compareByExpires);
-  }, [stateForRead, trashScopeFilter]);
+  }, [stateForRead, trashScopeFilter, user?.role]);
 
   const archivedDealerDisplays = useMemo(() => {
+    if (!stateForRead.updatedAt && user?.role === "manager") return [];
     const map = stateForRead.archivedDealersById ?? {};
     return Object.values(map)
       .filter(
@@ -212,9 +215,10 @@ export function TrashBinPage(): ReactElement {
           archiveScopeFilter.isDealerInScope(d.dealerId, archiveMetaFromDealerInfo(d)),
       )
       .map((info) => buildArchivedDealerDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId, archiveScopeFilter]);
+  }, [stateForRead, releaseByDealerId, archiveScopeFilter, user?.role]);
 
   const archivedTpDisplays = useMemo(() => {
+    if (!stateForRead.updatedAt && user?.role === "manager") return [];
     const map = stateForRead.archivedTradePointsById ?? {};
     return Object.values(map)
       .filter(
@@ -227,7 +231,7 @@ export function TrashBinPage(): ReactElement {
           ),
       )
       .map((info) => buildArchivedTpDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId, archiveScopeFilter]);
+  }, [stateForRead, releaseByDealerId, archiveScopeFilter, user?.role]);
 
   const filteredArchivedDealers = useMemo(() => {
     const q = archiveDealerSearch.trim().toLowerCase();
