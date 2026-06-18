@@ -194,7 +194,10 @@ async function postActualizationStateOnce(
       tradePoints: unTrash.tradePoints ?? [],
     };
   }
-  const res = await fetch("/api/actualization/state", {
+  const url = role
+    ? `/api/actualization/state?userId=${encodeURIComponent(userId)}&role=${encodeURIComponent(role)}`
+    : `/api/actualization/state?userId=${encodeURIComponent(userId)}`;
+  const res = await fetch(url, {
     method: "POST",
     headers: { ...demoHeaders(userId, role), "Content-Type": "application/json" },
     credentials: "same-origin",

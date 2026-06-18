@@ -31,6 +31,7 @@ function trash(id: string, by: string) {
 
 const mergedState: ActualizationState = (() => {
   const s = createEmptyActualizationState();
+  s.updatedAt = nowIso;
   s.trashedDealersById = {
     "client-own": trash("client-own", MGR),
     "client-foreign": trash("client-foreign", OTHER),
