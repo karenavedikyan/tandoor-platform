@@ -10,6 +10,10 @@ import {
 } from "./actualization-blob-trash.js";
 import { logDealerAuditEvent, logTradePointAuditEvent } from "./override-audit-events.js";
 import {
+  removeDealersFromArchiveEverywhere,
+  removeTradePointsFromArchiveEverywhere,
+} from "./archive-trash-invariant.js";
+import {
   BULK_TRASH_MAX_IDS,
   chunkIds,
   filterTrashedDealerIdsForBulk,
@@ -87,6 +91,7 @@ export async function handleBulkRestoreDealers(
     }
 
     await removeDealersFromInitiatorTrashBlob(pool, me.id, allowed);
+    await removeDealersFromArchiveEverywhere(pool, allowed);
 
     for (const dealerId of allowed) {
       await logDealerAuditEvent(pool, {
@@ -204,6 +209,7 @@ export async function handleBulkRestoreTradePoints(
     }
 
     await removeTradePointsFromInitiatorTrashBlob(pool, me.id, allowed);
+    await removeTradePointsFromArchiveEverywhere(pool, allowed);
 
     for (const tpId of allowed) {
       await logTradePointAuditEvent(pool, {

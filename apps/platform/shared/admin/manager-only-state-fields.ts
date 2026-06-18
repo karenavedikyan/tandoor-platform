@@ -12,6 +12,9 @@
  *   - на записи (POST /api/actualization/state) — обнуляем поля до INSERT;
  *   - на чтении (GET) — обнуляем поля у строк не-manager перед merge.
  *
+ * См. также `archive-trash-invariant.ts` — INVARIANT (промт 405): dealer не может одновременно
+ * быть в `dealer_overrides.trashed_at` и `state.archivedDealersById`.
+ *
  * Пути выше (UI карточки, актуализация и т.п.) ничего о ней знать не должны.
  */
 
