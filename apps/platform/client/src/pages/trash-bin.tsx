@@ -70,7 +70,9 @@ import {
   mergeTrashedDealersForUi,
   mergeTrashedTradePointsForUi,
   patchDealerTrashRuntime,
+  patchDealerPurgePendingRuntime,
   patchTradePointTrashRuntime,
+  patchTradePointPurgePendingRuntime,
 } from "@/lib/dealer-overrides-runtime";
 import { buildArchiveScopeFilter, buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo, archiveMetaFromDealerInfo, archiveMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
@@ -373,6 +375,7 @@ export function TrashBinPage(): ReactElement {
     if (busy) return;
     setBusy(`request-purge-dealer:${dealerId}`);
     patchDealerTrashRuntime(dealerId, null);
+    patchDealerPurgePendingRuntime(dealerId, true);
     const r = await requestPurgeDealerStrict(dealerId);
     setBusy(null);
     if (r.ok) {
@@ -388,6 +391,7 @@ export function TrashBinPage(): ReactElement {
     if (busy) return;
     setBusy(`request-purge-tp:${tradePointId}`);
     patchTradePointTrashRuntime(tradePointId, null);
+    patchTradePointPurgePendingRuntime(tradePointId, true);
     const r = await requestPurgeTradePointStrict(tradePointId);
     setBusy(null);
     if (r.ok) {
@@ -406,6 +410,7 @@ export function TrashBinPage(): ReactElement {
       let ok = 0;
       for (const id of ids) {
         patchDealerTrashRuntime(id, null);
+        patchDealerPurgePendingRuntime(id, true);
         const r = await requestPurgeDealerStrict(id);
         if (r.ok) ok++;
       }
@@ -427,6 +432,7 @@ export function TrashBinPage(): ReactElement {
       let ok = 0;
       for (const id of ids) {
         patchTradePointTrashRuntime(id, null);
+        patchTradePointPurgePendingRuntime(id, true);
         const r = await requestPurgeTradePointStrict(id);
         if (r.ok) ok++;
       }
