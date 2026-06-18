@@ -46,6 +46,7 @@ import {
 } from "@/lib/dealer-base-mock-data";
 import { externalKeysToReleaseCodes, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
+import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import { DealerBaseSkeleton } from "@/components/skeletons/dealer-base-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
@@ -1408,9 +1409,18 @@ export type DealerBaseProps = {
   embedListOnly?: boolean;
 };
 
-export default function DealerBase({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
+export default function DealerBase(props: DealerBaseProps = {}) {
+  return (
+    <DealerBaseErrorBoundary>
+      <DealerBaseContent {...props} />
+    </DealerBaseErrorBoundary>
+  );
+}
+
+function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
   const scopeUserIdResolved = scopeUserId?.trim() || undefined;
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
+  const isRealUser = Boolean(me?.id);
   const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
   const readOnlyScope = viewingOtherUserScope;
   const targetScopeQ = useMyScopeFromDB({
@@ -1422,7 +1432,6 @@ export default function DealerBase({ scopeUserId, embedListOnly = false }: Deale
   const catalogRows = catalogQ.data ?? [];
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
-  const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
   const myCodesQ = useMyClientCodes({ enabled: isRealUser });
