@@ -34,6 +34,7 @@ import {
   resolveRequestUserId,
   type RequestUserResolution,
 } from "../../shared/actualization-request-user.js";
+import { stripArchivedKeysAlreadyInActiveTrash } from "../../shared/archive-trash-invariant.js";
 import type { UserRole } from "../../shared/auth.js";
 
 const JSON_CT = "application/json; charset=utf-8";
@@ -1154,6 +1155,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           ? Math.floor(sanitizedNext.version)
           : 1;
 
+      // Промт 405: архив state и корзина БД взаимоисключающие — дропаем архивные ключи, уже в trashed.
+      let stateToWrite = sanitizedNext;
+      const invariantPool = getPool();
+      if (invariantPool) {
+        const stripped = await stripArchivedKeysAlreadyInActiveTrash(
+          invariantPool,
+          stateToWrite as Record<string, unknown>,
+        );
+        const dropped = stripped.droppedDealers + stripped.droppedTradePoints;
+        if (dropped > 0) {
+          console.warn(
+            `[actualization-api] dropped ${dropped} archive keys already in trash for user=${userId}`,
+          );
+        }
+        stateToWrite = stripped.state as typeof sanitizedNext;
+        stateToWrite.updatedAt = now;
+        stateToWrite.updatedBy = userId;
+      }
+
       // Защита корзины (Промт 45 B1): если ключ trashedDealersById / trashedTradePointsById
       // присутствовал в prev state, но отсутствует в next state — восстанавливаем его,
       // если только клиент явно не указал ключ в body.unTrash.dealers / body.unTrash.tradePoints.
@@ -1172,8 +1192,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       if (!dbUrl) {
         const prev = memoryStore.get(userId)?.state;
         const prevState = isPlainObject(prev) ? coerceState(prev) : null;
-        applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
-        const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, sanitizedNext, unTrash);
+        applyStaleProtectionIfNeeded(scopeKey, prevState, stateToWrite, incomingUpdatedAt);
+        const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, stateToWrite, unTrash);
         if (rbacErr) {
           sendJson(res, 403, {
             success: false,
@@ -1185,7 +1205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           });
           return;
         }
-        const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
+        const guard = applyTrashProtection(prevState, stateToWrite, unTrash);
         if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
           console.warn(
             "[actualization-api] POST scope=" +
@@ -1196,14 +1216,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
               guard.protectedTradePoints,
           );
         }
-        memoryStore.set(userId, { state: sanitizedNext, updatedAt: now });
+        memoryStore.set(userId, { state: stateToWrite, updatedAt: now });
         sendJson(
           res,
           200,
           buildResponse(
             true,
             "server_memory",
-            sanitizedNext,
+            stateToWrite,
             now,
             `${MSG_PERSISTENT_NOT_CONFIGURED} ${MSG_SERVER_MEMORY_FALLBACK}`,
           ),
@@ -1221,8 +1241,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           `;
           const prevRaw = prevRows[0]?.state;
           prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
-          applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
-          const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, sanitizedNext, unTrash);
+          applyStaleProtectionIfNeeded(scopeKey, prevState, stateToWrite, incomingUpdatedAt);
+          const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, stateToWrite, unTrash);
           if (rbacErr) {
             sendJson(res, 403, {
               success: false,
@@ -1234,7 +1254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
             });
             return;
           }
-          const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
+          const guard = applyTrashProtection(prevState, stateToWrite, unTrash);
           if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
             console.warn(
               "[actualization-api] POST scope=" +
@@ -1250,7 +1270,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           const m = e instanceof Error ? e.message : String(e);
           console.warn("[actualization-api] trash protection read failed", m.slice(0, 200));
         }
-        const stateJson = JSON.stringify(sanitizedNext);
+        const stateJson = JSON.stringify(stateToWrite);
         const rows = await sql`
           INSERT INTO client_base_actualization_state (scope_key, user_id, role, state, version)
           VALUES (${scopeKey}, ${userId}, ${role}, ${stateJson}::jsonb, ${version})
