@@ -71,6 +71,8 @@ export type ArchivedTradePointInfo = {
   archivedByName: string;
   reason?: string;
   source: ActualizationSource;
+  ownerTeamAtArchive?: string | null;
+  ownerCode?: string | null;
 };
 
 /** Мягкое архивирование вручную созданного клиента (остаётся в manuallyCreatedDealersById). */
@@ -80,6 +82,10 @@ export type ArchivedDealerInfo = {
   archivedBy: string;
   archivedByName: string;
   source: ActualizationSource;
+  /** Промт 398: команда на момент архивации (стабильность при смене команды). */
+  ownerTeamAtArchive?: string | null;
+  /** Промт 398: client code / external code на момент архивации. */
+  ownerCode?: string | null;
 };
 
 /** Корзина клиента — хранится 14 дней, затем чистится cron'ом. Отдельная сущность от архива. */
@@ -95,6 +101,10 @@ export type TrashedDealerInfo = {
   trashedByName: string;
   expiresAt: string;
   source: TrashedDealerSource;
+  /** Промт 398: команда удаляющего на момент удаления. */
+  ownerTeamAtTrash?: string | null;
+  /** Промт 398: client code на момент удаления. */
+  ownerCode?: string | null;
   /**
    * Снимок ключевых полей на момент удаления — чтобы корзина оставалась читаемой,
    * даже если исходная запись пропала из state.
@@ -122,6 +132,8 @@ export type TrashedTradePointInfo = {
   trashedByName: string;
   expiresAt: string;
   source: TrashedTradePointSource;
+  ownerTeamAtTrash?: string | null;
+  ownerCode?: string | null;
   snapshot: {
     name: string | null;
     address: string | null;

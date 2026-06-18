@@ -28,6 +28,8 @@ export type SidebarDealerClientCountContext = {
   realScope?: SidebarNavRealScope;
   /** Платформенная роль — для скоупа корзины (Промт 336). */
   role?: UserRole | null;
+  userId?: string | null;
+  teamContext?: import("@shared/trash-archive-rbac").TeamContext;
 };
 
 /**
@@ -70,6 +72,8 @@ export function resolveSidebarTrashCount(
     role: ctx.role ?? null,
     profile,
     realScope: ctx.realScope,
+    userId: ctx.userId ?? null,
+    teamContext: ctx.teamContext,
   });
   return countScopedTrashItems(dealers, tps, filter);
 }

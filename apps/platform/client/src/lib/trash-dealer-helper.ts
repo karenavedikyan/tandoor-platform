@@ -63,10 +63,13 @@ export function makeTrashedDealerInfo(args: {
   by: TrashActor;
   snapshot: TrashedDealerInfo["snapshot"];
   source: TrashSource;
+  ownerTeamAtTrash?: string | null;
+  ownerCode?: string | null;
   /** Override now for tests. */
   nowIso?: string;
 }): TrashedDealerInfo {
   const trashedAt = args.nowIso ?? new Date().toISOString();
+  const ownerCode = args.ownerCode ?? args.snapshot.dealerCode ?? null;
   return {
     dealerId: args.dealerId,
     trashedAt,
@@ -74,6 +77,8 @@ export function makeTrashedDealerInfo(args: {
     trashedByName: args.by.userName,
     expiresAt: computeTrashExpiresAt(trashedAt),
     source: args.source,
+    ownerTeamAtTrash: args.ownerTeamAtTrash ?? null,
+    ownerCode,
     snapshot: args.snapshot,
   };
 }
@@ -84,6 +89,8 @@ export function makeTrashedTradePointInfo(args: {
   by: TrashActor;
   snapshot: TrashedTradePointInfo["snapshot"];
   source: TrashSource;
+  ownerTeamAtTrash?: string | null;
+  ownerCode?: string | null;
   nowIso?: string;
 }): TrashedTradePointInfo {
   const trashedAt = args.nowIso ?? new Date().toISOString();
@@ -95,6 +102,8 @@ export function makeTrashedTradePointInfo(args: {
     trashedByName: args.by.userName,
     expiresAt: computeTrashExpiresAt(trashedAt),
     source: args.source,
+    ownerTeamAtTrash: args.ownerTeamAtTrash ?? null,
+    ownerCode: args.ownerCode ?? null,
     snapshot: args.snapshot,
   };
 }

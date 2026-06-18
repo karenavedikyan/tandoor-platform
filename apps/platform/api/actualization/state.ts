@@ -20,6 +20,15 @@ import {
   sanitizeStateForNonManagerRole,
   shouldSanitizeStateForRole,
 } from "../../shared/admin/manager-only-state-fields.js";
+import { getPool } from "../../shared/admin/admin-auth.js";
+import {
+  assertUnTrashAllowed,
+  auditTrashArchiveAction,
+  enrichTrashArchiveMetaOnWrite,
+  loadTeamContextForUser,
+} from "../../shared/trash-archive-mutation-guard.js";
+import { normalizePlatformRole } from "../../shared/trash-archive-rbac.js";
+import type { UserRole } from "../../shared/auth.js";
 
 const JSON_CT = "application/json; charset=utf-8";
 // Стейт актуализации может достигать ~1.3 МБ у активных пользователей с большой базой.
@@ -447,6 +456,40 @@ function applyStaleProtectionIfNeeded(
       " by=" +
       JSON.stringify(mergeResult.recoveredByField),
   );
+}
+
+async function enforceTrashArchiveRbacOnPost(
+  userId: string,
+  roleHeader: string | null,
+  prevState: Record<string, unknown> | null,
+  nextState: Record<string, unknown>,
+  unTrash: UnTrashDirective | null,
+): Promise<string | null> {
+  enrichTrashArchiveMetaOnWrite(prevState, nextState, { id: userId, teamId: null });
+  const pool = getPool();
+  if (!pool) return null;
+
+  const teamContext = await loadTeamContextForUser(pool, userId, roleHeader ?? "manager");
+  enrichTrashArchiveMetaOnWrite(prevState, nextState, { id: userId, teamId: teamContext.teamId });
+
+  if (!unTrash || (!unTrash.dealers?.length && !unTrash.tradePoints?.length)) return null;
+
+  const platformRole = normalizePlatformRole(roleHeader) as UserRole;
+  const check = await assertUnTrashAllowed(
+    pool,
+    { id: userId, role: platformRole },
+    prevState ?? {},
+    { dealers: unTrash.dealers, tradePoints: unTrash.tradePoints },
+  );
+  if (!check.ok) return check.message;
+
+  for (const id of unTrash.dealers ?? []) {
+    await auditTrashArchiveAction(pool, userId, "trash_restore", "dealer", id, { via: "actualization_state" });
+  }
+  for (const id of unTrash.tradePoints ?? []) {
+    await auditTrashArchiveAction(pool, userId, "trash_restore", "trade_point", id, { via: "actualization_state" });
+  }
+  return null;
 }
 
 function isSalesPlanFactRequest(req: VercelRequest): boolean {
@@ -1098,6 +1141,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const prev = memoryStore.get(userId)?.state;
         const prevState = isPlainObject(prev) ? coerceState(prev) : null;
         applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
+        const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, sanitizedNext, unTrash);
+        if (rbacErr) {
+          sendJson(res, 403, {
+            success: false,
+            storageMode: "server_memory",
+            state: prevState ?? emptyState(),
+            updatedAt: null,
+            message: rbacErr,
+            code: "FORBIDDEN",
+          });
+          return;
+        }
         const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
         if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
           console.warn(
@@ -1135,6 +1190,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           const prevRaw = prevRows[0]?.state;
           prevState = isPlainObject(prevRaw) ? coerceState(prevRaw) : null;
           applyStaleProtectionIfNeeded(scopeKey, prevState, sanitizedNext, incomingUpdatedAt);
+          const rbacErr = await enforceTrashArchiveRbacOnPost(userId, role, prevState, sanitizedNext, unTrash);
+          if (rbacErr) {
+            sendJson(res, 403, {
+              success: false,
+              storageMode: "persistent",
+              state: prevState ?? emptyState(),
+              updatedAt: null,
+              message: rbacErr,
+              code: "FORBIDDEN",
+            });
+            return;
+          }
           const guard = applyTrashProtection(prevState, sanitizedNext, unTrash);
           if (guard.protectedDealers > 0 || guard.protectedTradePoints > 0) {
             console.warn(
