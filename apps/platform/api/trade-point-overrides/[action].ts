@@ -28,6 +28,10 @@ import {
 } from "../../shared/trade-point-purge-handlers.js";
 import { handleBulkMoveArchiveToTrash as handleTpBulkMoveArchiveToTrash } from "../../shared/trade-point-bulk-archive-handlers.js";
 import {
+  handleBulkRequestPurgeTradePoints,
+  handleBulkRestoreTradePoints,
+} from "../../shared/trash-bulk-actions-handlers.js";
+import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
 } from "../../shared/overrides-api-access-log.js";
@@ -116,6 +120,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "bulk-move-archive-to-trash" && req.method === "POST") {
       await runLogged(() => handleTpBulkMoveArchiveToTrash(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "bulk-restore" && req.method === "POST") {
+      await runLogged(() => handleBulkRestoreTradePoints(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "bulk-request-purge" && req.method === "POST") {
+      await runLogged(() => handleBulkRequestPurgeTradePoints(req, res, pool, sessionUser));
       return;
     }
 
