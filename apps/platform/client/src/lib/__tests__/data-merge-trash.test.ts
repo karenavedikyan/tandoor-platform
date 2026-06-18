@@ -8,6 +8,10 @@
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "../client-base-actualization-data-merge";
+import {
+  mergeTrashedDealersForUi,
+  patchDealerTrashRuntime,
+} from "../dealer-overrides-runtime";
 import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
 import { roleScopedDealerRowsForReal } from "../dealer-base-real-scope";
 import { getReleaseClients } from "../release-client-data";
@@ -185,3 +189,68 @@ assert.equal(scoped.length, 1, "manual матчится по external1cCode в a
 assert.equal(scoped[0]!.id, manualId);
 
 console.log("data-merge-trash: ok (5 cases incl. prompt 349B)");
+
+// Промт 397: merge trash из jsonb-state + dealer_overrides без флага fallback.
+const afterFallbackExpiry = Date.parse("2026-07-01T00:00:00.000Z");
+const realDateNow = Date.now;
+
+function withMockedNow<T>(ms: number, fn: () => T): T {
+  Date.now = () => ms;
+  try {
+    return fn();
+  } finally {
+    Date.now = realDateNow;
+  }
+}
+
+function trashInfoForMerge(dealerId: string, trashedAt: string) {
+  return {
+    dealerId,
+    trashedAt,
+    trashedBy: "u1",
+    trashedByName: "U",
+    expiresAt: new Date(Date.parse(trashedAt) + 14 * 86400000).toISOString(),
+    source: "client_bulk_delete" as const,
+    snapshot: {
+      fullName: "Test",
+      city: null,
+      inn: null,
+      dealerCode: null,
+      legalEntityName: null,
+    },
+  };
+}
+
+// merge-trash-reads-from-blob-without-fallback-flag
+{
+  const act = createEmptyActualizationState();
+  act.trashedDealersById = {
+    "client-x": trashInfoForMerge("client-x", "2026-06-17T10:00:00.000Z"),
+  };
+  const merged = withMockedNow(afterFallbackExpiry, () => mergeTrashedDealersForUi(act));
+  assert.equal(Object.keys(merged).length, 1, "merge-trash-reads-from-blob-without-fallback-flag");
+  assert.ok(merged["client-x"], "client-x из blob");
+}
+
+// merge-trash-collision-prefers-newer-trashedAt
+{
+  const act = createEmptyActualizationState();
+  act.trashedDealersById = {
+    "client-x": trashInfoForMerge("client-x", "2026-06-17T10:00:00.000Z"),
+  };
+  patchDealerTrashRuntime("client-x", trashInfoForMerge("client-x", "2026-06-10T10:00:00.000Z"));
+  const merged = withMockedNow(afterFallbackExpiry, () => mergeTrashedDealersForUi(act));
+  assert.equal(merged["client-x"]?.trashedAt, "2026-06-17T10:00:00.000Z", "blob побеждает при более свежем trashedAt");
+  patchDealerTrashRuntime("client-x", null);
+}
+
+// merge-trash-falls-back-to-db-only-when-blob-empty
+{
+  const act = createEmptyActualizationState();
+  patchDealerTrashRuntime("client-y", trashInfoForMerge("client-y", "2026-06-12T10:00:00.000Z"));
+  const merged = withMockedNow(afterFallbackExpiry, () => mergeTrashedDealersForUi(act));
+  assert.ok(merged["client-y"], "merge-trash-falls-back-to-db-only-when-blob-empty");
+  patchDealerTrashRuntime("client-y", null);
+}
+
+console.log("data-merge-trash: ok (8 cases incl. prompt 397)");

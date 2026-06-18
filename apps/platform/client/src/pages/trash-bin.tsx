@@ -71,7 +71,6 @@ import {
   patchDealerTrashRuntime,
   patchTradePointTrashRuntime,
 } from "@/lib/dealer-overrides-runtime";
-import { isPrompt113BlobFallbackActive } from "@/lib/dealer-overrides-fallback";
 import { buildArchiveScopeFilter, buildTrashScopeFilter } from "@/lib/dealer-trash-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -276,18 +275,15 @@ export function TrashBinPage(): ReactElement {
     setBusy(`restore-dealer:${dealerId}`);
     patchDealerTrashRuntime(dealerId, null);
     const saved = await untrashDealer(dealerId);
-    let blobOk = true;
-    if (isPrompt113BlobFallbackActive()) {
-      const r = await actx.persist(
-        (prev) => {
-          const next = { ...prev.trashedDealersById };
-          delete next[dealerId];
-          return mergeActualizationState(prev, { trashedDealersById: next });
-        },
-        { unTrash: { dealers: [dealerId] } },
-      );
-      blobOk = r.success;
-    }
+    const r = await actx.persist(
+      (prev) => {
+        const next = { ...prev.trashedDealersById };
+        delete next[dealerId];
+        return mergeActualizationState(prev, { trashedDealersById: next });
+      },
+      { unTrash: { dealers: [dealerId] } },
+    );
+    const blobOk = r.success;
     setBusy(null);
     if (saved && blobOk) {
       toast({ title: "Клиент восстановлен в рабочую базу" });
@@ -310,18 +306,15 @@ export function TrashBinPage(): ReactElement {
     setBusy(`restore-tp:${tp.tradePointId}`);
     patchTradePointTrashRuntime(tp.tradePointId, null);
     const saved = await untrashTradePoint(tp.tradePointId);
-    let blobOk = true;
-    if (isPrompt113BlobFallbackActive()) {
-      const r = await actx.persist(
-        (prev) => {
-          const next = { ...prev.trashedTradePointsById };
-          delete next[tp.tradePointId];
-          return mergeActualizationState(prev, { trashedTradePointsById: next });
-        },
-        { unTrash: { tradePoints: [tp.tradePointId] } },
-      );
-      blobOk = r.success;
-    }
+    const r = await actx.persist(
+      (prev) => {
+        const next = { ...prev.trashedTradePointsById };
+        delete next[tp.tradePointId];
+        return mergeActualizationState(prev, { trashedTradePointsById: next });
+      },
+      { unTrash: { tradePoints: [tp.tradePointId] } },
+    );
+    const blobOk = r.success;
     setBusy(null);
     if (saved && blobOk) {
       toast({ title: "Торговая точка восстановлена" });

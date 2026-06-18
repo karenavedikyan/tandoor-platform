@@ -9,7 +9,6 @@ import type { ClientCategoryId } from "./client-category.js";
 import { normalizeClientCategory } from "./client-category.js";
 import type { ActualizationState, TrashedDealerInfo, TrashedTradePointInfo } from "./client-base-actualization-state.js";
 import { computeTrashExpiresAt } from "./client-base-actualization-state.js";
-import { isPrompt113BlobFallbackActive } from "./dealer-overrides-fallback.js";
 import type { DealerOverrideRow, DealerTrainingRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
 
@@ -242,16 +241,38 @@ export function getDbManualDealerPayload(dealerId: string): Record<string, unkno
   return dbManualDealerPayloads[dealerId];
 }
 
-export function isDealerTrashedInRuntime(dealerId: string, act: ActualizationState | null): boolean {
+export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationState | null): boolean {
   if (dbTrashedDealersById[dealerId]) return true;
-  if (isPrompt113BlobFallbackActive() && act?.trashedDealersById?.[dealerId]) return true;
+  if (act?.trashedDealersById?.[dealerId]) return true;
   return false;
 }
 
-export function isTradePointTrashedInRuntime(tpId: string, act: ActualizationState | null): boolean {
+export function isTradePointTrashedInRuntime(tpId: string, act?: ActualizationState | null): boolean {
   if (dbTrashedTradePointsById[tpId]) return true;
-  if (isPrompt113BlobFallbackActive() && act?.trashedTradePointsById?.[tpId]) return true;
+  if (act?.trashedTradePointsById?.[tpId]) return true;
   return false;
+}
+
+function pickNewerTrashed<T extends { trashedAt: string }>(a: T, b: T): T {
+  const ta = Date.parse(a.trashedAt);
+  const tb = Date.parse(b.trashedAt);
+  if (Number.isFinite(ta) && (!Number.isFinite(tb) || ta > tb)) return a;
+  return b;
+}
+
+function mergeTrashedRecordMaps<T extends { trashedAt: string }>(
+  blob: Record<string, T>,
+  runtime: Record<string, T>,
+): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const [id, info] of Object.entries(blob)) {
+    if (info) out[id] = info;
+  }
+  for (const [id, info] of Object.entries(runtime)) {
+    const existing = out[id];
+    out[id] = existing ? pickNewerTrashed(info, existing) : info;
+  }
+  return out;
 }
 
 export function getRuntimeTrashedDealersById(): Readonly<Record<string, TrashedDealerInfo>> {
@@ -262,18 +283,11 @@ export function getRuntimeTrashedTradePointsById(): Readonly<Record<string, Tras
   return dbTrashedTradePointsById;
 }
 
+/** Промт 397: jsonb-state (client_bulk_delete) + dealer_overrides.trashed_at. */
 export function mergeTrashedDealersForUi(act: ActualizationState): Record<string, TrashedDealerInfo> {
-  const out = { ...(isPrompt113BlobFallbackActive() ? act.trashedDealersById ?? {} : {}) };
-  for (const [id, info] of Object.entries(dbTrashedDealersById)) {
-    out[id] = info;
-  }
-  return out;
+  return mergeTrashedRecordMaps(act?.trashedDealersById ?? {}, dbTrashedDealersById);
 }
 
 export function mergeTrashedTradePointsForUi(act: ActualizationState): Record<string, TrashedTradePointInfo> {
-  const out = { ...(isPrompt113BlobFallbackActive() ? act.trashedTradePointsById ?? {} : {}) };
-  for (const [id, info] of Object.entries(dbTrashedTradePointsById)) {
-    out[id] = info;
-  }
-  return out;
+  return mergeTrashedRecordMaps(act?.trashedTradePointsById ?? {}, dbTrashedTradePointsById);
 }

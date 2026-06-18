@@ -6,7 +6,6 @@ import {
 import type { DealerRow } from "./dealer-base-mock-data.js";
 import type { ActualizationState } from "./client-base-actualization-state.js";
 import { getDbClientCategoryOverride } from "./dealer-overrides-runtime.js";
-import { isPrompt113BlobFallbackActive } from "./dealer-overrides-fallback.js";
 
 export const NEW_CLIENT_GRACE_DAYS = 90;
 
@@ -23,11 +22,9 @@ export function resolveEffectiveClientCategory(
   const fromDb = getDbClientCategoryOverride(dealer.id);
   if (fromDb) return fromDb;
 
-  if (isPrompt113BlobFallbackActive()) {
-    const overrideRaw = state?.clientCategoryOverridesById?.[dealer.id];
-    const fromOverride = topCategoryFromRaw(overrideRaw);
-    if (fromOverride) return fromOverride;
-  }
+  const overrideRaw = state?.clientCategoryOverridesById?.[dealer.id];
+  const fromOverride = topCategoryFromRaw(overrideRaw);
+  if (fromOverride) return fromOverride;
 
   const raw = dealer.clientCategory as ClientCategoryId | undefined;
   if (raw === "top150" || raw === "top350" || raw === "top500" || raw === "top500plus") {
