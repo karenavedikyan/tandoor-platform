@@ -19,6 +19,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
   Store,
   UserRound,
   Users,
@@ -114,6 +115,8 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-admin-brief-migrate": Database,
   "nav-item-admin-brief-migrate-top": Database,
   "nav-admin-brief-migrate": Database,
+  "nav-item-admin-audit": Shield,
+  "nav-admin-audit": Shield,
 };
 
 function pathMatchesNavHref(location: string, href: string): boolean {

@@ -14,6 +14,9 @@ import {
 import { listAudit } from "./admin/audit-handlers";
 import { postAdminTelegramRecovery } from "./admin/telegram-recovery";
 import { enforceCsrfOrigin } from "./security/csrf-origin";
+import { getPool } from "../shared/admin/admin-auth.js";
+import { handleAdminAuditList } from "../shared/admin/audit-ui-handlers.js";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const JSON_CT = "application/json; charset=utf-8";
 
@@ -52,6 +55,31 @@ export function registerAdminRoutes(app: Express): void {
       }
     },
   );
+
+  app.get("/api/admin/audit/list", requireAuth(), async (req: Request, res: Response) => {
+    const auth = req.auth;
+    if (!auth || auth.status !== "active" || (auth.role !== "admin" && auth.role !== "director")) {
+      applyJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+      return;
+    }
+    const pool = getPool();
+    if (!pool) {
+      applyJson(res, 503, { success: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
+      return;
+    }
+    try {
+      await handleAdminAuditList(
+        { method: "GET", query: req.query } as VercelRequest,
+        res as unknown as VercelResponse,
+        pool,
+        req.headers as Record<string, string | string[] | undefined>,
+      );
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[api/admin/audit] list", m.slice(0, 200));
+      applyJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Внутренняя ошибка сервера." });
+    }
+  });
 
   app.get(
     "/api/admin/users-list",
