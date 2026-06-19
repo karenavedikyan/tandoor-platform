@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
-import { useHashLocation } from "wouter/use-hash-location";
+import { useHashLocation } from "@/lib/hash-location-router";
 import { Button } from "@/components/ui/button";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
 import { getProductById } from "@/lib/catalog-data";
