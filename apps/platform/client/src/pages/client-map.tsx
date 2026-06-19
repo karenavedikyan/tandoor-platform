@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useHashLocation } from "wouter/use-hash-location";
+import { useHashLocation } from "@/lib/hash-location-router";
 import { Search } from "lucide-react";
 import { ClientMapYandex } from "@/components/client-map-yandex";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";

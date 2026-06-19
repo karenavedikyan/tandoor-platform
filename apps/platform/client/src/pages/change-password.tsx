@@ -3,7 +3,7 @@
  */
 
 import { useState } from "react";
-import { useHashLocation } from "wouter/use-hash-location";
+import { useHashLocation } from "@/lib/hash-location-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
