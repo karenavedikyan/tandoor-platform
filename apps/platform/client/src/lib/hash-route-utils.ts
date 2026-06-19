@@ -99,3 +99,25 @@ export function useHashRouteSearchParams(): URLSearchParams {
   }, []);
   return useMemo(() => readHashRouteQuery(), [loc, tick]);
 }
+
+/**
+ * Обновляет один query-параметр внутри hash-секции (после `?`), сохраняя путь.
+ * Если value === null → удаляет ключ.
+ * Использует history.replaceState чтобы не плодить записи в истории браузера.
+ * Бросает событие hashchange чтобы useHashRouteSearchParams реагировал.
+ */
+export function updateHashRouteParam(key: string, value: string | null): void {
+  if (typeof window === "undefined") return;
+  const hash = window.location.hash || "#/";
+  const qIdx = hash.indexOf("?");
+  const hashBase = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
+  const sp = new URLSearchParams(qIdx >= 0 ? hash.slice(qIdx + 1) : "");
+  if (value === null) sp.delete(key);
+  else sp.set(key, value);
+  const qs = sp.toString();
+  const nextHash = qs ? `${hashBase}?${qs}` : hashBase;
+  if (nextHash === window.location.hash) return;
+  window.history.replaceState(null, "", `${window.location.search}${nextHash}`);
+  const HashChange = window.HashChangeEvent ?? Event;
+  window.dispatchEvent(new HashChange("hashchange"));
+}
