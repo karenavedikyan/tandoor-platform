@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "../client-base-actualization-data-merge";
-import { isDealerTrashedInRuntime } from "../dealer-overrides-runtime";
+import { isDealerTrashedInRuntime, applyDealerOverridesRuntime } from "../dealer-overrides-runtime";
 import { resolveTrashedDealerDisplayName } from "../client-base-actualization-visibility";
 import { buildReleaseClientByDealerId } from "../trash-archive-helpers";
 import { getReleaseClients } from "../release-client-data";
@@ -83,7 +83,38 @@ assert.equal(unknownDisplay.name, "MA-UNK-1", "крайний fallback: код �
         source: "client_bulk_delete",
       }),
     };
-    assert.ok(isDealerTrashedInRuntime("D1", act), "blob trashed в runtime");
+    applyDealerOverridesRuntime(
+      [
+        {
+          dealer_id: "D1",
+          status: "in_trash",
+          name: null,
+          city: null,
+          contact_name: null,
+          contact_phone: null,
+          contact_email: null,
+          general_comment: null,
+          client_category: null,
+          trashed_at: new Date().toISOString(),
+          trashed_by: "u1",
+          purge_requested_at: null,
+          purge_requested_by: null,
+          purged_at: null,
+          purged_by: null,
+          unloading_order: null,
+          regional_manager_id: null,
+          regional_manager_name: null,
+          rop_id: null,
+          rop_name: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          updated_by: "u1",
+        },
+      ],
+      [],
+      [],
+    );
+    assert.ok(isDealerTrashedInRuntime("D1", act), "DB override trashed в runtime");
     const rows = buildDealerBaseRowsWithActualization(act, {
       personaId: "p1",
       personaUserId: "u1",

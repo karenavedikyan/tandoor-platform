@@ -17,7 +17,7 @@ export {
 } from "./overrides-api-result.js";
 import { sanitizeDealerOverrideFieldsForApi } from "./overrides-persona-fields.js";
 import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
-import { invalidateMyDealerScope } from "./dealers-my-scope-api.js";
+import { invalidateAllDealerScopes } from "./dealers-team-scope-api.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -151,7 +151,7 @@ export async function trashDealerStrict(dealerId: string): Promise<OverridesApiR
     traceFn: "trashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-trash", dealerId, body);
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -172,7 +172,7 @@ export async function untrashDealerStrict(dealerId: string): Promise<OverridesAp
     traceFn: "untrashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-untrash", dealerId, body);
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -188,7 +188,7 @@ export async function bulkTrashDealersStrict(
     body,
     traceFn: "bulkTrashDealersStrict",
   });
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -211,7 +211,7 @@ async function postDealerPurgeAction<T>(
     body,
     traceFn,
   });
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 

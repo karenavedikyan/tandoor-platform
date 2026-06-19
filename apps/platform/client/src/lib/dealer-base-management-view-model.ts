@@ -21,6 +21,7 @@ import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from ".
 import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
+import type { MemberTotals, TeamTotals } from "@shared/dealers-scope-types";
 
 export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;
 
@@ -325,6 +326,7 @@ export function aggregateManagersForTeam(
   orgSnap?: OrgSnapshot | null,
   responsibleByCode?: ResponsibleByCodeMap,
   _userIdToCatalogMgrId?: Map<string, string>,
+  membersTotalsById?: Map<string, MemberTotals>,
 ): ManagerRowModel[] {
   void _userIdToCatalogMgrId;
   const catalogTeamId = resolveManagementCatalogTeamId(teamId, orgSnap);
@@ -333,6 +335,22 @@ export function aggregateManagersForTeam(
     const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
     const match = buildDbAwareManagerMatcherForPreGroupedTeamRows(mgrCatalogId, m.name, responsibleByCode);
     const rows = teamRows.filter(match);
+    const dbTotals = membersTotalsById?.get(m.id) ?? membersTotalsById?.get(mgrCatalogId);
+    if (dbTotals) {
+      return {
+        managerId: mgrCatalogId,
+        name: m.name,
+        teamId,
+        active: dbTotals.active_dealers,
+        potential: 0,
+        attention: 0,
+        outlets: dbTotals.active_trade_points,
+        topSegmentLabel: bestTopSegmentLabel(rows),
+        rows,
+        isExternal: false,
+        externalTeamName: null,
+      };
+    }
     const active = rows.filter((r) => r.status === "активный").length;
     const potential = rows.filter((r) => r.status === "потенциальный").length;
     const attention = rows.filter((r) => dealerNeedsAttention(r)).length;
@@ -512,6 +530,8 @@ export function buildRopGroups(
   responsibleByCode?: ResponsibleByCodeMap,
   userIdToCatalogMgrId?: Map<string, string>,
   grantedCodes?: Set<string>,
+  teamTotalsById?: Map<string, TeamTotals>,
+  membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>,
 ): RopGroupModel[] {
   void userIdToCatalogMgrId;
   const rowsByCatalogTeamId = groupRowsByResolvedTeamId(rows);
@@ -523,12 +543,34 @@ export function buildRopGroups(
     if (index === 0 && orphanGranted.length > 0) {
       teamRows = [...teamRows, ...orphanGranted];
     }
-    return { t, catalogTeamId, teamRows, stats: summarizeTeamRows(teamRows) };
+    const teamDbTotals = teamTotalsById?.get(t.teamId);
+    const stats = summarizeTeamRows(teamRows);
+    return {
+      t,
+      catalogTeamId,
+      teamRows,
+      stats: teamDbTotals
+        ? {
+            active: teamDbTotals.active_dealers,
+            potential: 0,
+            attention: 0,
+            outlets: teamDbTotals.active_trade_points,
+          }
+        : stats,
+    };
   });
   const maxTeamActive = teamBundles.reduce((m, x) => Math.max(m, x.stats.active), 0);
 
   return teamBundles.map(({ t, catalogTeamId, teamRows, stats }) => {
-    const managers = aggregateManagersForTeam(catalogTeamId, teamRows, orgSnap, responsibleByCode, userIdToCatalogMgrId);
+    const membersTotals = membersTotalsByTeamId?.get(t.teamId);
+    const managers = aggregateManagersForTeam(
+      catalogTeamId,
+      teamRows,
+      orgSnap,
+      responsibleByCode,
+      userIdToCatalogMgrId,
+      membersTotals,
+    );
     const mgrCatalog = managersCatalogForTeam(t.teamId, orgSnap);
     const statusLine = buildRopStatusLine(
       teamRows,

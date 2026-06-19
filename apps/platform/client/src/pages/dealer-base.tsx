@@ -76,6 +76,9 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
+import { useMyTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope } from "@/hooks/use-org-scope";
+import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
@@ -1382,6 +1385,58 @@ function ruClientNoun(n: number): "клиент" | "клиента" | "клие�
   return "клиентов";
 }
 
+function dealerExternalKeysFromTeamScope(ts: TeamScopePayload): Set<string> {
+  return new Set(
+    ts.members.flatMap((m) => [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]),
+  );
+}
+
+function dealerExternalKeysFromOrgScope(os: OrgScopePayload): Set<string> {
+  const keys = new Set<string>();
+  for (const block of os.teams) {
+    for (const m of block.members) {
+      for (const k of m.active_dealer_external_keys) keys.add(k);
+      for (const k of m.trashed_dealer_external_keys) keys.add(k);
+    }
+  }
+  for (const m of os.orphan.members) {
+    for (const k of m.active_dealer_external_keys) keys.add(k);
+    for (const k of m.trashed_dealer_external_keys) keys.add(k);
+  }
+  return keys;
+}
+
+function buildTotalsMapsFromTeamScope(data: TeamScopePayload): {
+  teamTotalsById: Map<string, TeamTotals>;
+  membersTotalsByTeamId: Map<string, Map<string, MemberTotals>>;
+} {
+  const membersMap = new Map<string, MemberTotals>();
+  for (const m of data.members) {
+    membersMap.set(m.user.id, m.totals);
+  }
+  return {
+    teamTotalsById: new Map([[data.team.id, data.team_totals]]),
+    membersTotalsByTeamId: new Map([[data.team.id, membersMap]]),
+  };
+}
+
+function buildTotalsMapsFromOrgScope(data: OrgScopePayload): {
+  teamTotalsById: Map<string, TeamTotals>;
+  membersTotalsByTeamId: Map<string, Map<string, MemberTotals>>;
+} {
+  const teamTotalsById = new Map<string, TeamTotals>();
+  const membersTotalsByTeamId = new Map<string, Map<string, MemberTotals>>();
+  for (const block of data.teams) {
+    teamTotalsById.set(block.team.id, block.team_totals);
+    const membersMap = new Map<string, MemberTotals>();
+    for (const m of block.members) {
+      membersMap.set(m.user.id, m.totals);
+    }
+    membersTotalsByTeamId.set(block.team.id, membersMap);
+  }
+  return { teamTotalsById, membersTotalsByTeamId };
+}
+
 export type DealerBaseProps = {
   /** Если задан — показываем scope этого пользователя, а не текущего me. */
   scopeUserId?: string;
@@ -1408,6 +1463,24 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
   });
   const selfDbScopeQ = useMyScopeFromDB({ enabled: isRealUser && !viewingOtherUserScope });
+
+  const targetIsRop =
+    viewingOtherUserScope && targetScopeQ.ready && targetScopeQ.scopeSubject.role === "rop";
+  const targetIsDirector =
+    viewingOtherUserScope && targetScopeQ.ready && targetScopeQ.scopeSubject.role === "director";
+
+  const teamScopeQ = useMyTeamScope({
+    enabled: Boolean(isRealUser && (targetIsRop || (!viewingOtherUserScope && me?.role === "rop"))),
+    ropUserId: targetIsRop ? scopeUserIdResolved : undefined,
+  });
+
+  const orgScopeQ = useOrgScope({
+    enabled: Boolean(
+      isRealUser &&
+        ((targetIsDirector && viewingOtherUserScope) || (!viewingOtherUserScope && me?.role === "director")),
+    ),
+  });
+
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
@@ -1534,6 +1607,16 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     () => (useReal && snap ? { snap, access } : undefined),
     [useReal, snap, access],
   );
+
+  const managementScopeTotals = useMemo(() => {
+    if (teamScopeQ.ready && teamScopeQ.data) {
+      return buildTotalsMapsFromTeamScope(teamScopeQ.data);
+    }
+    if (orgScopeQ.ready && orgScopeQ.data) {
+      return buildTotalsMapsFromOrgScope(orgScopeQ.data);
+    }
+    return null;
+  }, [teamScopeQ.ready, teamScopeQ.data, orgScopeQ.ready, orgScopeQ.data]);
 
   const defaultRopManager = useMemo(() => {
     if (useReal && snap) {
@@ -1720,6 +1803,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
       return mergedRowsForDealerBase.filter((r) => dbScopedExternalKeys.has(r.id));
     }
+    if (useReal && access === "team_lead" && teamScopeQ.ready && teamScopeQ.data) {
+      const keys = dealerExternalKeysFromTeamScope(teamScopeQ.data);
+      return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
+    }
+    if (useReal && access === "sales_director" && orgScopeQ.ready && orgScopeQ.data) {
+      const keys = dealerExternalKeysFromOrgScope(orgScopeQ.data);
+      return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsForDealerBase,
@@ -1738,6 +1829,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     access,
     selfDbScopeQ.ready,
     dbScopedExternalKeys,
+    teamScopeQ.ready,
+    teamScopeQ.data,
+    orgScopeQ.ready,
+    orgScopeQ.data,
     mergedRowsForDealerBase,
     profile,
     assignmentsScope,
@@ -1778,6 +1873,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
       return mergedRowsActivePortfolio.filter((r) => dbScopedExternalKeys.has(r.id));
     }
+    if (useReal && access === "team_lead" && teamScopeQ.ready && teamScopeQ.data) {
+      const keys = dealerExternalKeysFromTeamScope(teamScopeQ.data);
+      return mergedRowsActivePortfolio.filter((r) => keys.has(r.id));
+    }
+    if (useReal && access === "sales_director" && orgScopeQ.ready && orgScopeQ.data) {
+      const keys = dealerExternalKeysFromOrgScope(orgScopeQ.data);
+      return mergedRowsActivePortfolio.filter((r) => keys.has(r.id));
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsActivePortfolio,
@@ -1796,6 +1899,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     access,
     selfDbScopeQ.ready,
     dbScopedExternalKeys,
+    teamScopeQ.ready,
+    teamScopeQ.data,
+    orgScopeQ.ready,
+    orgScopeQ.data,
     mergedRowsActivePortfolio,
     profile,
     assignmentsScope,
@@ -3565,6 +3672,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         rows={scopedActivePortfolioRows}
         orgTeamCtx={orgTeamCtxForCockpit}
         overview={overviewQ.data ?? null}
+        teamTotalsById={managementScopeTotals?.teamTotalsById}
+        membersTotalsByTeamId={managementScopeTotals?.membersTotalsByTeamId}
         mergedDealerRowsForCreate={
           useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
         }

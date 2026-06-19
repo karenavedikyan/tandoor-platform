@@ -59,8 +59,13 @@ export function buildReleaseCodeToDealerIdMap(
   return m;
 }
 
-export function isDealerTrashedInScope(dealerId: string, act: ActualizationState): boolean {
-  return Boolean(act.trashedDealersById?.[dealerId]);
+export function isDealerTrashedInScope(
+  dealerId: string,
+  _act?: ActualizationState | null,
+  options?: { trashedDealerExternalKeys?: ReadonlySet<string> },
+): boolean {
+  void _act;
+  return Boolean(options?.trashedDealerExternalKeys?.has(dealerId));
 }
 
 /**
@@ -71,12 +76,13 @@ export function manualDealerShouldShowSeparateFromLinkedSeed(
   external1cCode: string | undefined,
   act: ActualizationState,
   releaseByCode: ReadonlyMap<string, string>,
+  options?: { trashedDealerExternalKeys?: ReadonlySet<string> },
 ): boolean {
   const code = external1cCode?.trim();
   if (!code) return true;
   const seedId = releaseByCode.get(code);
   if (!seedId) return true;
-  return isDealerTrashedInScope(seedId, act);
+  return isDealerTrashedInScope(seedId, act, options);
 }
 
 export type TrashedDealerDisplay = {
