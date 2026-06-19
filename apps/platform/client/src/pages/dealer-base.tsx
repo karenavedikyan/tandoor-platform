@@ -2335,7 +2335,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     setUrlCharacteristicId(charParsed);
 
     setProgramFilters(programParsed);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- [412] mergedRowsForDealerBase убран из deps: его пересоздание при рефетчах my-scope/visCodes не должно сбрасывать пользовательские фильтры. Актуальное значение — mergedRowsRef.current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- [412] mergedRowsForDealerBase убран из deps; [419] assignmentsScope намеренно не в deps — пересоздание при рефетчах my-scope не должно сбрасывать пользовательские фильтры. Актуальное значение — mergedRowsRef.current и assignmentsScope из замыкания при смене routeKey.
   }, [
     profile.personaUserId,
     profile.role,
@@ -2346,7 +2346,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     snap,
     realCtxForRoute,
     me?.id,
-    assignmentsScope,
     isTaskSelectMode,
   ]);
 
