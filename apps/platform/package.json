@@ -13,6 +13,7 @@
     "check": "tsc && node scripts/check-shadow-write-coverage.mjs && node scripts/check-no-void-overrides-calls.mjs && node scripts/check-strict-coverage.mjs && node scripts/check-ls-storage-owners.mjs && node scripts/check-db-source-invariant.mjs",
     "test": "vitest run",
     "test:schema-version-handshake": "vitest run schema-version-handshake",
+    "test:build-version-poll": "vitest run build-version-poll",
     "lint:shadow-write": "node scripts/check-shadow-write-coverage.mjs",
     "lint:db-source-of-truth": "node ../../scripts/lint-db-source-of-truth.mjs",
     "lint:db-source-of-truth-full": "node scripts/check-db-source-invariant.mjs",
