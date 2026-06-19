@@ -28,11 +28,6 @@ import {
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
 
-import {
-  updateHashRouteParam,
-  updateHashRouteParams,
-  useHashRouteSearchParams,
-} from "@/lib/hash-route-utils";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type DistributionEntryCityPanelProps = {
@@ -48,16 +43,11 @@ function filterRowsByCity(rows: DistributionEntryTradePointRow[], city: string):
 export function DistributionEntryCityPanel({ profile, dealers }: DistributionEntryCityPanelProps) {
   const { user } = useCurrentUser();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
-  const routeParams = useHashRouteSearchParams();
-  const urlCity = routeParams.get("de_city");
-  const urlDealer = routeParams.get("de_dealer");
-  const urlTp = routeParams.get("de_tp");
   const [cityQuery, setCityQuery] = useState("");
   const [tpQuery, setTpQuery] = useState("");
+  const [selectedCity, setSelectedCity] = useState<string | null>(null);
+  const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
   const [cacheBump, setCacheBump] = useState(0);
-
-  const selectedCity = urlCity;
-  const selectedTradePointId = urlTp;
 
   useEffect(() => {
     const onCache = () => setCacheBump((n) => n + 1);
@@ -74,54 +64,10 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
     return filterRowsByCity(all, selectedCity);
   }, [dealers, selectedCity, tpQuery, cacheBump]);
 
-  const selectedRow = useMemo(() => {
-    if (!urlTp) return null;
-    return (
-      tpRows.find((r) => r.tradePointId === urlTp && (!urlDealer || r.dealerId === urlDealer)) ?? null
-    );
-  }, [tpRows, urlTp, urlDealer]);
-
-  useEffect(() => {
-    if (routeParams.get("de_fs") === "1" && (!urlDealer || !urlTp)) {
-      updateHashRouteParam("de_fs", null);
-    }
-  }, [routeParams, urlDealer, urlTp]);
-
-  useEffect(() => {
-    if (urlCity && !cityRows.some((row) => row.city === urlCity)) {
-      updateHashRouteParams({ de_city: null, de_dealer: null, de_tp: null, de_fs: null });
-    }
-  }, [urlCity, cityRows]);
-
-  useEffect(() => {
-    if (!urlDealer || !urlTp) return;
-    const exists = dealers.some(
-      (d) => d.id === urlDealer && d.tradePoints.some((tp) => tp.id === urlTp),
-    );
-    if (!exists) {
-      updateHashRouteParams({ de_dealer: null, de_tp: null, de_fs: null });
-    }
-  }, [urlDealer, urlTp, dealers]);
-
-  const handleFullscreenChange = useCallback(
-    (open: boolean) => {
-      if (open) {
-        if (!urlDealer || !urlTp) return;
-        updateHashRouteParams({ de_dealer: urlDealer, de_tp: urlTp, de_fs: "1" });
-      } else {
-        updateHashRouteParam("de_fs", null);
-      }
-    },
-    [urlDealer, urlTp],
+  const selectedRow = useMemo(
+    () => tpRows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
+    [tpRows, selectedTradePointId],
   );
-
-  const clearCity = useCallback(() => {
-    updateHashRouteParams({ de_city: null, de_dealer: null, de_tp: null, de_fs: null });
-  }, []);
-
-  const clearTradePoint = useCallback(() => {
-    updateHashRouteParams({ de_dealer: null, de_tp: null, de_fs: null });
-  }, []);
 
   const selectedRef = useMemo(
     () => (selectedRow ? findDealerTradePointForEntryRow(dealers, selectedRow) : null),
@@ -146,12 +92,8 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
   });
 
   const handleSelectCity = useCallback((city: string) => {
-    updateHashRouteParams({
-      de_city: city,
-      de_dealer: null,
-      de_tp: null,
-      de_fs: null,
-    });
+    setSelectedCity(city);
+    setSelectedTradePointId(null);
   }, []);
 
   const cityList = (
@@ -248,13 +190,7 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
                 >
                   <button
                     type="button"
-                    onClick={() =>
-                      updateHashRouteParams({
-                        de_dealer: row.dealerId,
-                        de_tp: row.tradePointId,
-                        de_fs: null,
-                      })
-                    }
+                    onClick={() => setSelectedTradePointId(row.tradePointId)}
                     className={cn(
                       "w-full rounded-xl border px-3 py-3 text-left transition-colors",
                       selected ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
@@ -301,8 +237,6 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
         profile={profile}
         actorUserId={actorUserId}
         actorName={actorName}
-        initialFullscreenOpen={routeParams.get("de_fs") === "1"}
-        onFullscreenChange={handleFullscreenChange}
       />
     ) : (
       <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
@@ -324,8 +258,11 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
           size="sm"
           className="min-h-10 px-0 text-muted-foreground"
           onClick={() => {
-            if (showShowcase) clearTradePoint();
-            else clearCity();
+            if (showShowcase) setSelectedTradePointId(null);
+            else {
+              setSelectedCity(null);
+              setSelectedTradePointId(null);
+            }
           }}
           data-testid="distribution-entry-city-step-back"
         >
@@ -347,7 +284,10 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
                 variant="ghost"
                 size="sm"
                 className="mb-3 min-h-9 px-0 text-muted-foreground"
-                onClick={clearCity}
+                onClick={() => {
+                  setSelectedCity(null);
+                  setSelectedTradePointId(null);
+                }}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
                 Города

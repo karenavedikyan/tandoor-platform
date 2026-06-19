@@ -21,8 +21,7 @@ import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-da
 import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
-import {
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";import {
   buildDistributionEntryTradePointRows,
   findDealerTradePointForEntryRow,
   type DistributionEntryTradePointRow,
@@ -32,11 +31,6 @@ import {
   listActiveDistributionFilterChips,
   type DistributionFilterState,
 } from "@/lib/distribution-filters";
-import {
-  updateHashRouteParam,
-  updateHashRouteParams,
-  useHashRouteSearchParams,
-} from "@/lib/hash-route-utils";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
@@ -75,10 +69,8 @@ export function DistributionEntryTradePointPanel({
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
-  const routeParams = useHashRouteSearchParams();
-  const urlDealer = routeParams.get("de_dealer");
-  const urlTp = routeParams.get("de_tp");
   const [query, setQuery] = useState("");
+  const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
   const [cacheBump, setCacheBump] = useState(0);
   const isMobile = useIsMobile();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
@@ -126,46 +118,10 @@ export function DistributionEntryTradePointPanel({
     return map;
   }, [rows, scopedDealers]);
 
-  const selectedRow = useMemo(() => {
-    if (!urlTp) return null;
-    return (
-      rows.find((r) => r.tradePointId === urlTp && (!urlDealer || r.dealerId === urlDealer)) ?? null
-    );
-  }, [rows, urlTp, urlDealer]);
-
-  const selectedTradePointId = urlTp;
-
-  useEffect(() => {
-    if (routeParams.get("de_fs") === "1" && (!urlDealer || !urlTp)) {
-      updateHashRouteParam("de_fs", null);
-    }
-  }, [routeParams, urlDealer, urlTp]);
-
-  useEffect(() => {
-    if (!urlDealer || !urlTp) return;
-    const exists = scopedDealers.some(
-      (d) => d.id === urlDealer && d.tradePoints.some((tp) => tp.id === urlTp),
-    );
-    if (!exists) {
-      updateHashRouteParams({ de_dealer: null, de_tp: null, de_fs: null });
-    }
-  }, [urlDealer, urlTp, scopedDealers]);
-
-  const handleFullscreenChange = useCallback(
-    (open: boolean) => {
-      if (open) {
-        if (!urlDealer || !urlTp) return;
-        updateHashRouteParams({ de_dealer: urlDealer, de_tp: urlTp, de_fs: "1" });
-      } else {
-        updateHashRouteParam("de_fs", null);
-      }
-    },
-    [urlDealer, urlTp],
+  const selectedRow = useMemo(
+    () => rows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
+    [rows, selectedTradePointId],
   );
-
-  const clearSelection = useCallback(() => {
-    updateHashRouteParams({ de_dealer: null, de_tp: null, de_fs: null });
-  }, []);
 
   const selectedRef = useMemo(
     () => (selectedRow ? findDealerTradePointForEntryRow(scopedDealers, selectedRow) : null),
@@ -176,11 +132,7 @@ export function DistributionEntryTradePointPanel({
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
 
   const handleSelectRow = useCallback((row: DistributionEntryTradePointRow) => {
-    updateHashRouteParams({
-      de_dealer: row.dealerId,
-      de_tp: row.tradePointId,
-      de_fs: null,
-    });
+    setSelectedTradePointId(row.tradePointId);
   }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -412,9 +364,7 @@ export function DistributionEntryTradePointPanel({
       profile={profile}
       actorUserId={actorUserId}
       actorName={actorName}
-      initialFullscreenOpen={routeParams.get("de_fs") === "1"}
-      onFullscreenChange={handleFullscreenChange}
-      onBackToList={clearSelection}
+      onBackToList={() => setSelectedTradePointId(null)}
     />
   ) : (
     <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
@@ -442,7 +392,7 @@ export function DistributionEntryTradePointPanel({
                 variant="outline"
                 size="sm"
                 className="min-h-10"
-                onClick={clearSelection}
+                onClick={() => setSelectedTradePointId(null)}
                 data-testid="button-distribution-entry-back-to-list"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
