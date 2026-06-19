@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHashLocation } from "wouter/use-hash-location";
 import { Search } from "lucide-react";
 import { ClientMapYandex } from "@/components/client-map-yandex";
@@ -43,7 +43,7 @@ import {
 } from "@/lib/client-map-data";
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
-import { getEffectiveTeamLeadTeamId, loadReleaseDemoProfile, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getAllSalesManagers, getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
@@ -111,21 +111,28 @@ export default function ClientMapPage() {
   const [, setLoc] = useHashLocation();
   const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
 
+  const defaultRopManager = useMemo(
+    () => initialRopManagerForProfile(profile, access),
+    [profile, access],
+  );
+  const userTouchedPickerRef = useRef(false);
+
   const [search, setSearch] = useState("");
   const [quick, setQuick] = useState<ClientMapQuickFilter>("all");
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
-  const [ropTeam, setRopTeam] = useState(() => {
-    const p = loadReleaseDemoProfile();
-    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
-  });
-  const [manager, setManager] = useState(() => {
-    const p = loadReleaseDemoProfile();
-    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
-  });
+  const [ropTeam, setRopTeam] = useState(defaultRopManager.ropTeam);
+  const [manager, setManager] = useState(defaultRopManager.manager);
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null);
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
+
+  useEffect(() => {
+    if (userTouchedPickerRef.current) return;
+    if (routeKey) return;
+    setRopTeam(defaultRopManager.ropTeam);
+    setManager(defaultRopManager.manager);
+  }, [defaultRopManager.ropTeam, defaultRopManager.manager, routeKey]);
 
   const teamCtx = useClientBaseTeamActualization();
   const teamActualizationPlane = teamCtx.mergedState;
@@ -148,8 +155,10 @@ export default function ClientMapPage() {
   useEffect(() => {
     const d = initialRopManagerForProfile(profile, access);
     if (!routeKey) {
-      setRopTeam(d.ropTeam);
-      setManager(d.manager);
+      if (!userTouchedPickerRef.current) {
+        setRopTeam(d.ropTeam);
+        setManager(d.manager);
+      }
       setQuick("all");
       setSelectedCities([]);
       setSearch("");
@@ -230,12 +239,18 @@ export default function ClientMapPage() {
   const hideRopManagerFilters = access === "sales_manager";
 
   const onRopChange = useCallback((v: string) => {
+    userTouchedPickerRef.current = true;
     setRopTeam(v);
     setManager((prev) => {
       if (prev === "all") return "all";
       const allowed = getManagersForRopTeam(v).some((m) => m.id === prev);
       return allowed ? prev : "all";
     });
+  }, []);
+
+  const onManagerChange = useCallback((v: string) => {
+    userTouchedPickerRef.current = true;
+    setManager(v);
   }, []);
 
   useEffect(() => {
@@ -404,7 +419,7 @@ export default function ClientMapPage() {
             {!hideRopManagerFilters ? (
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Менеджер</Label>
-                <Select value={manager} onValueChange={setManager}>
+                <Select value={manager} onValueChange={onManagerChange}>
                   <SelectTrigger className="min-h-10 min-w-0" data-testid="select-client-map-manager">
                     <SelectValue placeholder="Менеджер" />
                   </SelectTrigger>
