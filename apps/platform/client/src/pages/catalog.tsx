@@ -13,12 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Slider } from "@/components/ui/slider";
 import {
   Sheet,
@@ -30,9 +24,9 @@ import { CatalogViewToggle } from "@/components/catalog/catalog-view-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { CatalogShowcase, type ShowcaseBadge } from "@/components/catalog/CatalogShowcase";
-import { CategoryChips } from "@/components/catalog/CategoryChips";
 import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
-import { FilterCheckboxGroup } from "@/components/catalog/FilterCheckboxGroup";
+import { CatalogFiltersPanel } from "@/components/catalog/CatalogFiltersPanel";
+import type { CatalogFilterFacet } from "@/components/catalog/CatalogFiltersPanel";
 import {
   ProductCardGrid,
   ProductListHeader,
@@ -619,13 +613,24 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          <CategoryChips
-            categories={categories}
-            selectedId={categoryId}
-            onSelect={(id) => {
-              setCategoryId(id);
+          <CatalogFiltersPanel
+            categories={categories.map((c) => ({
+              id: c.id,
+              label: c.name,
+              count: c.product_count,
+            }))}
+            selectedCategories={categoryId === "all" ? [] : [categoryId]}
+            onCategoriesChange={(next) => {
+              setCategoryId(next.length === 0 ? "all" : next[next.length - 1]!);
               scrollToListing();
             }}
+            singleCategory
+            facets={[]}
+            value={{}}
+            onChange={() => {}}
+            onResetAll={() => {}}
+            open
+            data-testid="catalog-page-category-filters"
           />
 
           <div className="flex flex-col gap-3 min-[866px]:flex-row min-[866px]:items-center">
@@ -770,12 +775,16 @@ function CatalogAdvancedFilters({
   const sliderMax = bHi > bLo ? bHi : bLo + 1;
   const sliderValue = priceRange ?? [bLo, sliderMax];
   const groups = filtersData?.groups ?? [];
-  const defaultOpen = useMemo(() => groups.map((g) => g.key), [groups]);
-  const [openSections, setOpenSections] = useState<string[]>(defaultOpen);
-
-  useEffect(() => {
-    setOpenSections(groups.map((g) => g.key));
-  }, [groups]);
+  const facetGroups: CatalogFilterFacet[] = useMemo(
+    () =>
+      groups.map((group) => ({
+        key: group.key,
+        label: group.label,
+        kind: group.kind,
+        options: group.values,
+      })),
+    [groups],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -829,31 +838,25 @@ function CatalogAdvancedFilters({
               </div>
             )}
 
-            <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="w-full">
-              {groups.map((group) => (
-                <AccordionItem key={group.key} value={group.key} className="border-b border-[#e3e6f3]">
-                  <AccordionTrigger className="py-2.5 text-sm font-medium text-foreground hover:no-underline">
-                    {group.label}
-                  </AccordionTrigger>
-                  <AccordionContent className="pb-3 pt-1">
-                    <FilterCheckboxGroup
-                      label={group.label}
-                      kind={group.kind}
-                      options={group.values}
-                      selected={propFilters[group.key] ?? []}
-                      onChange={(next) =>
-                        setPropFilters((prev) => {
-                          const copy = { ...prev };
-                          if (next.length) copy[group.key] = next;
-                          else delete copy[group.key];
-                          return copy;
-                        })
-                      }
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            <CatalogFiltersPanel
+              facets={facetGroups}
+              selectedCategories={[]}
+              onCategoriesChange={() => {}}
+              value={propFilters}
+              onChange={(key, next) =>
+                setPropFilters((prev) => {
+                  const copy = { ...prev };
+                  if (next.length) copy[key] = next;
+                  else delete copy[key];
+                  return copy;
+                })
+              }
+              onResetAll={onReset}
+              activeCount={Object.keys(propFilters).length}
+              open
+              className="border-0 bg-transparent p-0"
+              data-testid="catalog-advanced-filters-panel"
+            />
           </div>
         )}
       </div>
