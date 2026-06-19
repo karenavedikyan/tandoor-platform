@@ -64,6 +64,7 @@ import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client
 import {
   realAllSalesManagers,
   realEffectiveTeamLeadTeamId,
+  realInitialRopManagerDefaults,
   realManagerOptionsForAccess,
   realRopOptions,
   realRopOptionsForAccess,
@@ -1513,10 +1514,12 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     [useReal, snap, access],
   );
 
-  const defaultRopManager = useMemo(
-    () => initialRopManagerForProfile(profile, access),
-    [profile, access],
-  );
+  const defaultRopManager = useMemo(() => {
+    if (useReal && snap) {
+      return realInitialRopManagerDefaults(snap, access);
+    }
+    return initialRopManagerForProfile(profile, access);
+  }, [useReal, snap, profile, access]);
 
   const userTouchedPickerRef = useRef(false);
 
@@ -2124,7 +2127,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       taskSelectFiltersInitedRef.current = true;
     }
 
-    const d = initialRopManagerForProfile(profile, access);
+    const d =
+      useReal && snap
+        ? realInitialRopManagerDefaults(snap, access)
+        : initialRopManagerForProfile(profile, access);
     if (!routeKey) {
       if (!userTouchedPickerRef.current) {
         setRopTeam(d.ropTeam);

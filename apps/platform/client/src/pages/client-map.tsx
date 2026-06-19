@@ -44,6 +44,7 @@ import {
 import { useRouteSearchParams } from "@/lib/hash-route-utils";
 import { getManagersForRopTeam, getRopOptions, isRopOrManagerAllFilter } from "@/lib/rop-manager-filters";
 import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { realInitialRopManagerDefaults } from "@/lib/real-org-adapter";
 import { getAllSalesManagers, getSalesUserById, type SalesRole } from "@/lib/sales-control-data";
 import { getClientCategoryBadgeClass, getClientCategoryLabel } from "@/lib/client-category";
 import { cn } from "@/lib/utils";
@@ -109,12 +110,20 @@ export default function ClientMapPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
   const [, setLoc] = useHashLocation();
-  const access = useMemo(() => mapSalesRoleToDealerBaseAccess(profile.role), [profile.role]);
-
-  const defaultRopManager = useMemo(
-    () => initialRopManagerForProfile(profile, access),
-    [profile, access],
+  const realScope = useSidebarNavRealScope();
+  const snap = realScope.orgScope?.snap ?? null;
+  const useReal = Boolean(realScope.ready && snap);
+  const access = useMemo(
+    () => realScope.orgScope?.access ?? mapSalesRoleToDealerBaseAccess(profile.role),
+    [realScope.orgScope?.access, profile.role],
   );
+
+  const defaultRopManager = useMemo(() => {
+    if (useReal && snap) {
+      return realInitialRopManagerDefaults(snap, access);
+    }
+    return initialRopManagerForProfile(profile, access);
+  }, [useReal, snap, profile, access]);
   const userTouchedPickerRef = useRef(false);
 
   const [search, setSearch] = useState("");
@@ -137,7 +146,6 @@ export default function ClientMapPage() {
   const teamCtx = useClientBaseTeamActualization();
   const teamActualizationPlane = teamCtx.mergedState;
   const { publishDashboardRopTeamId } = teamCtx;
-  const realScope = useSidebarNavRealScope();
 
   const baseRowsForMap = useMemo(
     () =>
@@ -153,7 +161,10 @@ export default function ClientMapPage() {
   }, [ropTeam, access, publishDashboardRopTeamId]);
 
   useEffect(() => {
-    const d = initialRopManagerForProfile(profile, access);
+    const d =
+      useReal && snap
+        ? realInitialRopManagerDefaults(snap, access)
+        : initialRopManagerForProfile(profile, access);
     if (!routeKey) {
       if (!userTouchedPickerRef.current) {
         setRopTeam(d.ropTeam);
