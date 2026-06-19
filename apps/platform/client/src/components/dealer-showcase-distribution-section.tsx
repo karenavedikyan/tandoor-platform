@@ -41,6 +41,7 @@ import {
   type ShowcaseTask,
   type ShowcaseTaskStatus,
   showcaseCompleteResultLabel,
+  showcaseOverrideStorageKey,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
 import {
@@ -521,7 +522,7 @@ export function DealerShowcaseDistributionSection({
             displayedCategoryRows.map((r) => {
               const catKey = r.categoryId;
               const isCatOpen = categoryExpanded[catKey] ?? false;
-              const ov = storage.overrides[showcaseOverrideStorageKey(row.id, r.categoryId)];
+              const ov = resolvedStorage.overrides[showcaseOverrideStorageKey(row.id, r.categoryId)];
               const catTasks = tasks.filter((t) => t.categoryId === r.categoryId);
               return (
                 <div
