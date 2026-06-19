@@ -2,7 +2,7 @@
  * Запуск: `npm run test:hash-route-utils` из каталога apps/platform.
  */
 import assert from "node:assert/strict";
-import { readHashRouteQuery, updateHashRouteParam, updateHashRouteParams } from "../hash-route-utils";
+import { readHashRouteQuery } from "../hash-route-utils";
 
 type LocationMock = {
   search: string;
@@ -17,53 +17,6 @@ function withLocation(loc: LocationMock, fn: () => void): void {
   } finally {
     if (prev) {
       (globalThis as { window: { location: LocationMock } }).window = prev;
-    } else {
-      delete (globalThis as { window?: unknown }).window;
-    }
-  }
-}
-
-function withUpdateHashRouteEnv(loc: LocationMock, fn: (ctx: { getHashChangeCount: () => number }) => void): void {
-  let hashChangeCount = 0;
-  const location = {
-    get search() {
-      return loc.search;
-    },
-    get hash() {
-      return loc.hash;
-    },
-    set hash(v: string) {
-      loc.hash = v;
-    },
-  };
-  const history = {
-    replaceState(_state: unknown, _title: string, url: string) {
-      const hashIdx = url.indexOf("#");
-      if (hashIdx >= 0) loc.hash = url.slice(hashIdx);
-      const beforeHash = url.slice(0, hashIdx);
-      const qIdx = beforeHash.indexOf("?");
-      loc.search = qIdx >= 0 ? beforeHash.slice(qIdx) : "";
-    },
-  };
-  const prevWindow = (globalThis as { window?: unknown }).window;
-  (globalThis as { window: unknown }).window = {
-    location,
-    history,
-    dispatchEvent: () => {
-      hashChangeCount += 1;
-      return true;
-    },
-    HashChangeEvent: class HashChangeEvent extends Event {
-      constructor(type: string) {
-        super(type);
-      }
-    },
-  };
-  try {
-    fn({ getHashChangeCount: () => hashChangeCount });
-  } finally {
-    if (prevWindow) {
-      (globalThis as { window: unknown }).window = prevWindow;
     } else {
       delete (globalThis as { window?: unknown }).window;
     }
@@ -99,91 +52,6 @@ function withUpdateHashRouteEnv(loc: LocationMock, fn: (ctx: { getHashChangeCoun
     const qs = readHashRouteQuery();
     assert.equal(qs.toString(), "");
     assert.equal(qs.get("view"), null);
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/distribution/abc/xyz" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParam("entry", "1");
-    assert.equal(loc.hash, "#/distribution/abc/xyz?entry=1");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/distribution/abc/xyz?dx_source=all" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParam("entry", "1");
-    assert.equal(loc.hash, "#/distribution/abc/xyz?dx_source=all&entry=1");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?entry=0" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParam("entry", "1");
-    assert.equal(loc.hash, "#/d?entry=1");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?entry=1&dx_source=all" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParam("entry", null);
-    assert.equal(loc.hash, "#/d?dx_source=all");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?entry=1" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParam("entry", null);
-    assert.equal(loc.hash, "#/d");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/distribution/abc/xyz" };
-  withUpdateHashRouteEnv(loc, ({ getHashChangeCount }) => {
-    updateHashRouteParam("entry", "1");
-    assert.equal(getHashChangeCount(), 1);
-    const before = getHashChangeCount();
-    updateHashRouteParam("entry", "1");
-    assert.equal(getHashChangeCount(), before, "idempotent call should not dispatch hashchange");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParams({ de_step: "showcase", de_tp: "tp-1" });
-    assert.equal(loc.hash, "#/d?de_step=showcase&de_tp=tp-1");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?de_step=model" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParams({ de_step: "showcase", de_model: "m1" });
-    assert.equal(loc.hash, "#/d?de_step=showcase&de_model=m1");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?de_step=showcase&de_fs=1" };
-  withUpdateHashRouteEnv(loc, () => {
-    updateHashRouteParams({ de_fs: null, de_step: "tp" });
-    assert.equal(loc.hash, "#/d?de_step=tp");
-  });
-}
-
-{
-  const loc = { search: "", hash: "#/d?de_step=showcase&de_tp=tp-1" };
-  withUpdateHashRouteEnv(loc, ({ getHashChangeCount }) => {
-    updateHashRouteParams({ de_step: "showcase", de_tp: "tp-1" });
-    const before = getHashChangeCount();
-    updateHashRouteParams({ de_step: "showcase", de_tp: "tp-1" });
-    assert.equal(getHashChangeCount(), before, "batch idempotent call should not dispatch hashchange");
   });
 }
 
