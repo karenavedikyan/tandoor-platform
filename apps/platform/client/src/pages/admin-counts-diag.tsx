@@ -72,7 +72,7 @@ function computePickerFilteredDefault(
   if (actState.enabled && actState.loading) return [];
   const actForRows = actState.managementDisplayState ?? actState.state;
   const merged = actState.enabled
-    ? buildDealerBaseRowsWithActualization(actForRows, profile, { includeArchivedDealers: false })
+    ? buildDealerBaseRowsWithActualization(actForRows, profile)
     : getCatalogDealerRows();
   const access = mapSalesRoleToDealerBaseAccess(profile.role);
   const scoped = getRoleScopedDealerRowsAuto(merged, profile, realScope);

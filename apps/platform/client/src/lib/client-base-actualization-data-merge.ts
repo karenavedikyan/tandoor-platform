@@ -38,7 +38,6 @@ import {
   isManualActualizationDealerId,
 } from "./client-base-actualization-stable-ids.js";
 import { isLegalEntityArchivedInActualization } from "./client-base-actualization-legal-entities.js";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "./archive-record-visual.js";
 import { dealerStatusFromPassportLifecycle } from "./client-base-actualization-visibility.js";
 import {
   clientCategoryFromPassportTier,
@@ -375,7 +374,7 @@ function attachTradePointCoverPhotos(entries: MergedTradePointEntry[], act: Actu
   });
 }
 
-/** Торговые точки: release + LS + actualization (manual / overrides / archive). */
+/** Торговые точки: release + LS + actualization (manual / overrides). */
 export function mergeTradePointsForActualization(row: DealerRow, act: ActualizationState): MergedTradePointEntry[] {
   const displayRow = mergeDealerRowWithActualization(row, act);
   const base = getMergedDealerTradePoints(displayRow, { includeArchived: true });
@@ -407,16 +406,6 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
       });
     } else {
       byId.set(o.tradePointId, entryFromOverride(o, displayRow));
-    }
-  }
-
-  if (!IGNORE_CLIENT_ARCHIVE_IN_UI) {
-    for (const arch of Object.values(act.archivedTradePointsById)) {
-      if (arch.dealerId !== row.id) continue;
-      const prev = byId.get(arch.tradePointId);
-      if (prev) {
-        byId.set(arch.tradePointId, { ...prev, isArchived: true, point: { ...prev.point, status: "Архив" } });
-      }
     }
   }
 
@@ -475,18 +464,10 @@ export function mergeTradePointsActiveForActualization(row: DealerRow, act: Actu
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived);
 }
 
-/**
- * Для списков/KPI рабочей базы: `outlets`, `tradePoints` и `format` отражают только неархивные ТТ.
- * В режиме списка «только архивные клиенты» оставляем полный merge ТТ (в т.ч. архивные точки) для карточки архива.
- */
-export function applyDealerRowTradePointOutletProjection(
-  row: DealerRow,
-  act: ActualizationState,
-  archivedDealerListMode: boolean,
-): DealerRow {
+/** Для списков/KPI рабочей базы: `outlets`, `tradePoints` и `format` отражают только неархивные ТТ. */
+export function applyDealerRowTradePointOutletProjection(row: DealerRow, act: ActualizationState): DealerRow {
   const merged = mergeTradePointsForActualization(row, act);
-  const slice = archivedDealerListMode ? merged : merged.filter((e) => !e.isArchived);
-  const points = slice.map((e) => e.point);
+  const points = merged.filter((e) => !e.isArchived).map((e) => e.point);
   const outlets = points.length;
   const format: DealerFormat = outlets > 1 ? "сетевой" : "одиночный";
   return { ...row, tradePoints: points, outlets, format };
@@ -689,43 +670,32 @@ export function resolveDealerRowForCard(dealerIdRaw: string, act: ActualizationS
 
 export type BuildDealerBaseRowsOptions = {
   /**
-   * `true` — режим «Архив» в клиентской базе: в списке **только** клиенты из `archivedDealersById`.
-   * `false` / не задано — рабочая база: архивные клиенты **скрыты**.
-   */
-  includeArchivedDealers?: boolean;
-  /**
    * `true` — режим «Корзина» в клиентской базе: в списке **только** клиенты из
    * `trashedDealersById`. По умолчанию (Промт 45) корзинные клиенты НЕ видны
-   * ни в рабочем, ни в архивном списке — корзина живёт на отдельной странице.
+   * в рабочем списке — корзина живёт на отдельной странице.
    */
   includeTrashedDealers?: boolean;
   /** Подмена статического `DEALER_BASE_ROWS` (например, после фильтра по видимым кодам из БД). */
   releaseDealerRows?: DealerRow[];
 };
 
-/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не архив, не корзина). */
+/** Строки для клиентской базы: manual сверху, затем release с merge. По умолчанию только рабочие (не корзина). */
 export function buildDealerBaseRowsWithActualization(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   opts?: BuildDealerBaseRowsOptions,
 ): DealerRow[] {
   const trashedListMode = opts?.includeTrashedDealers === true;
-  if (IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true && !trashedListMode) {
-    return [];
-  }
-  const archivedListMode = !IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true;
   const isTrashedForList = (id: string) => isDealerTrashedInRuntime(id, act);
   const includeId = (id: string) => {
-    const isArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[id]);
     const isTrashed = isTrashedForList(id);
     if (trashedListMode) return isTrashed;
-    if (archivedListMode) return isArchived && !isTrashed;
-    return !isArchived && !isTrashed;
+    return !isTrashed;
   };
 
   const mapBuilt = (baseRow: DealerRow): DealerRow => {
     const mergedFields = mergeDealerRowWithActualization(baseRow, act);
-    return applyDealerRowTradePointOutletProjection(mergedFields, act, archivedListMode);
+    return applyDealerRowTradePointOutletProjection(mergedFields, act);
   };
 
   const sourceRows = opts?.releaseDealerRows ?? getCatalogDealerRows();
@@ -749,21 +719,13 @@ export function excludeTrashedDealersFromWorkingRows(
   return rows.filter((r) => !isDealerTrashedInRuntime(r.id, act));
 }
 
-/**
- * Активные строки + архивные-only (для подписей событий активности по id, которые уже в архиве клиентов).
- */
+/** Строки рабочей базы для подписей событий активности по id клиента. */
 export function buildDealerBaseRowsUnionForActivityLabels(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   releaseDealerRows?: DealerRow[],
 ): DealerRow[] {
-  const active = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false, releaseDealerRows });
-  const archivedOnly = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: true, releaseDealerRows });
-  const byId = new Map(active.map((r) => [r.id, r]));
-  for (const r of archivedOnly) {
-    if (!byId.has(r.id)) byId.set(r.id, r);
-  }
-  return Array.from(byId.values());
+  return buildDealerBaseRowsWithActualization(act, profile, { releaseDealerRows });
 }
 
 /** Карточка торговой точки: дилер из actualization + merge ТТ. */

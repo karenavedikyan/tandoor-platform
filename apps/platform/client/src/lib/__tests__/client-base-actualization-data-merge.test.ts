@@ -47,20 +47,9 @@ function stateWithReleaseTrashed(): ReturnType<typeof createEmptyActualizationSt
 {
   const state = stateWithReleaseTrashed();
   const rows = buildDealerBaseRowsWithActualization(state, profile, {
-    includeArchivedDealers: false,
-    releaseDealerRows: releaseRows,
+        releaseDealerRows: releaseRows,
   });
   assert.ok(!rows.some((r) => r.id === releaseVictim.id), "working: trashed release client excluded");
-}
-
-// Режим архива (UI) — trashed release client тоже не показывается.
-{
-  const state = stateWithReleaseTrashed();
-  const rows = buildDealerBaseRowsWithActualization(state, profile, {
-    includeArchivedDealers: true,
-    releaseDealerRows: releaseRows,
-  });
-  assert.ok(!rows.some((r) => r.id === releaseVictim.id), "archive UI mode: trashed release client excluded");
 }
 
 // Режим корзины — trashed release client возвращается.
@@ -85,4 +74,4 @@ function stateWithReleaseTrashed(): ReturnType<typeof createEmptyActualizationSt
   assert.equal(filtered.length, 1, "invariant filter keeps active row");
 }
 
-console.log("client-base-actualization-data-merge: ok (4 cases)");
+console.log("client-base-actualization-data-merge: ok (3 cases)");

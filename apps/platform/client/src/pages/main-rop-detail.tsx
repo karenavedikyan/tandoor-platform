@@ -94,7 +94,6 @@ export default function MainRopDetailPage() {
 
   const allowed = useReal && access === "sales_director" && rop != null && isRopUserInSnapshot(snap!, ropId);
 
-  const [showArchive, setShowArchive] = useState(false);
   const [selectedSegment, setSelectedSegment] = useState<MainFocusTileId | null>(null);
   const focusTableRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points">("clients");
@@ -106,9 +105,7 @@ export default function MainRopDetailPage() {
     }, 50);
   }, []);
   const [selectedDealer, setSelectedDealer] = useState<DealerRow | null>(null);
-  const [selectedTp, setSelectedTp] = useState<{ dealer: DealerRow; point: DealerTradePoint; isArchived: boolean } | null>(
-    null,
-  );
+  const [selectedTp, setSelectedTp] = useState<{ dealer: DealerRow; point: DealerTradePoint } | null>(null);
 
   const teamScope = useMemo(
     () => (rows: DealerRow[]) => (snap && ropId ? realRowsForRopTeam(rows, snap, ropId) : []),
@@ -167,40 +164,24 @@ export default function MainRopDetailPage() {
     return computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, teamScope);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope]);
 
-  const activeClientRows = useMemo(() => {
-    if (!actx.enabled || !allowed) return [];
-    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-      includeArchivedDealers: false,
-    });
-    return teamScope(built);
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope]);
-
   const clientRows = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    if (!showArchive) return activeClientRows;
-    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-      includeArchivedDealers: true,
-    });
+    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile);
     return teamScope(built);
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope, showArchive, activeClientRows]);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, teamScope]);
 
   const tradePointRows = useMemo((): TradePointListRow[] => {
     if (!actx.enabled || !allowed) return [];
     const dealerIds = new Set(clientRows.map((r) => r.id));
-    const list = buildTradePointListForActualization(managementPlane.mergedState, profile, {
-      includeArchivedTradePoints: showArchive,
-      archivedTradePointsOnly: showArchive,
-    });
+    const list = buildTradePointListForActualization(managementPlane.mergedState, profile);
     return list.filter((r) => dealerIds.has(r.dealerId));
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows, showArchive]);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows]);
 
   const loading =
     authLoading ||
     (isRealUser && orgSnapQ.isLoading) ||
     (actx.enabled && actx.loading) ||
     (actx.enabled && managementPlane.teamFetchLoading);
-
-  const hasArchive = false;
 
   if (!loading && !allowed) {
     return <Redirect to="/main" />;
@@ -257,7 +238,7 @@ export default function MainRopDetailPage() {
       {scopeMetrics ? (
         <MainFocusTilesSection
           title={`Фокус команды ${ropName}`}
-          rows={activeClientRows}
+          rows={clientRows}
           act={managementPlane.mergedState}
           selectedSegment={selectedSegment}
           onTileClick={handleFocusTileClick}
@@ -267,7 +248,7 @@ export default function MainRopDetailPage() {
 
       {scopeMetrics && actx.enabled && snap ? (
         <MainDashboardFocusClientsPanel
-          rows={activeClientRows}
+          rows={clientRows}
           act={managementPlane.mergedState}
           profile={profile}
           role="sales_director"
@@ -285,7 +266,7 @@ export default function MainRopDetailPage() {
 
       {scopeMetrics && actx.enabled ? (
         <MainDashboardCityCoverage
-          rows={activeClientRows}
+          rows={clientRows}
           act={managementPlane.mergedState}
           testId="section-main-rop-city-coverage"
         />
@@ -306,20 +287,6 @@ export default function MainRopDetailPage() {
           ))}
         </DrilldownList>
       </section>
-
-      {hasArchive ? (
-        <div className="flex items-center gap-2" data-testid="section-main-rop-archive-toggle">
-          <Switch
-            id="toggle-rop-archive"
-            checked={showArchive}
-            onCheckedChange={(v) => setShowArchive(v === true)}
-            data-testid="toggle-main-rop-show-archive"
-          />
-          <Label htmlFor="toggle-rop-archive" className="text-sm">
-            Архив
-          </Label>
-        </div>
-      ) : null}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "clients" | "trade_points")}>
         <TabsList>
@@ -348,7 +315,7 @@ export default function MainRopDetailPage() {
                 {clientRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                      {showArchive ? "Нет архивных клиентов" : "Нет клиентов"}
+                      Нет клиентов
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -391,7 +358,7 @@ export default function MainRopDetailPage() {
                 {tradePointRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {showArchive ? "Нет архивных торговых точек" : "Нет торговых точек"}
+                      Нет торговых точек
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -404,7 +371,6 @@ export default function MainRopDetailPage() {
                         setSelectedTp({
                           dealer: row.dealer,
                           point: row.point,
-                          isArchived: row.isArchived,
                         })
                       }
                     >
@@ -414,7 +380,7 @@ export default function MainRopDetailPage() {
                       </TableCell>
                       <TableCell>{row.dealerName}</TableCell>
                       <TableCell>{row.manager || "—"}</TableCell>
-                      <TableCell>{row.isArchived ? "В архиве" : row.showcaseBucketLabel}</TableCell>
+                      <TableCell>{row.showcaseBucketLabel}</TableCell>
                       <TableCell>{row.showcaseUpdatedAt || row.dealer.lastActivity || "—"}</TableCell>
                     </TableRow>
                   ))
@@ -447,7 +413,6 @@ export default function MainRopDetailPage() {
           point={selectedTp.point}
           profile={profile}
           readOnly
-          isArchived={selectedTp.isArchived}
         />
       ) : null}
     </div>

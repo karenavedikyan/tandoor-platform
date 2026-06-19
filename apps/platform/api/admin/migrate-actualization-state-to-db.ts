@@ -1,5 +1,5 @@
 /**
- * Admin: миграция trash/archive из jsonb actualization_state → dealer_overrides (Промт 420).
+ * Admin: миграция trash/archive из jsonb actualization_state → dealer_overrides (Промт 420/421).
  * POST /api/admin/migrate-actualization-state-to-db
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -16,6 +16,37 @@ type TrashEntry = {
   trashedAt?: string;
   trashedBy?: string;
 };
+
+type ArchiveEntry = {
+  dealerId?: string;
+  archivedAt?: string;
+  archivedBy?: string;
+};
+
+async function upsertDealerTrash(
+  pool: NonNullable<ReturnType<typeof getPool>>,
+  dealerId: string,
+  trashedAt: string,
+  trashedBy: string,
+  dryRun: boolean,
+): Promise<void> {
+  if (dryRun) return;
+  await pool.query(
+    `INSERT INTO dealer_overrides (dealer_id, status, trashed_at, trashed_by, updated_by)
+     VALUES ($1, 'in_trash', $2::timestamptz, $3::uuid, $3::uuid)
+     ON CONFLICT (dealer_id) DO UPDATE SET
+       status = CASE
+         WHEN dealer_overrides.status IN ('purged', 'pending_admin') THEN dealer_overrides.status
+         WHEN dealer_overrides.status = 'in_trash' THEN dealer_overrides.status
+         ELSE 'in_trash'::record_status
+       END,
+       trashed_at = COALESCE(dealer_overrides.trashed_at, EXCLUDED.trashed_at),
+       trashed_by = COALESCE(dealer_overrides.trashed_by, EXCLUDED.trashed_by),
+       updated_at = NOW(),
+       updated_by = EXCLUDED.updated_by`,
+    [dealerId, trashedAt, trashedBy],
+  );
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
@@ -46,7 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     `SELECT user_id::text, state FROM client_base_actualization_state`,
   );
 
-  let migratedDealers = 0;
+  let migratedFromTrash = 0;
+  let migratedFromArchive = 0;
   let clearedBlobs = 0;
 
   await pool.query("BEGIN");
@@ -54,32 +86,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     for (const row of rowsQ.rows) {
       const state = row.state ?? {};
       const trashMap = (state.trashedDealersById ?? {}) as Record<string, TrashEntry>;
+      const archiveMap = (state.archivedDealersById ?? {}) as Record<string, ArchiveEntry>;
       const trashIds = Object.keys(trashMap);
-      if (trashIds.length === 0) continue;
+      const archiveIds = Object.keys(archiveMap);
+      if (trashIds.length === 0 && archiveIds.length === 0) continue;
 
       for (const dealerId of trashIds) {
         const info = trashMap[dealerId];
         if (!info) continue;
         const trashedBy = info.trashedBy?.trim() || row.user_id;
         const trashedAt = info.trashedAt ?? new Date().toISOString();
-        if (!dryRun) {
-          await pool.query(
-            `INSERT INTO dealer_overrides (dealer_id, status, trashed_at, trashed_by, updated_by)
-             VALUES ($1, 'in_trash', $2::timestamptz, $3::uuid, $3::uuid)
-             ON CONFLICT (dealer_id) DO UPDATE SET
-               status = CASE
-                 WHEN dealer_overrides.status IN ('purged', 'pending_admin') THEN dealer_overrides.status
-                 WHEN dealer_overrides.status = 'in_trash' THEN dealer_overrides.status
-                 ELSE 'in_trash'::record_status
-               END,
-               trashed_at = COALESCE(dealer_overrides.trashed_at, EXCLUDED.trashed_at),
-               trashed_by = COALESCE(dealer_overrides.trashed_by, EXCLUDED.trashed_by),
-               updated_at = NOW(),
-               updated_by = EXCLUDED.updated_by`,
-            [dealerId, trashedAt, trashedBy],
-          );
-        }
-        migratedDealers += 1;
+        await upsertDealerTrash(pool, dealerId, trashedAt, trashedBy, dryRun);
+        migratedFromTrash += 1;
+      }
+
+      for (const dealerId of archiveIds) {
+        if (trashMap[dealerId]) continue;
+        const info = archiveMap[dealerId];
+        if (!info) continue;
+        const trashedBy = info.archivedBy?.trim() || row.user_id;
+        const trashedAt = info.archivedAt ?? new Date().toISOString();
+        await upsertDealerTrash(pool, dealerId, trashedAt, trashedBy, dryRun);
+        migratedFromArchive += 1;
       }
 
       if (!dryRun) {
@@ -103,7 +131,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     sendJson(res, 200, {
       success: true,
       dry_run: dryRun,
-      migrated_dealers: migratedDealers,
+      migrated_from_trash: migratedFromTrash,
+      migrated_from_archive: migratedFromArchive,
+      migrated_dealers: migratedFromTrash + migratedFromArchive,
       cleared_user_blobs: clearedBlobs,
     });
   } catch (e) {

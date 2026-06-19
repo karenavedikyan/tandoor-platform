@@ -107,8 +107,7 @@ export default function DealerBaseCityDetailPage() {
       const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       merged = actx.enabled
         ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, {
-            includeArchivedDealers: false,
-            releaseDealerRows: releaseRows,
+                        releaseDealerRows: releaseRows,
           })
         : releaseRows;
       return roleScopedDealerRowsForReal(
@@ -122,7 +121,7 @@ export default function DealerBaseCityDetailPage() {
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return roleScopedDealerRows(catalogRows, profile);
     return roleScopedDealerRows(
-      buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, { includeArchivedDealers: false }),
+      buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile),
       profile,
     );
   }, [

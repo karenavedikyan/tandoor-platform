@@ -1,6 +1,6 @@
 /**
  * Агрегаты для управленческого экрана «Клиентская база» (директор / РОП) на team actualization plane.
- * Только рабочие строки без архивных клиентов/ТТ — см. buildDealerBaseRowsWithActualization(..., includeArchivedDealers: false).
+ * Только рабочие строки без архивных клиентов/ТТ — см. buildDealerBaseRowsWithActualization(...).
  */
 
 import { computeManagementDealerPickerKpis } from "./client-base-management-scope.js";

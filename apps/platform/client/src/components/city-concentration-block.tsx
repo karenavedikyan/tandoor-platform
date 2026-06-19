@@ -1,4 +1,3 @@
-import { archiveCountParenSuffix } from "@/lib/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CityConcentrationRow } from "@/lib/city-concentration";
@@ -60,10 +59,8 @@ function CityRows({
             {variant === "dealer" ? (
               <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs" data-testid={`text-dealer-base-city-stats-${sid}`}>
                 клиенты <span className="tabular-nums text-foreground">{row.total}</span>
-                {archiveCountParenSuffix(row.archivedClients ?? 0)}
                 {" · "}
                 ТТ <span className="tabular-nums text-foreground">{row.tradePoints}</span>
-                {archiveCountParenSuffix(row.archivedTradePoints ?? 0)}
               </p>
             ) : (
               <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3 lg:grid-cols-6">

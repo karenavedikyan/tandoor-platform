@@ -59,31 +59,24 @@ export function buildReleaseCodeToDealerIdMap(
   return m;
 }
 
-export function isDealerTrashedOrArchivedInScope(
-  dealerId: string,
-  act: ActualizationState,
-  ignoreArchive = false,
-): boolean {
-  if (act.trashedDealersById?.[dealerId]) return true;
-  if (!ignoreArchive && act.archivedDealersById?.[dealerId]) return true;
-  return false;
+export function isDealerTrashedInScope(dealerId: string, act: ActualizationState): boolean {
+  return Boolean(act.trashedDealersById?.[dealerId]);
 }
 
 /**
  * Manual-дилер с external1cCode показывается отдельной строкой, если seed по коду
- * скрыт в корзине/архиве — иначе данные «теряются» при склейке с невидимым seed.
+ * скрыт в корзине — иначе данные «теряются» при склейке с невидимым seed.
  */
 export function manualDealerShouldShowSeparateFromLinkedSeed(
   external1cCode: string | undefined,
   act: ActualizationState,
   releaseByCode: ReadonlyMap<string, string>,
-  ignoreArchive = false,
 ): boolean {
   const code = external1cCode?.trim();
   if (!code) return true;
   const seedId = releaseByCode.get(code);
   if (!seedId) return true;
-  return isDealerTrashedOrArchivedInScope(seedId, act, ignoreArchive);
+  return isDealerTrashedInScope(seedId, act);
 }
 
 export type TrashedDealerDisplay = {

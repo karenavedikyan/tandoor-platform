@@ -10,23 +10,23 @@ import {
   isStaleActualizationSnapshot,
 } from "../actualization-merge";
 
-// 1. Восстанавливает ключи archivedDealersById, отсутствующие в next, но имеющиеся в prev.
+// 1. Восстанавливает ключи archivedLegalEntitiesById, отсутствующие в next, но имеющиеся в prev.
 {
   const prev = {
     updatedAt: "2026-06-12T10:00:00.000Z",
-    archivedDealersById: {
-      "client-X": { dealerId: "client-X", archivedAt: "2026-06-10T00:00:00.000Z" },
-      "client-Y": { dealerId: "client-Y", archivedAt: "2026-06-11T00:00:00.000Z" },
+    archivedLegalEntitiesById: {
+      "le-X": { legalEntityId: "le-X", archivedAt: "2026-06-10T00:00:00.000Z" },
+      "le-Y": { legalEntityId: "le-Y", archivedAt: "2026-06-11T00:00:00.000Z" },
     },
   };
-  const next: Record<string, unknown> = { archivedDealersById: { "client-Z": { dealerId: "client-Z" } } };
+  const next: Record<string, unknown> = { archivedLegalEntitiesById: { "le-Z": { legalEntityId: "le-Z" } } };
   const r = applyStaleStateMerge(prev, next);
-  assert.deepEqual(next.archivedDealersById, {
-    "client-Z": { dealerId: "client-Z" },
-    "client-X": { dealerId: "client-X", archivedAt: "2026-06-10T00:00:00.000Z" },
-    "client-Y": { dealerId: "client-Y", archivedAt: "2026-06-11T00:00:00.000Z" },
+  assert.deepEqual(next.archivedLegalEntitiesById, {
+    "le-Z": { legalEntityId: "le-Z" },
+    "le-X": { legalEntityId: "le-X", archivedAt: "2026-06-10T00:00:00.000Z" },
+    "le-Y": { legalEntityId: "le-Y", archivedAt: "2026-06-11T00:00:00.000Z" },
   });
-  assert.equal(r.recoveredByField.archivedDealersById, 2);
+  assert.equal(r.recoveredByField.archivedLegalEntitiesById, 2);
   assert.equal(r.totalRecovered, 2);
 }
 
@@ -49,9 +49,9 @@ import {
   assert.equal(r.totalRecovered, 0);
 }
 
-// 3. Корректно обрабатывает все 15 полей из MANAGER_ID_DICT_FIELDS.
+// 3. Корректно обрабатывает все поля из MANAGER_ID_DICT_FIELDS.
 {
-  assert.equal(MANAGER_ID_DICT_FIELDS.length, 15);
+  assert.equal(MANAGER_ID_DICT_FIELDS.length, 13);
   const prev: Record<string, unknown> = {};
   const next: Record<string, unknown> = {};
   for (const field of MANAGER_ID_DICT_FIELDS) {
@@ -64,23 +64,23 @@ import {
     assert.ok(dict[`key-${field}`], `${field}: ключ восстановлен`);
     assert.equal(r.recoveredByField[field], 1, `${field}: recovered=1`);
   }
-  assert.equal(r.totalRecovered, 15);
+  assert.equal(r.totalRecovered, 13);
 }
 
 // 4. Возвращает корректные счётчики recoveredByField и totalRecovered.
 {
   const prev = {
-    archivedDealersById: { A: 1, B: 2 },
+    archivedLegalEntitiesById: { A: 1, B: 2 },
     dealerOverridesById: { C: 3 },
     tradePointOverridesById: { T1: 4, T2: 5, T3: 6 },
   };
   const next: Record<string, unknown> = {
-    archivedDealersById: { A: 99 },
+    archivedLegalEntitiesById: { A: 99 },
     dealerOverridesById: {},
     tradePointOverridesById: { T2: 55 },
   };
   const r = applyStaleStateMerge(prev, next);
-  assert.equal(r.recoveredByField.archivedDealersById, 1, "только B восстановлен");
+  assert.equal(r.recoveredByField.archivedLegalEntitiesById, 1, "только B восстановлен");
   assert.equal(r.recoveredByField.dealerOverridesById, 1, "C восстановлен");
   assert.equal(r.recoveredByField.tradePointOverridesById, 2, "T1 и T3 восстановлены");
   assert.equal(r.totalRecovered, 4);
@@ -88,9 +88,9 @@ import {
 
 // 5. prevState == null — nextState без изменений, нулевые счётчики.
 {
-  const next: Record<string, unknown> = { archivedDealersById: {} };
+  const next: Record<string, unknown> = { archivedLegalEntitiesById: {} };
   const r = applyStaleStateMerge(null, next);
-  assert.deepEqual(next, { archivedDealersById: {} });
+  assert.deepEqual(next, { archivedLegalEntitiesById: {} });
   assert.deepEqual(r.recoveredByField, {});
   assert.equal(r.totalRecovered, 0);
 }

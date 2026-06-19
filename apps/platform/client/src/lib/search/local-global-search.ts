@@ -53,8 +53,7 @@ function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
     );
     rows = ctx.actEnabled
       ? buildDealerBaseRowsWithActualization(ctx.actState, ctx.profile, {
-          includeArchivedDealers: false,
-          releaseDealerRows: releaseRows,
+                    releaseDealerRows: releaseRows,
         })
       : releaseRows;
     return roleScopedDealerRowsForReal(
@@ -67,7 +66,7 @@ function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
   }
 
   rows = ctx.actEnabled
-    ? buildDealerBaseRowsWithActualization(ctx.actState, ctx.profile, { includeArchivedDealers: false })
+    ? buildDealerBaseRowsWithActualization(ctx.actState, ctx.profile)
     : getCatalogDealerRows();
   return roleScopedDealerRows(rows, ctx.profile);
 }

@@ -6,7 +6,6 @@ import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -702,12 +701,7 @@ export function TradePointManualActualizationView(props: {
           onRetry={() => void actx.refresh()}
         />
 
-        <section
-          className={cn(
-            "overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm",
-            isArchived && "bg-muted/30",
-          )}
-        >
+        <section className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm">
           <div className="flex flex-col gap-3 px-3.5 py-3 sm:flex-row sm:items-start sm:gap-4 sm:px-4 sm:py-4">
             <div className="w-full shrink-0 sm:max-w-[15rem]" data-testid="trade-point-manual-hero-visual">
               <ShowcaseCoverPhotoSlot
@@ -727,9 +721,6 @@ export function TradePointManualActualizationView(props: {
                     <h1 className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
                       {name.trim() || point.name}
                     </h1>
-                    {isArchived ? (
-                      <ArchiveInArchiveBadge size="header" testId="badge-trade-point-manual-header-archived" />
-                    ) : null}
                   </div>
                   <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
                 </div>
@@ -762,7 +753,6 @@ export function TradePointManualActualizationView(props: {
               </div>
 
               <div className="flex flex-wrap gap-1.5 border-t border-border/40 pt-2.5">
-                {isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-status-${point.id}`} /> : null}
                 {hasShowcase === false ? (
                   <Badge variant="outline" className="h-[1.125rem] px-1.5 py-0 text-[10px] font-normal leading-none text-muted-foreground">
                     Нет витрины

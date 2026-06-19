@@ -50,8 +50,6 @@ import {
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArchiveInArchiveBadge, archivedEntityRowClassName } from "@/components/archive-record-visual";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -425,7 +423,6 @@ export default function TradePointsPage({
   const [mgrFilter, setMgrFilter] = useState<string>("__all__");
   const [rmFilter, setRmFilter] = useState<string>("__all__");
   const [ropFilter, setRopFilter] = useState<string>("__all__");
-  const [showArchived, setShowArchived] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("tpName");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [quickPreset, setQuickPreset] = useState<QuickPreset>("all");
@@ -436,7 +433,6 @@ export default function TradePointsPage({
   const [showIneligibleInBulkMode, setShowIneligibleInBulkMode] = useState(false);
   const [selectedBulkTpKeys, setSelectedBulkTpKeys] = useState<Set<string>>(() => new Set());
   const [bulkArchiveDialogOpen, setBulkArchiveDialogOpen] = useState(false);
-  const [bulkSoftArchiveDialogOpen, setBulkSoftArchiveDialogOpen] = useState(false);
   const tradePointsListRef = useRef<HTMLDivElement>(null);
   const [bulkArchiveBusy, setBulkArchiveBusy] = useState(false);
 
@@ -445,13 +441,12 @@ export default function TradePointsPage({
       const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
       if (!actx.enabled) return releaseRows;
       return buildDealerBaseRowsWithActualization(actState, profile, {
-        includeArchivedDealers: false,
-        releaseDealerRows: releaseRows,
+                releaseDealerRows: releaseRows,
       });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return buildDealerBaseRowsWithActualization(actState, profile, { includeArchivedDealers: false });
+    return buildDealerBaseRowsWithActualization(actState, profile);
   }, [
     isRealUser,
     authLoading,
@@ -589,32 +584,7 @@ export default function TradePointsPage({
     sidebarRealScope,
   ]);
 
-  const baseRows = useMemo(() => {
-    if (showArchived) {
-      if (isRealUser && !authLoading && !authError && (!snap || !visPayload || orgSnapQ.isError || visCodesQ.isError)) {
-        return [];
-      }
-      return buildTradePointListForActualization(actState, profile, {
-        includeArchivedTradePoints: true,
-        archivedTradePointsOnly: true,
-        ...(tpListRealOpts ?? {}),
-      });
-    }
-    return workingRows;
-  }, [
-    showArchived,
-    isRealUser,
-    authLoading,
-    authError,
-    snap,
-    visPayload,
-    orgSnapQ.isError,
-    visCodesQ.isError,
-    actState,
-    profile,
-    tpListRealOpts,
-    workingRows,
-  ]);
+  const baseRows = workingRows;
 
   const summary = useMemo(() => {
     let filled = 0;
@@ -797,17 +767,16 @@ export default function TradePointsPage({
   const archiveBlockReason = useCallback(
     (row: TradePointListRow): string | null => {
       if (!actx.enabled) return "Актуализация недоступна.";
-      if (row.isArchived) return "Точка уже в архиве.";
       if (row.isVirtual) return "Виртуальная точка не архивируется.";
       if (assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope)) return null;
       if (!canEditDealerDuringActualization(profile, row.dealer)) return "Нет прав на редактирование этого клиента.";
-      if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) return "Нет прав на архив торговых точек.";
+      if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) return "Нет прав на удаление торговых точек.";
       return null;
     },
     [actx.enabled, profile, assignmentsScope],
   );
 
-  const canShowBulkTradePointControls = !readOnlyScope && actx.enabled && canActualizeClientBase(profile) && !showArchived;
+  const canShowBulkTradePointControls = !readOnlyScope && actx.enabled && canActualizeClientBase(profile);
 
   /** Сколько ТТ в текущей выдаче (по фильтрам) реально можно архивировать. */
   const eligibleTradePointsInFilterCount = useMemo(() => filteredSorted.filter((r) => canArchiveRow(r)).length, [filteredSorted, canArchiveRow]);
@@ -884,13 +853,6 @@ export default function TradePointsPage({
     }
   }, [desktopFiltersCollapsed]);
 
-  useEffect(() => {
-    if (showArchived) {
-      setBulkDeleteMode(false);
-      setShowIneligibleInBulkMode(false);
-      setSelectedBulkTpKeys(new Set());
-    }
-  }, [showArchived]);
 
   const exitBulkDeleteMode = useCallback(() => {
     setBulkDeleteMode(false);
@@ -947,7 +909,6 @@ export default function TradePointsPage({
     setMgrFilter("__all__");
     setRmFilter("__all__");
     setRopFilter("__all__");
-    setShowArchived(false);
     setQuickPreset("all");
     setSortKey("tpName");
     setSortDir("asc");
@@ -988,9 +949,6 @@ export default function TradePointsPage({
       case "rop":
         setRopFilter("__all__");
         break;
-      case "archived":
-        setShowArchived(false);
-        break;
       case "quick":
         setQuickPreset("all");
         break;
@@ -1023,7 +981,6 @@ export default function TradePointsPage({
     if (mgrFilter !== "__all__") chips.push({ filterKey: "manager", label: `Менеджер: ${mgrFilter}` });
     if (rmFilter !== "__all__") chips.push({ filterKey: "regionalManager", label: `Рег. менеджер: ${rmFilter}` });
     if (ropFilter !== "__all__") chips.push({ filterKey: "rop", label: `РОП: ${ropFilter}` });
-    if (showArchived) chips.push({ filterKey: "archived", label: "Режим архива: только архивные ТТ" });
     if (quickPreset !== "all") {
       const qLabel =
         quickPreset === "unfilled_showcase"
@@ -1048,7 +1005,6 @@ export default function TradePointsPage({
     mgrFilter,
     rmFilter,
     ropFilter,
-    showArchived,
     quickPreset,
     dealerOptions,
   ]);
@@ -1061,37 +1017,6 @@ export default function TradePointsPage({
       userName: displayUserName(user).trim() || userLabelFromProfile(profile),
     }),
     [user, profile],
-  );
-
-  const handleRowArchiveTp = useCallback(
-    async (row: TradePointListRow) => {
-      if (!actx.enabled) return;
-      const now = new Date().toISOString();
-      const r = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          archivedTradePointsById: {
-            ...prev.archivedTradePointsById,
-            [row.tradePointId]: {
-              tradePointId: row.tradePointId,
-              dealerId: row.dealerId,
-              archivedAt: now,
-              archivedBy: trashActor.userId,
-              archivedByName: trashActor.userName,
-              source: "manual_actualization",
-            },
-          },
-        }),
-      );
-      if (r.success) {
-        toast({
-          title: "Торговая точка перемещена в Архив",
-          description: "Восстановить можно из раздела «Корзина» → Архив.",
-        });
-      } else {
-        toast({ title: "Не удалось сохранить", variant: "destructive" });
-      }
-    },
-    [actx, trashActor],
   );
 
   const handleRowTrashTp = useCallback(
@@ -1129,12 +1054,12 @@ export default function TradePointsPage({
   );
 
   const tpRowQuickMoveProps = useMemo((): TradePointListRowQuickMoveProps | undefined => {
-    if (!canShowBulkTradePointControls || bulkDeleteMode || showArchived) return undefined;
+    if (!canShowBulkTradePointControls || bulkDeleteMode) return undefined;
     return {
       canMoveRow: (r) => canArchiveRow(r),
       onTrash: (r) => void handleRowTrashTp(r),
     };
-  }, [canShowBulkTradePointControls, bulkDeleteMode, showArchived, canArchiveRow, handleRowTrashTp]);
+  }, [canShowBulkTradePointControls, bulkDeleteMode, canArchiveRow, handleRowTrashTp]);
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
@@ -1186,51 +1111,6 @@ export default function TradePointsPage({
       toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
     }
   }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey, assignmentsScope]);
-
-  const confirmBulkSoftArchiveTps = useCallback(async () => {
-    if (!actx.enabled) return;
-    const keys = Array.from(selectedBulkTpKeys).filter((k) => archivableTpKeysInView.has(k));
-    if (keys.length === 0) {
-      setBulkSoftArchiveDialogOpen(false);
-      return;
-    }
-    setBulkArchiveBusy(true);
-    const now = new Date().toISOString();
-    const r = await actx.persist((prev) => {
-      const next = { ...prev.archivedTradePointsById };
-      for (const key of keys) {
-        const row = rowsByCompositeKey.get(key);
-        if (!row || row.isArchived || row.isVirtual) continue;
-        const inScope = assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope);
-        const canTrash =
-          (canEditDealerDuringActualization(profile, row.dealer) &&
-            canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) ||
-          inScope;
-        if (!canTrash) continue;
-        next[row.tradePointId] = {
-          tradePointId: row.tradePointId,
-          dealerId: row.dealerId,
-          archivedAt: now,
-          archivedBy: trashActor.userId,
-          archivedByName: trashActor.userName,
-          source: "manual_actualization",
-        };
-      }
-      return mergeActualizationState(prev, { archivedTradePointsById: next });
-    });
-    setBulkArchiveBusy(false);
-    if (r.success) {
-      toast({
-        title: `Перемещено в Архив: ${keys.length}`,
-        description: "Архив доступен через переключатель «Архив ТТ» или в разделе «Корзина».",
-      });
-      setSelectedBulkTpKeys(new Set());
-      setBulkDeleteMode(false);
-      setBulkSoftArchiveDialogOpen(false);
-    } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
-    }
-  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, rowsByCompositeKey, trashActor, assignmentsScope]);
 
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
@@ -1429,22 +1309,6 @@ export default function TradePointsPage({
           </SelectContent>
         </Select>
       </div>
-      {!IGNORE_CLIENT_ARCHIVE_IN_UI ? (
-        <div className="flex items-center justify-between gap-2 sm:col-span-2 lg:col-span-3">
-          <div className="space-y-0.5">
-            <Label htmlFor="toggle-archived-tp" className="text-xs">
-              Режим архива ТТ
-            </Label>
-            <p className="text-[11px] text-muted-foreground">
-              Включено — в списке <span className="font-medium text-foreground">только архивные</span> торговые точки. Выключено — только рабочие точки активных клиентов.
-            </p>
-            <p className="text-[11px] text-muted-foreground" data-testid="text-trade-points-archived-dealers-hidden-hint">
-              Точки клиентов в архиве в рабочий список не попадают. Восстановите клиента, чтобы вернуть его точки в рабочую базу.
-            </p>
-          </div>
-          <Switch id="toggle-archived-tp" checked={showArchived} data-testid="toggle-trade-points-show-archived" onCheckedChange={(v) => setShowArchived(v === true)} />
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
         <div className="space-y-1">
           <Label className="text-xs">Сортировка</Label>
@@ -1763,15 +1627,6 @@ export default function TradePointsPage({
         {quickPresetButton("deficit", "Есть дефицит")}
         {quickPresetButton("no_address", "Без адреса")}
         {quickPresetButton("no_responsible", "Без ответственного")}
-        <Button
-          type="button"
-          size="sm"
-          variant={showArchived ? "default" : "outline"}
-          className="shrink-0 touch-manipulation"
-          onClick={() => setShowArchived((v) => !v)}
-        >
-          Архив ТТ
-        </Button>
       </div>
 
       {canShowBulkTradePointControls ? (
@@ -1867,17 +1722,6 @@ export default function TradePointsPage({
                   variant="default"
                   size="default"
                   className="min-h-11 w-full text-base font-bold sm:min-h-10 sm:w-auto"
-                  data-testid="button-trade-points-bulk-soft-archive"
-                  disabled={bulkSelectedVisibleCount === 0}
-                  onClick={() => setBulkSoftArchiveDialogOpen(true)}
-                >
-                  Переместить в Архив ({bulkSelectedVisibleCount})
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="default"
-                  className="min-h-11 w-full border-primary/40 bg-primary/10 text-base font-bold text-foreground hover:bg-primary/15 sm:min-h-10 sm:w-auto"
                   data-testid="button-trade-points-bulk-archive"
                   disabled={bulkSelectedVisibleCount === 0}
                   onClick={() => setBulkArchiveDialogOpen(true)}
@@ -2098,7 +1942,7 @@ export default function TradePointsPage({
                   <tr
                     key={k}
                     data-testid={`row-trade-point-table-${r.tradePointId}`}
-                    className={cn(archivedEntityRowClassName(r.isArchived), bulkRowSelected && "bg-primary/[0.06]")}
+                    className={cn(bulkRowSelected && "bg-primary/[0.06]")}
                   >
                     {bulkDeleteMode && canShowBulkTradePointControls ? (
                       <td className="p-2 align-middle">{renderBulkRowControl(r, { dense: true })}</td>
@@ -2176,7 +2020,6 @@ export default function TradePointsPage({
                   data-testid={`row-trade-point-list-${r.tradePointId}`}
                   className={cn(
                     "flex min-w-0 gap-2 p-2.5 sm:gap-3 sm:p-3",
-                    archivedEntityRowClassName(r.isArchived),
                     bulkRowSelected && "bg-primary/[0.06]",
                   )}
                 >
@@ -2210,8 +2053,7 @@ export default function TradePointsPage({
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
-                      {r.isArchived ? <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} /> : null}
-                    </div>
+                      </div>
                     {cleanContactDisplay(r.point.contactName) ? (
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
                     ) : null}
@@ -2251,7 +2093,6 @@ export default function TradePointsPage({
                       data-testid={`card-trade-point-grid-${r.tradePointId}`}
                       className={cn(
                         "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
-                        archivedEntityRowClassName(r.isArchived),
                         bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                       )}
                     >
@@ -2300,7 +2141,6 @@ export default function TradePointsPage({
                   data-testid={`card-trade-point-grid-${r.tradePointId}`}
                   className={cn(
                     "flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
-                    archivedEntityRowClassName(r.isArchived),
                     bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                   )}
                 >
@@ -2355,7 +2195,6 @@ export default function TradePointsPage({
                 data-testid={`card-trade-point-large-${r.tradePointId}`}
                 className={cn(
                   "overflow-hidden rounded-2xl border border-border/80 border-l-4 border-l-primary/55 bg-card shadow-md",
-                  archivedEntityRowClassName(r.isArchived),
                   bulkCardSelected && "ring-2 ring-primary/35 ring-offset-2 ring-offset-background",
                 )}
               >
@@ -2382,10 +2221,7 @@ export default function TradePointsPage({
                               Дефицит {r.matrixDeficitCount}
                             </Badge>
                           ) : null}
-                          {r.isArchived ? (
-                            <ArchiveInArchiveBadge testId={`badge-trade-point-archived-${r.tradePointId}`} />
-                          ) : null}
-                        </div>
+                          </div>
                       </div>
                       <p className="text-sm">
                         <span className="text-muted-foreground">Клиент:</span>{" "}
@@ -2446,28 +2282,6 @@ export default function TradePointsPage({
 
       {filteredSorted.length === 0 ? <p className="text-sm text-muted-foreground">Нет торговых точек по выбранным фильтрам.</p> : null}
 
-      <AlertDialog open={bulkSoftArchiveDialogOpen} onOpenChange={(o) => !o && !bulkArchiveBusy && setBulkSoftArchiveDialogOpen(false)}>
-        <AlertDialogContent data-testid="dialog-trade-points-bulk-soft-archive-confirm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Переместить {bulkSelectedVisibleCount} ТТ в Архив?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Торговые точки исчезнут из активной базы и появятся в Архиве. Восстановить их обратно можно в любой момент (раздел Корзина → Архив).
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkArchiveBusy} data-testid="button-trade-points-bulk-soft-archive-cancel">
-              Отмена
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={bulkArchiveBusy || bulkSelectedVisibleCount === 0}
-              data-testid="button-trade-points-bulk-soft-archive-confirm"
-              onClick={() => void confirmBulkSoftArchiveTps()}
-            >
-              {bulkArchiveBusy ? "Сохранение…" : "Переместить в Архив"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog open={bulkArchiveDialogOpen} onOpenChange={(o) => !o && !bulkArchiveBusy && setBulkArchiveDialogOpen(false)}>
         <AlertDialogContent data-testid="dialog-trade-points-bulk-archive-confirm">

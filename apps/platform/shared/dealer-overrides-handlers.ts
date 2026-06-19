@@ -16,7 +16,6 @@ import {
 import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { OverridesValidationError, sanitizeDealerOverrideUuidFields } from "./overrides-uuid-validation.js";
 import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
-import { removeDealerFromArchiveEverywhere } from "./archive-trash-invariant.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -404,9 +403,6 @@ async function setTrash(
       }
     },
   );
-  if (trash) {
-    await removeDealerFromArchiveEverywhere(pool, dealerId);
-  }
   const override = await fetchOverride(pool, dealerId);
   sendJson(res, 200, { success: true, data: { override } });
 }

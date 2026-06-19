@@ -106,8 +106,7 @@ function mergedRowsForDealerBaseManager411(
   if (!actxEnabled) return releaseDealerRowsForScope;
   return excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(teamPlane, profileForAct, {
-      includeArchivedDealers: false,
-      releaseDealerRows: releaseDealerRowsForScope,
+            releaseDealerRows: releaseDealerRowsForScope,
     }),
     teamPlane,
   );
@@ -147,8 +146,7 @@ function mergedRowsForDealerBaseManager411(
 
   const withActxShrink = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(incompletePlane, profile, {
-      includeArchivedDealers: false,
-      releaseDealerRows: releaseDealerRowsForScope,
+            releaseDealerRows: releaseDealerRowsForScope,
     }),
     incompletePlane,
   );
@@ -188,8 +186,7 @@ function mergedRowsForDealerBaseManager411(
 
   const merged = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(act, profile, {
-      includeArchivedDealers: false,
-      releaseDealerRows: visible,
+            releaseDealerRows: visible,
     }),
     act,
   );
@@ -239,8 +236,7 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
 
   const mergedAll = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(act, profile, {
-      includeArchivedDealers: false,
-      releaseDealerRows: visibleAll,
+            releaseDealerRows: visibleAll,
     }),
     act,
   );
@@ -259,8 +255,7 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
 
   const merged = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(act, profile, {
-      includeArchivedDealers: false,
-      releaseDealerRows: visible,
+            releaseDealerRows: visible,
     }),
     act,
   );
@@ -305,8 +300,7 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
   assert.ok(visOnlyScope);
   const visible = filterDealerRowsByExternalKeys(catalogRows, externalKeysActive);
   const merged = buildDealerBaseRowsWithActualization(act, profile, {
-    includeArchivedDealers: false,
-    releaseDealerRows: visible,
+        releaseDealerRows: visible,
   });
   const scoped = roleScopedDealerRowsForReal(merged, snap, "sales_manager", undefined, visOnlyScope);
   assert.equal(scoped.length, 44, "418: active visibleCodes fallback: 44");
@@ -318,8 +312,7 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
   const scope = buildAssignmentsScopeFromSources({ ownCodes: mixedCodes });
   const visible = getVisibleDealerRows(catalogRows, false, activeCodes, externalKeysActive);
   const merged = buildDealerBaseRowsWithActualization(act, profile, {
-    includeArchivedDealers: false,
-    releaseDealerRows: visible,
+        releaseDealerRows: visible,
   });
   const scoped = roleScopedDealerRowsForReal(merged, snap, "sales_manager", undefined, scope);
   assert.equal(scoped.length, 44, "mixed-case ownCodes with active visible: 44");

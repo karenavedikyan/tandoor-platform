@@ -38,7 +38,6 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
@@ -183,7 +182,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
   const [expanded, setExpanded] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addName, setAddName] = useState("");
   const [addCity, setAddCity] = useState("");
@@ -231,16 +229,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     if (useAct) return mergeTradePointsActiveForActualization(row, actx.state);
     return getEffectiveDealerTradePoints(row, { includeArchived: false });
   }, [useAct, actx.state, row, tpBump]);
-  const mergedArchived = useMemo(() => {
-    if (useAct) return mergeTradePointsForActualization(row, actx.state).filter((m) => m.isArchived);
-    return getMergedDealerTradePoints(row, { includeArchived: true }).filter((m) => m.isArchived);
-  }, [useAct, actx.state, row, tpBump]);
-  const mergedArchivedCount = useMemo(() => {
-    if (useAct) return mergeTradePointsForActualization(row, actx.state).filter((m) => m.isArchived).length;
-    return getMergedDealerTradePoints(row, { includeArchived: true }).filter((m) => m.isArchived).length;
-  }, [useAct, actx.state, row, tpBump]);
-  const archivedCount = mergedArchivedCount;
-  const archivedList = mergedArchived;
   const hasSeeds = row.tradePoints.length > 0;
   const hasManualStored = getManualTradePoints(row.id).length > 0;
   const hasAnyTradePointEver = useMemo(() => {
@@ -699,25 +687,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     if (ok) setSingleDeleteTarget(null);
   }, [singleDeleteTarget, onArchive]);
 
-  const onRestoreTradePoint = useCallback(
-    async (tp: DealerTradePoint) => {
-      if (!useAct) return;
-      const r = await actx.persist((prev) => {
-        const { [tp.id]: _removed, ...rest } = prev.archivedTradePointsById;
-        return mergeActualizationState(prev, { archivedTradePointsById: rest });
-      });
-      if (r.success) toast({ title: "Точка восстановлена" });
-      else
-        toast({
-          title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
-          variant: "destructive",
-        });
-    },
-    [useAct, actx],
-  );
 
-  const listToShow = showArchived ? archivedList : mergedActive;
-  const hasArchived = archivedCount > 0;
+  const listToShow = mergedActive;
   void hasAnyTradePointEver;
 
   const tpListLimit = useMemo(() => {
@@ -735,7 +706,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     "data-diag-can-edit": String(canEdit),
     "data-diag-actx-enabled": String(actx.enabled),
     "data-diag-merged-active-len": String(mergedActive.length),
-    "data-diag-merged-archived-len": String(mergedArchived.length),
     "data-diag-has-any-ever": String(hasAnyTradePointEver),
     "data-diag-is-virtual": String(isUsingVirtualDefault),
     "data-diag-tp-list-len": String(tpListSlice.length),
@@ -745,7 +715,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   };
 
   const archivableTradePointIdsFull = useMemo(() => {
-    if (!useAct || !canEdit || showArchived) return new Set<string>();
+    if (!useAct || !canEdit) return new Set<string>();
     const s = new Set<string>();
     for (const entry of mergedActive) {
       const tp = entry.point;
@@ -754,7 +724,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       s.add(tp.id);
     }
     return s;
-  }, [useAct, canEdit, showArchived, mergedActive, profile, row]);
+  }, [useAct, canEdit, mergedActive, profile, row]);
 
   const archivableTradePointIdsInSlice = useMemo(() => {
     const s = new Set<string>();
@@ -850,7 +820,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     }
   }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, actx, profile, row, mergedActive]);
 
-  if (mergedActive.length === 0 && !showArchived && !hasAnyTradePointEver) {
+  if (mergedActive.length === 0 && !hasAnyTradePointEver) {
     return (
       <section
         id={sectionDomId}
@@ -1014,7 +984,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     );
   }
 
-  if (mergedActive.length === 0 && !showArchived && hasAnyTradePointEver) {
+  if (mergedActive.length === 0 && hasAnyTradePointEver) {
     return (
       <section
         id={sectionDomId}
@@ -1025,18 +995,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            {hasArchived ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="min-h-9 w-full text-xs font-semibold text-muted-foreground sm:w-auto"
-                data-testid="button-dealer-trade-points-show-archived"
-                onClick={() => setShowArchived(true)}
-              >
-                Показать архивные
-              </Button>
-            ) : null}
             {canEdit ? (
               <Button
                 type="button"
@@ -1201,18 +1159,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-          {hasArchived && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="min-h-9 w-full text-xs font-semibold text-muted-foreground sm:w-auto"
-              data-testid="button-dealer-trade-points-show-archived"
-              onClick={() => setShowArchived((v) => !v)}
-            >
-              {showArchived ? "Скрыть архивные" : "Показать архивные"}
-            </Button>
-          ) : null}
           {canEdit ? (
             <Button
               type="button"
@@ -1241,7 +1187,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </p>
       ) : null}
 
-      {useAct && canEdit && !showArchived && archivableTradePointIdsFull.size > 0 ? (
+      {useAct && canEdit && archivableTradePointIdsFull.size > 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="text-trade-point-bulk-selection-hint">
           Выберите одну или несколько точек, чтобы удалить их из рабочей карточки.
         </p>
@@ -1249,7 +1195,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
 
       {useAct &&
       canEdit &&
-      !showArchived &&
       archivableTradePointIdsFull.size > 0 &&
       selectedBulkArchiveTpIds.size > 0 ? (
         <div
@@ -1325,15 +1270,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
               className="rounded-lg border border-border/60 bg-card shadow-xs"
             >
               <CardContent className="space-y-2 p-3 sm:p-3.5">
-                {showArchived && isArchived ? (
-                  <Badge
-                    variant="secondary"
-                    className="text-[10px] font-medium"
-                    data-testid={`badge-trade-point-archived-status-${tp.id}`}
-                  >
-                    В архиве
-                  </Badge>
-                ) : null}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1409,18 +1345,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         <span className="font-semibold tabular-nums text-foreground">{showcaseOpen}</span>
                       </p>
                     ) : null}
-                    {useAct && canEdit && !isVirtual && isArchived && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-full text-xs font-medium sm:w-auto"
-                        data-testid={`button-trade-point-restore-${tp.id}`}
-                        onClick={() => void onRestoreTradePoint(tp)}
-                      >
-                        Восстановить ТТ
-                      </Button>
-                    ) : null}
                     <div className="mt-1 flex flex-col gap-1.5 border-t border-border/40 pt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
                       <Button
                         asChild
@@ -1436,7 +1360,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           {isVirtual ? "Открыть основную точку" : "Открыть точку"}
                         </Link>
                       </Button>
-                      {useAct && canEdit && (IGNORE_CLIENT_ARCHIVE_IN_UI || !isArchived) ? (
+                      {useAct && canEdit ? (
                         <Button
                           type="button"
                           variant="outline"

@@ -1,4 +1,3 @@
-import { buildCityArchiveCountsMap } from "./archive-record-visual.js";
 import type { ActualizationState } from "./client-base-actualization-state.js";
 import type { DealerRow } from "./dealer-base-mock-data.js";
 import { dealerNeedsAttention, isDealerTop } from "./dealer-base-role-views.js";
@@ -23,9 +22,17 @@ export type CityConcentrationRow = {
   pctAttention: number;
   /** Доля от города с максимумом клиентов в переданном наборе (0..1). */
   intensity: number;
-  archivedClients?: number;
-  archivedTradePoints?: number;
 };
+
+/** Стабильный ключ города для агрегаций и drill-down. */
+export function cityKeyForDealerRow(row: DealerRow): string {
+  const raw = row.city?.trim();
+  const display =
+    !raw || raw === "—" || raw === "-"
+      ? "Без города"
+      : normalizeTerritoryCityName(row.city, row.releaseAddress);
+  return display === "Без города" ? "__no_city__" : display;
+}
 
 /** Стабильный идентификатор для data-testid (без пробелов и спецсимволов). */
 export function safeCityId(city: string): string {
@@ -45,7 +52,7 @@ export function getCityRiskLevel(row: CityConcentrationRow): CityRiskLevel {
   return row.pctAttention > 50 ? "critical" : "ok";
 }
 
-export function buildCityConcentrationRows(rows: DealerRow[], act?: ActualizationState): CityConcentrationRow[] {
+export function buildCityConcentrationRows(rows: DealerRow[], _act?: ActualizationState): CityConcentrationRow[] {
   const map = new Map<
     string,
     { total: number; tradePoints: number; active: number; top: number; attention: number; potential: number }
@@ -87,18 +94,6 @@ export function buildCityConcentrationRows(rows: DealerRow[], act?: Actualizatio
   const maxTotal = sorted.reduce((mx, r) => Math.max(mx, r.total), 0) || 1;
   for (const r of sorted) {
     r.intensity = r.total / maxTotal;
-  }
-
-  if (act) {
-    const archiveByCity = buildCityArchiveCountsMap(rows, act);
-    for (const r of sorted) {
-      const key = r.city === "Без города" ? "__no_city__" : r.city;
-      const arch = archiveByCity.get(key);
-      if (arch) {
-        (r as CityConcentrationRow).archivedClients = arch.archivedClients;
-        (r as CityConcentrationRow).archivedTradePoints = arch.archivedTradePoints;
-      }
-    }
   }
 
   return sorted;

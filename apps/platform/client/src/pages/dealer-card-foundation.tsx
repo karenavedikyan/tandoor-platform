@@ -21,8 +21,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -791,7 +789,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const [regionalBump, setRegionalBump] = useState(0);
   const [ropBump, setRopBump] = useState(0);
   const [dealerEditOpen, setDealerEditOpen] = useState(false);
-  const [dealerArchiveBusy, setDealerArchiveBusy] = useState(false);
+  const [dealerTrashBusy, setDealerTrashBusy] = useState(false);
   const [dealerDeleteDialogOpen, setDealerDeleteDialogOpen] = useState(false);
   const [historyCommentDraft, setHistoryCommentDraft] = useState("");
   const [problemCommentDraft, setProblemCommentDraft] = useState("");
@@ -903,19 +901,14 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
   const isDealerTrashed = isDealerTrashedInRuntime(baseRow.id, actx.state);
   /**
-   * Промт 46: пользовательская кнопка «Удалить» теперь шлёт клиента в Корзину
-   * (`trashedDealersById`), а не в Архив. Архив остаётся как legacy (restore-banner ниже).
-   * Условие активации: actx включён, клиент не в архиве и не в корзине, есть права.
+   * Промт 46: пользовательская кнопка «Удалить» шлёт клиента в Корзину (`trashedDealersById`).
    */
-  const isArchivedDealerCard =
-    !IGNORE_CLIENT_ARCHIVE_IN_UI && actx.enabled && Boolean(actx.state.archivedDealersById[baseRow.id]);
-
   const canTrashDealer =
     actx.enabled && !isDealerTrashed && canArchiveDealerDuringActualization(profile, row);
 
   const trashDealer = useCallback(async () => {
     if (!canTrashDealer) return;
-    setDealerArchiveBusy(true);
+    setDealerTrashBusy(true);
     const info = makeTrashedDealerInfo({
       dealerId: baseRow.id,
       by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
@@ -930,7 +923,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     });
     patchDealerTrashRuntime(baseRow.id, info);
     const result = await trashDealerStrict(baseRow.id);
-    setDealerArchiveBusy(false);
+    setDealerTrashBusy(false);
     if (
       handleOverridesStrictResult(result, {
         pendingId: makePendingId("dealer-trash", baseRow.id),
@@ -951,10 +944,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
       });
     }
   }, [baseRow.id, canTrashDealer, profile, row, setLocation]);
-
-  // Алиас сохранён для совместимости с существующими использованиями переменной.
-  const canSoftArchiveDealer = canTrashDealer;
-  const softArchiveDealer = trashDealer;
 
   const effectiveCategory = useMemo(
     () => resolveEffectiveClientCategory(row, actx.enabled ? actx.state : null),
@@ -1297,10 +1286,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               className="scroll-mt-28 space-y-3 sm:scroll-mt-32 lg:scroll-mt-32"
             >
               <SurfaceCard
-                className={cn(
-                  "overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4",
-                  isArchivedDealerCard && "bg-muted/30",
-                )}>
+                className="overflow-hidden border border-border border-l-4 border-l-primary p-3 sm:p-4"
+              >
                 <CardContent className="space-y-3 p-0 sm:space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                     <ShowcaseCoverPhotoSlot kind="dealer" dealer={row} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
@@ -1340,9 +1327,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="line-clamp-2 text-lg font-semibold tracking-tight text-foreground sm:text-xl">{rowView.name}</h1>
-                    {isArchivedDealerCard ? (
-                      <ArchiveInArchiveBadge size="header" testId="badge-dealer-card-header-archived" />
-                    ) : null}
                   </div>
                     </div>
                   </div>
@@ -1604,7 +1588,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                         Редактировать
                       </Button>
                     ) : null}
-                    {canSoftArchiveDealer ? (
+                    {canTrashDealer ? (
                       <Button
                         type="button"
                         variant="outline"
@@ -1614,7 +1598,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                           "border-destructive/40 text-destructive hover:bg-destructive/10",
                         )}
                         data-testid={`button-dealer-delete-${baseRow.id}`}
-                        disabled={dealerArchiveBusy}
+                        disabled={dealerTrashBusy}
                         onClick={() => setDealerDeleteDialogOpen(true)}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden />
@@ -2498,7 +2482,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               variant="outline"
               className="w-full sm:w-auto"
               data-testid="button-dealer-delete-cancel"
-              disabled={dealerArchiveBusy}
+              disabled={dealerTrashBusy}
               onClick={() => setDealerDeleteDialogOpen(false)}
             >
               Отмена
@@ -2508,11 +2492,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               variant="destructive"
               className="w-full gap-1.5 font-semibold sm:w-auto"
               data-testid="button-dealer-delete-confirm"
-              disabled={dealerArchiveBusy}
-              onClick={() => void softArchiveDealer()}
+              disabled={dealerTrashBusy}
+              onClick={() => void trashDealer()}
             >
               <Trash2 className="h-4 w-4" aria-hidden />
-              {dealerArchiveBusy ? "Удаление…" : "Удалить"}
+              {dealerTrashBusy ? "Удаление…" : "Удалить"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2524,58 +2508,6 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
         testId="floating-back-to-dealer-base"
         ariaLabel="Назад к клиентской базе"
       />
-    </div>
-  );
-}
-
-function ArchivedDealerCardBanner({ dealerId, profile, row }: { dealerId: string; profile: ReleaseDemoProfile; row: DealerRow }) {
-  const actx = useClientBaseActualization();
-  const [busy, setBusy] = useState(false);
-  const canRestore = actx.enabled && canArchiveDealerDuringActualization(profile, row);
-
-  const onRestore = async () => {
-    if (!canRestore) return;
-    if (!actx.state.archivedDealersById[dealerId]) return;
-    setBusy(true);
-    const r = await actx.persist((prev) => {
-      if (!prev.archivedDealersById[dealerId]) return prev;
-      const { [dealerId]: _removed, ...rest } = prev.archivedDealersById;
-      void _removed;
-      return mergeActualizationState(prev, { archivedDealersById: rest });
-    });
-    setBusy(false);
-    if (r.success) toast({ title: "Клиент восстановлен" });
-    else
-      toast({
-        title: "Не удалось сохранить. Проверьте соединение и попробуйте ещё раз.",
-        variant: "destructive",
-      });
-  };
-
-  return (
-    <div className="border-b border-border/80 bg-muted/25 px-3 py-3 sm:px-4" data-testid="banner-dealer-card-archived-region">
-      <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-          <Badge variant="secondary" className="w-fit shrink-0 border-border/80 text-xs font-medium" data-testid="badge-dealer-card-archived">
-            В архиве
-          </Badge>
-          <p className="min-w-0 text-sm leading-snug text-muted-foreground" data-testid="text-dealer-card-archived-hint">
-            Клиент скрыт из рабочей базы. Редактирование сохранит изменения, но не восстановит клиента.
-          </p>
-        </div>
-        {canRestore ? (
-          <Button
-            type="button"
-            variant="default"
-            className="h-10 shrink-0 px-4 text-sm font-semibold sm:min-w-[12rem]"
-            data-testid={`button-dealer-restore-${dealerId}`}
-            disabled={busy}
-            onClick={() => void onRestore()}
-          >
-            {busy ? "Сохранение…" : "Восстановить клиента"}
-          </Button>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -2597,8 +2529,6 @@ export function DealerCardPage() {
     return <DealerNotFound />;
   }
 
-  const isArchivedDealer =
-    !IGNORE_CLIENT_ARCHIVE_IN_UI && actx.enabled && Boolean(actx.state.archivedDealersById[id]);
   const isTrashedDealer = actx.enabled && isDealerTrashedInRuntime(id, actx.state);
 
   const useCleanActualizationAnketa =

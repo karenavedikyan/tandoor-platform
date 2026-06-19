@@ -89,7 +89,6 @@ export function buildDealerBaseWorkingRowsForCount(input: BuildDealerBaseWorking
   }
 
   const merged = buildDealerBaseRowsWithActualization(actState, profile, {
-    includeArchivedDealers: false,
     releaseDealerRows: realScope?.ready ? realScope.releaseDealerRows : undefined,
   });
 

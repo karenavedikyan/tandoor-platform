@@ -16,8 +16,7 @@ export function buildDistributionWorkingDealerRows(
 ): DealerRow[] {
   if (options.actualizationEnabled) {
     return buildDealerBaseRowsWithActualization(options.mergedState, profile, {
-      includeArchivedDealers: false,
-      releaseDealerRows: options.releaseDealerRows,
+            releaseDealerRows: options.releaseDealerRows,
     });
   }
   if (options.releaseDealerRows && options.releaseDealerRows.length > 0) {

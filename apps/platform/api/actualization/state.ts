@@ -34,7 +34,6 @@ import {
   resolveRequestUserId,
   type RequestUserResolution,
 } from "../../shared/actualization-request-user.js";
-import { stripArchivedKeysAlreadyInActiveTrash } from "../../shared/archive-trash-invariant.js";
 import type { UserRole } from "../../shared/auth.js";
 
 const JSON_CT = "application/json; charset=utf-8";
@@ -95,10 +94,8 @@ function emptyState(): Record<string, unknown> {
     clientCategoryOverridesById: {},
     dealerOverridesById: {},
     manuallyCreatedDealersById: {},
-    archivedDealersById: {},
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
-    archivedTradePointsById: {},
     archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
@@ -1155,24 +1152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
           ? Math.floor(sanitizedNext.version)
           : 1;
 
-      // Промт 405: архив state и корзина БД взаимоисключающие — дропаем архивные ключи, уже в trashed.
-      let stateToWrite = sanitizedNext;
-      const invariantPool = getPool();
-      if (invariantPool) {
-        const stripped = await stripArchivedKeysAlreadyInActiveTrash(
-          invariantPool,
-          stateToWrite as Record<string, unknown>,
-        );
-        const dropped = stripped.droppedDealers + stripped.droppedTradePoints;
-        if (dropped > 0) {
-          console.warn(
-            `[actualization-api] dropped ${dropped} archive keys already in trash for user=${userId}`,
-          );
-        }
-        stateToWrite = stripped.state as typeof sanitizedNext;
-        stateToWrite.updatedAt = now;
-        stateToWrite.updatedBy = userId;
-      }
+      const stateToWrite = sanitizedNext;
 
       // Защита корзины (Промт 45 B1): если ключ trashedDealersById / trashedTradePointsById
       // присутствовал в prev state, но отсутствует в next state — восстанавливаем его,

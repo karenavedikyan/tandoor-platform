@@ -10,8 +10,6 @@
  */
 
 export const MANAGER_ID_DICT_FIELDS = [
-  "archivedDealersById",
-  "archivedTradePointsById",
   "archivedLegalEntitiesById",
   "archivedDealerContactsById",
   "dealerOverridesById",

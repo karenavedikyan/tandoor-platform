@@ -30,7 +30,6 @@ import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { canActualizeClientBase, canArchiveTradePointDuringActualization } from "@/lib/client-base-actualization-permissions";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
 import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
@@ -691,18 +690,15 @@ function TradePointDetailContent({
   const breadcrumbDealerLabel = dealer.name;
 
   if (useCleanTradePointAnketa) {
-    const canArchiveTpClean =
-      canEditTp &&
-      (IGNORE_CLIENT_ARCHIVE_IN_UI || !tpMeta.isArchived) &&
-      canArchiveTradePointDuringActualization(profile, dealerForRbac, point);
+    const canTrashTpClean =
+      canEditTp && canArchiveTradePointDuringActualization(profile, dealerForRbac, point);
     return (
       <>
         <TradePointManualActualizationView
           dealer={dealer}
           point={point}
           profile={profile}
-          isArchived={!IGNORE_CLIENT_ARCHIVE_IN_UI && tpMeta.isArchived}
-          onRequestArchive={canArchiveTpClean ? () => setArchiveOpen(true) : undefined}
+          onRequestArchive={canTrashTpClean ? () => setArchiveOpen(true) : undefined}
         />
         <Dialog open={archiveOpen} onOpenChange={setArchiveOpen}>
           <DialogContent className="sm:max-w-md" data-testid="dialog-trade-point-archive-confirm">
@@ -766,11 +762,6 @@ function TradePointDetailContent({
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-[10px] font-medium text-emerald-950">
             {point.status}
           </Badge>
-          {!IGNORE_CLIENT_ARCHIVE_IN_UI && tpMeta.isArchived ? (
-            <Badge variant="secondary" className="text-[10px] font-medium" data-testid="badge-trade-point-archived">
-              Архивная
-            </Badge>
-          ) : null}
           {isVirtualDefaultPoint ? (
             <Badge
               variant="outline"
@@ -813,7 +804,7 @@ function TradePointDetailContent({
             >
               Редактировать точку
             </Button>
-            {(IGNORE_CLIENT_ARCHIVE_IN_UI || !tpMeta.isArchived) && actx.enabled ? (
+            {actx.enabled ? (
               <Button
                 type="button"
                 variant="secondary"

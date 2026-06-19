@@ -1,15 +1,14 @@
 /**
  * Запуск: `npm run test:dealer-trash-scope` из каталога apps/platform.
- * Промт 398: RBAC корзины и архива.
+ * Промт 398: RBAC корзины.
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
 import {
-  buildArchiveScopeFilterRbac,
   buildTrashScopeFilterRbac,
   type TeamContext,
 } from "@shared/trash-archive-rbac";
-import { buildArchiveScopeFilter, buildTrashScopeFilter } from "../dealer-trash-scope";
+import { buildTrashScopeFilter } from "../dealer-trash-scope";
 import type { ReleaseDemoProfile } from "../release-demo-profile";
 import type { SidebarNavRealScope } from "../sidebar-nav-real-scope";
 import type { OrgSnapshot } from "../use-org-snapshot";
@@ -149,33 +148,6 @@ for (const role of ["admin", "director"] as const) {
   assert.ok(!f.isDealerInScope("x", { trashedBy: OTHER }));
 }
 
-// archive manager: 0 пересечений ownCodes → 0 видимых (regression 542)
-{
-  const sklyarovCodes = new Set(["MA-SK-001", "MA-SK-002"]);
-  const foreignArchive = {
-    isRealUser: true,
-    loading: false,
-    ready: true,
-    releaseDealerRows: [],
-    orgScope: scopedRealScope("manager", MGR).orgScope,
-    assignmentsScope: {
-      ownCodes: sklyarovCodes,
-      teamCodes: new Set<string>(),
-      grantedCodes: new Set<string>(),
-    },
-  } satisfies SidebarNavRealScope;
-  const f = buildArchiveScopeFilter({
-    role: "manager",
-    profile,
-    realScope: foreignArchive,
-    teamContext: teamCtx,
-  });
-  assert.equal(f.fullView, false);
-  assert.ok(!f.isDealerInScope("client-ma-999", { ownerCode: "MA-999", archivedBy: "other-mgr" }));
-  assert.ok(!f.isDealerInScope("client-ma-888", { ownerCode: "MA-888" }));
-  assert.ok(f.isDealerInScope("client-ma-sk-001", { ownerCode: "MA-SK-001" }));
-}
-
 // slug fallback для manager trash
 {
   const f = buildTrashScopeFilterRbac({
@@ -185,30 +157,6 @@ for (const role of ["admin", "director"] as const) {
     teamContext: { teamId: TEAM, teamMemberIds: [MGR], teamCodes: [] },
   });
   assert.ok(f.isDealerInScope("x", { trashedBy: "mgr-sklyarov-dv", trashedBySlug: "mgr-sklyarov-dv" }));
-}
-
-// archive manager by ownerCode
-{
-  const f = buildArchiveScopeFilter({
-    role: "manager",
-    profile,
-    realScope: scopedRealScope("manager", MGR),
-    teamContext: teamCtx,
-  });
-  assert.ok(f.isDealerInScope("client-ma-001", { ownerCode: "MA-001" }));
-  assert.ok(!f.isDealerInScope("client-ma-999", { ownerCode: "MA-999" }));
-}
-
-// archive rop team codes
-{
-  const f = buildArchiveScopeFilter({
-    role: "rop",
-    profile: { role: "team_lead", personaUserId: ROP } as ReleaseDemoProfile,
-    realScope: scopedRealScope("rop", ROP),
-    teamContext: teamCtx,
-  });
-  assert.ok(f.isDealerInScope("client-ma-002", { ownerCode: "MA-002" }));
-  assert.ok(!f.isDealerInScope("client-ma-999", { ownerCode: "MA-999", ownerTeamAtArchive: "team-z" }));
 }
 
 // team change stability

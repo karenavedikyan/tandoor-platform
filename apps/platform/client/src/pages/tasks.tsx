@@ -737,7 +737,7 @@ export default function TasksPage() {
 
   const dealerById = useMemo(() => {
     const rows = actx.enabled
-      ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
+      ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile)
       : catalogRows;
     return new Map(rows.map((d) => [d.id, d]));
   }, [actx.enabled, managementPlane.mergedState, profile, catalogRows]);
@@ -816,7 +816,7 @@ export default function TasksPage() {
   const workingDealerRows = useMemo(
     () =>
       actx.enabled
-        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, { includeArchivedDealers: false })
+        ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile)
         : catalogRows,
     [actx.enabled, managementPlane.mergedState, profile, catalogRows],
   );

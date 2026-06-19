@@ -143,9 +143,8 @@ export function shouldUseTeamMergedActualizationPlane(
 export function buildManagementDealerBaseRows(
   mergedState: ActualizationState,
   profile: ReleaseDemoProfile,
-  opts: { includeArchivedDealers: boolean },
 ): DealerRow[] {
-  return buildDealerBaseRowsWithActualization(mergedState, profile, opts);
+  return buildDealerBaseRowsWithActualization(mergedState, profile);
 }
 
 /** KPI полосы «как на dealer-base» — один расчёт для совпадения цифр между блоками. */

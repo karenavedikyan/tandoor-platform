@@ -421,7 +421,7 @@ export function getActualizationPersistedShowcaseMatrixTasksForDealers(
     if (act.trashedDealersById?.[dealer.id]) continue;
     for (const point of dealer.tradePoints) {
       if (point.status?.trim() === "Архив") continue;
-      if (act.archivedTradePointsById[point.id]) continue;
+      if (act.trashedTradePointsById?.[point.id]) continue;
       if (act.trashedTradePointsById?.[point.id]) continue;
       const sh = act.tradePointShowcaseActualizationById[point.id];
       for (const mt of sh?.showcaseMatrixTasks ?? []) {

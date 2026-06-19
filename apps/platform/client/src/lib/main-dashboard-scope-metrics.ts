@@ -8,9 +8,7 @@ import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 
 export type MainDashboardScopeMetrics = {
   activeClients: number;
-  archivedClients: number;
   activeTradePoints: number;
-  archivedTradePoints: number;
 };
 
 function countTradePointsForRows(rows: DealerRow[], act: ActualizationState): number {
@@ -25,20 +23,18 @@ function countTradePointsForRows(rows: DealerRow[], act: ActualizationState): nu
 
 /**
  * KPI /main: активные клиенты и ТТ в заданном scope (после roleScoped*).
- * Промт 79: архив в JSON state игнорируется — «активные» = все не в корзине.
+ * «Активные» = все не в корзине.
  */
 export function computeMainDashboardScopeMetrics(
   act: ActualizationState,
   profile: ReleaseDemoProfile,
   scopeRows: (rows: DealerRow[]) => DealerRow[],
 ): MainDashboardScopeMetrics {
-  const built = buildDealerBaseRowsWithActualization(act, profile, { includeArchivedDealers: false });
+  const built = buildDealerBaseRowsWithActualization(act, profile);
   const scoped = scopeRows(built);
   const activeTradePoints = countTradePointsForRows(scoped, act);
   return {
     activeClients: scoped.length,
-    archivedClients: 0,
     activeTradePoints,
-    archivedTradePoints: 0,
   };
 }

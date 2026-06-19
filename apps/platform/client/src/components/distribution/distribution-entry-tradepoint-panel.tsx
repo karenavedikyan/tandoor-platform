@@ -89,8 +89,7 @@ export function DistributionEntryTradePointPanel({
     () =>
       actx.enabled
         ? buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-            includeArchivedDealers: false,
-          })
+                      })
         : getCatalogDealerRows(),
     [actx.enabled, managementPlane.mergedState, profile],
   );
