@@ -1001,6 +1001,7 @@ export function AppShell({
             userSubtitle={cityLabel !== "—" ? cityLabel : undefined}
             onLogout={onLogout}
             paddingClass="px-3 pb-4"
+            showSchemaVersionBadge={navDebugRoles?.platformUserRole === "admin"}
           />
         )}
       </aside>

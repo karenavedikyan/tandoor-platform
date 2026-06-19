@@ -1,5 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  clearSchemaVersionMarkerForHandshake,
+  reloadPageWithSchemaVersionBump,
+} from "@/lib/schema-version-handshake";
 
 type Props = {
   children: ReactNode;
@@ -19,11 +23,16 @@ export function DealerBaseErrorFallback({ onRetry }: { onRetry?: () => void }) {
       <p className="max-w-md text-sm text-muted-foreground">
         Перезагрузите страницу. Если ошибка повторится — обратитесь в поддержку.
       </p>
-      {onRetry ? (
-        <Button type="button" variant="outline" onClick={onRetry}>
-          Попробовать снова
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {onRetry ? (
+          <Button type="button" variant="outline" onClick={onRetry}>
+            Попробовать снова
+          </Button>
+        ) : null}
+        <Button type="button" variant="outline" onClick={reloadPageWithSchemaVersionBump}>
+          Перезагрузить страницу
         </Button>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -37,6 +46,7 @@ export class DealerBaseErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error("[dealer-base] render error", error, info.componentStack);
+    clearSchemaVersionMarkerForHandshake();
   }
 
   private handleRetry = (): void => {

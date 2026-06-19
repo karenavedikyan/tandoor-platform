@@ -14,6 +14,7 @@ import {
   uniqueDealersFromSummaryRows,
 } from "@/lib/distribution-scope-summary-view-model";
 import { fetchShowcaseMatrixScopeAll } from "@/lib/showcase-matrix-api";
+import { reloadPageWithSchemaVersionBump } from "@/lib/schema-version-handshake";
 import type { ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
 import {
   DistributionPercentBadge,
@@ -168,7 +169,7 @@ export function DistributionScopeSummary({
       ) : errorText ? (
         <div className="space-y-2">
           <p className="text-sm text-destructive">{errorText}</p>
-          <Button type="button" variant="outline" size="sm" onClick={() => window.location.reload()}>
+          <Button type="button" variant="outline" size="sm" onClick={reloadPageWithSchemaVersionBump}>
             Повторить
           </Button>
         </div>

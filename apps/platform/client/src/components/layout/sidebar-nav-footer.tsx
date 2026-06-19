@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/theme-provider";
 import type { TandoorThemeChoice } from "@/lib/tandoor-theme";
+import { SCHEMA_VERSION } from "@/lib/schema-version";
 
 function themeLabel(t: TandoorThemeChoice): string {
   if (t === "light") return "Светлая";
@@ -19,6 +20,8 @@ type SidebarNavFooterProps = {
   settingsDefaultOpen?: boolean;
   paddingClass?: string;
   className?: string;
+  /** Промт 433: диагностический бейдж schema vN для admin. */
+  showSchemaVersionBadge?: boolean;
 };
 
 function themeRowButtonClass(active: boolean) {
@@ -40,6 +43,7 @@ export function SidebarNavFooter({
   settingsDefaultOpen = false,
   paddingClass = "px-4",
   className,
+  showSchemaVersionBadge = false,
 }: SidebarNavFooterProps) {
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(settingsDefaultOpen);
@@ -56,6 +60,14 @@ export function SidebarNavFooter({
         {userSubtitle ? (
           <p className="mt-0.5 truncate text-xs leading-snug text-[#8F96B0]" data-testid="text-sidebar-user-subtitle">
             {userSubtitle}
+          </p>
+        ) : null}
+        {showSchemaVersionBadge ? (
+          <p
+            className="mt-1 inline-block rounded border border-[#E3E6F3] bg-[#EEEFF6]/60 px-1.5 py-0.5 font-mono text-[10px] leading-none text-[#8F96B0]"
+            data-testid="badge-schema-version"
+          >
+            schema v{SCHEMA_VERSION}
           </p>
         ) : null}
       </div>
