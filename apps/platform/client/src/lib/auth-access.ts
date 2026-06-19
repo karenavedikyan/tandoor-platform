@@ -20,11 +20,13 @@ export function canCreateResetLink(
   return canCreatePasswordResetLink(actor.role, target.role);
 }
 
+export type PilotNavBadge = number | string;
+
 export type PilotNavItem = {
   href: string;
   label: string;
   testId: string;
-  badge?: number;
+  badge?: PilotNavBadge;
   /** Плейсхолдер бейджа (например пока грузится актуализация клиентской базы). */
   badgeLoading?: boolean;
   /**
@@ -554,12 +556,27 @@ function finalizeGroupedPilotNavigation(
   );
 }
 
+/** Формат бейджа корзины: `12/10` если оба > 0, одно число если только один > 0. */
+export function buildTrashNavBadge(
+  trashDealersCount?: number | null,
+  trashTradePointsCount?: number | null,
+): Pick<PilotNavItem, "badge" | "badgeLoading"> {
+  if (trashDealersCount === undefined && trashTradePointsCount === undefined) return {};
+  if (trashDealersCount === null || trashTradePointsCount === null) return { badgeLoading: true };
+  const d = trashDealersCount ?? 0;
+  const tp = trashTradePointsCount ?? 0;
+  if (d <= 0 && tp <= 0) return {};
+  if (d > 0 && tp > 0) return { badge: `${d}/${tp}` };
+  return { badge: d > 0 ? d : tp };
+}
+
 export function getPilotNavigation(
   role: SalesRole,
   dealerBaseClientCount?: number | null,
   tradePointCount?: number | null,
   platformUserRole?: UserRole | null,
-  trashCount?: number | null,
+  trashDealersCount?: number | null,
+  trashTradePointsCount?: number | null,
   adminPurgeQueueCount?: number | null,
 ): PilotNavigationModel {
   const sch = salesControlHomeHref(role);
@@ -577,12 +594,8 @@ export function getPilotNavigation(
     return { badge: tradePointCount };
   };
 
-  const trashNavExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
-    if (trashCount === undefined) return {};
-    if (trashCount === null) return { badgeLoading: true };
-    if (trashCount <= 0) return {};
-    return { badge: trashCount };
-  };
+  const trashNavExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> =>
+    buildTrashNavBadge(trashDealersCount, trashTradePointsCount);
 
   const buildInDevelopmentNavGroup = (options: {
     includeMarketingBriefsInDev: boolean;

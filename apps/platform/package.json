@@ -69,7 +69,7 @@
     "test:db-scope-source-of-truth": "tsx shared/__tests__/db-scope-source-of-truth.test.ts",
     "test:db-scope-formula": "tsx shared/__tests__/db-scope-formula.test.ts",
     "test:two-stage-trash": "tsx shared/__tests__/two-stage-trash.test.ts",
-    "test:record-status": "tsx shared/__tests__/record-status.test.ts && vitest run server/migrations/__tests__/record-status-migration.spec.ts",
+    "test:record-status": "tsx shared/__tests__/record-status.test.ts && tsx shared/__tests__/record-status-cascade.test.ts && vitest run server/migrations/__tests__/record-status-migration.spec.ts",
     "test:bulk-archive-to-trash": "tsx shared/__tests__/bulk-archive-to-trash.test.ts",
     "test:trash-bulk": "tsx shared/__tests__/trash-bulk-actions.test.ts && vitest run client/src/__tests__/trash-bin-bulk-selection.test.tsx",
     "test:archive-trash-mutual-exclusion": "tsx shared/__tests__/archive-trash-mutual-exclusion.test.ts",

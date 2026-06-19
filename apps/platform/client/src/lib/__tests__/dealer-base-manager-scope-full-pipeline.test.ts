@@ -1,5 +1,5 @@
 /**
- * Промт 394: полный пайплайн «Мои клиенты» менеджера — 56 из 56.
+ * Промт 394 / 418: полный пайплайн «Мои клиенты» менеджера — active-only из my-scope.
  * Запуск: `npm run test:manager-scope-full-pipeline` из каталога apps/platform.
  */
 import assert from "node:assert/strict";
@@ -51,7 +51,9 @@ function makeCatalog(n: number): DealerRow[] {
 }
 
 const codes = Array.from({ length: 56 }, (_, i) => `MA-MA${String(100000 + i).padStart(6, "0")}`);
-const externalKeys = new Set(codes.map((c) => `client-${c.toLowerCase()}`));
+const activeCodes = codes.slice(0, 44);
+const externalKeysActive = new Set(activeCodes.map((c) => `client-${c.toLowerCase()}`));
+const externalKeysAll = new Set(codes.map((c) => `client-${c.toLowerCase()}`));
 
 const snap = {
   me: { id: SKLYAROV_UUID, role: "manager", fullName: SKLYAROV_NAME, teamId: "team-uuid" },
@@ -111,12 +113,24 @@ function mergedRowsForDealerBaseManager411(
   );
 }
 
-// Промт 411: actx.enabled + неполный plane — manager bypass, merged = release (56).
+// Промт 418: my-scope active keys (44) ≠ все assignments (56).
 {
   const catalog = makeCatalog(100);
-  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
+  const dbKeys = externalKeysActive;
   const releaseDealerRowsForScope = getVisibleDealerRows(catalog, false, codes, dbKeys);
-  assert.equal(releaseDealerRowsForScope.length, 56);
+  assert.equal(releaseDealerRowsForScope.length, 44, "active-only external keys: 44");
+
+  const scoped = scopedRowsForManager410(releaseDealerRowsForScope, true, "sales_manager", true, dbKeys);
+  assert.equal(scoped.length, 44, "418: scopedRows=44 active, не 56");
+  assert.notEqual(scoped.length, codes.length, "418: active ≠ all assignment codes");
+}
+
+// Промт 411: actx.enabled + неполный plane — manager bypass, merged = release (active-only).
+{
+  const catalog = makeCatalog(100);
+  const dbKeys = externalKeysActive;
+  const releaseDealerRowsForScope = getVisibleDealerRows(catalog, false, codes, dbKeys);
+  assert.equal(releaseDealerRowsForScope.length, 44);
 
   const incompletePlane = createEmptyActualizationState();
   for (let i = 4; i < releaseDealerRowsForScope.length; i++) {
@@ -149,28 +163,28 @@ function mergedRowsForDealerBaseManager411(
   );
   assert.equal(
     managerMerged.length,
-    56,
-    "manager (real, actx.enabled): mergedRowsForDealerBase = releaseDealerRowsForScope (без buildDealerBaseRowsWithActualization)",
+    44,
+    "manager (real, actx.enabled): mergedRowsForDealerBase = releaseDealerRowsForScope (active-only)",
   );
 
   const scoped = scopedRowsForManager410(managerMerged, true, "sales_manager", true, dbKeys);
-  assert.equal(scoped.length, 56, "411 + 410 pipeline: scopedRows=56");
+  assert.equal(scoped.length, 44, "411 + 410 pipeline: scopedRows=44 active");
 }
 
-// Промт 410: catalog ∩ dbScopedExternalKeys.
+// Промт 410: catalog ∩ dbScopedExternalKeys (active-only).
 {
   const catalog = makeCatalog(100);
-  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
+  const dbKeys = externalKeysActive;
   const out = catalog.filter((r) => dbKeys.has(r.id));
-  assert.equal(out.length, 56, "manager (real) — scopedRows = catalog ∩ dbScopedExternalKeys");
+  assert.equal(out.length, 44, "manager (real) — scopedRows = catalog ∩ active dbScopedExternalKeys");
 }
 
-// Промт 410: полный pipeline — manager real, dbScopedExternalKeys=56 → managerScopedRows=56.
+// Промт 410: полный pipeline — manager real, dbScopedExternalKeys=44 active.
 {
   const catalog = makeCatalog(100);
-  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
-  const visible = getVisibleDealerRows(catalog, false, codes, dbKeys);
-  assert.equal(visible.length, 56);
+  const dbKeys = externalKeysActive;
+  const visible = getVisibleDealerRows(catalog, false, activeCodes, dbKeys);
+  assert.equal(visible.length, 44);
 
   const merged = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(act, profile, {
@@ -181,7 +195,7 @@ function mergedRowsForDealerBaseManager411(
   );
 
   const scoped = scopedRowsForManager410(merged, true, "sales_manager", true, dbKeys);
-  assert.equal(scoped.length, 56, "scopedRows direct my-scope: 56");
+  assert.equal(scoped.length, 44, "scopedRows direct my-scope: 44 active");
 
   const realDefaults = realInitialRopManagerDefaults(snap, "sales_manager");
   const pickerFiltered = applyDealerBasePickerFilters(scoped, {
@@ -197,11 +211,11 @@ function mergedRowsForDealerBaseManager411(
     geoDistrict: "",
     geoLocality: "",
   });
-  assert.equal(pickerFiltered.length, 56, "picker all/all: 56");
+  assert.equal(pickerFiltered.length, 44, "picker all/all: 44 active");
 
   const wrongManager = "dc958e02-d80e-4615-bb8a-8a46be70daed";
   const finalRows = managerScopedRows410(pickerFiltered, true, "sales_manager", wrongManager);
-  assert.equal(finalRows.length, 56, "managerScopedRows ignores manager/ropTeam filter in real: 56");
+  assert.equal(finalRows.length, 44, "managerScopedRows ignores manager/ropTeam filter in real: 44 active");
 }
 
 // 39 с ФИО Склярова, 17 с «чужим» manager_name (как в dealers.manager_name при client_assignments на Склярова).
@@ -220,8 +234,28 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
 
 // Регрессия: без assignmentsScope fallback по имени даёт 39.
 {
-  const visible = getVisibleDealerRows(catalogRows, false, codes, externalKeys);
-  assert.equal(visible.length, 56, "db external keys: 56 видимых строк каталога");
+  const visibleAll = getVisibleDealerRows(catalogRows, false, codes, externalKeysAll);
+  assert.equal(visibleAll.length, 56, "all assignment external keys: 56");
+
+  const mergedAll = excludeTrashedDealersFromWorkingRows(
+    buildDealerBaseRowsWithActualization(act, profile, {
+      includeArchivedDealers: false,
+      releaseDealerRows: visibleAll,
+    }),
+    act,
+  );
+
+  const withAssignments = roleScopedDealerRowsForReal(
+    mergedAll,
+    snap,
+    "sales_manager",
+    undefined,
+    assignmentsScope,
+  );
+  assert.equal(withAssignments.length, 56, "assignmentsScope (all 56 codes): legacy path still 56");
+
+  const visible = getVisibleDealerRows(catalogRows, false, activeCodes, externalKeysActive);
+  assert.equal(visible.length, 44, "db active external keys: 44 видимых строк каталога");
 
   const merged = excludeTrashedDealersFromWorkingRows(
     buildDealerBaseRowsWithActualization(act, profile, {
@@ -234,14 +268,18 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
   const withoutAssignments = roleScopedDealerRowsForReal(merged, snap, "sales_manager");
   assert.equal(withoutAssignments.length, 39, "fallback по manager_name: 39 (репродукция бага)");
 
-  const withAssignments = roleScopedDealerRowsForReal(
+  const activeOnlyScope = buildAssignmentsScopeFromSources({
+    visibleCodes: activeCodes,
+    visibleAll: false,
+  });
+  const withActiveOnly = roleScopedDealerRowsForReal(
     merged,
     snap,
     "sales_manager",
     undefined,
-    assignmentsScope,
+    activeOnlyScope,
   );
-  assert.equal(withAssignments.length, 56, "assignmentsScope: все 56");
+  assert.equal(withActiveOnly.length, 44, "418: assignmentsScope from active my-scope codes: 44");
 
   const pickerFiltered = applyDealerBasePickerFilters(withAssignments, {
     search: "",
@@ -261,30 +299,30 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
 // visPayload fallback до загрузки my-codes.
 {
   const visOnlyScope = buildAssignmentsScopeFromSources({
-    visibleCodes: codes,
+    visibleCodes: activeCodes,
     visibleAll: false,
   });
   assert.ok(visOnlyScope);
-  const visible = filterDealerRowsByExternalKeys(catalogRows, externalKeys);
+  const visible = filterDealerRowsByExternalKeys(catalogRows, externalKeysActive);
   const merged = buildDealerBaseRowsWithActualization(act, profile, {
     includeArchivedDealers: false,
     releaseDealerRows: visible,
   });
   const scoped = roleScopedDealerRowsForReal(merged, snap, "sales_manager", undefined, visOnlyScope);
-  assert.equal(scoped.length, 56, "visibleCodes fallback: 56 без ожидания my-codes");
+  assert.equal(scoped.length, 44, "418: active visibleCodes fallback: 44");
 }
 
 // case-insensitive client_code.
 {
   const mixedCodes = new Set(codes.map((c, i) => (i % 2 === 0 ? c.toLowerCase() : c)));
   const scope = buildAssignmentsScopeFromSources({ ownCodes: mixedCodes });
-  const visible = getVisibleDealerRows(catalogRows, false, codes, externalKeys);
+  const visible = getVisibleDealerRows(catalogRows, false, activeCodes, externalKeysActive);
   const merged = buildDealerBaseRowsWithActualization(act, profile, {
     includeArchivedDealers: false,
     releaseDealerRows: visible,
   });
   const scoped = roleScopedDealerRowsForReal(merged, snap, "sales_manager", undefined, scope);
-  assert.equal(scoped.length, 56, "mixed-case ownCodes: 56");
+  assert.equal(scoped.length, 44, "mixed-case ownCodes with active visible: 44");
 }
 
 // Промт 409: MA-MAxxx ownCodes + catalog id client-ma-maxxx → 56 строк.

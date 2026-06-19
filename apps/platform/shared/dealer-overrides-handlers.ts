@@ -333,6 +333,11 @@ export async function handleDealerOverridesSetTraining(
   });
 }
 
+import {
+  cascadeDealerTradePointsToActive,
+  cascadeDealerTradePointsToTrash,
+} from "./record-status-cascade.js";
+
 async function setTrash(
   pool: PoolLike,
   me: SessionUser,
@@ -367,6 +372,7 @@ async function setTrash(
              updated_by = EXCLUDED.updated_by`,
           [dealerId, new Date().toISOString(), me.id, me.id],
         );
+        await cascadeDealerTradePointsToTrash(pool, dealerId, me.id);
       } else {
         await pool.query(
           `UPDATE dealer_overrides
@@ -380,6 +386,7 @@ async function setTrash(
            WHERE dealer_id = $1 AND status IN ('in_trash', 'pending_admin')`,
           [dealerId, me.id],
         );
+        await cascadeDealerTradePointsToActive(pool, dealerId, me.id);
       }
     },
   );

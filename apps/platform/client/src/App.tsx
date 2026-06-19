@@ -305,7 +305,8 @@ function AuthenticatedShell({
   const dbSidebarCounts = sidebarCountsFromDbScope(dbScope);
   const dealerNavCount = dbSidebarCounts.dealers;
   const tradePointNavCount = showTradePointsNav ? dbSidebarCounts.tradePoints : undefined;
-  const trashNavCount = dbSidebarCounts.trash;
+  const trashDealersNavCount = dbSidebarCounts.trashDealers;
+  const trashTradePointsNavCount = dbSidebarCounts.trashTradePoints;
   const adminPurgeQueueNavCount =
     user.role === "admin" || user.role === "director" ? dbSidebarCounts.adminPurgeQueue : undefined;
   const navigation = useMemo(
@@ -315,10 +316,19 @@ function AuthenticatedShell({
         dealerNavCount,
         tradePointNavCount,
         user.role,
-        trashNavCount,
+        trashDealersNavCount,
+        trashTradePointsNavCount,
         adminPurgeQueueNavCount,
       ),
-    [salesRole, dealerNavCount, tradePointNavCount, user.role, trashNavCount, adminPurgeQueueNavCount],
+    [
+      salesRole,
+      dealerNavCount,
+      tradePointNavCount,
+      user.role,
+      trashDealersNavCount,
+      trashTradePointsNavCount,
+      adminPurgeQueueNavCount,
+    ],
   );
 
   const showAuditLogLink = userHas(user.role, "audit.read");
