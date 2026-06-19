@@ -91,6 +91,72 @@ function managerScopedRows410(
   return pickerFiltered.filter((row) => row.releaseManagerId === manager);
 }
 
+function mergedRowsForDealerBaseManager411(
+  releaseDealerRowsForScope: DealerRow[],
+  actxEnabled: boolean,
+  teamPlane: ReturnType<typeof createEmptyActualizationState>,
+  profileForAct: ReleaseDemoProfile,
+  meRole: string | undefined,
+): DealerRow[] {
+  if (meRole === "manager") {
+    return releaseDealerRowsForScope;
+  }
+  if (!actxEnabled) return releaseDealerRowsForScope;
+  return excludeTrashedDealersFromWorkingRows(
+    buildDealerBaseRowsWithActualization(teamPlane, profileForAct, {
+      includeArchivedDealers: false,
+      releaseDealerRows: releaseDealerRowsForScope,
+    }),
+    teamPlane,
+  );
+}
+
+// Промт 411: actx.enabled + неполный plane — manager bypass, merged = release (56).
+{
+  const catalog = makeCatalog(100);
+  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
+  const releaseDealerRowsForScope = getVisibleDealerRows(catalog, false, codes, dbKeys);
+  assert.equal(releaseDealerRowsForScope.length, 56);
+
+  const incompletePlane = createEmptyActualizationState();
+  for (let i = 4; i < releaseDealerRowsForScope.length; i++) {
+    const row = releaseDealerRowsForScope[i]!;
+    incompletePlane.trashedDealersById[row.id] = {
+      dealerId: row.id,
+      trashedAt: "2025-01-01T00:00:00Z",
+      trashedBy: "test",
+      trashedByName: "test",
+      expiresAt: "2025-02-01T00:00:00Z",
+      source: "manual_actualization",
+    };
+  }
+
+  const withActxShrink = excludeTrashedDealersFromWorkingRows(
+    buildDealerBaseRowsWithActualization(incompletePlane, profile, {
+      includeArchivedDealers: false,
+      releaseDealerRows: releaseDealerRowsForScope,
+    }),
+    incompletePlane,
+  );
+  assert.equal(withActxShrink.length, 4, "без bypass: неполный plane режет 56 → 4");
+
+  const managerMerged = mergedRowsForDealerBaseManager411(
+    releaseDealerRowsForScope,
+    true,
+    incompletePlane,
+    profile,
+    "manager",
+  );
+  assert.equal(
+    managerMerged.length,
+    56,
+    "manager (real, actx.enabled): mergedRowsForDealerBase = releaseDealerRowsForScope (без buildDealerBaseRowsWithActualization)",
+  );
+
+  const scoped = scopedRowsForManager410(managerMerged, true, "sales_manager", true, dbKeys);
+  assert.equal(scoped.length, 56, "411 + 410 pipeline: scopedRows=56");
+}
+
 // Промт 410: catalog ∩ dbScopedExternalKeys.
 {
   const catalog = makeCatalog(100);
