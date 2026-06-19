@@ -310,13 +310,13 @@ export default function TradePointsPage({
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
   const readOnlyScope = viewingOtherUserScope;
+  const user = me ?? undefined;
+  const isRealUser = Boolean(me?.id);
   const targetScopeQ = useMyScopeFromDB({
     enabled: viewingOtherUserScope,
     forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
   });
   const selfDbScopeQ = useMyScopeFromDB({ enabled: isRealUser && !viewingOtherUserScope });
-  const user = me ?? undefined;
-  const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
   const myCodesQ = useMyClientCodes({ enabled: isRealUser });
