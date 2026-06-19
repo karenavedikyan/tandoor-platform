@@ -25,6 +25,7 @@ import {
   handleClientAssignmentHistory,
   handleClientsAssignmentsList,
   handleClientsReassign,
+  handleRegionalManagerReassign,
   handleRopGrantsAdd,
   handleRopGrantsList,
   handleRopGrantsRemove,
@@ -56,6 +57,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "clients-reassign" && req.method === "POST") {
       await handleClientsReassign(req, res, pool, me);
+      return;
+    }
+    if (action === "regional-manager-reassign" && req.method === "POST") {
+      await handleRegionalManagerReassign(req, res, pool, me);
       return;
     }
     if (action === "user-team-reassign" && req.method === "POST") {
