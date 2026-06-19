@@ -78,6 +78,51 @@ export const DEALER_IS_EMPLOYEE_TRASH_SQL = `(
 
 export const DEALER_IS_ACTIVE_SQL = `(d_ov.purged_at IS NULL AND d_ov.trashed_at IS NULL)`;
 
+export type TrashRbacMode = "self" | "team" | "full";
+
+export function resolveTrashRbacMode(role: UserRole): TrashRbacMode {
+  if (role === "admin" || role === "director") return "full";
+  if (role === "rop") return "team";
+  return "self";
+}
+
+export async function fetchTeamMemberIds(pool: PoolLike, userId: string): Promise<Set<string>> {
+  const q = await pool.query<{ user_id: string }>(
+    `SELECT user_id::text FROM user_team_memberships
+     WHERE team_id IN (SELECT team_id FROM user_team_memberships WHERE user_id = $1)`,
+    [userId],
+  );
+  const ids = new Set<string>(q.rows.map((r) => r.user_id));
+  ids.add(userId);
+  return ids;
+}
+
+function dealerVisibleInTrash(
+  trashedBy: string | null | undefined,
+  mode: TrashRbacMode,
+  userId: string,
+  teamMemberIds: Set<string> | null,
+): boolean {
+  if (mode === "full") return true;
+  if (mode === "self") return trashedBy === userId;
+  if (mode === "team") return Boolean(trashedBy && teamMemberIds?.has(trashedBy));
+  return false;
+}
+
+function buildTradePointTrashByFilter(
+  mode: TrashRbacMode,
+  userId: string,
+  teamMemberIds: Set<string> | null,
+): { sql: string; params: unknown[] } {
+  if (mode === "self") {
+    return { sql: "AND tpo.trashed_by = $2::uuid", params: [userId] };
+  }
+  if (mode === "team" && teamMemberIds) {
+    return { sql: "AND tpo.trashed_by = ANY($2::uuid[])", params: [Array.from(teamMemberIds)] };
+  }
+  return { sql: "", params: [] };
+}
+
 export async function computeAdminPurgeQueueCounts(
   pool: PoolLike,
 ): Promise<{ dealers: number; trade_points: number }> {
@@ -339,15 +384,21 @@ export async function computeDbScopeForUser(
     external_key: string;
     is_purged: boolean;
     is_employee_trash: boolean;
+    trashed_by: string | null;
   }>(
     `SELECT d.id::text AS id, d.external_key,
             (d_ov.purged_at IS NOT NULL) AS is_purged,
-            ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash
+            ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash,
+            d_ov.trashed_by::text AS trashed_by
      FROM dealers d
      ${DEALER_OVERRIDE_JOIN}
      WHERE d.release_code = ANY($1::text[])`,
     [meta.allCodes],
   );
+
+  const trashRbacMode = resolveTrashRbacMode(role);
+  const teamMemberIds =
+    trashRbacMode === "team" ? await fetchTeamMemberIds(pool, userId) : null;
 
   const activeIds: string[] = [];
   const activeKeys: string[] = [];
@@ -355,26 +406,36 @@ export async function computeDbScopeForUser(
   const trashedKeys: string[] = [];
   for (const row of dealersQ.rows) {
     if (row.is_purged) continue;
-    if (row.is_employee_trash) {
-      trashedIds.push(row.id);
-      trashedKeys.push(row.external_key);
-    } else {
+    const isTrashed = row.is_employee_trash;
+    if (!isTrashed) {
       activeIds.push(row.id);
       activeKeys.push(row.external_key);
+      continue;
+    }
+    if (dealerVisibleInTrash(row.trashed_by, trashRbacMode, userId, teamMemberIds)) {
+      trashedIds.push(row.id);
+      trashedKeys.push(row.external_key);
     }
   }
 
   let activeTp = 0;
   let trashedTp = 0;
-  if (activeIds.length > 0) {
+  const scopeDealerIds = [...activeIds, ...trashedIds];
+  if (scopeDealerIds.length > 0) {
+    const tpTrashFilter = buildTradePointTrashByFilter(trashRbacMode, userId, teamMemberIds);
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
          COUNT(*) FILTER (WHERE tp.is_active = TRUE AND tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
-         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
+         COUNT(*) FILTER (
+           WHERE tpo.purged_at IS NULL
+             AND tpo.trashed_at IS NOT NULL
+             AND tpo.purge_requested_at IS NULL
+             ${tpTrashFilter.sql}
+         )::text AS trashed_tps
        FROM trade_points tp
        ${TRADE_POINT_OVERRIDE_JOIN}
        WHERE tp.dealer_id = ANY($1::uuid[])`,
-      [activeIds],
+      [scopeDealerIds, ...tpTrashFilter.params],
     );
     activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
     trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
