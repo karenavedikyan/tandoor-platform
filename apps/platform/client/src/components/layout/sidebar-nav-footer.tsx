@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/context/theme-provider";
 import type { TandoorThemeChoice } from "@/lib/tandoor-theme";
 import { SCHEMA_VERSION } from "@/lib/schema-version";
+import { readBuildCommitFromMeta } from "@/lib/build-version-poll";
 
 function themeLabel(t: TandoorThemeChoice): string {
   if (t === "light") return "Светлая";
@@ -47,6 +48,8 @@ export function SidebarNavFooter({
 }: SidebarNavFooterProps) {
   const { theme, setTheme } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(settingsDefaultOpen);
+  const buildCommit = showSchemaVersionBadge ? readBuildCommitFromMeta() : null;
+  const buildShort = buildCommit ? buildCommit.slice(0, 7) : null;
 
   return (
     <div
@@ -68,6 +71,7 @@ export function SidebarNavFooter({
             data-testid="badge-schema-version"
           >
             schema v{SCHEMA_VERSION}
+            {buildShort ? ` · build ${buildShort}` : ""}
           </p>
         ) : null}
       </div>
