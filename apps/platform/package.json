@@ -19,6 +19,7 @@
     "test:effective-scope-hotfix2": "vitest run effective-scope-hotfix2",
     "test:effective-scope-shadow": "vitest run effective-scope-shadow",
     "test:effective-scope-hotfix3": "vitest run effective-scope-hotfix3",
+    "test:use-catalog-filters-url": "vitest run use-catalog-filters-url",
     "lint:shadow-write": "node scripts/check-shadow-write-coverage.mjs",
     "lint:db-source-of-truth": "node ../../scripts/lint-db-source-of-truth.mjs",
     "lint:db-source-of-truth-full": "node scripts/check-db-source-invariant.mjs",
