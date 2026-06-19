@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
-import { canCreateResetLink, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
+import { buildTrashNavBadge, canCreateResetLink, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
 
 const U = (id: string, role: UserRole) => ({ id, role });
 
@@ -58,3 +58,19 @@ if (devGroup.layout === "grouped") {
 assert.ok(managerNav.filter((id) => id === "nav-item-marketing-briefs").length === 1, "single marketing briefs entry");
 
 console.log("auth-access pilot navigation admin shortcut: ok");
+
+assert.deepEqual(buildTrashNavBadge(12, 10), { badge: "12/10" });
+assert.deepEqual(buildTrashNavBadge(12, 0), { badge: 12 });
+assert.deepEqual(buildTrashNavBadge(0, 5), { badge: 5 });
+assert.deepEqual(buildTrashNavBadge(0, 0), {});
+assert.deepEqual(buildTrashNavBadge(null, 0), { badgeLoading: true });
+
+const navWithTrash = getPilotNavigation("sales_manager", 44, 33, "manager", 12, 10);
+assert.equal(navWithTrash.layout, "grouped");
+if (navWithTrash.layout === "grouped") {
+  const flat = flattenGroupedPilotNavigation(navWithTrash);
+  const trashItem = flat.find((i) => i.testId === "nav-item-trash");
+  assert.equal(trashItem?.badge, "12/10", "418: trash nav badge dealers/tp");
+}
+
+console.log("auth-access trash badge: ok");

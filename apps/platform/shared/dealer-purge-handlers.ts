@@ -16,6 +16,12 @@ import {
 import { logDealerAuditEvent } from "./override-audit-events.js";
 import { removeDealerFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
+import {
+  cascadeDealerTradePointsToActive,
+  cascadeDealerTradePointsToEmployeeTrash,
+  cascadeDealerTradePointsToPendingAdmin,
+  cascadeDealerTradePointsToPurged,
+} from "./record-status-cascade.js";
 import { roleHasPermission } from "./auth-rbac.js";
 import type { UserRole } from "./auth.js";
 
@@ -122,6 +128,7 @@ export async function handleDealerOverridesRequestPurge(
          WHERE dealer_id = $1 AND status = 'in_trash'`,
         [dealerId, me.id],
       );
+      await cascadeDealerTradePointsToPendingAdmin(pool, dealerId, me.id);
       await logDealerAuditEvent(pool, {
         dealerId,
         eventKind: "dealer_purge_requested",
@@ -178,6 +185,7 @@ export async function handleDealerOverridesRestore(
              WHERE dealer_id = $1 AND status IN ('in_trash', 'pending_admin')`,
             [dealerId, me.id],
           );
+          await cascadeDealerTradePointsToActive(pool, dealerId, me.id);
           await logDealerAuditEvent(pool, {
             dealerId,
             eventKind: "dealer_restored_to_active",
@@ -193,6 +201,7 @@ export async function handleDealerOverridesRestore(
              WHERE dealer_id = $1 AND status = 'pending_admin'`,
             [dealerId, me.id],
           );
+          await cascadeDealerTradePointsToEmployeeTrash(pool, dealerId, me.id);
           await logDealerAuditEvent(pool, {
             dealerId,
             eventKind: "dealer_restored_to_employee_trash",
@@ -227,6 +236,7 @@ export async function handleDealerOverridesRestore(
            WHERE dealer_id = $1 AND status IN ('in_trash', 'pending_admin')`,
           [dealerId, me.id],
         );
+        await cascadeDealerTradePointsToActive(pool, dealerId, me.id);
         await logDealerAuditEvent(pool, {
           dealerId,
           eventKind: "dealer_restored_to_active",
@@ -280,6 +290,7 @@ export async function handleDealerOverridesPurge(
        WHERE dealer_id = $1 AND status = 'pending_admin'`,
       [dealerId, me.id],
     );
+    await cascadeDealerTradePointsToPurged(pool, dealerId, me.id);
     await logDealerAuditEvent(pool, {
       dealerId,
       eventKind: "dealer_purged",

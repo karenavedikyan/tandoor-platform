@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 export function useStartImpersonation() {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (targetUserId: string) => {
       const res = await fetch("/api/auth/impersonate-start", {
@@ -12,6 +13,9 @@ export function useStartImpersonation() {
       const json = (await res.json()) as { success?: boolean; message?: string; code?: string };
       if (!res.ok || !json.success) throw new Error(json.message || json.code || "FAILED");
       return json;
+    },
+    onSuccess: () => {
+      qc.clear();
     },
   });
 }
