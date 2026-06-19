@@ -99,12 +99,12 @@ export function defaultHomePathForUserRole(role: UserRole): string {
     case "admin":
       return "/admin/users";
     case "director":
-      return "/dealer-base";
+      return "/main";
     case "rop":
     case "regional_manager":
-      return "/dealer-base";
+      return "/main";
     case "manager":
-      return "/dealer-base";
+      return "/main";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -615,6 +615,12 @@ export function getPilotNavigation(
   ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
     leadingItems: [
+      {
+        href: "/main",
+        label: "Главная",
+        testId: "nav-item-main",
+        navBehaviorId: "nav-main",
+      },
       {
         href: homeHref,
         label: "Клиенты-дилеры",

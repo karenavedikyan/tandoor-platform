@@ -3,7 +3,13 @@
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
-import { canCreateResetLink, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
+import {
+  canAccessPathForUser,
+  canCreateResetLink,
+  defaultHomePathForUserRole,
+  flattenGroupedPilotNavigation,
+  getPilotNavigation,
+} from "../auth-access";
 
 const U = (id: string, role: UserRole) => ({ id, role });
 
@@ -42,8 +48,24 @@ for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as cons
   const ids = navTestIds(salesRole, salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager");
   assert.ok(!ids.includes("nav-item-admin-brief-migrate-top"), `${salesRole}: no top migrate for non-admin`);
   assert.ok(!ids.includes("nav-item-admin-brief-migrate"), `${salesRole}: no migrate in nav for non-admin`);
+  assert.ok(ids.includes("nav-item-main"), `${salesRole}: main nav item`);
   assert.ok(ids.includes("nav-item-marketing-briefs"), `${salesRole}: marketing briefs in main nav`);
 }
+
+const teamLeadNav = getPilotNavigation("team_lead", undefined, undefined, "rop");
+assert.equal(teamLeadNav.layout, "grouped");
+if (teamLeadNav.layout === "grouped") {
+  assert.equal(teamLeadNav.leadingItems[0]?.testId, "nav-item-main", "team_lead: main is first nav item");
+  assert.equal(teamLeadNav.leadingItems[0]?.href, "/main", "team_lead: main href");
+}
+
+for (const role of ["director", "rop", "regional_manager", "manager"] as const) {
+  assert.equal(defaultHomePathForUserRole(role), "/main", `${role}: home is /main`);
+  assert.equal(canAccessPathForUser(role, "/main"), true, `${role}: /main accessible`);
+}
+assert.equal(defaultHomePathForUserRole("marketer"), "/marketing-briefs", "marketer: home unchanged");
+assert.equal(defaultHomePathForUserRole("analyst"), "/analytics-workspace", "analyst: home unchanged");
+assert.equal(defaultHomePathForUserRole("admin"), "/admin/users", "admin: home unchanged");
 
 const managerNav = navTestIds("sales_manager", "manager");
 const devGroup = getPilotNavigation("sales_manager", undefined, undefined, "manager");
