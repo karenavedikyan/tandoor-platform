@@ -114,6 +114,7 @@
     "test:dealer-base-real-picker-hotfix": "tsx client/src/lib/__tests__/dealer-base-real-picker-hotfix.test.ts",
     "test:dealer-base-initial-picker": "tsx client/src/lib/__tests__/dealer-base-initial-picker.test.tsx",
     "test:dealer-base-filters-persistence": "vitest run client/src/__tests__/dealer-base-filters-persistence.test.tsx",
+    "test:dealer-base-final-rows-manager": "tsx client/src/__tests__/dealer-base-final-rows-manager.test.tsx",
     "test:dealer-base-clients-selfheal": "tsx client/src/lib/__tests__/dealer-base-clients-selfheal.test.ts",
     "test:assignments-scope": "tsx client/src/lib/__tests__/dealer-base-real-scope-assignments.test.ts",
     "test:management-view-model": "tsx client/src/lib/__tests__/dealer-base-management-view-model.test.ts",
