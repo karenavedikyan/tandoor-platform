@@ -76,6 +76,12 @@ const RULES = [
     message:
       "OrgSnapshot.*.length в контексте счётчика. OrgSnapshot — release-каталог, а не источник scope. Используйте API endpoints.",
   },
+  {
+    id: "tp-sum-not-union",
+    pattern: /members\.reduce\s*\([^)]*active_trade_points/,
+    message:
+      "Сумма active_trade_points через reduce → дубли по RM. Используйте SET-union по tp_id (unionTradePointIds).",
+  },
 ];
 
 function walk(dir, acc = []) {

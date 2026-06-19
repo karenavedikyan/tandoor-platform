@@ -40,14 +40,8 @@ const MEMBERS: TeamScopeMember[] = [
 // team_totals invariant
 {
   const totals = aggregateMemberTotals(MEMBERS);
-  const sum = {
-    active_dealers: MEMBERS.reduce((s, m) => s + m.totals.active_dealers, 0),
-    active_trade_points: MEMBERS.reduce((s, m) => s + m.totals.active_trade_points, 0),
-    trashed_dealers: MEMBERS.reduce((s, m) => s + m.totals.trashed_dealers, 0),
-    trashed_trade_points: MEMBERS.reduce((s, m) => s + m.totals.trashed_trade_points, 0),
-  };
-  assert.equal(totals.active_trade_points, sum.active_trade_points);
-  assert.equal(totals.trashed_trade_points, sum.trashed_trade_points);
+  assert.equal(totals.active_trade_points, 1, "SET-union active TP by tp_id");
+  assert.equal(totals.trashed_trade_points, MEMBERS.reduce((s, m) => s + m.totals.trashed_trade_points, 0));
   assert.equal(totals.active_dealers, 2, "SET-union active dealers");
   assert.equal(totals.trashed_dealers, 1, "SET-union trashed dealers");
 }
