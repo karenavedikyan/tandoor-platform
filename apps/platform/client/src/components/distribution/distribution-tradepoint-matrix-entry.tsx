@@ -14,7 +14,11 @@ import { TradePointShowcaseCatalogSlot } from "@/components/trade-point-showcase
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { formatRelativeTime } from "@/lib/format-datetime";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import {
+  buildHashPath,
+  updateHashRouteParam,
+  useHashRouteSearchParams,
+} from "@/lib/hash-route-utils";
 import {
   filterMatrix,
   getTradePointMatrix,
@@ -93,7 +97,11 @@ export function DistributionTradePointMatrixEntry({
   const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
-  const [showcaseFullscreenOpen, setShowcaseFullscreenOpen] = useState(false);
+  const routeParams = useHashRouteSearchParams();
+  const showcaseFullscreenOpen = routeParams.get("de_fs") === "1";
+  const setShowcaseFullscreenOpen = useCallback((open: boolean) => {
+    updateHashRouteParam("de_fs", open ? "1" : null);
+  }, []);
 
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
@@ -155,7 +163,7 @@ export function DistributionTradePointMatrixEntry({
     setExpandedTaskIds(new Set());
     setMatrixTaskFilter("all");
     setMatrixFilter("all");
-    setShowcaseFullscreenOpen(false);
+    updateHashRouteParam("de_fs", null);
   }, [dealer.id, point.id]);
 
   const createdTaskByProductId = useMemo(() => {
