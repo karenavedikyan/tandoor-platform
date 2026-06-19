@@ -120,12 +120,26 @@ export async function handleDealerOverridesList(
   _me: SessionUser,
 ): Promise<void> {
   const ids = parseIdList(req.query.dealer_ids);
+  const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const statusFilter =
+    statusRaw === "active" || statusRaw === "in_trash" || statusRaw === "pending_admin" || statusRaw === "purged"
+      ? statusRaw
+      : null;
+
   const overridesQ =
     ids.length > 0
-      ? pool.query<Record<string, unknown>>(`SELECT * FROM dealer_overrides WHERE dealer_id = ANY($1::text[])`, [
-          ids,
-        ])
-      : pool.query<Record<string, unknown>>(`SELECT * FROM dealer_overrides`);
+      ? pool.query<Record<string, unknown>>(
+          statusFilter
+            ? `SELECT * FROM dealer_overrides WHERE dealer_id = ANY($1::text[]) AND status = $2::record_status`
+            : `SELECT * FROM dealer_overrides WHERE dealer_id = ANY($1::text[])`,
+          statusFilter ? [ids, statusFilter] : [ids],
+        )
+      : pool.query<Record<string, unknown>>(
+          statusFilter
+            ? `SELECT * FROM dealer_overrides WHERE status = $1::record_status`
+            : `SELECT * FROM dealer_overrides`,
+          statusFilter ? [statusFilter] : [],
+        );
   const trainingQ =
     ids.length > 0
       ? pool.query<Record<string, unknown>>(

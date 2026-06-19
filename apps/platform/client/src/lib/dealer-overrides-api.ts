@@ -151,6 +151,7 @@ export async function trashDealerStrict(dealerId: string): Promise<OverridesApiR
     traceFn: "trashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-trash", dealerId, body);
+  if (r.ok) invalidateMyDealerScope();
   return r;
 }
 
@@ -171,6 +172,23 @@ export async function untrashDealerStrict(dealerId: string): Promise<OverridesAp
     traceFn: "untrashDealerStrict",
   });
   if (!r.ok && r.network) enqueueOnNetwork("dealer-untrash", dealerId, body);
+  if (r.ok) invalidateMyDealerScope();
+  return r;
+}
+
+export async function bulkTrashDealersStrict(
+  dealerIds: string[],
+): Promise<OverridesApiResult<{ moved: number; skipped: number; skippedIds?: string[] }>> {
+  traceOverridesStrictCalled("bulkTrashDealersStrict", { dealerIds });
+  const body = { dealer_ids: dealerIds };
+  const r = await overridesApiPost<{ moved: number; skipped: number; skippedIds?: string[] }>({
+    scope: "dealer",
+    action: "bulk-trash",
+    url: "/api/dealer-overrides/bulk-trash",
+    body,
+    traceFn: "bulkTrashDealersStrict",
+  });
+  if (r.ok) invalidateMyDealerScope();
   return r;
 }
 

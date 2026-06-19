@@ -147,6 +147,7 @@ const WRITE_ACTIONS = new Set([
   "purge",
   "admin-restore",
   "bulk-move-archive-to-trash",
+  "bulk-trash",
   "bulk-restore",
   "bulk-request-purge",
 ]);

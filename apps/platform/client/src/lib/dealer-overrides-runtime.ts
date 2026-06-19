@@ -274,7 +274,8 @@ export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationSt
   if (isPurgedStatus(parseRecordStatus(ov?.status))) return false;
   if (dbTrashedDealersById[dealerId]) return true;
   if (dbPurgePendingDealersById[dealerId]) return true;
-  if (act?.trashedDealersById?.[dealerId]) return true;
+  // Промт 420: после гидрации оверрайдов jsonb trashedDealersById не участвует в чтении.
+  if (!dealerHydrated && act?.trashedDealersById?.[dealerId]) return true;
   return false;
 }
 
@@ -283,7 +284,7 @@ export function isTradePointTrashedInRuntime(tpId: string, act?: ActualizationSt
   if (isPurgedStatus(parseRecordStatus(ov?.status))) return false;
   if (dbTrashedTradePointsById[tpId]) return true;
   if (dbPurgePendingTradePointsById[tpId]) return true;
-  if (act?.trashedTradePointsById?.[tpId]) return true;
+  if (!tpHydrated && act?.trashedTradePointsById?.[tpId]) return true;
   return false;
 }
 
@@ -317,8 +318,15 @@ export function getRuntimeTrashedTradePointsById(): Readonly<Record<string, Tras
   return dbTrashedTradePointsById;
 }
 
-/** Промт 397: jsonb-state (client_bulk_delete) + dealer_overrides.trashed_at. */
+/** Промт 397 / 420: dealer_overrides (runtime) — источник правды; jsonb только до гидрации. */
 export function mergeTrashedDealersForUi(act: ActualizationState): Record<string, TrashedDealerInfo> {
+  if (dealerHydrated) {
+    const merged = { ...dbTrashedDealersById };
+    for (const id of Object.keys(merged)) {
+      if (dbPurgePendingDealersById[id]) delete merged[id];
+    }
+    return merged;
+  }
   const merged = mergeTrashedRecordMaps(act?.trashedDealersById ?? {}, dbTrashedDealersById);
   for (const id of Object.keys(merged)) {
     if (dbPurgePendingDealersById[id]) delete merged[id];
@@ -327,6 +335,13 @@ export function mergeTrashedDealersForUi(act: ActualizationState): Record<string
 }
 
 export function mergeTrashedTradePointsForUi(act: ActualizationState): Record<string, TrashedTradePointInfo> {
+  if (tpHydrated) {
+    const merged = { ...dbTrashedTradePointsById };
+    for (const id of Object.keys(merged)) {
+      if (dbPurgePendingTradePointsById[id]) delete merged[id];
+    }
+    return merged;
+  }
   const merged = mergeTrashedRecordMaps(act?.trashedTradePointsById ?? {}, dbTrashedTradePointsById);
   for (const id of Object.keys(merged)) {
     if (dbPurgePendingTradePointsById[id]) delete merged[id];
