@@ -106,8 +106,6 @@ import {
 } from "@/lib/dealer-base-picker-filters";
 import { shouldSelfHealZeroResult } from "@/lib/dealer-base-clients-selfheal";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
-import { ArchiveInArchiveBadge, archivedEntityRowClassName, isDealerArchivedInActualization } from "@/components/archive-record-visual";
-import { IGNORE_CLIENT_ARCHIVE_IN_UI } from "@/lib/archive-record-visual";
 import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -117,15 +115,13 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cockpit";
 import {
   canActualizeClientBase,
-  canArchiveDealerDuringActualization,
   canCreateDealerDuringActualization,
+  canEditDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
 import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
-import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
@@ -270,7 +266,6 @@ import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { MultiSelect } from "@/components/ui/multi-select";
-import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { normalizeGeoCompare, parseDealerGeoFromRow } from "@/lib/dealer-base-geo-parse";
 
@@ -453,7 +448,7 @@ function OpenDealerButton({ id }: { id: string }) {
   );
 }
 
-type DealerListArchiveBulkProps = {
+type DealerListBulkDeleteProps = {
   selectedIds: Set<string>;
   selectableIds: Set<string>;
   onToggle: (dealerId: string, checked: boolean) => void;
@@ -482,17 +477,12 @@ type DealerRowRendererBaseProps = {
   onToggleWorkPlanSelect?: (dealerId: string, checked: boolean) => void;
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
-  archiveBulk?: DealerListArchiveBulkProps;
+  bulkDelete?: DealerListBulkDeleteProps;
   taskSelectBulk?: DealerListTaskSelectBulkProps;
   rowQuickMove?: DealerListRowQuickMoveProps;
   nextStepsStorage: DealerBaseNextStepsStorage;
   focusList?: DealerFocusViewListCtx;
 };
-
-function archivedDealerListBadge(row: DealerRow, act: ActualizationState): ReactNode {
-  if (!isDealerArchivedInActualization(row.id, act)) return null;
-  return <ArchiveInArchiveBadge testId={`badge-dealer-archived-${row.id}`} />;
-}
 
 function ClientCompactGridBlock({
   rows,
@@ -506,7 +496,7 @@ function ClientCompactGridBlock({
   onToggleWorkPlanSelect,
   shipmentActiveDayId,
   shipmentUserId,
-  archiveBulk,
+  bulkDelete,
   taskSelectBulk,
   rowQuickMove,
   nextStepsStorage: _nextStepsStorage,
@@ -564,7 +554,6 @@ function ClientCompactGridBlock({
         const programSig = getDealerProgramSignal(row);
         const codeStr = showcaseClientCode(row, actualizationState);
         const metaLine = [row.city?.trim() || "—", codeStr, getClientCategoryLabel(row.clientCategory)].join(" · ");
-        const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
 
         const extraBadges: ReactNode[] = [];
         if (stockSig.hasMainWarehouse) {
@@ -609,10 +598,7 @@ function ClientCompactGridBlock({
         return (
           <Card
             key={row.id}
-            className={cn(
-              "overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm",
-              archivedEntityRowClassName(rowArchived),
-            )}
+            className="overflow-hidden rounded-xl border border-border border-l-4 border-l-primary bg-card shadow-sm"
             data-testid={`card-dealer-compact-${row.id}`}
           >
             <CardContent
@@ -643,7 +629,7 @@ function ClientCompactGridBlock({
                       aria-label={`Выбрать клиента ${row.name} для задания`}
                     />
                   ) : null}
-                  {archiveBulk?.selectableIds.has(row.id) ? (
+                  {bulkDelete?.selectableIds.has(row.id) ? (
                     <span
                       className={cn(
                         "inline-flex shrink-0 items-center gap-1 rounded border border-destructive/45 bg-destructive/[0.06] px-1 py-0.5",
@@ -653,8 +639,8 @@ function ClientCompactGridBlock({
                     >
                       <span className="text-[9px] font-semibold uppercase leading-none text-destructive">Удал.</span>
                       <DealerBulkDeleteCheckbox
-                        checked={archiveBulk.selectedIds.has(row.id)}
-                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                        checked={bulkDelete.selectedIds.has(row.id)}
+                        onCheckedChange={(v) => bulkDelete.onToggle(row.id, v === true)}
                         data-testid={`checkbox-dealer-select-${row.id}`}
                         aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                       />
@@ -694,7 +680,6 @@ function ClientCompactGridBlock({
                   <Badge variant="outline" className={cn("px-1.5 py-0 text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
-                  {archivedDealerListBadge(row, actualizationState)}
                 </div>
                 {row.outlets > 1 ? (
                   <Badge variant="outline" className={cn("w-fit px-1.5 py-0 text-[10px] tabular-nums", badgeOutline)}>
@@ -771,7 +756,7 @@ function ClientListRowsBlock({
   onToggleWorkPlanSelect,
   shipmentActiveDayId,
   shipmentUserId,
-  archiveBulk,
+  bulkDelete,
   taskSelectBulk,
   rowQuickMove,
   nextStepsStorage,
@@ -826,16 +811,12 @@ function ClientListRowsBlock({
         const showcaseHint = dealerShowcaseAggregateHint(row, actualizationState);
         const codeStr = showcaseClientCode(row, actualizationState);
         const innLine = innCell(row);
-        const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
         return (
           <div
             key={vi.key}
             data-index={vi.index}
             ref={virtualizer.measureElement}
-            className={cn(
-              "flex min-w-0 items-stretch gap-1.5 border-b border-border p-2 sm:gap-2 sm:p-2.5 last:border-0",
-              archivedEntityRowClassName(rowArchived),
-            )}
+            className="flex min-w-0 items-stretch gap-1.5 border-b border-border p-2 sm:gap-2 sm:p-2.5 last:border-0"
             style={dealerBaseVirtualItemStyle(virtualizer, vi.start)}
             data-testid={`row-dealer-showcase-list-${row.id}`}
           >
@@ -862,12 +843,12 @@ function ClientListRowsBlock({
                   aria-label={`Выбрать клиента ${row.name} для задания`}
                 />
               ) : null}
-              {archiveBulk?.selectableIds.has(row.id) ? (
+              {bulkDelete?.selectableIds.has(row.id) ? (
                 <span className="inline-flex flex-col items-center gap-0.5 rounded-md border border-destructive/35 bg-destructive/[0.04] px-1 py-1" data-testid={`wrap-dealer-bulk-select-${row.id}`}>
                   <span className="text-[8px] font-bold uppercase text-destructive">Del</span>
                   <DealerBulkDeleteCheckbox
-                    checked={archiveBulk.selectedIds.has(row.id)}
-                    onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                    checked={bulkDelete.selectedIds.has(row.id)}
+                    onCheckedChange={(v) => bulkDelete.onToggle(row.id, v === true)}
                     data-testid={`checkbox-dealer-select-${row.id}`}
                     aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                   />
@@ -904,7 +885,6 @@ function ClientListRowsBlock({
                   <Badge variant="outline" className={cn("text-[10px]", statusBadgeClass(row.status))}>
                     {row.status}
                   </Badge>
-                  {archivedDealerListBadge(row, actualizationState)}
                   <Badge variant="outline" className={cn("text-[10px] tabular-nums", badgeOutline)}>
                     {row.outlets} ТТ
                   </Badge>
@@ -1004,7 +984,7 @@ export function DealerBaseDataTable({
   onToggleWorkPlanSelect,
   shipmentActiveDayId,
   shipmentUserId,
-  archiveBulk,
+  bulkDelete,
   taskSelectBulk,
   rowQuickMove,
   nextStepsStorage,
@@ -1047,7 +1027,7 @@ export function DealerBaseDataTable({
     );
   }
 
-  const showArchiveBulkCol = Boolean(archiveBulk && rows.some((r) => archiveBulk.selectableIds.has(r.id)));
+  const showBulkDeleteCol = Boolean(bulkDelete && rows.some((r) => bulkDelete.selectableIds.has(r.id)));
   const showTaskSelectCol = Boolean(taskSelectBulk);
 
   const sortableTh = (key: TableSortKey, label: string, className?: string) => (
@@ -1074,7 +1054,7 @@ export function DealerBaseDataTable({
           <tr className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {showWorkPlanSelect ? <th className="w-10 px-2 py-2" aria-label="Выбор" /> : null}
             {showTaskSelectCol ? <th className="w-10 px-2 py-2 text-center">Задача</th> : null}
-            {showArchiveBulkCol ? (
+            {showBulkDeleteCol ? (
               <th className="w-14 px-2 py-2 text-center text-destructive">Удал.</th>
             ) : null}
             <th className="w-11 px-1 py-2 text-center font-normal normal-case" aria-label="Фото" />
@@ -1110,13 +1090,12 @@ export function DealerBaseDataTable({
                 ? getDealerShipmentStatus(row, shipmentActiveDayId, shipmentUserId, workPlanState)
                 : null;
             const stockShort = [stockSig.hasMainWarehouse ? "Д" : "", stockSig.hasHardwareWarehouse ? "Ф" : ""].filter(Boolean).join("+") || "—";
-            const rowArchived = isDealerArchivedInActualization(row.id, actualizationState);
             return (
               <tr
                 key={vi.key}
                 data-index={vi.index}
                 ref={virtualizer.measureElement}
-                className={cn("border-b border-border/80", archivedEntityRowClassName(rowArchived))}
+                className="border-b border-border/80"
                 style={{
                   display: "table",
                   position: "absolute",
@@ -1153,12 +1132,12 @@ export function DealerBaseDataTable({
                     />
                   </td>
                 ) : null}
-                {showArchiveBulkCol && archiveBulk ? (
+                {showBulkDeleteCol && bulkDelete ? (
                   <td className="bg-destructive/[0.04] px-2 py-1.5 text-center align-middle">
-                    {archiveBulk.selectableIds.has(row.id) ? (
+                    {bulkDelete.selectableIds.has(row.id) ? (
                       <DealerBulkDeleteCheckbox
-                        checked={archiveBulk.selectedIds.has(row.id)}
-                        onCheckedChange={(v) => archiveBulk.onToggle(row.id, v === true)}
+                        checked={bulkDelete.selectedIds.has(row.id)}
+                        onCheckedChange={(v) => bulkDelete.onToggle(row.id, v === true)}
                         data-testid={`checkbox-dealer-select-${row.id}`}
                         aria-label={`Удалить клиента ${row.name} из рабочей базы`}
                       />
@@ -1175,7 +1154,6 @@ export function DealerBaseDataTable({
                   <div className="line-clamp-2 font-medium" title={row.name}>
                     {row.name}
                   </div>
-                  {archivedDealerListBadge(row, actualizationState)}
                   {hidden ? (
                     <Badge variant="secondary" className="mt-0.5 w-fit text-[10px]" data-testid={`badge-dealer-hidden-${row.id}`}>
                       Скрыт
@@ -1260,7 +1238,7 @@ function DealerBaseSegmentGroups({
   emptyMessage,
   shipmentActiveDayId,
   shipmentUserId,
-  archiveBulk,
+  bulkDelete,
   taskSelectBulk,
   rowQuickMove,
   actualizationState,
@@ -1281,7 +1259,7 @@ function DealerBaseSegmentGroups({
   emptyMessage: string;
   shipmentActiveDayId?: DealerShipmentDayId | null;
   shipmentUserId?: string;
-  archiveBulk?: DealerListArchiveBulkProps;
+  bulkDelete?: DealerListBulkDeleteProps;
   taskSelectBulk?: DealerListTaskSelectBulkProps;
   rowQuickMove?: DealerListRowQuickMoveProps;
   actualizationState: ActualizationState;
@@ -1302,7 +1280,7 @@ function DealerBaseSegmentGroups({
       onToggleWorkPlanSelect,
       shipmentActiveDayId,
       shipmentUserId,
-      archiveBulk,
+      bulkDelete,
       taskSelectBulk,
       rowQuickMove,
       nextStepsStorage,
@@ -1324,7 +1302,7 @@ function DealerBaseSegmentGroups({
           onToggleWorkPlanSelect={onToggleWorkPlanSelect}
           shipmentActiveDayId={shipmentActiveDayId}
           shipmentUserId={shipmentUserId}
-          archiveBulk={archiveBulk}
+          archiveBulk={bulkDelete}
           taskSelectBulk={taskSelectBulk}
           rowQuickMove={rowQuickMove}
         />
@@ -1673,28 +1651,18 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const showActualizationSync = useMemo(() => canActualizeClientBase(profile), [profile]);
 
   const [createDealerOpen, setCreateDealerOpen] = useState(false);
-  const [showArchivedDealers, setShowArchivedDealers] = useState(false);
-
-  /** Real-режим: список только архивных клиентов (toggle «Режим архива»). */
-  const dealerBaseArchiveListMode = useReal && actx.enabled && showArchivedDealers;
 
   const mergedRowsForDealerBase = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
-      const includeArchived = showArchivedDealers;
-      const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-        includeArchivedDealers: includeArchived,
+      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
         releaseDealerRows: releaseRows,
       });
-      if (!includeArchived) return merged;
-      return merged.filter((r) => Boolean((teamActualizationPlane.archivedDealersById ?? {})[r.id]));
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-      includeArchivedDealers: showArchivedDealers,
-    });
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile);
   }, [
     isRealUser,
     authLoading,
@@ -1706,7 +1674,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     actx.enabled,
     teamActualizationPlane,
     profile,
-    showArchivedDealers,
     hydrationVersion,
     catalogRows,
     releaseDealerRowsForScope,
@@ -1782,13 +1749,12 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
       return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-        includeArchivedDealers: false,
         releaseDealerRows: releaseRows,
       });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false });
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile);
   }, [
     isRealUser,
     authLoading,
@@ -1856,20 +1822,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       const dealerRowsBeforeActualizationLen = dealerRowsBeforeActualization.length;
 
       const act = teamActualizationPlane;
-      const archivedDealersById = act.archivedDealersById ?? {};
       const trashedDealersById = act.trashedDealersById ?? {};
-      const archivedKeys = Object.keys(archivedDealersById);
       const trashedKeys = Object.keys(trashedDealersById);
-      const myCodesOwn = myCodesQ.data.ownCodes;
-
-      let myCodesArchivedHitCount = 0;
-      let myCodesNotArchivedHitCount = 0;
-      for (const r of dealerRowsBeforeActualization) {
-        const code = r.releaseCode?.trim();
-        if (!code || !myCodesOwn.has(code)) continue;
-        if (archivedDealersById[r.id]) myCodesArchivedHitCount++;
-        else myCodesNotArchivedHitCount++;
-      }
 
       let manualDealersInMergedLen = 0;
       for (const r of mergedRowsForDealerBase) {
@@ -1893,21 +1847,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         dealerRowsBeforeActualizationLen,
 
         actxEnabled: actx.enabled,
-        showArchivedDealers,
         assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
         assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
         assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
 
-        archivedDealersByIdSize: archivedKeys.length,
         dealerOverridesByIdSize: Object.keys(act.dealerOverridesById ?? {}).length,
         manuallyCreatedDealersByIdSize: Object.keys(act.manuallyCreatedDealersById ?? {}).length,
         trashedDealersByIdSize: trashedKeys.length,
         dealerActualizationContactsByIdSize: Object.keys(act.dealerActualizationContactsById ?? {}).length,
-        archivedDealersByIdSample: archivedKeys.slice(0, 10),
         trashedDealersByIdSample: trashedKeys.length > 0 ? trashedKeys.slice(0, 10) : null,
-
-        myCodesArchivedHitCount,
-        myCodesNotArchivedHitCount,
 
         manualDealersInMergedLen,
         releaseDealersInMergedLen: mergedRowsForDealerBase.length - manualDealersInMergedLen,
@@ -1971,7 +1919,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     scopedRows,
     scopedActivePortfolioRows,
     assignmentsScope,
-    showArchivedDealers,
     me?.role,
     actx.enabled,
     teamActualizationPlane,
@@ -2413,12 +2360,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     isRopOrManagerAllFilter(manager);
 
   const resultsContextLine = useMemo(() => {
-    if (actx.enabled && showArchivedDealers) {
-      if ((access === "sales_director" || access === "team_lead") && DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) {
-        return `Режим архива · команда: ${teamRopDisplayLabel}`;
-      }
-      return "Режим архива: показаны только архивные клиенты.";
-    }
     if ((access === "sales_director" || access === "team_lead") && DEALER_BASE_TEAM_WORK_VIEWS.includes(workView)) {
       return `Показана команда: ${teamRopDisplayLabel}`;
     }
@@ -2441,7 +2382,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       }
     }
     return null;
-  }, [actx.enabled, showArchivedDealers, access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
+  }, [access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
 
   const managerScopedRows = useMemo(() => {
     // [410] Manager в real-режиме: pickerFiltered УЖЕ содержит только его клиентов (из my-scope),
@@ -2557,9 +2498,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const displayRows = useMemo(() => {
     const limit = DEALER_BASE_DISPLAY_LIMIT;
-    if (dealerBaseArchiveListMode) {
-      return pickerFiltered.slice(0, limit);
-    }
     if (
       workView === "risks_all" ||
       workView === "top_all" ||
@@ -2590,7 +2528,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     teamRowsForModes,
     managerScopedRows,
     needsManagerSelection,
-    dealerBaseArchiveListMode,
   ]);
 
   const cap = DEALER_BASE_DISPLAY_LIMIT;
@@ -2639,7 +2576,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const resultsCapTotal = useMemo(() => {
-    if (dealerBaseArchiveListMode) return pickerFiltered.length;
     switch (workView) {
       case "risks_all":
         return pickerFiltered.filter(isDealerBusinessRisk).length;
@@ -2675,7 +2611,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     managerScopedRows,
     needsManagerSelection,
     pickerArgs,
-    dealerBaseArchiveListMode,
   ]);
 
   const setRopManagerFromClick = (tid: string, mid: string) => {
@@ -2706,15 +2641,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     profile.role === "marketer" || profile.role === "analyst" ? "all" : "active",
   );
   const [selectedWpIds, setSelectedWpIds] = useState<Set<string>>(() => new Set());
-  const [selectedBulkArchiveDealerIds, setSelectedBulkArchiveDealerIds] = useState<Set<string>>(() => new Set());
+  const [selectedBulkTrashDealerIds, setSelectedBulkTrashDealerIds] = useState<Set<string>>(() => new Set());
   const [selectedTaskSelectKeys, setSelectedTaskSelectKeys] = useState<Set<string>>(() => new Set());
   const [taskSelectTpDialogRow, setTaskSelectTpDialogRow] = useState<DealerRow | null>(null);
   const [batchCreateOpen, setBatchCreateOpen] = useState(false);
-  /** Режим массового удаления: чекбоксы архива показываются только после явного включения. */
+  /** Режим массового удаления: чекбоксы показываются только после явного включения. */
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
-  const [bulkArchiveDealerDialogOpen, setBulkArchiveDealerDialogOpen] = useState(false);
-  const [bulkSoftArchiveDealerDialogOpen, setBulkSoftArchiveDealerDialogOpen] = useState(false);
-  const [bulkArchiveDealerBusy, setBulkArchiveDealerBusy] = useState(false);
+  const [bulkTrashDealerDialogOpen, setBulkTrashDealerDialogOpen] = useState(false);
+  const [bulkTrashDealerBusy, setBulkTrashDealerBusy] = useState(false);
   const [wpScheduleDate, setWpScheduleDate] = useState("");
   const [wpNote, setWpNote] = useState("");
   const [segmentList, setSegmentList] = useState<DealerBaseSegmentId[]>([]);
@@ -2787,9 +2721,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const workPlanState = useMemo(() => resolveWorkPlanState(), [workPlanBump]);
 
   const rowsForWorkPlan = useMemo(() => {
-    if (dealerBaseArchiveListMode) return displayRows;
     return filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState);
-  }, [dealerBaseArchiveListMode, displayRows, profile.personaUserId, workPlanFilter, workPlanState]);
+  }, [displayRows, profile.personaUserId, workPlanFilter, workPlanState]);
 
   const rowsAfterSegmentFilter = useMemo(() => {
     if (segmentList.length === 0) return rowsForWorkPlan;
@@ -3128,16 +3061,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return { main, hardware: hw };
   }, [rowsAfterShipmentDay]);
 
-  useEffect(() => {
-    if (showArchivedDealers) {
-      setBulkDeleteMode(false);
-      setSelectedBulkArchiveDealerIds(new Set());
-    }
-  }, [showArchivedDealers]);
-
   const exitBulkDeleteMode = useCallback(() => {
     setBulkDeleteMode(false);
-    setSelectedBulkArchiveDealerIds(new Set());
+    setSelectedBulkTrashDealerIds(new Set());
   }, []);
 
   useEffect(() => {
@@ -3154,40 +3080,31 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     });
   }, [rowsFinalForList]);
 
-  const archivableDealerIdsInView = useMemo(() => {
-    if (readOnlyScope || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers) return new Set<string>();
+  const trashableDealerIdsInView = useMemo(() => {
+    if (readOnlyScope || !actx.enabled || !canActualizeClientBase(profile)) return new Set<string>();
     const s = new Set<string>();
     for (const r of rowsFinalForList) {
-      if (teamActualizationPlane.archivedDealersById[r.id]) continue;
       if (isDealerTrashedInRuntime(r.id, teamActualizationPlane)) continue;
-      if (canArchiveDealerDuringActualization(profile, r)) s.add(r.id);
+      if (canEditDealerDuringActualization(profile, r)) s.add(r.id);
     }
     return s;
-  }, [
-    readOnlyScope,
-    actx.enabled,
-    teamActualizationPlane.archivedDealersById,
-    teamActualizationPlane,
-    profile,
-    rowsFinalForList,
-    showArchivedDealers,
-  ]);
+  }, [readOnlyScope, actx.enabled, teamActualizationPlane, profile, rowsFinalForList]);
 
   useEffect(() => {
-    setSelectedBulkArchiveDealerIds((prev) => {
+    setSelectedBulkTrashDealerIds((prev) => {
       const n = new Set<string>();
       let changed = false;
       prev.forEach((id) => {
-        if (archivableDealerIdsInView.has(id)) n.add(id);
+        if (trashableDealerIdsInView.has(id)) n.add(id);
         else changed = true;
       });
       if (!changed && n.size === prev.size) return prev;
       return n;
     });
-  }, [archivableDealerIdsInView]);
+  }, [trashableDealerIdsInView]);
 
-  const toggleBulkArchiveDealer = useCallback((dealerId: string, checked: boolean) => {
-    setSelectedBulkArchiveDealerIds((prev) => {
+  const toggleBulkTrashDealer = useCallback((dealerId: string, checked: boolean) => {
+    setSelectedBulkTrashDealerIds((prev) => {
       const next = new Set(prev);
       if (checked) next.add(dealerId);
       else next.delete(dealerId);
@@ -3195,20 +3112,20 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     });
   }, []);
 
-  const allVisibleArchiveDealersSelected = useMemo(() => {
-    if (archivableDealerIdsInView.size === 0) return false;
-    for (const id of Array.from(archivableDealerIdsInView)) {
-      if (!selectedBulkArchiveDealerIds.has(id)) return false;
+  const allVisibleTrashDealersSelected = useMemo(() => {
+    if (trashableDealerIdsInView.size === 0) return false;
+    for (const id of Array.from(trashableDealerIdsInView)) {
+      if (!selectedBulkTrashDealerIds.has(id)) return false;
     }
     return true;
-  }, [archivableDealerIdsInView, selectedBulkArchiveDealerIds]);
+  }, [trashableDealerIdsInView, selectedBulkTrashDealerIds]);
 
-  const someVisibleArchiveDealersSelected = useMemo(() => {
-    for (const id of Array.from(archivableDealerIdsInView)) {
-      if (selectedBulkArchiveDealerIds.has(id)) return true;
+  const someVisibleTrashDealersSelected = useMemo(() => {
+    for (const id of Array.from(trashableDealerIdsInView)) {
+      if (selectedBulkTrashDealerIds.has(id)) return true;
     }
     return false;
-  }, [archivableDealerIdsInView, selectedBulkArchiveDealerIds]);
+  }, [trashableDealerIdsInView, selectedBulkTrashDealerIds]);
 
   const toggleTaskSelectTradePoint = useCallback((dealerId: string, tradePointId: string, checked: boolean) => {
     const key = taskSelectTargetKey(dealerId, tradePointId);
@@ -3338,60 +3255,33 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     });
   }, []);
 
-  const archiveBulkListProps = useMemo((): DealerListArchiveBulkProps | undefined => {
-    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || !bulkDeleteMode) {
+  const bulkDeleteListProps = useMemo((): DealerListBulkDeleteProps | undefined => {
+    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || !bulkDeleteMode) {
       return undefined;
     }
     return {
-      selectedIds: selectedBulkArchiveDealerIds,
-      selectableIds: archivableDealerIdsInView,
-      onToggle: toggleBulkArchiveDealer,
+      selectedIds: selectedBulkTrashDealerIds,
+      selectableIds: trashableDealerIdsInView,
+      onToggle: toggleBulkTrashDealer,
     };
   }, [
     readOnlyScope,
     actx.enabled,
     profile,
-    showArchivedDealers,
     isTaskSelectMode,
     bulkDeleteMode,
-    selectedBulkArchiveDealerIds,
-    archivableDealerIdsInView,
-    toggleBulkArchiveDealer,
+    selectedBulkTrashDealerIds,
+    trashableDealerIdsInView,
+    toggleBulkTrashDealer,
   ]);
 
-  const bulkArchiveDealerDialogCount = useMemo(() => {
+  const bulkTrashDealerDialogCount = useMemo(() => {
     let n = 0;
-    for (const id of Array.from(selectedBulkArchiveDealerIds)) {
-      if (archivableDealerIdsInView.has(id)) n += 1;
+    for (const id of Array.from(selectedBulkTrashDealerIds)) {
+      if (trashableDealerIdsInView.has(id)) n += 1;
     }
     return n;
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView]);
-
-  const handleRowArchiveDealer = useCallback(
-    async (row: DealerRow) => {
-      const now = new Date().toISOString();
-      const r = await actx.persist((prev) => {
-        const next = { ...prev.archivedDealersById };
-        next[row.id] = {
-          dealerId: row.id,
-          archivedAt: now,
-          archivedBy: profile.personaUserId,
-          archivedByName: userLabelFromProfile(profile),
-          source: "manual_actualization",
-        };
-        return mergeActualizationState(prev, { archivedDealersById: next });
-      });
-      if (r.success) {
-        toast({
-          title: "Клиент перемещён в Архив",
-          description: "Восстановить можно из раздела «Корзина» → Архив.",
-        });
-      } else {
-        toast({ title: "Не удалось сохранить", variant: "destructive" });
-      }
-    },
-    [actx, profile],
-  );
+  }, [selectedBulkTrashDealerIds, trashableDealerIdsInView]);
 
   const refreshDealerTrashFromServer = useCallback(async () => {
     await hydrateDealerOverridesFromServer();
@@ -3418,71 +3308,33 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
-    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || showArchivedDealers || bulkDeleteMode) {
+    if (readOnlyScope || isTaskSelectMode || !actx.enabled || !canActualizeClientBase(profile) || bulkDeleteMode) {
       return undefined;
     }
     return {
-      canMoveDealerId: (id) => archivableDealerIdsInView.has(id),
+      canMoveDealerId: (id) => trashableDealerIdsInView.has(id),
       onTrash: (row) => void handleRowTrashDealer(row),
     };
-  }, [readOnlyScope, isTaskSelectMode, actx.enabled, profile, showArchivedDealers, bulkDeleteMode, archivableDealerIdsInView, handleRowTrashDealer]);
-
-  /** Bulk: мягкая архивация в `archivedDealersById` (Промт 70.6). */
-  const confirmBulkSoftArchiveDealers = useCallback(async () => {
-    const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
-    if (ids.length === 0) {
-      setBulkSoftArchiveDealerDialogOpen(false);
-      return;
-    }
-    setBulkArchiveDealerBusy(true);
-    const now = new Date().toISOString();
-    const uid = profile.personaUserId;
-    const uname = userLabelFromProfile(profile);
-    const r = await actx.persist((prev) => {
-      const next = { ...prev.archivedDealersById };
-      for (const id of ids) {
-        next[id] = {
-          dealerId: id,
-          archivedAt: now,
-          archivedBy: uid,
-          archivedByName: uname,
-          source: "manual_actualization",
-        };
-      }
-      return mergeActualizationState(prev, { archivedDealersById: next });
-    });
-    setBulkArchiveDealerBusy(false);
-    if (r.success) {
-      toast({
-        title: `Перемещено в Архив: ${ids.length}`,
-        description: "Архив доступен через переключатель «Режим архива клиентов» или в разделе «Корзина».",
-      });
-      setSelectedBulkArchiveDealerIds(new Set());
-      setBulkDeleteMode(false);
-      setBulkSoftArchiveDealerDialogOpen(false);
-    } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
-    }
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile]);
+  }, [readOnlyScope, isTaskSelectMode, actx.enabled, profile, bulkDeleteMode, trashableDealerIdsInView, handleRowTrashDealer]);
 
   /**
    * Bulk-delete отправляет клиентов в КОРЗИНУ через dealer_overrides (Промт 420).
    */
-  const confirmBulkArchiveDealers = useCallback(async () => {
-    const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
+  const confirmBulkTrashDealers = useCallback(async () => {
+    const ids = Array.from(selectedBulkTrashDealerIds).filter((id) => trashableDealerIdsInView.has(id));
     if (ids.length === 0) {
-      setBulkArchiveDealerDialogOpen(false);
+      setBulkTrashDealerDialogOpen(false);
       return;
     }
-    setBulkArchiveDealerBusy(true);
+    setBulkTrashDealerBusy(true);
     const r = await bulkTrashDealersStrict(ids);
-    setBulkArchiveDealerBusy(false);
+    setBulkTrashDealerBusy(false);
     if (r.ok) {
       await refreshDealerTrashFromServer();
       toast({ title: "Клиенты перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
-      setSelectedBulkArchiveDealerIds(new Set());
+      setSelectedBulkTrashDealerIds(new Set());
       setBulkDeleteMode(false);
-      setBulkArchiveDealerDialogOpen(false);
+      setBulkTrashDealerDialogOpen(false);
     } else {
       toast({
         title: "Не удалось переместить в корзину",
@@ -3490,7 +3342,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         variant: "destructive",
       });
     }
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, refreshDealerTrashFromServer]);
+  }, [selectedBulkTrashDealerIds, trashableDealerIdsInView, refreshDealerTrashFromServer]);
 
   const selectedWpRows = useMemo(
     () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
@@ -3634,7 +3486,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   useEffect(() => {
     if (!showClientShipmentAndSegments) {
       setBulkDeleteMode(false);
-      setSelectedBulkArchiveDealerIds(new Set());
+      setSelectedBulkTrashDealerIds(new Set());
     }
   }, [showClientShipmentAndSegments]);
 
@@ -3675,8 +3527,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const canShowBulkDeleteEntry =
-    !readOnlyScope && !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile) && !showArchivedDealers;
-  const bulkDeleteHasTargets = archivableDealerIdsInView.size > 0;
+    !readOnlyScope && !isTaskSelectMode && actx.enabled && canActualizeClientBase(profile);
+  const bulkDeleteHasTargets = trashableDealerIdsInView.size > 0;
 
   if (!isTaskSelectMode && isPageInitialLoading) {
     return <DealerBaseSkeleton />;
@@ -3834,27 +3686,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
               </AlertDescription>
             </Alert>
           ) : null}
-          {actx.enabled && !IGNORE_CLIENT_ARCHIVE_IN_UI ? (
-            <div
-              className="flex max-w-lg flex-col gap-2 rounded-xl border border-border/80 bg-muted/15 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              data-testid="section-dealers-archived-toggle"
-            >
-              <div className="min-w-0 space-y-1">
-                <Label htmlFor="toggle-dealers-show-archived" className="cursor-pointer text-sm font-medium text-foreground">
-                  Режим архива клиентов
-                </Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Включено — в списке <span className="font-medium text-foreground">только архивные</span> клиенты. Выключено — только активная рабочая база (KPI команд и карточки менеджеров всегда по активной базе).
-                </p>
-              </div>
-              <Switch
-                id="toggle-dealers-show-archived"
-                checked={showArchivedDealers}
-                onCheckedChange={(v) => setShowArchivedDealers(v === true)}
-                data-testid="toggle-dealers-show-archived"
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
 
@@ -3865,7 +3696,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         profile={profile}
         mergedDealerRows={
           actx.enabled
-            ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false })
+            ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile)
             : catalogRows
         }
         onCreated={(id) => setLocation(`/dealers/${encodeURIComponent(id)}`)}
@@ -4478,14 +4309,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
             clientCount={rowsFinalForList.length}
           />
         ) : null}
-        {showArchivedDealers && actx.enabled ? (
-          <Alert className="mb-3 border-primary/30 bg-primary/5" data-testid="text-dealer-base-archive-mode-hint">
-            <Info className="h-4 w-4 text-primary" aria-hidden />
-            <AlertDescription>
-              Вы смотрите архивных клиентов. Изменения в карточках сохраняются, но клиент не вернётся в рабочую базу без восстановления.
-            </AlertDescription>
-          </Alert>
-        ) : null}
         {showClientShipmentAndSegments ? (
           <div className="mb-3 min-w-0 space-y-3">
             <DealerShipmentDayPlanner
@@ -4574,35 +4397,35 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
             </div>
             {bulkDeleteMode ? (
               <p className="text-sm leading-snug text-muted-foreground" data-testid="text-dealer-bulk-delete-mode-hint">
-                Отметьте клиентов для перемещения в Архив или в Корзину.
+                Отметьте клиентов для перемещения в Корзину.
               </p>
             ) : null}
           </div>
         ) : null}
-        {archiveBulkListProps && archivableDealerIdsInView.size > 0 && selectedBulkArchiveDealerIds.size > 0 ? (
+        {bulkDeleteListProps && trashableDealerIdsInView.size > 0 && selectedBulkTrashDealerIds.size > 0 ? (
           <div
             className="mb-3 flex min-w-0 flex-col gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
             data-testid="panel-dealer-bulk-actions"
           >
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
               <p className="text-sm font-semibold text-foreground" data-testid="text-dealer-bulk-selected-count">
-                Выбрано: {selectedBulkArchiveDealerIds.size}
+                Выбрано: {selectedBulkTrashDealerIds.size}
               </p>
               <div className="flex items-center gap-2 rounded-lg border border-destructive/35 bg-destructive/[0.06] px-2 py-1.5">
                 <DealerBulkDeleteCheckbox
                   id="dealer-bulk-select-all-visible"
                   checked={
-                    allVisibleArchiveDealersSelected
+                    allVisibleTrashDealersSelected
                       ? true
-                      : someVisibleArchiveDealersSelected
+                      : someVisibleTrashDealersSelected
                         ? "indeterminate"
                         : false
                   }
                   onCheckedChange={(v) => {
                     if (v === true) {
-                      setSelectedBulkArchiveDealerIds(new Set(archivableDealerIdsInView));
+                      setSelectedBulkTrashDealerIds(new Set(trashableDealerIdsInView));
                     } else {
-                      setSelectedBulkArchiveDealerIds(new Set());
+                      setSelectedBulkTrashDealerIds(new Set());
                     }
                   }}
                   data-testid="checkbox-dealer-select-all-visible"
@@ -4623,20 +4446,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 size="sm"
                 className="min-h-10 w-full font-semibold sm:w-auto"
                 data-testid="button-dealer-bulk-clear-selection"
-                onClick={() => setSelectedBulkArchiveDealerIds(new Set())}
+                onClick={() => setSelectedBulkTrashDealerIds(new Set())}
               >
                 Снять выбор
-              </Button>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                className="min-h-10 w-full font-semibold sm:w-auto"
-                data-testid="button-dealer-bulk-soft-archive"
-                disabled={bulkArchiveDealerDialogCount === 0}
-                onClick={() => setBulkSoftArchiveDealerDialogOpen(true)}
-              >
-                Переместить в Архив ({bulkArchiveDealerDialogCount})
               </Button>
               <Button
                 type="button"
@@ -4644,10 +4456,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 size="sm"
                 className="min-h-10 w-full font-semibold sm:w-auto"
                 data-testid="button-dealer-bulk-archive"
-                disabled={bulkArchiveDealerDialogCount === 0}
-                onClick={() => setBulkArchiveDealerDialogOpen(true)}
+                disabled={bulkTrashDealerDialogCount === 0}
+                onClick={() => setBulkTrashDealerDialogOpen(true)}
               >
-                Переместить в Корзину ({bulkArchiveDealerDialogCount})
+                Переместить в Корзину ({bulkTrashDealerDialogCount})
               </Button>
             </div>
           </div>
@@ -4819,10 +4631,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                   {g.rows.slice(0, 40).map((row) => (
                     <div
                       key={row.id}
-                      className={cn(
-                        "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm",
-                        archivedEntityRowClassName(isDealerArchivedInActualization(row.id, teamActualizationPlane)),
-                      )}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
                       data-testid={`row-dealer-${row.id}`}
                     >
                       <span className="min-w-0 font-medium">{row.name}</span>
@@ -4892,7 +4701,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 actualizationState={teamActualizationPlane}
                 focusList={focusListCtx}
                 {...workPlanListProps}
-                archiveBulk={archiveBulkListProps}
+                bulkDelete={bulkDeleteListProps}
                 taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
@@ -4911,7 +4720,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 actualizationState={teamActualizationPlane}
                 focusList={focusListCtx}
                 {...workPlanListProps}
-                archiveBulk={archiveBulkListProps}
+                bulkDelete={bulkDeleteListProps}
                 taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
@@ -4940,7 +4749,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 actualizationState={teamActualizationPlane}
                 focusList={focusListCtx}
                 {...workPlanListProps}
-                archiveBulk={archiveBulkListProps}
+                bulkDelete={bulkDeleteListProps}
                 taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
@@ -4969,7 +4778,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 actualizationState={teamActualizationPlane}
                 focusList={focusListCtx}
                 {...workPlanListProps}
-                archiveBulk={archiveBulkListProps}
+                bulkDelete={bulkDeleteListProps}
                 taskSelectBulk={taskSelectBulkListProps}
                 rowQuickMove={dealerRowQuickMoveProps}
               />
@@ -5008,54 +4817,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       />
 
       <AlertDialog
-        open={bulkSoftArchiveDealerDialogOpen}
+        open={bulkTrashDealerDialogOpen}
         onOpenChange={(open) => {
-          if (bulkArchiveDealerBusy) return;
-          setBulkSoftArchiveDealerDialogOpen(open);
-        }}
-      >
-        <AlertDialogContent data-testid="dialog-dealer-bulk-soft-archive-confirm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Переместить {bulkArchiveDealerDialogCount} клиентов в Архив?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Клиенты исчезнут из активной базы и появятся в Архиве. Восстановить их обратно можно в любой момент (раздел Корзина → Архив).
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
-            <AlertDialogCancel asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-10 w-full font-semibold sm:w-auto"
-                data-testid="button-dealer-bulk-soft-archive-cancel"
-              >
-                Отмена
-              </Button>
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              variant="default"
-              className="min-h-10 w-full font-semibold sm:w-auto"
-              data-testid="button-dealer-bulk-soft-archive-confirm"
-              disabled={bulkArchiveDealerBusy || bulkArchiveDealerDialogCount === 0}
-              onClick={() => void confirmBulkSoftArchiveDealers()}
-            >
-              {bulkArchiveDealerBusy ? "Сохранение…" : "Переместить в Архив"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={bulkArchiveDealerDialogOpen}
-        onOpenChange={(open) => {
-          if (bulkArchiveDealerBusy) return;
-          setBulkArchiveDealerDialogOpen(open);
+          if (bulkTrashDealerBusy) return;
+          setBulkTrashDealerDialogOpen(open);
         }}
       >
         <AlertDialogContent data-testid="dialog-dealer-bulk-archive-confirm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Переместить {bulkArchiveDealerDialogCount} клиентов в корзину?</AlertDialogTitle>
+            <AlertDialogTitle>Переместить {bulkTrashDealerDialogCount} клиентов в корзину?</AlertDialogTitle>
             <AlertDialogDescription>
               Клиенты будут храниться в корзине 14 дней. Восстановить можно в любой момент на странице «Корзина». Через 14 дней удалятся окончательно.
             </AlertDialogDescription>
@@ -5076,10 +4846,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
               variant="destructive"
               className="min-h-10 w-full font-semibold sm:w-auto"
               data-testid="button-dealer-bulk-archive-confirm"
-              disabled={bulkArchiveDealerBusy || bulkArchiveDealerDialogCount === 0}
-              onClick={() => void confirmBulkArchiveDealers()}
+              disabled={bulkTrashDealerBusy || bulkTrashDealerDialogCount === 0}
+              onClick={() => void confirmBulkTrashDealers()}
             >
-              {bulkArchiveDealerBusy ? "Сохранение…" : "Переместить в корзину"}
+              {bulkTrashDealerBusy ? "Сохранение…" : "Переместить в корзину"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
