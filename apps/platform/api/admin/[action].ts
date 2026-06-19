@@ -3433,7 +3433,7 @@ async function resolveViewerOwnTeam(
        JOIN teams t ON t.id = m.team_id
        LEFT JOIN users u ON u.id = t.rop_user_id
       WHERE m.user_id = $1::uuid
-      ORDER BY (t.rop_user_id = $1::uuid) DESC, m.joined_at NULLS LAST
+      ORDER BY (t.rop_user_id = $1::uuid) DESC, t.name
       LIMIT 1`,
     [userId],
   );
@@ -3471,8 +3471,9 @@ async function handleTradePointsOverview(
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
 ): Promise<void> {
+  let me: Awaited<ReturnType<typeof resolveCurrentUser>> | undefined;
   try {
-    const me = await resolveCurrentUser(pool, headers);
+    me = await resolveCurrentUser(pool, headers);
     if (!me) {
       sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
       return;
@@ -3502,7 +3503,12 @@ async function handleTradePointsOverview(
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : undefined;
-    console.error("[trade-points-overview] failed", { message: m, stack });
+    console.error("[trade-points-overview] failed", {
+      message: m,
+      stack,
+      userId: me?.id,
+      role: me?.role,
+    });
     sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Не удалось загрузить обзор торговых точек." });
   }
 }
