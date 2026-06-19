@@ -3920,6 +3920,14 @@ mergedRowsForDealerBase=${mergedRowsForDealerBase.length}
 scopedRows=${scopedRows.length}
 pickerFiltered=${pickerFiltered.length}
 managerScopedRows=${managerScopedRows.length}
+displayRows=${displayRows.length}
+rowsForWorkPlan=${rowsForWorkPlan.length}
+rowsAfterSegmentFilter=${rowsAfterSegmentFilter.length}
+rowsAfterShipmentDay=${rowsAfterShipmentDay.length}
+rowsAfterPrograms=${rowsAfterPrograms.length}
+rowsAfterUrlFocus=${rowsAfterUrlFocus.length}
+rowsAfterCityFilter=${rowsAfterCityFilter.length}
+workPlanFilter=${workPlanFilter} segmentList=${segmentList.length} programs=${programFilters.length}
 assignments=${assignmentsScopeIsActive(assignmentsScope) ? "active" : "inactive"} own=${assignmentsScope?.ownCodes.size ?? 0}
 dbScopedExtKeys=${dbScopedExternalKeys?.size ?? "null"}
 selfDbScopeReady=${String(selfDbScopeQ.ready)}
