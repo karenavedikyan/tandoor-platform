@@ -5,6 +5,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin-auth.js";
+import { logDealerAuditEvent, logTradePointAuditEvent } from "../override-audit-events.js";
 
 export type SessionUser = {
   id: string;
@@ -82,6 +83,18 @@ function normalizeCategoryArray(raw: unknown): string[] | undefined {
   return cats.length ? cats : undefined;
 }
 
+function normalizeClientCodeArray(raw: unknown): string[] | undefined {
+  const arr = normalizeStringArray(raw);
+  if (!arr) return undefined;
+  const codes = arr.map((s) => s.toUpperCase());
+  return codes.length ? codes : undefined;
+}
+
+function normalizeTradePointIdArray(raw: unknown): string[] | undefined {
+  const arr = normalizeStringArray(raw);
+  return arr?.length ? arr : undefined;
+}
+
 function parseClientCategory(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   return CLIENT_CATEGORIES.has(raw) ? raw : undefined;
@@ -127,6 +140,8 @@ function hasAnyReassignFilter(filter: {
   regionalManager?: string[];
   rop?: string[];
   searchFrag?: string;
+  clientCodes?: string[];
+  tradePointIds?: string[];
 }): boolean {
   return Boolean(
     filter.fromUserId ||
@@ -136,6 +151,8 @@ function hasAnyReassignFilter(filter: {
       (filter.category?.length ?? 0) > 0 ||
       (filter.regionalManager?.length ?? 0) > 0 ||
       (filter.rop?.length ?? 0) > 0 ||
+      (filter.clientCodes?.length ?? 0) > 0 ||
+      (filter.tradePointIds?.length ?? 0) > 0 ||
       filter.searchFrag,
   );
 }
@@ -149,19 +166,28 @@ type ParsedReassignFilter = {
   regionalManager?: string[];
   rop?: string[];
   searchFrag?: string;
+  clientCodes?: string[];
+  tradePointIds?: string[];
 };
 
 function parseReassignFilterBody(f: {
   fromUserId?: unknown;
   fromTeamId?: unknown;
   responsibleUserId?: unknown;
+  managerUserId?: unknown;
   city?: unknown;
   category?: unknown;
   regionalManager?: unknown;
   rop?: unknown;
   search?: unknown;
+  clientCodes?: unknown;
+  tradePointIds?: unknown;
 }): ParsedReassignFilter {
   let responsibleUserId = normalizeUuidArray(f.responsibleUserId);
+  const managerUserId = normalizeUuidArray(f.managerUserId);
+  if (managerUserId?.length) {
+    responsibleUserId = [...new Set([...(responsibleUserId ?? []), ...managerUserId])];
+  }
   const fromUserIdRaw = typeof f.fromUserId === "string" && UUID_RE.test(f.fromUserId.trim()) ? f.fromUserId.trim() : undefined;
   if (!responsibleUserId?.length) {
     responsibleUserId = normalizeUuidArray(f.fromUserId);
@@ -171,6 +197,8 @@ function parseReassignFilterBody(f: {
   const category = normalizeCategoryArray(f.category);
   const regionalManager = normalizeStringArray(f.regionalManager);
   const rop = normalizeStringArray(f.rop);
+  const clientCodes = normalizeClientCodeArray(f.clientCodes);
+  const tradePointIds = normalizeTradePointIdArray(f.tradePointIds);
   const searchRaw = typeof f.search === "string" ? f.search.trim() : "";
   const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : undefined;
   return {
@@ -181,11 +209,28 @@ function parseReassignFilterBody(f: {
     category,
     regionalManager,
     rop,
+    clientCodes,
+    tradePointIds,
     searchFrag,
   };
 }
 
 function appendReassignAssignmentFilters(cond: string[], pr: unknown[], parsed: ParsedReassignFilter): void {
+  if (parsed.clientCodes?.length) {
+    pr.push(parsed.clientCodes);
+    cond.push(`ca.client_code = ANY($${pr.length}::text[])`);
+  }
+  if (parsed.tradePointIds?.length) {
+    pr.push(parsed.tradePointIds);
+    cond.push(
+      `EXISTS (
+         SELECT 1 FROM trade_points tp
+         JOIN dealers d ON d.id = tp.dealer_id
+         WHERE upper(replace(d.external_key, 'client-', '')) = ca.client_code
+           AND tp.id::text = ANY($${pr.length}::text[])
+       )`,
+    );
+  }
   if (parsed.responsibleUserId?.length) {
     pr.push(parsed.responsibleUserId);
     cond.push(`ca.responsible_user_id = ANY($${pr.length}::uuid[])`);
@@ -405,6 +450,298 @@ export async function handleClientsReassign(
   sendJson(res, 200, { success: true, reassigned: upd.rows.length, history });
 }
 
+async function isRegionalManagerUser(pool: PoolLike, userId: string): Promise<boolean> {
+  const r = await pool.query<{ ok: number }>(
+    `SELECT 1 AS ok FROM users u
+     LEFT JOIN user_team_memberships m ON m.user_id = u.id
+     WHERE u.id = $1::uuid AND u.status = 'active'
+       AND (u.role = 'regional_manager' OR m.role_in_team = 'regional_manager')
+     LIMIT 1`,
+    [userId],
+  );
+  return r.rows.length > 0;
+}
+
+async function resolveRegionalManagerDisplayName(pool: PoolLike, userId: string): Promise<string | null> {
+  const r = await pool.query<{ display_name: string | null }>(
+    `SELECT COALESCE(NULLIF(btrim(full_name), ''), NULLIF(btrim(email), '')) AS display_name
+     FROM users WHERE id = $1::uuid AND status = 'active'`,
+    [userId],
+  );
+  const name = r.rows[0]?.display_name?.trim();
+  return name || null;
+}
+
+export async function handleRegionalManagerReassign(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin" && me.role !== "director" && me.role !== "rop") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as {
+    toUserId?: unknown;
+    reason?: unknown;
+    clientCodes?: unknown;
+    tradePointIds?: unknown;
+    filter?: unknown;
+    cascadeTradePoints?: unknown;
+  };
+
+  const toUserIdRaw = body.toUserId === null ? null : typeof body.toUserId === "string" ? body.toUserId.trim() : undefined;
+  if (toUserIdRaw !== null && toUserIdRaw !== undefined && !UUID_RE.test(toUserIdRaw)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный toUserId." });
+    return;
+  }
+  const toUserId = toUserIdRaw ?? null;
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+  const cascadeTradePoints = body.cascadeTradePoints !== false;
+  const explicitTradePointIds = normalizeTradePointIdArray(body.tradePointIds) ?? [];
+
+  let rmDisplayName: string | null = null;
+  if (toUserId) {
+    if (!(await isRegionalManagerUser(pool, toUserId))) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Целевой пользователь не является региональным менеджером.",
+      });
+      return;
+    }
+    rmDisplayName = await resolveRegionalManagerDisplayName(pool, toUserId);
+    if (!rmDisplayName) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Не удалось определить имя регионального менеджера.",
+      });
+      return;
+    }
+  }
+
+  let myTeam: string | null = null;
+  if (me.role === "rop") {
+    myTeam = await resolveRopTeamId(pool, me.id);
+    if (!myTeam) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Не найдена команда РОПа." });
+      return;
+    }
+    if (toUserId) {
+      const okRm = await pool.query(
+        `SELECT 1 FROM user_team_memberships
+         WHERE user_id = $1::uuid AND team_id = $2::uuid AND role_in_team = 'regional_manager'
+         LIMIT 1`,
+        [toUserId, myTeam],
+      );
+      if (okRm.rows.length === 0) {
+        sendJson(res, 403, {
+          success: false,
+          code: "FORBIDDEN",
+          message: "РОП может назначать только регионалов своей команды.",
+        });
+        return;
+      }
+    }
+  }
+
+  let codes: string[] = [];
+  if (Array.isArray(body.clientCodes) && body.clientCodes.length > 0) {
+    codes = body.clientCodes
+      .filter((c): c is string => typeof c === "string" && c.trim() !== "")
+      .map((c) => c.trim().toUpperCase());
+  } else if (body.filter && typeof body.filter === "object" && body.filter !== null) {
+    const parsed = parseReassignFilterBody(body.filter as Record<string, unknown>);
+    if (!hasAnyReassignFilter(parsed)) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Укажите clientCodes или хотя бы одно поле filter.",
+      });
+      return;
+    }
+    const cond: string[] = ["1=1"];
+    const pr: unknown[] = [];
+    appendReassignAssignmentFilters(cond, pr, parsed);
+    if (myTeam) {
+      pr.push(myTeam);
+      cond.push(`ca.team_id = $${pr.length}::uuid`);
+    }
+    const whereSql = cond.join(" AND ");
+    const sel = await pool.query<{ client_code: string }>(
+      `SELECT ca.client_code
+       FROM client_assignments ca
+       ${DEALER_OVERRIDE_JOIN}
+       WHERE ${whereSql}
+       LIMIT 1000`,
+      pr,
+    );
+    codes = sel.rows.map((r) => r.client_code);
+  }
+
+  const updateDealers = codes.length > 0;
+  const updateTradePoints = explicitTradePointIds.length > 0 || (cascadeTradePoints && codes.length > 0);
+
+  if (!updateDealers && !updateTradePoints) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Укажите clientCodes, filter или tradePointIds.",
+    });
+    return;
+  }
+
+  if (codes.length > 1000 || explicitTradePointIds.length > 1000) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не более 1000 записей за запрос." });
+    return;
+  }
+
+  if (me.role === "rop" && myTeam) {
+    if (codes.length > 0) {
+      const chk = await pool.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n FROM client_assignments WHERE client_code = ANY($1::text[]) AND team_id <> $2::uuid`,
+        [codes, myTeam],
+      );
+      if (Number(chk.rows[0]?.n ?? 0) > 0) {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Есть клиенты вне вашей команды." });
+        return;
+      }
+    }
+    if (explicitTradePointIds.length > 0) {
+      const chkTp = await pool.query<{ n: number }>(
+        `SELECT COUNT(*)::int AS n
+         FROM trade_points tp
+         JOIN dealers d ON d.id = tp.dealer_id
+         LEFT JOIN client_assignments ca ON upper(replace(d.external_key, 'client-', '')) = ca.client_code
+         WHERE tp.id::text = ANY($1::text[])
+           AND (ca.team_id IS NULL OR ca.team_id <> $2::uuid)`,
+        [explicitTradePointIds, myTeam],
+      );
+      if (Number(chkTp.rows[0]?.n ?? 0) > 0) {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Есть торговые точки вне вашей команды." });
+        return;
+      }
+    }
+  }
+
+  const history: { dealer_id: string; fromUserId: string | null; toUserId: string | null }[] = [];
+  let dealersAffected = 0;
+
+  if (updateDealers) {
+    const before = await pool.query<{ dealer_id: string; from_user_id: string | null }>(
+      `SELECT 'client-' || lower(code) AS dealer_id, dov.regional_manager_id AS from_user_id
+       FROM unnest($1::text[]) AS code
+       LEFT JOIN dealer_overrides dov ON dov.dealer_id = 'client-' || lower(code)`,
+      [codes],
+    );
+
+    const upsert = await pool.query<{ dealer_id: string }>(
+      `INSERT INTO dealer_overrides (dealer_id, regional_manager_id, regional_manager_name, updated_at, updated_by)
+       SELECT 'client-' || lower(code), $2::uuid, $3, now(), $4::uuid
+       FROM unnest($1::text[]) AS code
+       ON CONFLICT (dealer_id) DO UPDATE SET
+         regional_manager_id = EXCLUDED.regional_manager_id,
+         regional_manager_name = EXCLUDED.regional_manager_name,
+         updated_at = now(),
+         updated_by = EXCLUDED.updated_by
+       RETURNING dealer_id`,
+      [codes, toUserId, rmDisplayName, me.id],
+    );
+    dealersAffected = upsert.rows.length;
+
+    for (const row of before.rows) {
+      history.push({
+        dealer_id: row.dealer_id,
+        fromUserId: row.from_user_id,
+        toUserId,
+      });
+      await pool.query(
+        `INSERT INTO dealer_responsibility_history (dealer_id, responsible_role, from_user_id, to_user_id, actor_user_id, reason)
+         VALUES ($1, 'regional_manager', $2::uuid, $3::uuid, $4::uuid, $5)`,
+        [row.dealer_id, row.from_user_id, toUserId, me.id, reason || null],
+      );
+      await logDealerAuditEvent(pool, {
+        dealerId: row.dealer_id,
+        eventKind: "regional_manager_changed",
+        userId: me.id,
+        payload: { fromUserId: row.from_user_id, toUserId, reason: reason || null },
+      });
+    }
+  }
+
+  let tradePointsAffected = 0;
+  if (updateTradePoints) {
+    let tpIds: string[] = [];
+    if (explicitTradePointIds.length > 0) {
+      tpIds = explicitTradePointIds;
+    } else if (codes.length > 0) {
+      const tpSel = await pool.query<{ tp_id: string }>(
+        `SELECT tp.id::text AS tp_id
+         FROM trade_points tp
+         JOIN dealers d ON d.id = tp.dealer_id
+         WHERE upper(replace(d.external_key, 'client-', '')) = ANY($1::text[])`,
+        [codes],
+      );
+      tpIds = tpSel.rows.map((r) => r.tp_id);
+    }
+
+    if (tpIds.length > 1000) {
+      sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не более 1000 торговых точек за запрос." });
+      return;
+    }
+
+    if (tpIds.length > 0) {
+      const tpUpd = await pool.query<{ tp_id: string }>(
+        `INSERT INTO trade_point_overrides (tp_id, regional_manager_id, regional_manager_name, updated_at, updated_by)
+         SELECT unnest($1::text[]), $2::uuid, $3, now(), $4::uuid
+         ON CONFLICT (tp_id) DO UPDATE SET
+           regional_manager_id = EXCLUDED.regional_manager_id,
+           regional_manager_name = EXCLUDED.regional_manager_name,
+           updated_at = now(),
+           updated_by = EXCLUDED.updated_by
+         RETURNING tp_id`,
+        [tpIds, toUserId, rmDisplayName, me.id],
+      );
+      tradePointsAffected = tpUpd.rows.length;
+
+      for (const row of tpUpd.rows) {
+        await logTradePointAuditEvent(pool, {
+          tpId: row.tp_id,
+          eventKind: "regional_manager_changed",
+          userId: me.id,
+          payload: { toUserId, reason: reason || null },
+        });
+      }
+    }
+  }
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "dealer.regional_manager.reassign",
+    entityType: "dealer_overrides",
+    entityId: "batch",
+    metadata: { dealersAffected, tradePointsAffected, toUserId, filter: body.filter ?? null },
+  });
+
+  sendJson(res, 200, {
+    success: true,
+    dealersAffected,
+    tradePointsAffected,
+    history: history.map((h) => ({
+      dealer_id: h.dealer_id,
+      fromUserId: h.fromUserId,
+      toUserId: h.toUserId,
+    })),
+  });
+}
+
 export async function handleUserTeamReassign(
   req: VercelRequest,
   res: VercelResponse,
@@ -516,6 +853,8 @@ export async function handleClientsAssignmentsList(
   const category = normalizeCategoryArray(qsParamArray(q, "category"));
   const regionalManager = normalizeStringArray(qsParamArray(q, "regionalManager"));
   const rop = normalizeStringArray(qsParamArray(q, "rop"));
+  const clientCodes = normalizeClientCodeArray(qsParamArray(q, "clientCode", "clientCodes"));
+  const tradePointIds = normalizeTradePointIdArray(qsParamArray(q, "tradePointId", "tradePointIds"));
   const limitRaw = qsParam(q, "limit");
   const offsetRaw = qsParam(q, "offset");
   let limit = 50;
@@ -538,6 +877,21 @@ export async function handleClientsAssignmentsList(
   if (teamIds?.length) {
     params.push(teamIds);
     cond.push(`ca.team_id = ANY($${params.length}::uuid[])`);
+  }
+  if (clientCodes?.length) {
+    params.push(clientCodes);
+    cond.push(`ca.client_code = ANY($${params.length}::text[])`);
+  }
+  if (tradePointIds?.length) {
+    params.push(tradePointIds);
+    cond.push(
+      `EXISTS (
+         SELECT 1 FROM trade_points tp
+         JOIN dealers d ON d.id = tp.dealer_id
+         WHERE upper(replace(d.external_key, 'client-', '')) = ca.client_code
+           AND tp.id::text = ANY($${params.length}::text[])
+       )`,
+    );
   }
   appendDealerOverrideFilters(cond, params, {
     searchFrag: searchFrag || undefined,
@@ -583,6 +937,7 @@ export async function handleClientsAssignmentsList(
     client_city: string | null;
     client_category: string | null;
     regional_manager_name: string | null;
+    regional_manager_id: string | null;
     rop_name: string | null;
   }>(
     `SELECT ca.client_code,
@@ -596,6 +951,7 @@ export async function handleClientsAssignmentsList(
             dov.city AS client_city,
             dov.client_category AS client_category,
             dov.regional_manager_name AS regional_manager_name,
+            dov.regional_manager_id AS regional_manager_id,
             dov.rop_name AS rop_name
      FROM client_assignments ca
      JOIN users u ON u.id = ca.responsible_user_id
@@ -621,6 +977,7 @@ export async function handleClientsAssignmentsList(
       city: r.client_city ?? null,
       clientCategory: r.client_category ?? null,
       regionalManagerName: r.regional_manager_name ?? null,
+      regionalManagerId: r.regional_manager_id ?? null,
       ropName: r.rop_name ?? null,
     })),
     total,
@@ -633,22 +990,145 @@ export async function handleClientAssignmentFilterOptions(
   pool: PoolLike,
   me: SessionUser,
 ): Promise<void> {
-  void req;
   if (me.status !== "active" || (me.role !== "admin" && me.role !== "director" && me.role !== "rop")) {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
     return;
   }
 
+  const q = req.query ?? {};
+  const type = qsParam(q, "type");
+  const searchRaw = qsParam(q, "q");
+  const searchFrag = searchRaw ? sanitizeLikeFragment(searchRaw) : "";
+  const limitRaw = qsParam(q, "limit");
+  let limit = 100;
+  if (limitRaw) {
+    const n = Number.parseInt(limitRaw, 10);
+    if (Number.isFinite(n) && n >= 1) limit = Math.min(n, 500);
+  }
+
+  let myTeam: string | null = null;
   let ropTeamCond = "";
   const baseParams: unknown[] = [];
   if (me.role === "rop") {
-    const myTeam = await resolveRopTeamId(pool, me.id);
+    myTeam = await resolveRopTeamId(pool, me.id);
     if (!myTeam) {
       sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Не найдена команда РОПа." });
       return;
     }
     baseParams.push(myTeam);
     ropTeamCond = `AND ca.team_id = $${baseParams.length}::uuid`;
+  }
+
+  if (type === "regionalManagers") {
+    const params = [...baseParams];
+    let teamCond = "";
+    if (myTeam) {
+      teamCond = `AND m.team_id = $1::uuid`;
+    }
+    const rows = await pool.query<{ id: string; full_name: string; role: string }>(
+      `SELECT DISTINCT u.id, u.full_name, u.role
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       WHERE u.status = 'active'
+         AND (u.role = 'regional_manager' OR m.role_in_team = 'regional_manager')
+         ${teamCond}
+       ORDER BY u.full_name ASC
+       LIMIT ${limit}`,
+      params,
+    );
+    sendJson(res, 200, {
+      success: true,
+      managers: rows.rows.map((r) => ({ id: r.id, fullName: r.full_name, role: r.role })),
+    });
+    return;
+  }
+
+  if (type === "managers") {
+    const params = [...baseParams];
+    let teamCond = "";
+    if (myTeam) {
+      teamCond = `AND m.team_id = $1::uuid`;
+    }
+    const rows = await pool.query<{ id: string; full_name: string; role: string }>(
+      `SELECT DISTINCT u.id, u.full_name, u.role
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       WHERE u.status = 'active'
+         AND (u.role = 'manager' OR m.role_in_team = 'manager')
+         ${teamCond}
+       ORDER BY u.full_name ASC
+       LIMIT ${limit}`,
+      params,
+    );
+    sendJson(res, 200, {
+      success: true,
+      managers: rows.rows.map((r) => ({ id: r.id, fullName: r.full_name, role: r.role })),
+    });
+    return;
+  }
+
+  if (type === "tradePoints") {
+    const params = [...baseParams];
+    const cond: string[] = ["1=1"];
+    if (searchFrag) {
+      params.push(`%${searchFrag}%`);
+      cond.push(
+        `(COALESCE(tpo.name, tp.name, '') ILIKE $${params.length} OR COALESCE(tpo.city, tp.city, '') ILIKE $${params.length} OR upper(replace(d.external_key, 'client-', '')) ILIKE $${params.length})`,
+      );
+    }
+    const whereSql = cond.join(" AND ");
+    const rows = await pool.query<{ id: string; name: string | null; dealer_code: string | null; city: string | null }>(
+      `SELECT tp.id::text AS id,
+              COALESCE(tpo.name, tp.name) AS name,
+              upper(replace(d.external_key, 'client-', '')) AS dealer_code,
+              COALESCE(tpo.city, tp.city) AS city
+       FROM trade_points tp
+       JOIN dealers d ON d.id = tp.dealer_id
+       LEFT JOIN trade_point_overrides tpo ON tpo.tp_id = tp.id::text
+       JOIN client_assignments ca ON upper(replace(d.external_key, 'client-', '')) = ca.client_code
+       WHERE ${whereSql} ${ropTeamCond}
+       ORDER BY name ASC NULLS LAST
+       LIMIT ${limit}`,
+      params,
+    );
+    sendJson(res, 200, {
+      success: true,
+      tradePoints: rows.rows.map((r) => ({
+        id: r.id,
+        name: r.name ?? "",
+        dealerCode: r.dealer_code ?? "",
+        city: r.city ?? "",
+      })),
+    });
+    return;
+  }
+
+  if (type === "clientCodes") {
+    const params = [...baseParams];
+    const cond: string[] = ["1=1"];
+    if (searchFrag) {
+      params.push(`%${searchFrag}%`);
+      cond.push(`(ca.client_code ILIKE $${params.length} OR dov.name ILIKE $${params.length})`);
+    }
+    const whereSql = cond.join(" AND ");
+    const rows = await pool.query<{ code: string; name: string | null; city: string | null }>(
+      `SELECT ca.client_code AS code, dov.name, dov.city
+       FROM client_assignments ca
+       LEFT JOIN dealer_overrides dov ON upper(regexp_replace(dov.dealer_id, '^client-', '')) = ca.client_code
+       WHERE ${whereSql} ${ropTeamCond}
+       ORDER BY ca.client_code ASC
+       LIMIT ${limit}`,
+      params,
+    );
+    sendJson(res, 200, {
+      success: true,
+      clientCodes: rows.rows.map((r) => ({
+        code: r.code,
+        name: r.name ?? "",
+        city: r.city ?? "",
+      })),
+    });
+    return;
   }
 
   async function distinctField(column: string): Promise<string[]> {

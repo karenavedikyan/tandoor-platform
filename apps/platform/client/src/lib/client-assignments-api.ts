@@ -16,8 +16,13 @@ export type ClientAssignmentRow = {
   city?: string | null;
   clientCategory?: string | null;
   regionalManagerName?: string | null;
+  regionalManagerId?: string | null;
   ropName?: string | null;
 };
+
+export type ManagerOption = { id: string; fullName: string; role: string };
+export type TradePointOption = { id: string; name: string; dealerCode: string; city: string };
+export type ClientCodeOption = { code: string; name: string; city: string };
 
 export type ClientAssignmentFilterOptions = {
   cities: string[];
@@ -74,18 +79,25 @@ export type ListAssignmentsParams = {
   category?: string[];
   regionalManager?: string[];
   rop?: string[];
+  clientCodes?: string[];
+  tradePointIds?: string[];
 };
 
-export type ReassignClientsFilter = {
+export type ReassignFilter = {
   fromUserId?: string;
   responsibleUserId?: string[];
+  managerUserId?: string[];
   fromTeamId?: string[];
   city?: string[];
   category?: string[];
   regionalManager?: string[];
   rop?: string[];
   search?: string;
+  clientCodes?: string[];
+  tradePointIds?: string[];
 };
+
+export type ReassignClientsFilter = ReassignFilter;
 
 function appendQueryArray(sp: URLSearchParams, key: string, values?: string[]): void {
   if (!values?.length) return;
@@ -136,6 +148,12 @@ function parseAssignmentRow(raw: unknown): ClientAssignmentRow | null {
       : typeof r.regionalManagerName === "string"
         ? r.regionalManagerName
         : null;
+  const regionalManagerId =
+    r.regionalManagerId === null || r.regionalManagerId === undefined
+      ? null
+      : typeof r.regionalManagerId === "string"
+        ? r.regionalManagerId
+        : null;
   const ropName = r.ropName === null || r.ropName === undefined ? null : typeof r.ropName === "string" ? r.ropName : null;
   return {
     clientCode,
@@ -149,6 +167,7 @@ function parseAssignmentRow(raw: unknown): ClientAssignmentRow | null {
     city,
     clientCategory,
     regionalManagerName,
+    regionalManagerId,
     ropName,
   };
 }
@@ -221,6 +240,8 @@ export async function listAssignments(
   appendQueryArray(sp, "category", params.category);
   appendQueryArray(sp, "regionalManager", params.regionalManager);
   appendQueryArray(sp, "rop", params.rop);
+  appendQueryArray(sp, "clientCodes", params.clientCodes);
+  appendQueryArray(sp, "tradePointIds", params.tradePointIds);
   const qs = sp.toString();
   const url = qs ? `${ASSIGNMENTS_BASE}/clients-assignments-list?${qs}` : `${ASSIGNMENTS_BASE}/clients-assignments-list`;
   const res = await fetch(url, { method: "GET", credentials: "include" });
@@ -261,6 +282,76 @@ export async function listAssignmentFilterOptions(): Promise<
     return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
   }
   return { ok: true, options: { cities, categories, regionalManagers, rops } };
+}
+
+export async function fetchFilterOptions(
+  type: "managers" | "regionalManagers" | "tradePoints" | "clientCodes",
+  q?: string,
+  limit?: number,
+): Promise<
+  | {
+      ok: true;
+      managers?: ManagerOption[];
+      tradePoints?: TradePointOption[];
+      clientCodes?: ClientCodeOption[];
+    }
+  | { ok: false; code: string; message: string }
+> {
+  const sp = new URLSearchParams({ type });
+  if (q?.trim()) sp.set("q", q.trim());
+  if (limit != null) sp.set("limit", String(limit));
+  const res = await fetch(`${ASSIGNMENTS_BASE}/client-assignment-filter-options?${sp.toString()}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось загрузить опции фильтров.") };
+  }
+  if (type === "managers" || type === "regionalManagers") {
+    const raw = body.managers;
+    if (!Array.isArray(raw)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+    const managers: ManagerOption[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+      const o = item as Record<string, unknown>;
+      const id = typeof o.id === "string" ? o.id : null;
+      const fullName = typeof o.fullName === "string" ? o.fullName : null;
+      const role = typeof o.role === "string" ? o.role : null;
+      if (!id || !fullName || !role) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+      managers.push({ id, fullName, role });
+    }
+    return { ok: true, managers };
+  }
+  if (type === "tradePoints") {
+    const raw = body.tradePoints;
+    if (!Array.isArray(raw)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+    const tradePoints: TradePointOption[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== "object") return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+      const o = item as Record<string, unknown>;
+      const id = typeof o.id === "string" ? o.id : null;
+      const name = typeof o.name === "string" ? o.name : "";
+      const dealerCode = typeof o.dealerCode === "string" ? o.dealerCode : "";
+      const city = typeof o.city === "string" ? o.city : "";
+      if (!id) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+      tradePoints.push({ id, name, dealerCode, city });
+    }
+    return { ok: true, tradePoints };
+  }
+  const raw = body.clientCodes;
+  if (!Array.isArray(raw)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  const clientCodes: ClientCodeOption[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+    const o = item as Record<string, unknown>;
+    const code = typeof o.code === "string" ? o.code : null;
+    const name = typeof o.name === "string" ? o.name : "";
+    const city = typeof o.city === "string" ? o.city : "";
+    if (!code) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+    clientCodes.push({ code, name, city });
+  }
+  return { ok: true, clientCodes };
 }
 
 export async function listTeams(): Promise<{ ok: true; teams: AdminTeamOption[] } | { ok: false; code: string; message: string }> {
@@ -350,6 +441,8 @@ export async function reassignClients(input: {
     if (f.regionalManager?.length) filter.regionalManager = f.regionalManager;
     if (f.rop?.length) filter.rop = f.rop;
     if (f.search?.trim()) filter.search = f.search.trim();
+    if (f.clientCodes?.length) filter.clientCodes = f.clientCodes;
+    if (f.tradePointIds?.length) filter.tradePointIds = f.tradePointIds;
     payload.filter = filter;
   } else if (input.clientCodes) {
     payload.clientCodes = input.clientCodes;
@@ -367,6 +460,60 @@ export async function reassignClients(input: {
   const reassigned = typeof body.reassigned === "number" ? body.reassigned : Number(body.reassigned);
   if (!Number.isFinite(reassigned)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
   return { ok: true, reassigned };
+}
+
+export async function reassignRegionalManager(params: {
+  toUserId: string | null;
+  reason?: string;
+  clientCodes?: string[];
+  tradePointIds?: string[];
+  filter?: ReassignFilter;
+  cascadeTradePoints?: boolean;
+}): Promise<
+  | { ok: true; dealersAffected: number; tradePointsAffected: number; message?: string }
+  | { ok: false; code: string; message: string }
+> {
+  const payload: Record<string, unknown> = {
+    toUserId: params.toUserId,
+    reason: params.reason,
+    cascadeTradePoints: params.cascadeTradePoints,
+  };
+  if (params.filter) {
+    const f = params.filter;
+    const filter: Record<string, unknown> = {};
+    if (f.fromUserId) filter.fromUserId = f.fromUserId;
+    if (f.responsibleUserId?.length) filter.responsibleUserId = f.responsibleUserId;
+    if (f.managerUserId?.length) filter.managerUserId = f.managerUserId;
+    if (f.fromTeamId?.length) filter.fromTeamId = f.fromTeamId;
+    if (f.city?.length) filter.city = f.city;
+    if (f.category?.length) filter.category = f.category;
+    if (f.regionalManager?.length) filter.regionalManager = f.regionalManager;
+    if (f.rop?.length) filter.rop = f.rop;
+    if (f.search?.trim()) filter.search = f.search.trim();
+    if (f.clientCodes?.length) filter.clientCodes = f.clientCodes;
+    if (f.tradePointIds?.length) filter.tradePointIds = f.tradePointIds;
+    payload.filter = filter;
+  } else if (params.clientCodes?.length) {
+    payload.clientCodes = params.clientCodes;
+  }
+  if (params.tradePointIds?.length) payload.tradePointIds = params.tradePointIds;
+  const res = await fetch(`${ASSIGNMENTS_BASE}/regional-manager-reassign`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось переназначить регионала.") };
+  }
+  const dealersAffected = typeof body.dealersAffected === "number" ? body.dealersAffected : Number(body.dealersAffected);
+  const tradePointsAffected =
+    typeof body.tradePointsAffected === "number" ? body.tradePointsAffected : Number(body.tradePointsAffected);
+  if (!Number.isFinite(dealersAffected) || !Number.isFinite(tradePointsAffected)) {
+    return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  }
+  return { ok: true, dealersAffected, tradePointsAffected };
 }
 
 function parseRopGrantRow(raw: unknown): RopClientGrantRow | null {

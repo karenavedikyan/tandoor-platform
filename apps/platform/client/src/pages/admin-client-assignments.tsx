@@ -56,16 +56,19 @@ import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { listUsers, type AdminUser } from "@/lib/admin-users-api";
 import {
   addRopGrants,
+  fetchFilterOptions,
   getClientHistory,
   listAssignmentFilterOptions,
   listAssignments,
   listRopGrants,
   listTeams,
   reassignClients,
+  reassignRegionalManager,
   removeRopGrants,
   type ClientAssignmentHistoryRow,
   type ClientAssignmentRow,
   type AdminTeamOption,
+  type ManagerOption,
   type ReassignClientsFilter,
   type RopClientGrantRow,
 } from "@/lib/client-assignments-api";
@@ -84,6 +87,9 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 type ActionMode = "reassign" | "grant";
+type BulkAssignmentType = "manager" | "regional_manager";
+
+const RM_UNASSIGN_VALUE = "__unassign_rm__";
 
 function cellText(value: string | null | undefined): string {
   return value?.trim() || "—";
@@ -198,6 +204,162 @@ function FilterCombobox({
   );
 }
 
+function AsyncFilterCombobox({
+  values,
+  onValuesChange,
+  type,
+  placeholder = "Все",
+  testId,
+}: {
+  values: string[];
+  onValuesChange: (next: string[]) => void;
+  type: "clientCodes" | "tradePoints";
+  placeholder?: string;
+  testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [options, setOptions] = useState<FilterComboboxOption[]>([]);
+  const [labelByValue, setLabelByValue] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      const r = await fetchFilterOptions(type, debouncedSearch.trim() || undefined, 100);
+      if (cancelled) return;
+      setLoading(false);
+      if (!r.ok) {
+        setOptions([]);
+        return;
+      }
+      const next: FilterComboboxOption[] = [];
+      if (type === "clientCodes" && r.clientCodes) {
+        for (const item of r.clientCodes) {
+          const label = `${item.code} — ${item.name}${item.city ? `, ${item.city}` : ""}`;
+          next.push({ value: item.code, label, searchValue: `${item.code} ${item.name} ${item.city}` });
+        }
+      }
+      if (type === "tradePoints" && r.tradePoints) {
+        for (const item of r.tradePoints) {
+          const clientPart = item.dealerCode ? ` (${item.dealerCode})` : "";
+          const label = `${item.name}${item.city ? ` — ${item.city}` : ""}${clientPart}`;
+          next.push({
+            value: item.id,
+            label,
+            searchValue: `${item.name} ${item.city} ${item.dealerCode}`,
+          });
+        }
+      }
+      setOptions(next);
+      setLabelByValue((prev) => {
+        const merged = { ...prev };
+        for (const o of next) merged[o.value] = o.label;
+        return merged;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, debouncedSearch, type]);
+
+  const selectedLabels = values.map((v) => labelByValue[v] ?? v);
+  let displayLabel = placeholder;
+  if (selectedLabels.length === 1) displayLabel = selectedLabels[0]!;
+  else if (selectedLabels.length > 1) displayLabel = `${selectedLabels[0]} +${selectedLabels.length - 1}`;
+
+  const toggleValue = (value: string, label: string) => {
+    setLabelByValue((prev) => ({ ...prev, [value]: label }));
+    if (values.includes(value)) onValuesChange(values.filter((v) => v !== value));
+    else onValuesChange([...values, value]);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            "min-h-11 w-full justify-between bg-background px-3 text-left font-normal",
+            values.length === 0 && "text-muted-foreground",
+          )}
+          data-testid={testId}
+        >
+          <span className="min-w-0 truncate">{displayLabel}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Поиск..." value={search} onValueChange={setSearch} />
+          <CommandList className="max-h-72 overflow-auto">
+            {loading ? (
+              <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Загрузка…
+              </div>
+            ) : (
+              <>
+                <CommandEmpty>Ничего не найдено</CommandEmpty>
+                <CommandGroup>
+                  <CommandItem
+                    value="__all__"
+                    onSelect={() => {
+                      onValuesChange([]);
+                    }}
+                  >
+                    <Check
+                      className={cn("h-4 w-4 text-primary", values.length === 0 ? "opacity-100" : "opacity-0")}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 truncate">Все</span>
+                  </CommandItem>
+                  {options.map((option) => (
+                    <CommandItem
+                      key={option.value}
+                      value={option.searchValue ?? option.label}
+                      onSelect={() => {
+                        toggleValue(option.value, option.label);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "h-4 w-4 text-primary",
+                          values.includes(option.value) ? "opacity-100" : "opacity-0",
+                        )}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 truncate">{option.label}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
+          </CommandList>
+          {values.length > 0 ? (
+            <div className="border-t border-border p-2">
+              <Button type="button" variant="ghost" size="sm" className="h-8 w-full" onClick={() => onValuesChange([])}>
+                Очистить
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function AssignmentHistoryPopover({ clientCode }: { clientCode: string }) {
   const [open, setOpen] = useState(false);
   const q = useQuery({
@@ -263,6 +425,8 @@ export default function AdminClientAssignmentsPage() {
   const [categoryFilter, setCategoryFilter] = useState<string[]>([]);
   const [regionalFilter, setRegionalFilter] = useState<string[]>([]);
   const [ropFilter, setRopFilter] = useState<string[]>([]);
+  const [clientCodeFilter, setClientCodeFilter] = useState<string[]>([]);
+  const [tradePointFilter, setTradePointFilter] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
 
   const userIdFilterKey = userIdFilter.join(",");
@@ -271,10 +435,22 @@ export default function AdminClientAssignmentsPage() {
   const categoryFilterKey = categoryFilter.join(",");
   const regionalFilterKey = regionalFilter.join(",");
   const ropFilterKey = ropFilter.join(",");
+  const clientCodeFilterKey = clientCodeFilter.join(",");
+  const tradePointFilterKey = tradePointFilter.join(",");
 
   useEffect(() => {
     setOffset(0);
-  }, [searchDebounced, userIdFilterKey, teamIdFilterKey, cityFilterKey, categoryFilterKey, regionalFilterKey, ropFilterKey]);
+  }, [
+    searchDebounced,
+    userIdFilterKey,
+    teamIdFilterKey,
+    cityFilterKey,
+    categoryFilterKey,
+    regionalFilterKey,
+    ropFilterKey,
+    clientCodeFilterKey,
+    tradePointFilterKey,
+  ]);
 
   const teamsQ = useQuery({
     queryKey: ["client-assignments", "teams"],
@@ -317,6 +493,8 @@ export default function AdminClientAssignmentsPage() {
       categoryFilterKey,
       regionalFilterKey,
       ropFilterKey,
+      clientCodeFilterKey,
+      tradePointFilterKey,
       offset,
     ],
     queryFn: async () => {
@@ -330,6 +508,8 @@ export default function AdminClientAssignmentsPage() {
         category: categoryFilter.length ? categoryFilter : undefined,
         regionalManager: regionalFilter.length ? regionalFilter : undefined,
         rop: ropFilter.length ? ropFilter : undefined,
+        clientCodes: clientCodeFilter.length ? clientCodeFilter : undefined,
+        tradePointIds: tradePointFilter.length ? tradePointFilter : undefined,
       });
       if (!r.ok) throw new Error(r.message);
       return r;
@@ -343,7 +523,19 @@ export default function AdminClientAssignmentsPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   useEffect(() => {
     setSelected({});
-  }, [items, offset, searchDebounced, userIdFilterKey, teamIdFilterKey, cityFilterKey, categoryFilterKey, regionalFilterKey, ropFilterKey]);
+  }, [
+    items,
+    offset,
+    searchDebounced,
+    userIdFilterKey,
+    teamIdFilterKey,
+    cityFilterKey,
+    categoryFilterKey,
+    regionalFilterKey,
+    ropFilterKey,
+    clientCodeFilterKey,
+    tradePointFilterKey,
+  ]);
 
   const currentReassignFilter = useMemo((): ReassignClientsFilter => {
     const filter: ReassignClientsFilter = {};
@@ -353,9 +545,21 @@ export default function AdminClientAssignmentsPage() {
     if (categoryFilter.length) filter.category = categoryFilter;
     if (regionalFilter.length) filter.regionalManager = regionalFilter;
     if (ropFilter.length) filter.rop = ropFilter;
+    if (clientCodeFilter.length) filter.clientCodes = clientCodeFilter;
+    if (tradePointFilter.length) filter.tradePointIds = tradePointFilter;
     if (searchDebounced.trim()) filter.search = searchDebounced.trim();
     return filter;
-  }, [userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter, searchDebounced]);
+  }, [
+    userIdFilter,
+    teamIdFilter,
+    cityFilter,
+    categoryFilter,
+    regionalFilter,
+    ropFilter,
+    clientCodeFilter,
+    tradePointFilter,
+    searchDebounced,
+  ]);
 
   const hasActiveFilter = useMemo(
     () =>
@@ -366,9 +570,21 @@ export default function AdminClientAssignmentsPage() {
           cityFilter.length ||
           categoryFilter.length ||
           regionalFilter.length ||
-          ropFilter.length,
+          ropFilter.length ||
+          clientCodeFilter.length ||
+          tradePointFilter.length,
       ),
-    [searchDebounced, userIdFilter, teamIdFilter, cityFilter, categoryFilter, regionalFilter, ropFilter],
+    [
+      searchDebounced,
+      userIdFilter,
+      teamIdFilter,
+      cityFilter,
+      categoryFilter,
+      regionalFilter,
+      ropFilter,
+      clientCodeFilter,
+      tradePointFilter,
+    ],
   );
 
   const selectedCodes = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
@@ -386,9 +602,12 @@ export default function AdminClientAssignmentsPage() {
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState<"selected" | "filter">("selected");
+  const [bulkAssignmentType, setBulkAssignmentType] = useState<BulkAssignmentType>("manager");
   const [bulkToUserId, setBulkToUserId] = useState<string>("");
+  const [bulkCascadeTradePoints, setBulkCascadeTradePoints] = useState(true);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
 
   const [actionMode, setActionMode] = useState<ActionMode>("reassign");
   const [grantConfirmOpen, setGrantConfirmOpen] = useState(false);
@@ -415,7 +634,22 @@ export default function AdminClientAssignmentsPage() {
   const teams: AdminTeamOption[] = teamsQ.data ?? [];
   const users: AdminUser[] = usersQ.data ?? [];
   const ropUsers = useMemo(() => users.filter((u) => u.role === "rop"), [users]);
+  const managerUsers = useMemo(
+    () => users.filter((u) => u.role === "manager" || u.role === "rop"),
+    [users],
+  );
   const filterOptions = filterOptionsQ.data;
+
+  const regionalManagersQ = useQuery({
+    queryKey: ["client-assignments", "regional-managers"],
+    queryFn: async () => {
+      const r = await fetchFilterOptions("regionalManagers");
+      if (!r.ok) throw new Error(r.message);
+      return r.managers ?? [];
+    },
+    enabled: canPage,
+  });
+  const regionalManagers: ManagerOption[] = regionalManagersQ.data ?? [];
 
   const userFilterOptions = useMemo(
     () =>
@@ -460,8 +694,41 @@ export default function AdminClientAssignmentsPage() {
 
   const bulkTargetUserName = useMemo(() => {
     if (!bulkToUserId) return "";
+    if (bulkAssignmentType === "regional_manager") {
+      return regionalManagers.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
+    }
     return users.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
-  }, [bulkToUserId, users]);
+  }, [bulkToUserId, bulkAssignmentType, regionalManagers, users]);
+
+  const selectAllInFilter = async () => {
+    if (!hasActiveFilter) return;
+    setSelectAllLoading(true);
+    try {
+      const r = await listAssignments({
+        limit: 1000,
+        offset: 0,
+        search: searchDebounced.trim() || undefined,
+        userId: userIdFilter.length ? userIdFilter : undefined,
+        teamId: teamIdFilter.length ? teamIdFilter : undefined,
+        city: cityFilter.length ? cityFilter : undefined,
+        category: categoryFilter.length ? categoryFilter : undefined,
+        regionalManager: regionalFilter.length ? regionalFilter : undefined,
+        rop: ropFilter.length ? ropFilter : undefined,
+        clientCodes: clientCodeFilter.length ? clientCodeFilter : undefined,
+        tradePointIds: tradePointFilter.length ? tradePointFilter : undefined,
+      });
+      if (!r.ok) {
+        toast({ title: r.message, variant: "destructive" });
+        return;
+      }
+      const next: Record<string, boolean> = {};
+      for (const row of r.items) next[row.clientCode] = true;
+      setSelected(next);
+      toast({ title: `Выбрано клиентов: ${r.items.length}` });
+    } finally {
+      setSelectAllLoading(false);
+    }
+  };
 
   const grantRopUserName = useMemo(() => {
     if (!grantRopUserId) return "";
@@ -554,7 +821,7 @@ export default function AdminClientAssignmentsPage() {
             />
           </div>
           <div className="min-w-0 flex-1 space-y-2 lg:min-w-[220px]">
-            <Label>Ответственный</Label>
+            <Label>Менеджер (ответственный)</Label>
             <FilterCombobox
               values={userIdFilter}
               onValuesChange={setUserIdFilter}
@@ -605,6 +872,24 @@ export default function AdminClientAssignmentsPage() {
               onValuesChange={setRopFilter}
               options={ropFilterOptions}
               testId="select-client-assignments-rop"
+            />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[240px]">
+            <Label>Клиент</Label>
+            <AsyncFilterCombobox
+              values={clientCodeFilter}
+              onValuesChange={setClientCodeFilter}
+              type="clientCodes"
+              testId="select-client-assignments-client-code"
+            />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 lg:min-w-[240px]">
+            <Label>Торговая точка</Label>
+            <AsyncFilterCombobox
+              values={tradePointFilter}
+              onValuesChange={setTradePointFilter}
+              type="tradePoints"
+              testId="select-client-assignments-trade-point"
             />
           </div>
         </CardContent>
@@ -952,6 +1237,25 @@ export default function AdminClientAssignmentsPage() {
           className="flex flex-col gap-3 rounded-lg border border-border bg-muted/30 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end"
           data-testid="toolbar-client-assignments-actions"
         >
+          {hasActiveFilter ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full sm:w-auto"
+              disabled={selectAllLoading || listQ.isFetching}
+              onClick={() => void selectAllInFilter()}
+              data-testid="button-client-assignments-select-all-filter"
+            >
+              {selectAllLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Выбор…
+                </>
+              ) : (
+                `Выбрать всех в результатах фильтра`
+              )}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -999,12 +1303,27 @@ export default function AdminClientAssignmentsPage() {
         </div>
       ) : null}
 
-      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+      <Dialog
+        open={bulkOpen}
+        onOpenChange={(open) => {
+          setBulkOpen(open);
+          if (!open) {
+            setBulkAssignmentType("manager");
+            setBulkCascadeTradePoints(true);
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{bulkMode === "filter" ? "Переназначить по фильтру" : "Переназначить выбранных"}</DialogTitle>
             <DialogDescription>
-              {bulkToUserId && bulkTargetUserName ? (
+              {bulkAssignmentType === "regional_manager" ? (
+                bulkMode === "filter" ? (
+                  `Назначение регионального менеджера для клиентов под фильтром (до 1000, сейчас ${total}).`
+                ) : (
+                  `Назначение регионального менеджера для ${selectedCount} выбранных клиентов.`
+                )
+              ) : bulkToUserId && bulkTargetUserName ? (
                 bulkMode === "filter" ? (
                   <>
                     Будет изменён ответственный у всех клиентов под фильтром (до 1000, сейчас {total}) на:{" "}
@@ -1025,20 +1344,76 @@ export default function AdminClientAssignmentsPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Новый ответственный</Label>
-              <Select value={bulkToUserId || undefined} onValueChange={(v) => setBulkToUserId(v)}>
+              <Label>Тип назначения</Label>
+              <ToggleGroup
+                type="single"
+                value={bulkAssignmentType}
+                onValueChange={(v) => {
+                  if (v === "manager" || v === "regional_manager") {
+                    setBulkAssignmentType(v);
+                    setBulkToUserId("");
+                  }
+                }}
+                className="flex w-full flex-col gap-2 sm:flex-row"
+              >
+                <ToggleGroupItem
+                  value="manager"
+                  className="min-h-10 flex-1 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  data-testid="toggle-bulk-assignment-manager"
+                >
+                  Менеджер (ответственный)
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="regional_manager"
+                  className="min-h-10 flex-1 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  data-testid="toggle-bulk-assignment-regional"
+                >
+                  Региональный менеджер
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <div className="space-y-2">
+              <Label>{bulkAssignmentType === "regional_manager" ? "Региональный менеджер" : "Новый ответственный"}</Label>
+              <Select
+                value={bulkToUserId || undefined}
+                onValueChange={(v) => setBulkToUserId(v)}
+              >
                 <SelectTrigger className="min-h-11">
                   <SelectValue placeholder="Выберите пользователя" />
                 </SelectTrigger>
                 <SelectContent>
-                  {users.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.fullName}
-                    </SelectItem>
-                  ))}
+                  {bulkAssignmentType === "regional_manager" ? (
+                    <>
+                      <SelectItem value={RM_UNASSIGN_VALUE}>— снять регионала —</SelectItem>
+                      {regionalManagers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.fullName}
+                        </SelectItem>
+                      ))}
+                    </>
+                  ) : (
+                    managerUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
+            {bulkAssignmentType === "regional_manager" ? (
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="bulk-cascade-tp"
+                  checked={bulkCascadeTradePoints}
+                  onCheckedChange={(v) => setBulkCascadeTradePoints(v === true)}
+                  data-testid="checkbox-bulk-cascade-trade-points"
+                />
+                <Label htmlFor="bulk-cascade-tp" className="cursor-pointer text-sm font-normal leading-snug">
+                  Также применить к торговым точкам этих клиентов
+                </Label>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="bulk-reason">Причина (необязательно)</Label>
               <Input id="bulk-reason" value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} className="min-h-11" />
@@ -1051,37 +1426,70 @@ export default function AdminClientAssignmentsPage() {
             <Button
               type="button"
               disabled={
-                !bulkToUserId ||
                 bulkLoading ||
+                (bulkAssignmentType === "manager" && !bulkToUserId) ||
+                (bulkAssignmentType === "regional_manager" && !bulkToUserId) ||
                 (bulkMode === "selected" ? selectedCount === 0 : !hasActiveFilter)
               }
               onClick={async () => {
-                if (!bulkToUserId) return;
+                if (bulkAssignmentType === "manager" && !bulkToUserId) return;
+                if (bulkAssignmentType === "regional_manager" && !bulkToUserId) return;
                 if (bulkMode === "selected" && selectedCount === 0) return;
                 if (bulkMode === "filter" && !hasActiveFilter) return;
                 setBulkLoading(true);
                 try {
-                  const r = await reassignClients(
-                    bulkMode === "filter"
-                      ? {
-                          filter: currentReassignFilter,
-                          toUserId: bulkToUserId,
-                          reason: bulkReason.trim() || undefined,
-                        }
-                      : {
-                          clientCodes: selectedCodes,
-                          toUserId: bulkToUserId,
-                          reason: bulkReason.trim() || undefined,
-                        },
-                  );
-                  if (!r.ok) {
-                    toast({ title: r.message, variant: "destructive" });
-                    return;
+                  if (bulkAssignmentType === "regional_manager") {
+                    const toUserId = bulkToUserId === RM_UNASSIGN_VALUE ? null : bulkToUserId;
+                    const r = await reassignRegionalManager(
+                      bulkMode === "filter"
+                        ? {
+                            filter: currentReassignFilter,
+                            toUserId,
+                            reason: bulkReason.trim() || undefined,
+                            cascadeTradePoints: bulkCascadeTradePoints,
+                            tradePointIds: tradePointFilter.length ? tradePointFilter : undefined,
+                          }
+                        : {
+                            clientCodes: selectedCodes,
+                            toUserId,
+                            reason: bulkReason.trim() || undefined,
+                            cascadeTradePoints: bulkCascadeTradePoints,
+                            tradePointIds: tradePointFilter.length ? tradePointFilter : undefined,
+                          },
+                    );
+                    if (!r.ok) {
+                      toast({ title: r.message, variant: "destructive" });
+                      return;
+                    }
+                    const actionLabel = toUserId ? "назначен" : "снят";
+                    toast({
+                      title: `Регионал ${actionLabel}: ${r.dealersAffected} клиентов, ${r.tradePointsAffected} торговых точек`,
+                    });
+                  } else {
+                    const r = await reassignClients(
+                      bulkMode === "filter"
+                        ? {
+                            filter: currentReassignFilter,
+                            toUserId: bulkToUserId,
+                            reason: bulkReason.trim() || undefined,
+                          }
+                        : {
+                            clientCodes: selectedCodes,
+                            toUserId: bulkToUserId,
+                            reason: bulkReason.trim() || undefined,
+                          },
+                    );
+                    if (!r.ok) {
+                      toast({ title: r.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: `Переназначено: ${r.reassigned}` });
                   }
-                  toast({ title: `Переназначено: ${r.reassigned}` });
                   setBulkOpen(false);
                   setBulkReason("");
                   setBulkToUserId("");
+                  setBulkAssignmentType("manager");
+                  setBulkCascadeTradePoints(true);
                   setSelected({});
                   await qc.invalidateQueries({ queryKey: ["client-assignments"] });
                 } finally {
