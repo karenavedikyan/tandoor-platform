@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DistributionFullscreenEntry } from "@/components/distribution/distribution-fullscreen-entry";
@@ -260,8 +260,7 @@ export function DistributionTradePointMatrixEntry({
     ],
   );
 
-  const showFullscreenButton =
-    canEdit && templateModelsCount > 0 && !showcaseFullscreenOpen;
+  const showEnterDistributionButton = canEdit && !showcaseFullscreenOpen;
 
   return (
     <div className="space-y-3">
@@ -285,16 +284,16 @@ export function DistributionTradePointMatrixEntry({
           <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
         </CollapsibleContent>
       </Collapsible>
-      {showFullscreenButton ? (
+      {showEnterDistributionButton ? (
         <Button
           type="button"
-          variant="default"
           size="sm"
-          className="h-9 w-full font-semibold"
-          data-testid="button-open-showcase-fullscreen"
+          className="h-10 w-full justify-center gap-1.5 bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+          data-testid="button-enter-distribution"
           onClick={() => setShowcaseFullscreenOpen(true)}
         >
-          Открыть витрину на весь экран
+          <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
+          Внести дистрибуцию
         </Button>
       ) : null}
       <TradePointShowcaseCatalogSlot
@@ -305,13 +304,13 @@ export function DistributionTradePointMatrixEntry({
         actorLabel={actorName}
         canEdit={canEdit}
       />
-      {templateModelsCount === 0 ? (
+      {templateModelsCount === 0 && !showcaseFullscreenOpen ? (
         <Card className="rounded-xl border border-border bg-card shadow-xs">
           <CardContent className="px-4 py-8 text-center">
             <p className="text-sm font-medium text-foreground">Активная матрица не назначена</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Для этой торговой точки нет чек-листа моделей. Выберите другую точку или назначьте матрицу в
-              справочнике.
+              Для этой торговой точки нет чек-листа моделей. Нажмите «Внести дистрибуцию», чтобы открыть
+              полноэкранный ввод, или назначьте матрицу в справочнике.
             </p>
           </CardContent>
         </Card>
