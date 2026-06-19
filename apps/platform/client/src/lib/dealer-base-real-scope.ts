@@ -319,3 +319,31 @@ export function roleScopedDealerRowsForReal(
     return false;
   });
 }
+
+/** Без throw: для UI, где падение scope не должно ронять всё SPA. */
+export function safeRoleScopedDealerRowsForReal(
+  rows: DealerRow[],
+  snap: OrgSnapshot,
+  access: DealerBaseAccessRole,
+  options?: RoleScopedDealerRowsForRealOptions,
+  assignmentsScope?: AssignmentsScope,
+): DealerRow[] {
+  if (
+    (access === "sales_director" || access === "team_lead") &&
+    !options?.managerUserId &&
+    !options?.ropUserId
+  ) {
+    return [];
+  }
+  try {
+    return roleScopedDealerRowsForReal(rows, snap, access, options, assignmentsScope);
+  } catch (e) {
+    console.error("[dealer-base-real-scope] scope failed", {
+      access,
+      meId: snap.me.id,
+      options,
+      error: e,
+    });
+    return [];
+  }
+}

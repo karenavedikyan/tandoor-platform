@@ -3437,7 +3437,25 @@ async function resolveViewerOwnTeam(
       LIMIT 1`,
     [userId],
   );
-  const row = r.rows[0];
+  let row = r.rows[0];
+  if (!row && role === "rop") {
+    const ropOwned = await pool.query<{
+      team_id: string;
+      team_name: string;
+      rop_user_id: string | null;
+      rop_full_name: string | null;
+    }>(
+      `SELECT t.id::text AS team_id, t.name AS team_name,
+              t.rop_user_id::text AS rop_user_id, u.full_name AS rop_full_name
+         FROM teams t
+         LEFT JOIN users u ON u.id = t.rop_user_id
+        WHERE t.rop_user_id = $1::uuid
+        ORDER BY t.name
+        LIMIT 1`,
+      [userId],
+    );
+    row = ropOwned.rows[0];
+  }
   if (!row) return null;
   return {
     teamId: row.team_id,
@@ -3453,26 +3471,40 @@ async function handleTradePointsOverview(
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
 ): Promise<void> {
-  const me = await resolveCurrentUser(pool, headers);
-  if (!me) {
-    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
-    return;
-  }
-  if (!["admin", "director", "rop", "manager", "regional_manager", "category_manager"].includes(me.role) || me.status !== "active") {
-    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
-    return;
-  }
+  try {
+    const me = await resolveCurrentUser(pool, headers);
+    if (!me) {
+      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      return;
+    }
+    if (!["admin", "director", "rop", "manager", "regional_manager", "category_manager"].includes(me.role) || me.status !== "active") {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+      return;
+    }
 
-  const showcaseMap = await loadShowcaseStatsForOverview(pool);
-  const viewerTeam = await resolveViewerOwnTeam(pool, me.id, me.role);
-  const payload = await buildTradePointsOverviewFromDb(
-    pool,
-    me.id,
-    me.role as import("../../shared/auth.js").UserRole,
-    showcaseMap,
-    viewerTeam,
-  );
-  sendJson(res, 200, payload);
+    let showcaseMap = new Map<string, { withoutPhoto: boolean; notFilled: boolean }>();
+    try {
+      showcaseMap = await loadShowcaseStatsForOverview(pool);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      console.error("[trade-points-overview] showcase stats failed", { userId: me.id, role: me.role, message: m });
+    }
+
+    const viewerTeam = await resolveViewerOwnTeam(pool, me.id, me.role);
+    const payload = await buildTradePointsOverviewFromDb(
+      pool,
+      me.id,
+      me.role as import("../../shared/auth.js").UserRole,
+      showcaseMap,
+      viewerTeam,
+    );
+    sendJson(res, 200, payload);
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : undefined;
+    console.error("[trade-points-overview] failed", { message: m, stack });
+    sendJson(res, 500, { success: false, code: "INTERNAL_ERROR", message: "Не удалось загрузить обзор торговых точек." });
+  }
 }
 
 

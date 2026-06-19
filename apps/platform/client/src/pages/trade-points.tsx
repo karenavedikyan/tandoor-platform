@@ -66,7 +66,7 @@ import {
 } from "@/lib/dealer-base-role-views";
 import {
   assignmentsScopeIsActive,
-  roleScopedDealerRowsForReal,
+  safeRoleScopedDealerRowsForReal,
   rowInAssignmentsScope,
   type AssignmentsScope,
 } from "@/lib/dealer-base-real-scope";
@@ -475,8 +475,17 @@ export default function TradePointsPage({
     if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
       return mergedRowsActivePortfolioForManagement.filter((r) => dbScopedExternalKeys.has(r.id));
     }
+    if (useReal && access === "team_lead" && snap?.me?.id) {
+      return safeRoleScopedDealerRowsForReal(
+        mergedRowsActivePortfolioForManagement,
+        snap,
+        access,
+        { ropUserId: snap.me.id },
+        assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+      );
+    }
     if (useReal && snap) {
-      return roleScopedDealerRowsForReal(
+      return safeRoleScopedDealerRowsForReal(
         mergedRowsActivePortfolioForManagement,
         snap,
         access,

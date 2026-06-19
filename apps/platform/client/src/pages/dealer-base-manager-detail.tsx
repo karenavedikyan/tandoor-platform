@@ -26,7 +26,11 @@ import {
   buildRopGroups,
   teamsForManagementView,
 } from "@/lib/dealer-base-management-view-model";
-import { assignmentsScopeIsActive, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import {
+  assignmentsScopeIsActive,
+  safeRoleScopedDealerRowsForReal,
+  type RoleScopedDealerRowsForRealOptions,
+} from "@/lib/dealer-base-real-scope";
 import { type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
@@ -106,6 +110,13 @@ export default function DealerBaseManagerDetailPage() {
     };
   }, [myCodesQ.data]);
 
+  const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
+
+  const scopeOptions = useMemo((): RoleScopedDealerRowsForRealOptions | undefined => {
+    if (managerApiUserId) return { managerUserId: managerApiUserId };
+    return undefined;
+  }, [managerApiUserId]);
+
   const scopedRows = useMemo(() => {
     let merged: DealerRow[];
     if (useReal && snap && visPayload) {
@@ -115,11 +126,11 @@ export default function DealerBaseManagerDetailPage() {
                         releaseDealerRows: releaseRows,
           })
         : releaseRows;
-      return roleScopedDealerRowsForReal(
+      return safeRoleScopedDealerRowsForReal(
         merged,
         snap,
         access,
-        undefined,
+        scopeOptions,
         assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
       );
     }
@@ -142,6 +153,8 @@ export default function DealerBaseManagerDetailPage() {
     authLoading,
     authError,
     catalogRows,
+    scopeOptions,
+    managerApiUserId,
   ]);
 
   const teams = useMemo(
@@ -157,8 +170,6 @@ export default function DealerBaseManagerDetailPage() {
   );
 
   const managerCtx = useMemo(() => findManagerInRopGroups(managerId, ropGroups), [managerId, ropGroups]);
-
-  const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
 
   const targetScopeQ = useMyScopeFromDB({
     enabled: Boolean(managerApiUserId) && Boolean(me?.id),

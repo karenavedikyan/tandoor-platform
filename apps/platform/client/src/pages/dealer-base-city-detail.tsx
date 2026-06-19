@@ -28,7 +28,7 @@ import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { assignmentsScopeIsActive, roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { assignmentsScopeIsActive, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
@@ -101,6 +101,11 @@ export default function DealerBaseCityDetailPage() {
     };
   }, [myCodesQ.data]);
 
+  const scopeOptions = useMemo(() => {
+    if (access === "team_lead" && snap?.me?.id) return { ropUserId: snap.me.id };
+    return undefined;
+  }, [access, snap?.me?.id]);
+
   const scopedRows = useMemo(() => {
     let merged: DealerRow[];
     if (useReal && snap && visPayload) {
@@ -110,11 +115,11 @@ export default function DealerBaseCityDetailPage() {
                         releaseDealerRows: releaseRows,
           })
         : releaseRows;
-      return roleScopedDealerRowsForReal(
+      return safeRoleScopedDealerRowsForReal(
         merged,
         snap,
         access,
-        undefined,
+        scopeOptions,
         assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
       );
     }
@@ -137,6 +142,7 @@ export default function DealerBaseCityDetailPage() {
     authLoading,
     authError,
     catalogRows,
+    scopeOptions,
   ]);
 
   const detail = useMemo(

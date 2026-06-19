@@ -42,6 +42,7 @@ import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope
 import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
+import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 
@@ -127,13 +128,23 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
   return Wrapped;
 }
 
+function suspensePageWithErrorBoundary(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
+  const Inner = suspensePage(Lazy);
+  const Wrapped: ComponentType<any> = (props) => (
+    <DealerBaseErrorBoundary>
+      <Inner {...props} />
+    </DealerBaseErrorBoundary>
+  );
+  return Wrapped;
+}
+
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
 const MainManagerDetailRoute = suspensePage(LazyMainManagerDetail);
 const MainRopDetailRoute = suspensePage(LazyMainRopDetail);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
-const DealerBaseCityDetailRoute = suspensePage(LazyDealerBaseCityDetail);
-const DealerBaseManagerDetailRoute = suspensePage(LazyDealerBaseManagerDetail);
-const TradePointsRoute = suspensePage(LazyTradePoints);
+const DealerBaseCityDetailRoute = suspensePageWithErrorBoundary(LazyDealerBaseCityDetail);
+const DealerBaseManagerDetailRoute = suspensePageWithErrorBoundary(LazyDealerBaseManagerDetail);
+const TradePointsRoute = suspensePageWithErrorBoundary(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
