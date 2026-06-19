@@ -3098,8 +3098,22 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       stockListFilter === "all"
         ? rowsAfterCityFilter
         : rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+    // [414] Manager в real-режиме доверяет серверному my-scope: trashed уже отфильтрованы сервером
+    // (отдельный список trashed_dealer_external_keys, в active_dealer_external_keys их нет).
+    // applyWorkingBaseTrashInvariant использует client-side actualization plane, который для
+    // real-manager неполный и режет валидные строки. Не применяем его для manager.
+    if (isRealUser && me?.role === "manager") {
+      return base;
+    }
     return !showArchivedDealers ? applyWorkingBaseTrashInvariant(base) : base;
-  }, [rowsAfterCityFilter, stockListFilter, showArchivedDealers, applyWorkingBaseTrashInvariant]);
+  }, [
+    rowsAfterCityFilter,
+    stockListFilter,
+    showArchivedDealers,
+    applyWorkingBaseTrashInvariant,
+    isRealUser,
+    me?.role,
+  ]);
 
   const trashInWorkingBaseDiagLoggedRef = useRef(false);
   useEffect(() => {
@@ -3927,6 +3941,7 @@ rowsAfterShipmentDay=${rowsAfterShipmentDay.length}
 rowsAfterPrograms=${rowsAfterPrograms.length}
 rowsAfterUrlFocus=${rowsAfterUrlFocus.length}
 rowsAfterCityFilter=${rowsAfterCityFilter.length}
+rowsFinalForList=${rowsFinalForList.length}
 workPlanFilter=${workPlanFilter} segmentList=${segmentList.length} programs=${programFilters.length}
 assignments=${assignmentsScopeIsActive(assignmentsScope) ? "active" : "inactive"} own=${assignmentsScope?.ownCodes.size ?? 0}
 dbScopedExtKeys=${dbScopedExternalKeys?.size ?? "null"}
