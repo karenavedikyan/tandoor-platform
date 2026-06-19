@@ -11,6 +11,7 @@ const ADMIN_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const ROP_ID = "3f67f770-f5cd-4257-a4b2-1cefa65fbfaa";
 const MGR_ID = "e60f1a83-88ae-41f8-8c32-edd91f666e8d";
 const ROP_OTHER_ID = "c36f625f-730e-4ae3-b118-bdb005d10b81";
+const RM_ID = "bb0e6231-8c1e-46ae-9e0f-a1d9003d9b81";
 const TEAM_SKALABAN = "cfa2ab87-9fe9-4068-a0e4-347ddad7a5fa";
 
 const USERS: Record<string, { id: string; email: string; role: string; full_name: string; status: string }> = {
@@ -18,6 +19,7 @@ const USERS: Record<string, { id: string; email: string; role: string; full_name
   [ROP_ID]: { id: ROP_ID, email: "rop@test.ru", role: "rop", full_name: "Skalaban", status: "active" },
   [MGR_ID]: { id: MGR_ID, email: "mgr@test.ru", role: "manager", full_name: "Ilyuchenko", status: "active" },
   [ROP_OTHER_ID]: { id: ROP_OTHER_ID, email: "rop2@test.ru", role: "rop", full_name: "Sapozhkov", status: "active" },
+  [RM_ID]: { id: RM_ID, email: "rm@test.ru", role: "regional_manager", full_name: "Serebryakov", status: "active" },
 };
 
 const SCOPED_TPS = [
@@ -130,6 +132,14 @@ function mockPool(): PoolLike {
         return { rows: [] };
       }
 
+      if (s.includes("dealer_overrides") && s.includes("regional_manager_id")) {
+        const userId = params?.[0] as string;
+        if (userId === RM_ID) {
+          return { rows: [{ client_code: "C001" }, { client_code: "C002" }] };
+        }
+        return { rows: [] };
+      }
+
       if (s.includes("client_assignments ca") && s.includes("team_id = ANY")) {
         return { rows: [{ client_code: "C001" }, { client_code: "C002" }] };
       }
@@ -221,6 +231,16 @@ function mockPool(): PoolLike {
   const out = await handleTradePointsListScoped(pool, { id: ADMIN_ID, role: "admin" }, ROP_ID);
   assert.ok("success" in out && out.success);
   assert.equal(out.tradePoints.length, 2);
+}
+
+// regional_manager sees trade points from dealer_overrides scope (prompt 429)
+{
+  const pool = mockPool();
+  const out = await handleTradePointsListScoped(pool, { id: RM_ID, role: "regional_manager" });
+  assert.ok("success" in out && out.success);
+  assert.equal(out.tradePoints.length, 2);
+  assert.equal(out.meta.scope, "team");
+  assert.equal(out.meta.total, 2);
 }
 
 // trade_points-overview structure.activeTradePoints matches COUNT from db
