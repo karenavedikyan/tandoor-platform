@@ -1,23 +1,14 @@
 /**
- * /trash — Корзина и Архив клиентов / торговых точек (Промт 45, 70.4, 70.5).
+ * /trash — Корзина клиентов / торговых точек (Промт 45, 70.4, 70.5).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Archive, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { BackNav } from "@/components/navigation/back-nav";
 import { breadcrumbsFor } from "@/lib/navigation/route-hierarchy";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import {
   AlertDialog,
@@ -44,21 +35,7 @@ import {
 } from "@/lib/client-base-actualization-state";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-display-date";
 import { getReleaseClients } from "@/lib/release-client-data";
-import {
-  ARCHIVE_PAGE_SIZE,
-  buildArchivedDealerDisplay,
-  buildArchivedTpDisplay,
-  buildReleaseClientByDealerId,
-  forceDeleteArchivedDealersPatch,
-  forceDeleteArchivedTpsPatch,
-  restoreArchivedDealersPatch,
-  restoreArchivedTpsPatch,
-  sortArchivedDealers,
-  sortArchivedTps,
-  type ArchiveDealerSort,
-  type ArchivedDealerDisplay,
-  type ArchivedTpDisplay,
-} from "@/lib/trash-archive-helpers";
+import { buildReleaseClientByDealerId } from "@/lib/trash-archive-helpers";
 import { resolveTrashedDealerDisplayName } from "@/lib/client-base-actualization-visibility";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { untrashDealerStrict, requestPurgeDealerStrict } from "@/lib/dealer-overrides-api";
@@ -73,7 +50,7 @@ import {
   patchTradePointTrashRuntime,
   patchTradePointPurgePendingRuntime,
 } from "@/lib/dealer-overrides-runtime";
-import { buildArchiveScopeFilter, buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo, archiveMetaFromDealerInfo, archiveMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
+import { buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -87,24 +64,10 @@ type ConfirmKind =
   | { kind: "request-purge-all-dealers"; count: number; ids: string[] }
   | { kind: "request-purge-all-tps"; count: number; ids: string[] }
   | { kind: "request-purge-selected-dealers"; count: number; ids: string[] }
-  | { kind: "request-purge-selected-tps"; count: number; ids: string[] }
-  | { kind: "restore-all-archived-dealers"; count: number }
-  | { kind: "restore-all-archived-tps"; count: number }
-  | { kind: "move-archived-dealers-to-trash"; count: number; ids: string[] }
-  | { kind: "move-archived-tps-to-trash"; count: number; ids: string[] }
-  | { kind: "force-delete-archived-dealers"; count: number; ids: string[] }
-  | { kind: "force-delete-archived-tps"; count: number; ids: string[] };
+  | { kind: "request-purge-selected-tps"; count: number; ids: string[] };
 
 function compareByExpires(a: TrashedDealerInfo | TrashedTradePointInfo, b: TrashedDealerInfo | TrashedTradePointInfo): number {
   return Date.parse(a.expiresAt) - Date.parse(b.expiresAt);
-}
-
-function useArchivePagination(total: number, page: number): { pageIndex: number; from: number; to: number; pageCount: number } {
-  const pageCount = Math.max(1, Math.ceil(total / ARCHIVE_PAGE_SIZE));
-  const pageIndex = Math.min(Math.max(0, page), pageCount - 1);
-  const from = pageIndex * ARCHIVE_PAGE_SIZE;
-  const to = Math.min(from + ARCHIVE_PAGE_SIZE, total);
-  return { pageIndex, from, to, pageCount };
 }
 
 export function TrashBinPage(): ReactElement {
@@ -116,25 +79,13 @@ export function TrashBinPage(): ReactElement {
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
   const [trashTab, setTrashTab] = useState<"clients" | "tps">("clients");
-  const [archiveTab, setArchiveTab] = useState<"clients" | "tps">("clients");
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmFD, setConfirmFD] = useState<ConfirmKind | null>(null);
   const [purgeBusy, setPurgeBusy] = useState(false);
 
-  const [archiveDealerSearch, setArchiveDealerSearch] = useState("");
-  const [archiveDealerSort, setArchiveDealerSort] = useState<ArchiveDealerSort>("archived_desc");
-  const [archiveDealerPage, setArchiveDealerPage] = useState(0);
-  const [selectedArchivedDealerIds, setSelectedArchivedDealerIds] = useState<Set<string>>(() => new Set());
-
-  const [archiveTpSearch, setArchiveTpSearch] = useState("");
-  const [archiveTpSort, setArchiveTpSort] = useState<ArchiveDealerSort>("archived_desc");
-  const [archiveTpPage, setArchiveTpPage] = useState(0);
-  const [selectedArchivedTpIds, setSelectedArchivedTpIds] = useState<Set<string>>(() => new Set());
-
   const [selectedTrashDealerIds, setSelectedTrashDealerIds] = useState<Set<string>>(() => new Set());
   const [selectedTrashTpIds, setSelectedTrashTpIds] = useState<Set<string>>(() => new Set());
 
-  const canForceDelete = user?.role === "admin" || user?.role === "director";
   const canRunPurge = user?.role === "admin";
 
   const useTeamState = shouldUseTeamMergedActualizationPlane(profile, user?.role);
@@ -159,17 +110,6 @@ export function TrashBinPage(): ReactElement {
         teamContext,
       }),
     [user?.role, user?.id, profile, realScope, teamContext],
-  );
-
-  const archiveScopeFilter = useMemo(
-    () =>
-      buildArchiveScopeFilter({
-        role: user?.role ?? null,
-        profile,
-        realScope,
-        teamContext,
-      }),
-    [user?.role, profile, realScope, teamContext],
   );
 
   const trashDealersListRef = useRef<HTMLDivElement>(null);
@@ -205,94 +145,6 @@ export function TrashBinPage(): ReactElement {
       )
       .sort(compareByExpires);
   }, [stateForRead, trashScopeFilter, user?.role]);
-
-  const archivedDealerDisplays = useMemo(() => {
-    if (!stateForRead.updatedAt && user?.role === "manager") return [];
-    const map = stateForRead.archivedDealersById ?? {};
-    return Object.values(map)
-      .filter(
-        (d) =>
-          archiveScopeFilter.fullView ||
-          archiveScopeFilter.isDealerInScope(d.dealerId, archiveMetaFromDealerInfo(d)),
-      )
-      .map((info) => buildArchivedDealerDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId, archiveScopeFilter, user?.role]);
-
-  const archivedTpDisplays = useMemo(() => {
-    if (!stateForRead.updatedAt && user?.role === "manager") return [];
-    const map = stateForRead.archivedTradePointsById ?? {};
-    return Object.values(map)
-      .filter(
-        (t) =>
-          archiveScopeFilter.fullView ||
-          archiveScopeFilter.isTradePointInScope(
-            t.tradePointId,
-            t.dealerId ?? null,
-            archiveMetaFromTradePointInfo(t),
-          ),
-      )
-      .map((info) => buildArchivedTpDisplay(info, stateForRead, releaseByDealerId));
-  }, [stateForRead, releaseByDealerId, archiveScopeFilter, user?.role]);
-
-  const filteredArchivedDealers = useMemo(() => {
-    const q = archiveDealerSearch.trim().toLowerCase();
-    let rows = archivedDealerDisplays;
-    if (q) rows = rows.filter((r) => r.searchBlob.includes(q));
-    return sortArchivedDealers(rows, archiveDealerSort);
-  }, [archivedDealerDisplays, archiveDealerSearch, archiveDealerSort]);
-
-  const filteredArchivedTps = useMemo(() => {
-    const q = archiveTpSearch.trim().toLowerCase();
-    let rows = archivedTpDisplays;
-    if (q) rows = rows.filter((r) => r.searchBlob.includes(q));
-    return sortArchivedTps(rows, archiveTpSort);
-  }, [archivedTpDisplays, archiveTpSearch, archiveTpSort]);
-
-  const dealerPageMeta = useArchivePagination(filteredArchivedDealers.length, archiveDealerPage);
-  const tpPageMeta = useArchivePagination(filteredArchivedTps.length, archiveTpPage);
-
-  const pagedArchivedDealers = useMemo(
-    () => filteredArchivedDealers.slice(dealerPageMeta.from, dealerPageMeta.to),
-    [filteredArchivedDealers, dealerPageMeta.from, dealerPageMeta.to],
-  );
-  const pagedArchivedTps = useMemo(
-    () => filteredArchivedTps.slice(tpPageMeta.from, tpPageMeta.to),
-    [filteredArchivedTps, tpPageMeta.from, tpPageMeta.to],
-  );
-
-  useEffect(() => {
-    setArchiveDealerPage(0);
-  }, [archiveDealerSearch, archiveDealerSort, archivedDealerDisplays.length]);
-
-  useEffect(() => {
-    setArchiveTpPage(0);
-  }, [archiveTpSearch, archiveTpSort, archivedTpDisplays.length]);
-
-  useEffect(() => {
-    const allowed = new Set(filteredArchivedDealers.map((r) => r.dealerId));
-    setSelectedArchivedDealerIds((prev) => {
-      const n = new Set<string>();
-      let changed = false;
-      prev.forEach((id) => {
-        if (allowed.has(id)) n.add(id);
-        else changed = true;
-      });
-      return changed || n.size !== prev.size ? n : prev;
-    });
-  }, [filteredArchivedDealers]);
-
-  useEffect(() => {
-    const allowed = new Set(filteredArchivedTps.map((r) => r.tradePointId));
-    setSelectedArchivedTpIds((prev) => {
-      const n = new Set<string>();
-      let changed = false;
-      prev.forEach((id) => {
-        if (allowed.has(id)) n.add(id);
-        else changed = true;
-      });
-      return changed || n.size !== prev.size ? n : prev;
-    });
-  }, [filteredArchivedTps]);
 
   useEffect(() => {
     setSelectedTrashDealerIds(new Set());
@@ -667,164 +519,6 @@ export function TrashBinPage(): ReactElement {
     afterPersist(r, "Торговая точка удалена окончательно", "Не удалось удалить");
   };
 
-  const onRestoreAllArchivedDealers = async (count: number): Promise<void> => {
-    if (busy || count === 0) return;
-    setBusy("restore-all-archived-dealers");
-    try {
-      const r = await actx.persist((prev) => mergeActualizationState(prev, { archivedDealersById: {} }));
-      afterPersist(r, `Восстановлено ${count} клиентов. Они снова в активной базе.`, "Не удалось восстановить");
-      setSelectedArchivedDealerIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onRestoreAllArchivedTps = async (count: number): Promise<void> => {
-    if (busy || count === 0) return;
-    setBusy("restore-all-archived-tps");
-    try {
-      const r = await actx.persist((prev) => mergeActualizationState(prev, { archivedTradePointsById: {} }));
-      afterPersist(r, `Восстановлено ${count} торговых точек.`, "Не удалось восстановить");
-      setSelectedArchivedTpIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onRestoreArchivedDealers = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("restore-archived-dealers");
-    try {
-      const r = await actx.persist((prev) => restoreArchivedDealersPatch(prev, ids));
-      afterPersist(r, `Восстановлено ${ids.length} клиентов`, "Не удалось восстановить");
-      setSelectedArchivedDealerIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onRestoreOneArchivedDealer = async (dealerId: string): Promise<void> => {
-    await onRestoreArchivedDealers([dealerId]);
-  };
-
-  const onRestoreArchivedTps = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("restore-archived-tps");
-    try {
-      const r = await actx.persist((prev) => restoreArchivedTpsPatch(prev, ids));
-      afterPersist(r, `Восстановлено ${ids.length} торговых точек`, "Не удалось восстановить");
-      setSelectedArchivedTpIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onRestoreOneArchivedTp = async (tradePointId: string): Promise<void> => {
-    await onRestoreArchivedTps([tradePointId]);
-  };
-
-  const onMoveArchivedDealersToTrash = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("move-archived-dealers-to-trash");
-    try {
-      const res = await fetch("/api/dealer-overrides/bulk-move-archive-to-trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ dealer_ids: ids }),
-      });
-      const json = (await res.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: { moved?: number; skipped?: number };
-      };
-      if (!res.ok || json.success !== true) {
-        toast({
-          title: "Не удалось переместить",
-          description: json.message ?? `HTTP ${res.status}`,
-          variant: "destructive",
-        });
-        return;
-      }
-      const moved = json.data?.moved ?? ids.length;
-      const skipped = json.data?.skipped ?? 0;
-      toast({
-        title:
-          skipped > 0
-            ? `Перемещено ${moved}, пропущено ${skipped} (вне вашей зоны ответственности)`
-            : `Перемещено ${moved} клиентов в Корзину`,
-      });
-      setSelectedArchivedDealerIds(new Set());
-      await actx.refresh();
-      void teamPlane.refresh();
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onMoveArchivedTpsToTrash = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("move-archived-tps-to-trash");
-    try {
-      const res = await fetch("/api/trade-point-overrides/bulk-move-archive-to-trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ trade_point_ids: ids }),
-      });
-      const json = (await res.json()) as {
-        success?: boolean;
-        message?: string;
-        data?: { moved?: number; skipped?: number };
-      };
-      if (!res.ok || json.success !== true) {
-        toast({
-          title: "Не удалось переместить",
-          description: json.message ?? `HTTP ${res.status}`,
-          variant: "destructive",
-        });
-        return;
-      }
-      const moved = json.data?.moved ?? ids.length;
-      const skipped = json.data?.skipped ?? 0;
-      toast({
-        title:
-          skipped > 0
-            ? `Перемещено ${moved}, пропущено ${skipped} (вне вашей зоны ответственности)`
-            : `Перемещено ${moved} торговых точек в Корзину`,
-      });
-      setSelectedArchivedTpIds(new Set());
-      await actx.refresh();
-      void teamPlane.refresh();
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onForceDeleteArchivedDealers = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("force-delete-archived-dealers");
-    try {
-      const r = await actx.persist((prev) => forceDeleteArchivedDealersPatch(prev, ids));
-      afterPersist(r, `Удалено ${ids.length} клиентов`, "Не удалось удалить");
-      setSelectedArchivedDealerIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const onForceDeleteArchivedTps = async (ids: string[]): Promise<void> => {
-    if (busy || ids.length === 0) return;
-    setBusy("force-delete-archived-tps");
-    try {
-      const r = await actx.persist((prev) => forceDeleteArchivedTpsPatch(prev, ids));
-      afterPersist(r, `Удалено ${ids.length} торговых точек`, "Не удалось удалить");
-      setSelectedArchivedTpIds(new Set());
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const onRunPurge = async (): Promise<void> => {
     if (purgeBusy) return;
     setPurgeBusy(true);
@@ -861,8 +555,6 @@ export function TrashBinPage(): ReactElement {
     }
   };
 
-  const selectedDealerCount = selectedArchivedDealerIds.size;
-  const selectedTpCount = selectedArchivedTpIds.size;
   const selectedTrashDealerCount = selectedTrashDealerIds.size;
   const selectedTrashTpCount = selectedTrashTpIds.size;
 
@@ -897,19 +589,6 @@ export function TrashBinPage(): ReactElement {
     trashedDealerDisplays.every((d) => selectedTrashDealerIds.has(d.info.dealerId));
   const allTrashTpsSelected =
     trashedTps.length > 0 && trashedTps.every((t) => selectedTrashTpIds.has(t.tradePointId));
-
-  const toggleSelectAllFilteredDealers = (checked: boolean) => {
-    setSelectedArchivedDealerIds(checked ? new Set(filteredArchivedDealers.map((r) => r.dealerId)) : new Set());
-  };
-
-  const toggleSelectAllFilteredTps = (checked: boolean) => {
-    setSelectedArchivedTpIds(checked ? new Set(filteredArchivedTps.map((r) => r.tradePointId)) : new Set());
-  };
-
-  const allFilteredDealersSelected =
-    filteredArchivedDealers.length > 0 && filteredArchivedDealers.every((r) => selectedArchivedDealerIds.has(r.dealerId));
-  const allFilteredTpsSelected =
-    filteredArchivedTps.length > 0 && filteredArchivedTps.every((r) => selectedArchivedTpIds.has(r.tradePointId));
 
   const renderTrashDealerToolbar = () => {
     if (trashedDealers.length === 0) return null;
@@ -1009,382 +688,9 @@ export function TrashBinPage(): ReactElement {
     );
   };
 
-  const renderArchivePagination = (
-    total: number,
-    pageMeta: ReturnType<typeof useArchivePagination>,
-    setPage: (n: number) => void,
-  ) => {
-    if (total === 0) return null;
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          Показано {pageMeta.from + 1}–{pageMeta.to} из {total}
-        </span>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={pageMeta.pageIndex <= 0}
-            onClick={() => setPage(pageMeta.pageIndex - 1)}
-            aria-label="Назад"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={pageMeta.pageIndex >= pageMeta.pageCount - 1}
-            onClick={() => setPage(pageMeta.pageIndex + 1)}
-            aria-label="Вперёд"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDealerArchiveToolbar = () => {
-    if (archivedDealerDisplays.length === 0) return null;
-    return (
-      <div className="sticky top-0 z-10 space-y-3 rounded-lg border border-border/80 bg-card/95 p-3 backdrop-blur-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            value={archiveDealerSearch}
-            onChange={(e) => setArchiveDealerSearch(e.target.value)}
-            placeholder="Поиск по имени, ИНН, коду, городу"
-            className="min-h-9 flex-1"
-            data-testid="input-archive-dealer-search"
-          />
-          <Select value={archiveDealerSort} onValueChange={(v) => setArchiveDealerSort(v as ArchiveDealerSort)}>
-            <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-archive-dealer-sort">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="archived_desc">По дате архивации (новые)</SelectItem>
-              <SelectItem value="archived_asc">По дате архивации (старые)</SelectItem>
-              <SelectItem value="name_asc">По имени (А–Я)</SelectItem>
-              <SelectItem value="name_desc">По имени (Я–А)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={allFilteredDealersSelected}
-                onCheckedChange={(v) => toggleSelectAllFilteredDealers(v === true)}
-                data-testid="checkbox-archive-dealer-select-all"
-              />
-              Выбрать все на странице
-            </label>
-            <span className="text-sm text-muted-foreground">Выбрано: {selectedDealerCount}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={selectedDealerCount === 0 || Boolean(busy)}
-              onClick={() => void onRestoreArchivedDealers(Array.from(selectedArchivedDealerIds))}
-              data-testid="button-archive-restore-selected-dealers"
-            >
-              Восстановить выбранных ({selectedDealerCount})
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={selectedDealerCount === 0 || Boolean(busy)}
-              onClick={() =>
-                setConfirmFD({
-                  kind: "move-archived-dealers-to-trash",
-                  count: selectedDealerCount,
-                  ids: Array.from(selectedArchivedDealerIds),
-                })
-              }
-              data-testid="button-archive-move-selected-dealers-to-trash"
-            >
-              Переместить выбранных в Корзину ({selectedDealerCount})
-            </Button>
-            {canForceDelete ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={selectedDealerCount === 0 || Boolean(busy)}
-                onClick={() =>
-                  setConfirmFD({
-                    kind: "force-delete-archived-dealers",
-                    count: selectedDealerCount,
-                    ids: Array.from(selectedArchivedDealerIds),
-                  })
-                }
-                data-testid="button-archive-force-delete-selected-dealers"
-              >
-                Удалить выбранных навсегда ({selectedDealerCount})
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 px-2"
-              disabled={archivedDealerDisplays.length === 0 || busy === "restore-all-archived-dealers"}
-              onClick={() =>
-                setConfirmFD({ kind: "restore-all-archived-dealers", count: archivedDealerDisplays.length })
-              }
-              data-testid="button-trash-restore-all-archived"
-            >
-              Восстановить всех (полный объём, {archivedDealerDisplays.length})
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderTpArchiveToolbar = () => {
-    if (archivedTpDisplays.length === 0) return null;
-    return (
-      <div className="sticky top-0 z-10 space-y-3 rounded-lg border border-border/80 bg-card/95 p-3 backdrop-blur-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            value={archiveTpSearch}
-            onChange={(e) => setArchiveTpSearch(e.target.value)}
-            placeholder="Поиск по имени, адресу, коду, городу"
-            className="min-h-9 flex-1"
-            data-testid="input-archive-tp-search"
-          />
-          <Select value={archiveTpSort} onValueChange={(v) => setArchiveTpSort(v as ArchiveDealerSort)}>
-            <SelectTrigger className="w-full sm:w-[220px]" data-testid="select-archive-tp-sort">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="archived_desc">По дате архивации (новые)</SelectItem>
-              <SelectItem value="archived_asc">По дате архивации (старые)</SelectItem>
-              <SelectItem value="name_asc">По имени (А–Я)</SelectItem>
-              <SelectItem value="name_desc">По имени (Я–А)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={allFilteredTpsSelected}
-                onCheckedChange={(v) => toggleSelectAllFilteredTps(v === true)}
-                data-testid="checkbox-archive-tp-select-all"
-              />
-              Выбрать все на странице
-            </label>
-            <span className="text-sm text-muted-foreground">Выбрано: {selectedTpCount}</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={selectedTpCount === 0 || Boolean(busy)}
-              onClick={() => void onRestoreArchivedTps(Array.from(selectedArchivedTpIds))}
-            >
-              Восстановить выбранных ({selectedTpCount})
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={selectedTpCount === 0 || Boolean(busy)}
-              onClick={() =>
-                setConfirmFD({
-                  kind: "move-archived-tps-to-trash",
-                  count: selectedTpCount,
-                  ids: Array.from(selectedArchivedTpIds),
-                })
-              }
-            >
-              Переместить выбранных в Корзину ({selectedTpCount})
-            </Button>
-            {canForceDelete ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={selectedTpCount === 0 || Boolean(busy)}
-                onClick={() =>
-                  setConfirmFD({
-                    kind: "force-delete-archived-tps",
-                    count: selectedTpCount,
-                    ids: Array.from(selectedArchivedTpIds),
-                  })
-                }
-              >
-                Удалить выбранных навсегда ({selectedTpCount})
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 px-2"
-              disabled={archivedTpDisplays.length === 0 || busy === "restore-all-archived-tps"}
-              onClick={() => setConfirmFD({ kind: "restore-all-archived-tps", count: archivedTpDisplays.length })}
-            >
-              Восстановить всех (полный объём, {archivedTpDisplays.length})
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDealerArchiveRow = (row: ArchivedDealerDisplay) => {
-    const id = row.dealerId;
-    const codeBadge = row.releaseCode || row.dealerCode;
-    return (
-      <Card key={id} className="rounded-xl border border-border bg-card" data-testid={`row-trash-archived-${id}`}>
-        <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start">
-          <Checkbox
-            className="mt-1"
-            checked={selectedArchivedDealerIds.has(id)}
-            onCheckedChange={(v) => {
-              setSelectedArchivedDealerIds((prev) => {
-                const n = new Set(prev);
-                if (v === true) n.add(id);
-                else n.delete(id);
-                return n;
-              });
-            }}
-            data-testid={`checkbox-archive-dealer-${id}`}
-          />
-          <ClientAvatar size={36} shape="circle" name={row.name} seed={id} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-sm font-semibold text-foreground">{row.name}</p>
-              {codeBadge ? (
-                <Badge variant="outline" className="font-mono text-[10px]">
-                  {codeBadge}
-                </Badge>
-              ) : null}
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              {[row.city, row.inn ? `ИНН ${row.inn}` : null].filter(Boolean).join(" · ") || "—"}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              архивировал {row.info.archivedByName} · {formatDisplayDateTime(row.info.archivedAt)}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={Boolean(busy)}
-              onClick={() => void onRestoreOneArchivedDealer(id)}
-            >
-              Восстановить
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={Boolean(busy)}
-              onClick={() => setConfirmFD({ kind: "move-archived-dealers-to-trash", count: 1, ids: [id] })}
-            >
-              В Корзину
-            </Button>
-            {canForceDelete ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={Boolean(busy)}
-                onClick={() => setConfirmFD({ kind: "force-delete-archived-dealers", count: 1, ids: [id] })}
-              >
-                Удалить навсегда
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const renderTpArchiveRow = (row: ArchivedTpDisplay) => {
-    const id = row.tradePointId;
-    const displayName = row.name || row.tradePointCode || id;
-    return (
-      <Card key={id} className="rounded-xl border border-border bg-card" data-testid={`row-trash-archived-tp-${id}`}>
-        <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-start">
-          <Checkbox
-            className="mt-1"
-            checked={selectedArchivedTpIds.has(id)}
-            onCheckedChange={(v) => {
-              setSelectedArchivedTpIds((prev) => {
-                const n = new Set(prev);
-                if (v === true) n.add(id);
-                else n.delete(id);
-                return n;
-              });
-            }}
-          />
-          <ClientAvatar size={32} shape="circle" name={displayName} seed={id} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
-            <p className="text-[11px] text-muted-foreground">
-              {row.city}
-              {row.address ? ` · ${row.address}` : ""}
-            </p>
-            <p className="text-[11px] text-muted-foreground">клиент: {row.dealerFullName}</p>
-            <p className="text-[11px] text-muted-foreground">
-              архивировал {row.info.archivedByName} · {formatDisplayDateTime(row.info.archivedAt)}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-1">
-            <Button type="button" size="sm" variant="outline" disabled={Boolean(busy)} onClick={() => void onRestoreOneArchivedTp(id)}>
-              Восстановить
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={Boolean(busy)}
-              onClick={() => setConfirmFD({ kind: "move-archived-tps-to-trash", count: 1, ids: [id] })}
-            >
-              В Корзину
-            </Button>
-            {canForceDelete ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                disabled={Boolean(busy)}
-                onClick={() => setConfirmFD({ kind: "force-delete-archived-tps", count: 1, ids: [id] })}
-              >
-                Удалить навсегда
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
   const confirmTitle = (() => {
     if (!confirmFD) return "";
     switch (confirmFD.kind) {
-      case "restore-all-archived-dealers":
-        return `Восстановить ${confirmFD.count} клиентов из архива?`;
-      case "restore-all-archived-tps":
-        return `Восстановить ${confirmFD.count} торговых точек из архива?`;
-      case "move-archived-dealers-to-trash":
-        return `Переместить ${confirmFD.count} клиентов в Корзину?`;
-      case "move-archived-tps-to-trash":
-        return `Переместить ${confirmFD.count} торговых точек в Корзину?`;
-      case "force-delete-archived-dealers":
-        return `Удалить ${confirmFD.count} клиентов навсегда?`;
-      case "force-delete-archived-tps":
-        return `Удалить ${confirmFD.count} торговых точек навсегда?`;
       case "force-delete-dealer":
       case "force-delete-tp":
         return "Удалить навсегда?";
@@ -1419,18 +725,6 @@ export function TrashBinPage(): ReactElement {
       case "request-purge-all-dealers":
       case "request-purge-all-tps":
         return "Запись будет отправлена админу на окончательное удаление. Восстановить сами больше не сможете. Продолжить?";
-      case "restore-all-archived-dealers":
-        return "Все клиенты вернутся в активную базу. Это действие не удаляет данные карточек, контакты, изменения — только снимает пометку «архив». Восстановить?";
-      case "restore-all-archived-tps":
-        return "Все торговые точки вернутся в активную базу. Восстановить?";
-      case "move-archived-dealers-to-trash":
-        return "Клиенты исчезнут из активной базы и из архива, и через 14 дней будут безвозвратно удалены, если их не восстановить. Восстановить можно из раздела Корзина.";
-      case "move-archived-tps-to-trash":
-        return "Торговые точки исчезнут из архива и через 14 дней будут безвозвратно удалены, если их не восстановить. Восстановить можно из раздела Корзина.";
-      case "force-delete-archived-dealers":
-        return "Это действие нельзя отменить. Будут удалены сами клиенты, их карточки, контакты и все ручные изменения. Подтвердите удаление.";
-      case "force-delete-archived-tps":
-        return "Это действие нельзя отменить. Будут удалены торговые точки и связанные ручные изменения. Подтвердите удаление.";
       default:
         return "";
     }
@@ -1439,14 +733,6 @@ export function TrashBinPage(): ReactElement {
   const confirmActionLabel = (() => {
     if (!confirmFD) return "Подтвердить";
     switch (confirmFD.kind) {
-      case "restore-all-archived-dealers":
-      case "restore-all-archived-tps":
-        return "Восстановить всех";
-      case "move-archived-dealers-to-trash":
-      case "move-archived-tps-to-trash":
-        return "Переместить в Корзину";
-      case "force-delete-archived-dealers":
-      case "force-delete-archived-tps":
       case "force-delete-dealer":
       case "force-delete-tp":
         return "Удалить навсегда";
@@ -1465,8 +751,6 @@ export function TrashBinPage(): ReactElement {
   const confirmDestructive =
     confirmFD?.kind === "force-delete-dealer" ||
     confirmFD?.kind === "force-delete-tp" ||
-    confirmFD?.kind === "force-delete-archived-dealers" ||
-    confirmFD?.kind === "force-delete-archived-tps" ||
     confirmFD?.kind === "request-purge-dealer" ||
     confirmFD?.kind === "request-purge-tp" ||
     confirmFD?.kind === "request-purge-all-dealers" ||
@@ -1505,24 +789,6 @@ export function TrashBinPage(): ReactElement {
       case "request-purge-selected-tps":
         void onBulkRequestPurgeTrashTps(confirmFD.ids);
         break;
-      case "restore-all-archived-dealers":
-        void onRestoreAllArchivedDealers(confirmFD.count);
-        break;
-      case "restore-all-archived-tps":
-        void onRestoreAllArchivedTps(confirmFD.count);
-        break;
-      case "move-archived-dealers-to-trash":
-        void onMoveArchivedDealersToTrash(confirmFD.ids);
-        break;
-      case "move-archived-tps-to-trash":
-        void onMoveArchivedTpsToTrash(confirmFD.ids);
-        break;
-      case "force-delete-archived-dealers":
-        void onForceDeleteArchivedDealers(confirmFD.ids);
-        break;
-      case "force-delete-archived-tps":
-        void onForceDeleteArchivedTps(confirmFD.ids);
-        break;
     }
     setConfirmFD(null);
   };
@@ -1560,9 +826,7 @@ export function TrashBinPage(): ReactElement {
         <CardContent className="space-y-1 p-3 text-sm">
           <p className="text-foreground">
             В корзине: <span className="font-semibold tabular-nums">{trashedDealers.length}</span> клиентов,{" "}
-            <span className="font-semibold tabular-nums">{trashedTps.length}</span> ТТ. В архиве:{" "}
-            <span className="font-semibold tabular-nums">{archivedDealerDisplays.length}</span> клиентов,{" "}
-            <span className="font-semibold tabular-nums">{archivedTpDisplays.length}</span> ТТ.
+            <span className="font-semibold tabular-nums">{trashedTps.length}</span> ТТ.
           </p>
           {earliestExpires ? (
             <p className="text-[11px] text-muted-foreground">
@@ -1573,51 +837,6 @@ export function TrashBinPage(): ReactElement {
           )}
         </CardContent>
       </Card>
-
-      <section className="space-y-3" data-testid="section-archive">
-        <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
-          <Archive className="h-5 w-5 text-muted-foreground" aria-hidden />
-          Архив
-        </h2>
-        <Tabs value={archiveTab} onValueChange={(v) => setArchiveTab(v as "clients" | "tps")}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="clients" className="text-xs" data-testid="tab-archive-clients">
-              Клиенты ({archivedDealerDisplays.length})
-            </TabsTrigger>
-            <TabsTrigger value="tps" className="text-xs" data-testid="tab-archive-tps">
-              Торговые точки ({archivedTpDisplays.length})
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="clients" className="mt-3 space-y-3">
-            {renderDealerArchiveToolbar()}
-            {archivedDealerDisplays.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">В архиве нет клиентов</p>
-            ) : filteredArchivedDealers.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Ничего не найдено по запросу</p>
-            ) : (
-              <>
-                {renderArchivePagination(filteredArchivedDealers.length, dealerPageMeta, setArchiveDealerPage)}
-                <div className="space-y-2">{pagedArchivedDealers.map(renderDealerArchiveRow)}</div>
-                {renderArchivePagination(filteredArchivedDealers.length, dealerPageMeta, setArchiveDealerPage)}
-              </>
-            )}
-          </TabsContent>
-          <TabsContent value="tps" className="mt-3 space-y-3">
-            {renderTpArchiveToolbar()}
-            {archivedTpDisplays.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">В архиве нет торговых точек</p>
-            ) : filteredArchivedTps.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Ничего не найдено по запросу</p>
-            ) : (
-              <>
-                {renderArchivePagination(filteredArchivedTps.length, tpPageMeta, setArchiveTpPage)}
-                <div className="space-y-2">{pagedArchivedTps.map(renderTpArchiveRow)}</div>
-                {renderArchivePagination(filteredArchivedTps.length, tpPageMeta, setArchiveTpPage)}
-              </>
-            )}
-          </TabsContent>
-        </Tabs>
-      </section>
 
       <section className="space-y-3" data-testid="section-trash">
         <div className="flex flex-wrap items-center justify-between gap-2">

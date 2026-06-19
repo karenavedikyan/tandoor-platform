@@ -28,7 +28,6 @@ import {
   handleDealerOverridesRequestPurge,
   handleDealerOverridesRestore,
 } from "../../shared/dealer-purge-handlers.js";
-import { handleBulkMoveArchiveToTrash } from "../../shared/dealer-bulk-archive-handlers.js";
 import { handleBulkTrashDealers } from "../../shared/dealer-bulk-trash-handlers.js";
 import {
   handleBulkRequestPurgeDealers,
@@ -127,10 +126,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "create-manual" && req.method === "POST") {
       await runLogged(() => handleDealerOverridesCreateManual(req, res, pool, sessionUser));
-      return;
-    }
-    if (action === "bulk-move-archive-to-trash" && req.method === "POST") {
-      await runLogged(() => handleBulkMoveArchiveToTrash(req, res, pool, sessionUser));
       return;
     }
     if (action === "bulk-trash" && req.method === "POST") {

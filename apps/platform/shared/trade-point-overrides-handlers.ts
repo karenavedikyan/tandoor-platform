@@ -15,7 +15,6 @@ import {
 import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { OverridesValidationError, sanitizeTradePointOverrideUuidFields } from "./overrides-uuid-validation.js";
 import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
-import { removeTradePointFromArchiveEverywhere } from "./archive-trash-invariant.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -314,7 +313,6 @@ async function setTrash(
     },
   );
   if (trash) {
-    await removeTradePointFromArchiveEverywhere(pool, tpId);
   }
   const override = await fetchOverride(pool, tpId);
   sendJson(res, 200, { success: true, data: { override } });

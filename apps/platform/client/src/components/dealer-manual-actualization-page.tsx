@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArchiveInArchiveBadge } from "@/components/archive-record-visual";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -341,13 +340,11 @@ export function DealerManualActualizationPage(props: {
   const canEdit = canEditDealerDuringActualization(profile, row, user?.role) && !readOnly;
   const canEditCardComments = canEditDealerCardComments(profile, row, user?.role);
   const canArchive = canArchiveDealerDuringActualization(profile, row, user?.role);
-  const isDealerArchived = Boolean(actx.state.archivedDealersById[baseRow.id]);
   const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
   /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
-  const canTrash = canArchive && !isDealerArchived && !isDealerTrashed;
-  const canArchiveToWorkingList = canTrash;
+  const canTrash = canArchive && !isDealerTrashed;
 
-  const softArchive = useCallback(async () => {
+  const trashDealer = useCallback(async () => {
     if (!canTrash) return;
     setBusy(true);
     const info = makeTrashedDealerInfo({
@@ -588,7 +585,7 @@ export function DealerManualActualizationPage(props: {
                 Редактировать
               </Button>
             ) : null}
-            {canArchiveToWorkingList ? (
+            {canTrash ? (
               <Button
                 type="button"
                 variant="outline"
@@ -616,10 +613,7 @@ export function DealerManualActualizationPage(props: {
         />
 
         <section
-          className={cn(
-            "overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm",
-            isDealerArchived && "bg-muted/30",
-          )}
+          className="overflow-hidden rounded-xl border border-border border-l-[3px] border-l-primary bg-card shadow-sm"
         >
           <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-stretch sm:gap-4 sm:px-5 sm:py-4">
             <div data-testid="dealer-manual-hero-visual" className="w-full shrink-0 sm:max-w-[15rem]">
@@ -629,9 +623,6 @@ export function DealerManualActualizationPage(props: {
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <h1 className="text-base font-semibold leading-tight tracking-tight text-foreground sm:text-lg">{row.name}</h1>
-                  {isDealerArchived ? (
-                    <ArchiveInArchiveBadge size="header" testId="badge-dealer-manual-header-archived" />
-                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0">
                   <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Код</span>
@@ -902,7 +893,7 @@ export function DealerManualActualizationPage(props: {
               className="gap-1.5"
               data-testid="button-dealer-delete-confirm"
               disabled={busy}
-              onClick={() => void softArchive()}
+              onClick={() => void trashDealer()}
             >
               <Trash2 className="h-4 w-4" aria-hidden />
               {busy ? "Перемещение…" : "Переместить в корзину"}

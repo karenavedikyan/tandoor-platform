@@ -1,11 +1,9 @@
 /**
- * Скоуп корзины и архива — RBAC по ролям (Промт 336, 396, 398).
+ * Скоуп корзины — RBAC по ролям (Промт 336, 396, 398).
  */
 
 import type { UserRole } from "@shared/auth";
 import {
-  archiveMetaFromRecord,
-  buildArchiveScopeFilterRbac,
   buildTrashScopeFilterRbac,
   EMPTY_TEAM_CONTEXT,
   trashMetaFromRecord,
@@ -13,7 +11,6 @@ import {
   type TrashArchiveScopeFilter,
 } from "@shared/trash-archive-rbac";
 import type {
-  ArchivedDealerInfo,
   TrashedDealerInfo,
   TrashedTradePointInfo,
 } from "./client-base-actualization-state.js";
@@ -23,7 +20,6 @@ import type { AssignmentsScope } from "./dealer-base-real-scope.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 
 export type TrashMeta = import("@shared/trash-archive-rbac").TrashMeta;
-export type ArchiveMeta = import("@shared/trash-archive-rbac").ArchiveMeta;
 export type { TeamContext };
 
 export type TrashScopeFilter = TrashArchiveScopeFilter;
@@ -106,58 +102,12 @@ export function buildTrashScopeFilter(opts: {
   });
 }
 
-export function buildArchiveScopeFilter(opts: {
-  role: UserRole | null;
-  profile: ReleaseDemoProfile;
-  realScope: SidebarNavRealScope | undefined;
-  teamContext?: TeamContext;
-}): TrashScopeFilter {
-  const { role, realScope, teamContext } = opts;
-
-  if (isFullViewRole(role)) {
-    return FULL_VIEW_FILTER;
-  }
-  if (!isRealScopeReadyForTrash(realScope)) {
-    return EMPTY_FILTER;
-  }
-
-  const assignments = realScope?.assignmentsScope;
-  return buildArchiveScopeFilterRbac({
-    role,
-    assignmentsScope: assignments
-      ? {
-          ownCodes: assignments.ownCodes,
-          teamCodes: assignments.teamCodes,
-          grantedCodes: assignments.grantedCodes,
-        }
-      : undefined,
-    teamContext: resolveTeamContext(realScope, teamContext),
-  });
-}
-
 export function trashMetaFromDealerInfo(info: TrashedDealerInfo): TrashMeta {
   return trashMetaFromRecord(info);
 }
 
 export function trashMetaFromTradePointInfo(info: TrashedTradePointInfo): TrashMeta {
   return trashMetaFromRecord(info);
-}
-
-export function archiveMetaFromDealerInfo(info: ArchivedDealerInfo): ArchiveMeta {
-  return archiveMetaFromRecord(info);
-}
-
-export function archiveMetaFromTradePointInfo(info: {
-  archivedBy?: string;
-  ownerTeamAtArchive?: string | null;
-  ownerCode?: string | null;
-  dealerId?: string;
-}): ArchiveMeta {
-  return archiveMetaFromRecord({
-    archivedBy: info.archivedBy,
-    ownerTeamAtArchive: info.ownerTeamAtArchive,
-    ownerCode: info.ownerCode ?? info.dealerId?.replace(/^client-/i, "").toUpperCase() ?? null,
-  });
 }
 
 export function countScopedTrashItems(

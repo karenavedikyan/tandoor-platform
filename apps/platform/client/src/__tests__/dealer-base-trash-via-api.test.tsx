@@ -1,5 +1,5 @@
 /**
- * Промт 420: dealer-base пишет trash через API, не в jsonb.
+ * Промт 420/421: dealer-base trash via API; no client archive UI.
  * Запуск: `npm run test:dealer-base-trash-via-api` из apps/platform.
  */
 import { readFileSync } from "node:fs";
@@ -22,9 +22,9 @@ describe("dealer-base trash via API (420)", () => {
     expect(trashHandler).not.toContain("actx.persist");
   });
 
-  it("confirmBulkArchiveDealers calls bulkTrashDealersStrict", () => {
+  it("confirmBulkTrashDealers calls bulkTrashDealersStrict", () => {
     const bulkHandler = dealerBaseSource.slice(
-      dealerBaseSource.indexOf("const confirmBulkArchiveDealers"),
+      dealerBaseSource.indexOf("const confirmBulkTrashDealers"),
       dealerBaseSource.indexOf("const selectedWpRows"),
     );
     expect(bulkHandler).toContain("bulkTrashDealersStrict");
@@ -32,12 +32,24 @@ describe("dealer-base trash via API (420)", () => {
     expect(bulkHandler).not.toContain("actx.persist");
   });
 
-  it("archivableDealerIdsInView uses isDealerTrashedInRuntime not jsonb trashedDealersById", () => {
+  it("trashableDealerIdsInView uses isDealerTrashedInRuntime not jsonb trashedDealersById", () => {
     const block = dealerBaseSource.slice(
-      dealerBaseSource.indexOf("const archivableDealerIdsInView"),
-      dealerBaseSource.indexOf("useEffect(() => {\n    setSelectedBulkArchiveDealerIds"),
+      dealerBaseSource.indexOf("const trashableDealerIdsInView"),
+      dealerBaseSource.indexOf("useEffect(() => {\n    setSelectedBulkTrashDealerIds"),
     );
     expect(block).toContain("isDealerTrashedInRuntime");
     expect(block).not.toContain("trashedDealersById");
+  });
+});
+
+describe("dealer-base has no client archive UI (421)", () => {
+  it("does not render archive toggle or bulk soft-archive controls", () => {
+    expect(dealerBaseSource).not.toContain("showArchivedDealers");
+    expect(dealerBaseSource).not.toContain("toggle-dealers-show-archived");
+    expect(dealerBaseSource).not.toContain("section-dealers-archived-toggle");
+    expect(dealerBaseSource).not.toContain("Режим архива клиентов");
+    expect(dealerBaseSource).not.toContain("button-dealer-bulk-soft-archive");
+    expect(dealerBaseSource).not.toContain("archivedDealersById");
+    expect(dealerBaseSource).not.toContain("archive-record-visual");
   });
 });

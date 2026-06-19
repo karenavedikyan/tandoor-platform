@@ -63,32 +63,7 @@ export type ManualTradePoint = {
   source: ActualizationSource;
 };
 
-export type ArchivedTradePointInfo = {
-  tradePointId: string;
-  dealerId: string;
-  archivedAt: string;
-  archivedBy: string;
-  archivedByName: string;
-  reason?: string;
-  source: ActualizationSource;
-  ownerTeamAtArchive?: string | null;
-  ownerCode?: string | null;
-};
-
-/** Мягкое архивирование вручную созданного клиента (остаётся в manuallyCreatedDealersById). */
-export type ArchivedDealerInfo = {
-  dealerId: string;
-  archivedAt: string;
-  archivedBy: string;
-  archivedByName: string;
-  source: ActualizationSource;
-  /** Промт 398: команда на момент архивации (стабильность при смене команды). */
-  ownerTeamAtArchive?: string | null;
-  /** Промт 398: client code / external code на момент архивации. */
-  ownerCode?: string | null;
-};
-
-/** Корзина клиента — хранится 14 дней, затем чистится cron'ом. Отдельная сущность от архива. */
+/** Корзина клиента — хранится 14 дней, затем чистится cron'ом. */
 export type TrashedDealerSource =
   | "client_bulk_delete"
   | "client_card_delete"
@@ -331,10 +306,8 @@ export type ActualizationState = {
   clientCategoryOverridesById: Record<string, ClientCategoryId>;
   dealerOverridesById: Record<string, DealerActualizationOverride>;
   manuallyCreatedDealersById: Record<string, ManualDealer>;
-  archivedDealersById: Record<string, ArchivedDealerInfo>;
   tradePointOverridesById: Record<string, TradePointActualizationOverride>;
   manuallyCreatedTradePointsById: Record<string, ManualTradePoint>;
-  archivedTradePointsById: Record<string, ArchivedTradePointInfo>;
   /** Мягкое скрытие юрлица (release и manual); ключ — legalEntityId. */
   archivedLegalEntitiesById: Record<string, ArchivedLegalEntityInfo>;
   legalEntityOverridesByDealerId: Record<string, LegalEntityActualizationState>;
@@ -374,10 +347,8 @@ export function createEmptyActualizationState(): ActualizationState {
     clientCategoryOverridesById: {},
     dealerOverridesById: {},
     manuallyCreatedDealersById: {},
-    archivedDealersById: {},
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
-    archivedTradePointsById: {},
     archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
@@ -406,14 +377,11 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
     },
     dealerOverridesById: { ...base.dealerOverridesById, ...(patch.dealerOverridesById ?? {}) },
     manuallyCreatedDealersById: { ...base.manuallyCreatedDealersById, ...(patch.manuallyCreatedDealersById ?? {}) },
-    /** Полная замена: иначе удаление ключа (восстановление из архива) не сработает при spread `{ ...base, ...patch }`. */
-    archivedDealersById: patch.archivedDealersById ?? base.archivedDealersById,
     tradePointOverridesById: { ...base.tradePointOverridesById, ...(patch.tradePointOverridesById ?? {}) },
     manuallyCreatedTradePointsById: {
       ...base.manuallyCreatedTradePointsById,
       ...(patch.manuallyCreatedTradePointsById ?? {}),
     },
-    archivedTradePointsById: patch.archivedTradePointsById ?? base.archivedTradePointsById,
     archivedLegalEntitiesById: patch.archivedLegalEntitiesById ?? base.archivedLegalEntitiesById,
     legalEntityOverridesByDealerId: {
       ...base.legalEntityOverridesByDealerId,
@@ -443,10 +411,7 @@ export function mergeActualizationState(base: ActualizationState, patch: Partial
       ...base.tradePointPhotosByTradePointId,
       ...(patch.tradePointPhotosByTradePointId ?? {}),
     },
-    /**
-     * Полная замена — иначе удаление ключа (восстановление из корзины) не сработает.
-     * Симметрично archivedDealersById.
-     */
+    /** Полная замена — иначе удаление ключа (восстановление из корзины) не сработает. */
     trashedDealersById: patch.trashedDealersById ?? base.trashedDealersById,
     trashedTradePointsById: patch.trashedTradePointsById ?? base.trashedTradePointsById,
   };

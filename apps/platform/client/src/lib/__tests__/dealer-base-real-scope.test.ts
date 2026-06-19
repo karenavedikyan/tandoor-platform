@@ -72,13 +72,12 @@ for (const { ropId, teamUuid, catalogTeam, min } of ropCases) {
   assert.ok(scoped.length >= 2700, "директор: >= 2700 клиентов");
 }
 
-// Метрики архива на пустом state — 0 архивных
+// Метрики на пустом state — только активные клиенты
 {
   const snap = ropSnap(ROP_KUPIANSKY, TEAM_KUPIANSKY_UUID);
   const metrics = computeMainDashboardScopeMetrics(emptyAct, profile, (rows) =>
     roleScopedDealerRowsForReal(rows, snap, "team_lead"),
   );
-  assert.equal(metrics.archivedClients, 0);
   assert.ok(metrics.activeClients >= 640);
 }
 

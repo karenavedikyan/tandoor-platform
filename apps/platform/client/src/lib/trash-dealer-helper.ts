@@ -3,13 +3,8 @@
  *
  * Все пользовательские пути «удалить клиента / ТТ» должны проходить через эти хелперы —
  * это гарантирует одинаковый snapshot и срок жизни 14 дней. Корзина — отдельная сущность
- * от архива; см. `client-base-actualization-state.ts` (`trashedDealersById` /
+ * см. `client-base-actualization-state.ts` (`trashedDealersById` /
  * `trashedTradePointsById`).
- *
- * Дополнительно (Промт 46): UI больше НЕ пишет напрямую в `archivedDealersById` /
- * `archivedTradePointsById` через кнопку «Удалить». Архивные сущности остаются как
- * legacy: restore-кнопки в карточке и фильтр на /dealer-base (тогл «Архив клиентов»)
- * работают по тем же ключам, что и раньше.
  */
 
 import {

@@ -3,11 +3,10 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
-import { removeDealerFromArchiveEverywhere } from "./archive-trash-invariant.js";
+import { parseEntityIdArray } from "./parse-entity-id-array.js";
 import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
 import { logDealerAuditEvent } from "./override-audit-events.js";
 import { auditTrashArchiveAction } from "./trash-archive-mutation-guard.js";
-import { parseEntityIdArray } from "./bulk-archive-to-trash-core.js";
 import { cascadeDealersTradePointsToTrash } from "./record-status-cascade.js";
 
 type SessionUser = { id: string; role: string; status: string };
@@ -87,7 +86,6 @@ export async function handleBulkTrashDealers(
     await cascadeDealersTradePointsToTrash(pool, allowedIds, me.id);
 
     for (const dealerId of allowedIds) {
-      await removeDealerFromArchiveEverywhere(pool, dealerId);
       await logDealerAuditEvent(pool, {
         dealerId,
         eventKind: "dealer_trash_bulk",

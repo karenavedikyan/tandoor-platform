@@ -12,22 +12,19 @@
  *   - на записи (POST /api/actualization/state) — обнуляем поля до INSERT;
  *   - на чтении (GET) — обнуляем поля у строк не-manager перед merge.
  *
- * См. также `archive-trash-invariant.ts` — INVARIANT (промт 405): dealer не может одновременно
- * быть в `dealer_overrides.trashed_at` и `state.archivedDealersById`.
+ * См. также dealer_overrides.status — единственный канал мягкого удаления (корзина, промт 421).
  *
  * Пути выше (UI карточки, актуализация и т.п.) ничего о ней знать не должны.
  */
 
 /**
- * 14 ключей state, которые должны существовать только у роли `manager`.
+ * 12 ключей state, которые должны существовать только у роли `manager`.
  * Ровно эти поля обнуляются у не-manager scope-keys.
  *
  * Поля UI-настроек (`dealerCardViewSettingsByUserId`, `unloadingOrderByDealerId`,
  * `routeOrderByRouteId`) — допустимы у любой роли и в этом списке НЕ участвуют.
  */
 export const MANAGER_ONLY_STATE_FIELDS = [
-  "archivedDealersById",
-  "archivedTradePointsById",
   "archivedLegalEntitiesById",
   "trashedDealersById",
   "trashedTradePointsById",
@@ -49,7 +46,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Возвращает копию `state`, в которой все 14 manager-only полей заменены на `{}`.
+ * Возвращает копию `state`, в которой все manager-only поля заменены на `{}`.
  * Не мутирует входной объект. Если переданное значение не объект — возвращает как есть.
  */
 export function sanitizeStateForNonManagerRole<T>(state: T): T {

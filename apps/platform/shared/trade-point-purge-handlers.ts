@@ -4,7 +4,6 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
-import { removeTradePointFromArchiveEverywhere } from "./archive-trash-invariant.js";
 import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
 import { mapTradePointOverrideRow, type TradePointOverrideRow } from "./trade-point-overrides-types.js";
 import {
@@ -140,7 +139,6 @@ export async function handleTradePointOverridesRestore(
           [tpId, me.id],
         );
         await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_active", userId: me.id });
-        await removeTradePointFromArchiveEverywhere(pool, tpId);
       } else {
         await pool.query(
           `UPDATE trade_point_overrides
@@ -169,7 +167,6 @@ export async function handleTradePointOverridesRestore(
         [tpId, me.id],
       );
       await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_active", userId: me.id });
-      await removeTradePointFromArchiveEverywhere(pool, tpId);
     });
   } else {
     sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запись не в корзине." });

@@ -4,7 +4,6 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
-import { removeDealerFromArchiveEverywhere } from "./archive-trash-invariant.js";
 import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
 import { mapDealerOverrideRow, type DealerOverrideRow } from "./dealer-overrides-types.js";
 import {
@@ -191,7 +190,6 @@ export async function handleDealerOverridesRestore(
             eventKind: "dealer_restored_to_active",
             userId: me.id,
           });
-          await removeDealerFromArchiveEverywhere(pool, dealerId);
         } else {
           await pool.query(
             `UPDATE dealer_overrides
@@ -242,7 +240,6 @@ export async function handleDealerOverridesRestore(
           eventKind: "dealer_restored_to_active",
           userId: me.id,
         });
-        await removeDealerFromArchiveEverywhere(pool, dealerId);
       },
     );
   } else {

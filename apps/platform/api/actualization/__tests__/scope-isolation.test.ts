@@ -261,7 +261,7 @@ async function testResolveVisibleScopeKeys(): Promise<void> {
 // =====================================================
 async function testBatchFetchParts(): Promise<void> {
   const scopeRows = [
-    { scope_key: "user:a", state: { version: 1, archivedDealersById: { x: { dealerId: "x" } } }, updated_at: "2026-01-01T00:00:00.000Z", role: "manager" },
+    { scope_key: "user:a", state: { version: 1, trashedDealersById: { x: { dealerId: "x" } } }, updated_at: "2026-01-01T00:00:00.000Z", role: "manager" },
     { scope_key: "user:c", state: { version: 1 }, updated_at: null, role: "manager" },
   ];
   const { sql, calls } = makeMockSql({ scopeKeys: scopeRows });
@@ -270,8 +270,8 @@ async function testBatchFetchParts(): Promise<void> {
   assert.equal(parts[0]?.userId, "a");
   assert.equal(parts[1]?.userId, "b");
   assert.equal(parts[2]?.userId, "c");
-  assert.ok((parts[0]?.state.archivedDealersById as Record<string, unknown>)?.x, "batch: state для a");
-  assert.deepEqual(parts[1]?.state.archivedDealersById, {}, "batch: b → emptyState");
+  assert.ok((parts[0]?.state.trashedDealersById as Record<string, unknown>)?.x, "batch: state для a");
+  assert.deepEqual(parts[1]?.state.trashedDealersById, {}, "batch: b → emptyState");
   assert.equal(calls.filter((c) => c.kind === "scope_keys").length, 1, "batch: один SQL");
 }
 

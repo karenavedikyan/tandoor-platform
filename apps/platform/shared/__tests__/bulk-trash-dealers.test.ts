@@ -53,9 +53,6 @@ void (async () => {
         return { rows: [{ c: "1" }] };
       }
       if (s.includes("INSERT INTO trade_point_overrides")) return { rows: [] };
-      if (s.includes("removeDealerFromArchiveEverywhere") || s.includes("archivedDealersById")) {
-        return { rows: [] };
-      }
       return { rows: [] };
     },
   };

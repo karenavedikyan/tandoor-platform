@@ -3,16 +3,12 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "./admin/admin-auth.js";
-import { parseEntityIdArray } from "./bulk-archive-to-trash-core.js";
+import { parseEntityIdArray } from "./parse-entity-id-array.js";
 import {
   removeDealerFromActualizationTrashBlob,
   removeTradePointFromActualizationTrashBlob,
 } from "./actualization-blob-trash.js";
 import { logDealerAuditEvent, logTradePointAuditEvent } from "./override-audit-events.js";
-import {
-  removeDealersFromArchiveEverywhere,
-  removeTradePointsFromArchiveEverywhere,
-} from "./archive-trash-invariant.js";
 import {
   BULK_TRASH_MAX_IDS,
   chunkIds,
@@ -93,7 +89,6 @@ export async function handleBulkRestoreDealers(
     }
 
     await removeDealersFromInitiatorTrashBlob(pool, me.id, allowed);
-    await removeDealersFromArchiveEverywhere(pool, allowed);
 
     for (const dealerId of allowed) {
       await logDealerAuditEvent(pool, {
@@ -212,7 +207,6 @@ export async function handleBulkRestoreTradePoints(
     }
 
     await removeTradePointsFromInitiatorTrashBlob(pool, me.id, allowed);
-    await removeTradePointsFromArchiveEverywhere(pool, allowed);
 
     for (const tpId of allowed) {
       await logTradePointAuditEvent(pool, {

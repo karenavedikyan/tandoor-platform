@@ -107,14 +107,13 @@ function sidebarCount(input: {
   });
 }
 
-// 1. Менеджер: релиз-ТТ + manual − archived − trashed.
+// 1. Менеджер: релиз-ТТ + manual − trashed ТТ − trashed клиент.
 {
   const scopedRows = roleScopedDealerRowsForReal(allReleaseRows, directorSnap(), "sales_director").slice(0, 3);
   assert.ok(scopedRows.length >= 1, "fixture: есть клиенты");
   const dealer = scopedRows[0]!;
-  const tpId = dealer.tradePoints[0]?.id ?? `${dealer.id}-tp-1`;
   const manualTpId = "manual-tp-test-001";
-  const archivedTpId = dealer.tradePoints[1]?.id ?? `${dealer.id}-tp-2`;
+  const trashedTpId = dealer.tradePoints[1]?.id ?? `${dealer.id}-tp-2`;
 
   const act = createEmptyActualizationState();
   act.manuallyCreatedTradePointsById[manualTpId] = {
@@ -126,14 +125,22 @@ function sidebarCount(input: {
     createdByName: "Тест",
     source: "manual_actualization",
   };
-  if (archivedTpId) {
-    act.archivedTradePointsById[archivedTpId] = {
-      tradePointId: archivedTpId,
+  if (trashedTpId) {
+    act.trashedTradePointsById[trashedTpId] = {
+      tradePointId: trashedTpId,
       dealerId: dealer.id,
-      archivedAt: new Date().toISOString(),
-      archivedBy: "u1",
-      archivedByName: "Тест",
+      trashedAt: new Date().toISOString(),
+      trashedBy: "u1",
+      trashedByName: "Тест",
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
       source: "test",
+      snapshot: {
+        name: null,
+        address: null,
+        city: null,
+        tradePointCode: null,
+        dealerFullName: null,
+      },
     };
   }
   const trashedDealer = scopedRows[1];
@@ -159,7 +166,7 @@ function sidebarCount(input: {
     actState: act,
     realScope: mgrScope,
   })!;
-  assert.ok(!rows.some((r) => r.tradePointId === archivedTpId), "archived ТТ исключена");
+  assert.ok(!rows.some((r) => r.tradePointId === trashedTpId), "trashed ТТ исключена");
   if (trashedDealer) {
     assert.ok(!rows.some((r) => r.dealerId === trashedDealer.id), "trashed клиент исключён");
   }

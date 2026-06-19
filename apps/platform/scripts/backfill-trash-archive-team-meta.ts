@@ -66,26 +66,8 @@ async function main(): Promise<void> {
       }
     };
 
-    const patchArchive = (map: Record<string, TrashRec> | undefined) => {
-      if (!map) return;
-      for (const [id, rec] of Object.entries(map)) {
-        if (!rec || typeof rec !== "object") continue;
-        const by = typeof rec.archivedBy === "string" ? rec.archivedBy : null;
-        if (!rec.ownerTeamAtArchive && by) {
-          rec.ownerTeamAtArchive = teamByUser.get(by) ?? null;
-          changed = true;
-        }
-        if (!rec.ownerCode) {
-          rec.ownerCode = id.replace(/^client-/i, "").toUpperCase() || null;
-          changed = true;
-        }
-      }
-    };
-
     patchTrash(state.trashedDealersById as Record<string, TrashRec>);
     patchTrash(state.trashedTradePointsById as Record<string, TrashRec>);
-    patchArchive(state.archivedDealersById as Record<string, TrashRec>);
-    patchArchive(state.archivedTradePointsById as Record<string, TrashRec>);
 
     if (changed) {
       await sql`

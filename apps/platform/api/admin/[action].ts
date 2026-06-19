@@ -478,7 +478,6 @@ function actualizationEmptyState(): Record<string, unknown> {
     manuallyCreatedDealersById: {},
     tradePointOverridesById: {},
     manuallyCreatedTradePointsById: {},
-    archivedTradePointsById: {},
     archivedLegalEntitiesById: {},
     legalEntityOverridesByDealerId: {},
     dealerCardViewSettingsByUserId: {},
@@ -1990,7 +1989,6 @@ function summarizeActualizationDebugRow(row: ActualizationDebugStateRow): Record
   const dealerOverridesById = actualizationMap(state.dealerOverridesById);
   const manuallyCreatedDealersById = actualizationMap(state.manuallyCreatedDealersById);
   const dealerActualizationContactsById = actualizationMap(state.dealerActualizationContactsById);
-  const archivedDealersById = actualizationMap(state.archivedDealersById);
   const trashedDealersById = actualizationMap(state.trashedDealersById);
   const contactSample = Object.entries(dealerActualizationContactsById)
     .slice(0, 3)
@@ -2016,8 +2014,6 @@ function summarizeActualizationDebugRow(row: ActualizationDebugStateRow): Record
     dealerActualizationContactsById_count: Object.keys(dealerActualizationContactsById).length,
     dealerActualizationContactsById_sample: contactSample,
     dealerOverridesById_keys_sample: Object.keys(dealerOverridesById).slice(0, 10),
-    archivedDealersById_count: Object.keys(archivedDealersById).length,
-    archivedDealersById_sample: Object.keys(archivedDealersById).slice(0, 10),
     trashedDealersById_count: Object.keys(trashedDealersById).length,
     trashedDealersById_sample: Object.keys(trashedDealersById).slice(0, 10),
   };
@@ -2029,7 +2025,7 @@ function scopeUserId(scopeKey: string): string | null {
 
 /**
  * Промт 45 F1. Диагностика actualization state по `dealerId`: возвращает все scope-ы,
- * где этот dealerId встречается в `archivedDealersById | manuallyCreatedDealersById |
+ * где этот dealerId встречается в `manuallyCreatedDealersById |
  * dealerOverridesById | trashedDealersById`. Доступ — только admin / director.
  */
 async function handleActualizationStateTrace(
@@ -2061,12 +2057,10 @@ async function handleActualizationStateTrace(
   const occurrences: Array<Record<string, unknown>> = [];
   for (const row of rows.rows) {
     const st = coerceActualizationState(row.state);
-    const archived = stateRecord(st.archivedDealersById)[dealerId];
     const manual = stateRecord(st.manuallyCreatedDealersById)[dealerId];
     const override = stateRecord(st.dealerOverridesById)[dealerId];
     const trashed = stateRecord(st.trashedDealersById)[dealerId];
-    if (!archived && !manual && !override && !trashed) continue;
-    const archivedRec = stateRecord(archived);
+    if (!manual && !override && !trashed) continue;
     const trashedRec = stateRecord(trashed);
     occurrences.push({
       scopeKey: row.scope_key,
@@ -2078,9 +2072,6 @@ async function handleActualizationStateTrace(
           : typeof row.updated_at === "string"
             ? row.updated_at
             : null,
-      isArchived: Boolean(archived),
-      archivedAt: stateString(archivedRec.archivedAt) || null,
-      archivedBy: stateString(archivedRec.archivedBy) || null,
       isTrashed: Boolean(trashed),
       trashedAt: stateString(trashedRec.trashedAt) || null,
       trashedBy: stateString(trashedRec.trashedBy) || null,

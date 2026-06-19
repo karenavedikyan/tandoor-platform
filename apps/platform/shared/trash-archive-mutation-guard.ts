@@ -116,15 +116,6 @@ export function enrichTrashArchiveMetaOnWrite(
     if (!rec.ownerTeamAtTrash && actor.teamId) rec.ownerTeamAtTrash = actor.teamId;
     if (!prevTp[id] && !rec.trashedBy) rec.trashedBy = actor.id;
   }
-
-  const prevArch = (prevState?.archivedDealersById ?? {}) as Record<string, ArchiveRecord>;
-  const nextArch = (nextState.archivedDealersById ?? {}) as Record<string, ArchiveRecord>;
-  for (const [id, rec] of Object.entries(nextArch)) {
-    if (!rec || typeof rec !== "object") continue;
-    if (!rec.ownerTeamAtArchive && actor.teamId) rec.ownerTeamAtArchive = actor.teamId;
-    if (!rec.ownerCode) rec.ownerCode = id.replace(/^client-/i, "").toUpperCase() || null;
-    if (!prevArch[id] && !rec.archivedBy) rec.archivedBy = actor.id;
-  }
 }
 
 export function archiveMetaFromStateRecord(rec: ArchiveRecord): ArchiveMeta {

@@ -149,7 +149,7 @@ export default function ClientMapPage() {
 
   const baseRowsForMap = useMemo(
     () =>
-      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : catalogRows,
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile) : catalogRows,
     [actx.enabled, teamActualizationPlane, profile, catalogRows],
   );
 
@@ -181,7 +181,7 @@ export default function ClientMapPage() {
     let cityV: string[] = [];
     let searchV = "";
     const scoped = getRoleScopedDealerRowsAuto(
-      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }) : catalogRows,
+      actx.enabled ? buildDealerBaseRowsWithActualization(teamActualizationPlane, profile) : catalogRows,
       profile,
       realScope,
     );

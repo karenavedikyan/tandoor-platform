@@ -4,7 +4,7 @@
 
 import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
 import type { ActualizationState } from "./client-base-actualization-state.js";
-import { cityKeyForDealerRow } from "./archive-record-visual.js";
+import { cityKeyForDealerRow } from "./city-concentration.js";
 import type { DealerRow } from "./dealer-base-mock-data.js";
 
 export type MainDashboardCityTile = {

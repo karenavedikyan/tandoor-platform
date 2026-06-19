@@ -9,9 +9,7 @@ import {
   mergeActualizationState,
   type ActualizationState,
   type ArchivedDealerContactInfo,
-  type ArchivedDealerInfo,
   type ArchivedLegalEntityInfo,
-  type ArchivedTradePointInfo,
   type DealerActualizationAudit,
   type DealerActualizationContact,
   type DealerActualizationOverride,
@@ -102,14 +100,6 @@ function pickNewerDealerOv(a: DealerActualizationOverride, b: DealerActualizatio
 
 function pickNewerTpOv(a: TradePointActualizationOverride, b: TradePointActualizationOverride): TradePointActualizationOverride {
   return isoMs(a.updatedAt) >= isoMs(b.updatedAt) ? a : b;
-}
-
-function pickNewerArchiveDealer(a: ArchivedDealerInfo, b: ArchivedDealerInfo): ArchivedDealerInfo {
-  return isoMs(a.archivedAt) >= isoMs(b.archivedAt) ? a : b;
-}
-
-function pickNewerArchiveTp(a: ArchivedTradePointInfo, b: ArchivedTradePointInfo): ArchivedTradePointInfo {
-  return isoMs(a.archivedAt) >= isoMs(b.archivedAt) ? a : b;
 }
 
 function pickNewerTrashedDealer(a: TrashedDealerInfo, b: TrashedDealerInfo): TrashedDealerInfo {
@@ -241,10 +231,8 @@ export function mergeActualizationStatesForActivityDashboard(sources: { userId: 
       ...out,
       dealerOverridesById: mergeRecMap(out.dealerOverridesById, state.dealerOverridesById, pickNewerDealerOv),
       manuallyCreatedDealersById: mergeRecMap(out.manuallyCreatedDealersById, state.manuallyCreatedDealersById, pickNewerManualDealer),
-      archivedDealersById: mergeRecMap(out.archivedDealersById, state.archivedDealersById, pickNewerArchiveDealer),
       tradePointOverridesById: mergeRecMap(out.tradePointOverridesById, state.tradePointOverridesById, pickNewerTpOv),
       manuallyCreatedTradePointsById: mergeRecMap(out.manuallyCreatedTradePointsById, state.manuallyCreatedTradePointsById, pickNewerManualTp),
-      archivedTradePointsById: mergeRecMap(out.archivedTradePointsById, state.archivedTradePointsById, pickNewerArchiveTp),
       archivedLegalEntitiesById: mergeRecMap(out.archivedLegalEntitiesById, state.archivedLegalEntitiesById, pickNewerArchiveLegal),
       archivedDealerContactsById: mergeRecMap(out.archivedDealerContactsById, state.archivedDealerContactsById, pickNewerArchiveContact),
       legalEntityOverridesByDealerId: mergeLegalEntityMap(out.legalEntityOverridesByDealerId, state.legalEntityOverridesByDealerId),

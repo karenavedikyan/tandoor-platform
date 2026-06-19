@@ -121,12 +121,9 @@ function MainManagerDetailContent() {
   }, [useReal, snap, manager, managerId, access]);
 
   const { selectedCity } = useMainDashboardCityFilter();
-  const [showArchive, setShowArchive] = useState(false);
   const [activeTab, setActiveTab] = useState<"clients" | "trade_points">("clients");
   const [selectedDealer, setSelectedDealer] = useState<DealerRow | null>(null);
-  const [selectedTp, setSelectedTp] = useState<{ dealer: DealerRow; point: DealerTradePoint; isArchived: boolean } | null>(
-    null,
-  );
+  const [selectedTp, setSelectedTp] = useState<{ dealer: DealerRow; point: DealerTradePoint } | null>(null);
 
   const managerScope = useMemo(
     () => (rows: DealerRow[]) => (snap && managerId ? realRowsForManagerByUUID(rows, snap, managerId) : []),
@@ -138,21 +135,11 @@ function MainManagerDetailContent() {
     return computeMainDashboardScopeMetrics(managementPlane.mergedState, profile, managerScope);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
 
-  const activeClientRows = useMemo(() => {
-    if (!actx.enabled || !allowed) return [];
-    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-      includeArchivedDealers: false,
-    });
-    return managerScope(built);
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
-
   const clientRows = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile, {
-      includeArchivedDealers: showArchive,
-    });
+    const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile);
     return managerScope(built);
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope, showArchive]);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
 
   const displayedClientRows = useMemo(() => {
     if (!selectedCity) return clientRows;
@@ -162,12 +149,9 @@ function MainManagerDetailContent() {
   const tradePointRows = useMemo((): TradePointListRow[] => {
     if (!actx.enabled || !allowed) return [];
     const dealerIds = new Set(clientRows.map((r) => r.id));
-    const list = buildTradePointListForActualization(managementPlane.mergedState, profile, {
-      includeArchivedTradePoints: showArchive,
-      archivedTradePointsOnly: showArchive,
-    });
+    const list = buildTradePointListForActualization(managementPlane.mergedState, profile);
     return list.filter((r) => dealerIds.has(r.dealerId));
-  }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows, showArchive]);
+  }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows]);
 
   const displayedTradePointRows = useMemo(() => {
     if (!selectedCity) return tradePointRows;
@@ -175,15 +159,13 @@ function MainManagerDetailContent() {
     return tradePointRows.filter((r) => dealerIds.has(r.dealerId));
   }, [tradePointRows, selectedCity, displayedClientRows]);
 
-  const showCityCoverage = actx.enabled && allowed && activeClientRows.length > 0;
+  const showCityCoverage = actx.enabled && allowed && clientRows.length > 0;
 
   const loading =
     authLoading ||
     (isRealUser && orgSnapQ.isLoading) ||
     (actx.enabled && actx.loading) ||
     (actx.enabled && managementPlane.teamFetchLoading);
-
-  const hasArchive = false;
 
   if (!loading && !allowed) {
     return <Redirect to="/main" />;
@@ -251,27 +233,13 @@ function MainManagerDetailContent() {
 
       {showCityCoverage ? (
         <MainDashboardCityCoverage
-          rows={activeClientRows}
+          rows={clientRows}
           act={managementPlane.mergedState}
           testId="section-main-manager-city-coverage"
         />
       ) : null}
 
       <ManagerCityFilterChip />
-
-      {hasArchive ? (
-        <div className="flex items-center gap-2" data-testid="section-main-manager-archive-toggle">
-          <Switch
-            id="toggle-manager-archive"
-            checked={showArchive}
-            onCheckedChange={(v) => setShowArchive(v === true)}
-            data-testid="toggle-main-manager-show-archive"
-          />
-          <Label htmlFor="toggle-manager-archive" className="text-sm">
-            Архив
-          </Label>
-        </div>
-      ) : null}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "clients" | "trade_points")}>
         <TabsList>
@@ -299,11 +267,7 @@ function MainManagerDetailContent() {
                 {displayedClientRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {selectedCity
-                        ? "Нет клиентов в выбранном городе"
-                        : showArchive
-                          ? "Нет архивных клиентов"
-                          : "Нет клиентов"}
+                      {selectedCity ? "Нет клиентов в выбранном городе" : "Нет клиентов"}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -344,11 +308,7 @@ function MainManagerDetailContent() {
                 {displayedTradePointRows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
-                      {selectedCity
-                        ? "Нет торговых точек в выбранном городе"
-                        : showArchive
-                          ? "Нет архивных торговых точек"
-                          : "Нет торговых точек"}
+                      {selectedCity ? "Нет торговых точек в выбранном городе" : "Нет торговых точек"}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -361,7 +321,6 @@ function MainManagerDetailContent() {
                         setSelectedTp({
                           dealer: row.dealer,
                           point: row.point,
-                          isArchived: row.isArchived,
                         })
                       }
                     >
@@ -370,7 +329,7 @@ function MainManagerDetailContent() {
                         <div className="text-xs text-muted-foreground">{row.address}</div>
                       </TableCell>
                       <TableCell>{row.dealerName}</TableCell>
-                      <TableCell>{row.isArchived ? "В архиве" : row.showcaseBucketLabel}</TableCell>
+                      <TableCell>{row.showcaseBucketLabel}</TableCell>
                       <TableCell>{row.showcaseUpdatedAt || row.dealer.lastActivity || "—"}</TableCell>
                     </TableRow>
                   ))
@@ -403,7 +362,6 @@ function MainManagerDetailContent() {
           point={selectedTp.point}
           profile={profile}
           readOnly
-          isArchived={selectedTp.isArchived}
         />
       ) : null}
     </div>
