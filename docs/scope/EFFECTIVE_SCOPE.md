@@ -10,7 +10,7 @@ Read-only SQL-view `effective_scope` — единая проекция «как�
 | `dealer_id` | text | UUID дилера в `dealers` |
 | `dealer_external_key` | text | `dealers.external_key` (канонический ключ scope) |
 | `responsible_role` | text | `manager` \| `regional_manager` \| `rop` |
-| `source` | text | Сейчас всегда `responsibility_assignments` |
+| `source` | text | `responsibility_assignments` \| `rop_client_grants` (для grant-rop) |
 
 ## Канонический ключ дилера в scope-записях = `external_key`
 
@@ -28,14 +28,33 @@ Read-only SQL-view `effective_scope` — единая проекция «как�
 |------|-----------------|------|
 | manager | `client_assignments` | `responsible_user_id` |
 | team дилера | `client_assignments` | `team_id` |
-| rop | `teams` (через `client_assignments.team_id`) | `rop_user_id` |
+| rop (team) | `teams` (через `client_assignments.team_id`) | `rop_user_id` |
+| rop (granted) | `rop_client_grants` | `client_code` → `dealer.release_code` |
 | regional_manager | `dealer_overrides` | `regional_manager_id` |
 
-Цепочка для РОП (единственный путь после hotfix2):
+Цепочка для РОП через команду (hotfix2):
 
 ```
 дилер → client_assignments.team_id → teams.rop_user_id → user_id
 ```
+
+Дополнительный путь для grant-РОП (hotfix3):
+
+```
+дилер → rop_client_grants.client_code → dealers.release_code → rop_user_id
+```
+
+## Множественные rop на дилере
+
+После hotfix3 unique constraint расширен до `(scope_kind, scope_key, responsible_role, user_id)`.
+
+У одного дилера может быть **несколько** rop-записей с разными `user_id`:
+- team-РОП команды дилера;
+- granted-РОП из `rop_client_grants` (персональный грант вне команды).
+
+При итерации scope **для пользователя** он видит дилера, если есть запись с его `user_id` (любой путь).
+
+При обратной задаче «кто РОП дилера D?» — ответов может быть несколько. UI/API должны это учитывать (промт 435c).
 
 ## Deprecated поля
 
@@ -43,13 +62,14 @@ Read-only SQL-view `effective_scope` — единая проекция «как�
 |------|--------|
 | `dealer_overrides.rop_id` | **НЕ используется** для scope. Исторически рассинхронизирован с `client_assignments.team_id`. Колонка остаётся в схеме до отдельного промта на удаление; приложение не должно её читать для scope. |
 
-## Откуда наполняется (миграции 435а + hotfix + hotfix2)
+## Откуда наполняется (миграции 435а + hotfix + hotfix2 + hotfix3)
 
 View читает из `responsibility_assignments` (`scope_kind = 'dealer'`). Материализация:
 
 1. **manager** — уже были в `responsibility_assignments`; hotfix нормализовал `scope_key` с `release_code` → `external_key`
 2. **RM** — из `dealer_overrides.regional_manager_id` (JOIN `dealers.external_key = dealer_overrides.dealer_id`)
-3. **РОП** — **только** через `client_assignments.team_id` → `teams.rop_user_id` (hotfix2; без `dealer_overrides.rop_id`)
+3. **РОП (team)** — через `client_assignments.team_id` → `teams.rop_user_id` (hotfix2)
+4. **РОП (granted)** — из `rop_client_grants` (hotfix3; `source=rop_client_grants` в view)
 
 ## История hotfix 2026-06-24 (промт 435а-hotfix)
 
@@ -77,6 +97,25 @@ Hotfix1 дополнительно сделал UPSERT rop из `dealer_override
 | Купянский | 649 |
 
 Аудит-копия: `responsibility_assignments_pre_hotfix2_435a`.
+
+## История hotfix3 2026-06-24 (промт 435а-hotfix3)
+
+Shadow-чтение 435b показало diff: Скалабан legacy 1322 vs shadow 1241 (−81). Причина — `rop_client_grants` (82 строки у Скалабана): персональные гранты дилеров вне команды. Legacy `resolveScopeCodesMeta` включает `grantedCodes`; view — нет.
+
+**Решение:**
+- Расширить unique: `(scope_kind, scope_key, responsible_role, user_id)` — допускает team-РОП и granted-РОП на одного дилера
+- Backfill grant-записей в `responsibility_assignments`
+- View `effective_scope`: `source = 'rop_client_grants'` для grant-rop, иначе `'responsibility_assignments'`
+
+Ожидаемые counts после hotfix3:
+
+| Метрика | Значение |
+|---------|----------|
+| rop total | ~2942 (=2860 team + 82 grants) |
+| Скалабан rop | ~1323 (=1241 team + 82 grants) |
+| shadow vs legacy (Скалабан) | equal или diff 0–2 |
+
+Аудит-копия: `responsibility_assignments_pre_hotfix3_435a`.
 
 ## Что 435а НЕ делает
 
@@ -148,7 +187,7 @@ curl -s -b /tmp/lk-smoke.cookies \
 | Промт | Содержание |
 |-------|------------|
 | **435а** | View + backfill `responsibility_assignments` |
-| **435а-hotfix / hotfix2** | JOIN fix, manager scope_key, rop via team only |
+| **435а-hotfix / hotfix2 / hotfix3** | JOIN fix, manager scope_key, rop via team, rop_client_grants |
 
 ## Контрольные запросы
 
@@ -175,7 +214,11 @@ curl -s -b "$ADMIN_COOKIE" https://lk.tandoor.ru/api/diag/effective-scope | jq .
 
 curl -s -b "$ADMIN_COOKIE" \
   'https://lk.tandoor.ru/api/diag/effective-scope?userId=3f67f770-f5cd-4257-a4b2-1cefa65fbfaa' | jq .
-# ожидание perUser.count: 1241
+# ожидание perUser.count: ~1323 (после hotfix3)
+
+curl -s -b /tmp/lk-smoke.cookies \
+  "https://lk.tandoor.ru/api/diag/effective-scope-shadow-stats?userId=3f67f770-f5cd-4257-a4b2-1cefa65fbfaa&role=rop" \
+  | jq '{legacy: .legacy.all_codes, shadow: .shadow.external_keys, equal}'
 ```
 
 Миграции (вручную на Neon):
@@ -184,6 +227,29 @@ curl -s -b "$ADMIN_COOKIE" \
 psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_foundation.sql
 psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_hotfix.sql
 psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_hotfix2_rop_via_team.sql
+psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_hotfix3_rop_grants.sql
+```
+
+## Откат hotfix3
+
+```sql
+BEGIN;
+DELETE FROM responsibility_assignments;
+INSERT INTO responsibility_assignments SELECT * FROM responsibility_assignments_pre_hotfix3_435a;
+ALTER TABLE responsibility_assignments DROP CONSTRAINT IF EXISTS responsibility_assignments_scope_role_user_uq;
+ALTER TABLE responsibility_assignments
+  ADD CONSTRAINT responsibility_assignments_scope_role_uq
+  UNIQUE (scope_kind, scope_key, responsible_role);
+CREATE OR REPLACE VIEW effective_scope AS
+SELECT ra.user_id::text AS user_id,
+       d.id::text AS dealer_id,
+       d.external_key AS dealer_external_key,
+       ra.responsible_role AS responsible_role,
+       'responsibility_assignments'::text AS source
+  FROM responsibility_assignments ra
+  JOIN dealers d ON d.external_key = ra.scope_key
+ WHERE ra.scope_kind = 'dealer';
+COMMIT;
 ```
 
 ## Откат hotfix2 (только rop-записи)
