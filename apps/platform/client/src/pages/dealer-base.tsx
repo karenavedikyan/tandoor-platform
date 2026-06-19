@@ -1692,6 +1692,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     me?.role,
   ]);
 
+  const mergedRowsRef = useRef(mergedRowsForDealerBase);
+  useEffect(() => {
+    mergedRowsRef.current = mergedRowsForDealerBase;
+  }, [mergedRowsForDealerBase]);
+
   useEffect(() => {
     if (isTaskSelectMode) {
       setWorkView(taskSelectWorkViewForAccess(access));
@@ -2216,13 +2221,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     const scoped =
       useReal && snap
         ? roleScopedDealerRowsForReal(
-            mergedRowsForDealerBase,
+            mergedRowsRef.current,
             snap,
             access,
             undefined,
             assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
           )
-        : roleScopedDealerRows(mergedRowsForDealerBase, profile);
+        : roleScopedDealerRows(mergedRowsRef.current, profile);
     const catOpts = Array.from(new Set(scoped.map((r) => r.clientCategory)));
 
     const teamRaw = (routeQs.get("team") ?? routeQs.get("rop"))?.trim() ?? "";
@@ -2330,13 +2335,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     setUrlCharacteristicId(charParsed);
 
     setProgramFilters(programParsed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- [412] mergedRowsForDealerBase убран из deps: его пересоздание при рефетчах my-scope/visCodes не должно сбрасывать пользовательские фильтры. Актуальное значение — mergedRowsRef.current.
   }, [
     profile.personaUserId,
     profile.role,
     access,
     routeKey,
     routeQs,
-    mergedRowsForDealerBase,
     useReal,
     snap,
     realCtxForRoute,
