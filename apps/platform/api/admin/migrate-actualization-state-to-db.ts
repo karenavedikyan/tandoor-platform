@@ -86,6 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     for (const row of rowsQ.rows) {
       const state = row.state ?? {};
       const trashMap = (state.trashedDealersById ?? {}) as Record<string, TrashEntry>;
+      // Промт 421: legacy archivedDealersById → in_trash (архив клиентов удалён из продукта)
       const archiveMap = (state.archivedDealersById ?? {}) as Record<string, ArchiveEntry>;
       const trashIds = Object.keys(trashMap);
       const archiveIds = Object.keys(archiveMap);
