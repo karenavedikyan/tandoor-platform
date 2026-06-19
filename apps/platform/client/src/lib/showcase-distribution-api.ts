@@ -13,8 +13,8 @@ import type {
   ShowcaseStorageV1Dto,
   ShowcaseTaskStatus,
   ShowcaseTaskUpdate,
-  SHOWCASE_DISTRIBUTION_CHANGED_EVENT,
 } from "./showcase-distribution-data.js";
+import { SHOWCASE_DISTRIBUTION_CHANGED_EVENT } from "./showcase-distribution-data.js";
 
 const BASE = "/api/showcase-distribution";
 
