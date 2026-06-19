@@ -1,5 +1,6 @@
 /**
  * Промт 418: каскад status dealer → trade_point_overrides при trash/restore/purge.
+ * Промт 422-hotfix: dealer_id — text (external_key), не uuid cast.
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
@@ -14,11 +15,12 @@ export async function cascadeDealerTradePointsToTrash(
   trashedAt = nowIso(),
 ): Promise<void> {
   await pool.query(
-    `INSERT INTO trade_point_overrides (tp_id, status, trashed_at, trashed_by, updated_by)
-     SELECT tp.id, 'in_trash'::record_status, $2::timestamptz, $3::uuid, $3::uuid
-     FROM trade_points tp
-     LEFT JOIN trade_point_overrides tpo ON tpo.tp_id = tp.id
-     WHERE tp.dealer_id = $1::uuid
+    `INSERT INTO trade_point_overrides (tp_id, dealer_id, status, trashed_at, trashed_by, updated_by)
+     SELECT tp.id::text, d.external_key, 'in_trash'::record_status, $2::timestamptz, $3::uuid, $3::uuid
+     FROM dealers d
+     INNER JOIN trade_points tp ON tp.dealer_id = d.id
+     LEFT JOIN trade_point_overrides tpo ON tpo.tp_id = tp.id::text
+     WHERE d.external_key = $1
        AND tp.is_active = TRUE
        AND (tpo.tp_id IS NULL OR tpo.status = 'active')
      ON CONFLICT (tp_id) DO UPDATE SET
@@ -51,8 +53,9 @@ export async function cascadeDealerTradePointsToActive(
          updated_at = NOW(),
          updated_by = $3::uuid
      FROM trade_points tp
-     WHERE tp.id = tpo.tp_id
-       AND tp.dealer_id = $1::uuid
+     INNER JOIN dealers d ON d.id = tp.dealer_id
+     WHERE tpo.tp_id = tp.id::text
+       AND d.external_key = $1
        AND tpo.status = 'in_trash'
        AND tpo.trashed_by = $2::uuid`,
     [dealerId, restoringUserId, restoringUserId],
@@ -73,8 +76,9 @@ export async function cascadeDealerTradePointsToPendingAdmin(
          updated_at = NOW(),
          updated_by = $3::uuid
      FROM trade_points tp
-     WHERE tp.id = tpo.tp_id
-       AND tp.dealer_id = $1::uuid
+     INNER JOIN dealers d ON d.id = tp.dealer_id
+     WHERE tpo.tp_id = tp.id::text
+       AND d.external_key = $1
        AND tpo.status = 'in_trash'
        AND tpo.trashed_by = $2::uuid`,
     [dealerId, userId, userId],
@@ -95,8 +99,9 @@ export async function cascadeDealerTradePointsToPurged(
          updated_at = NOW(),
          updated_by = $3::uuid
      FROM trade_points tp
-     WHERE tp.id = tpo.tp_id
-       AND tp.dealer_id = $1::uuid
+     INNER JOIN dealers d ON d.id = tp.dealer_id
+     WHERE tpo.tp_id = tp.id::text
+       AND d.external_key = $1
        AND tpo.status = 'pending_admin'`,
     [dealerId, userId, userId],
   );
@@ -116,8 +121,9 @@ export async function cascadeDealerTradePointsToEmployeeTrash(
          updated_at = NOW(),
          updated_by = $3::uuid
      FROM trade_points tp
-     WHERE tp.id = tpo.tp_id
-       AND tp.dealer_id = $1::uuid
+     INNER JOIN dealers d ON d.id = tp.dealer_id
+     WHERE tpo.tp_id = tp.id::text
+       AND d.external_key = $1
        AND tpo.status = 'pending_admin'`,
     [dealerId, userId, userId],
   );
