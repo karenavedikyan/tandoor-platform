@@ -5,6 +5,7 @@
 
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
+import { scheduleScopeCodesMetaShadowDiff } from "./effective-scope-shadow.js";
 import {
   dealerJoinStatusActive,
   dealerStatusPendingAdmin,
@@ -274,7 +275,7 @@ export async function resolveScopeCodesMeta(
   }
 
   const allSet = new Set<string>([...ownCodes, ...teamCodes, ...grantedCodes]);
-  return {
+  const result: DbScopeCodesMeta = {
     fullCatalog: false,
     teamIds,
     ownCodes,
@@ -282,6 +283,10 @@ export async function resolveScopeCodesMeta(
     grantedCodes,
     allCodes: Array.from(allSet).sort(),
   };
+
+  scheduleScopeCodesMetaShadowDiff(pool, userId, role, result.allCodes);
+
+  return result;
 }
 
 export async function computeDbScopeForUser(

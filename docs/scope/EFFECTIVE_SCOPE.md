@@ -84,12 +84,71 @@ Hotfix1 дополнительно сделал UPSERT rop из `dealer_override
 - **Не удаляет** `client_assignments` и колонку `dealer_overrides.rop_id` (отдельный промт).
 - Только материализация + диагностика: `GET /api/diag/effective-scope` (admin).
 
-## Дорожная карта
+## 435b: shadow-чтение (промт 435b)
+
+Параллельное сравнение legacy-формулы (`resolveScopeCodesMeta`) и view `effective_scope`. **Не меняет ответы API** — только server-log.
+
+### Флаг
+
+```bash
+READ_FROM_EFFECTIVE_SCOPE_SHADOW=1   # Vercel Production (включается вручную после merge)
+```
+
+При выключенном флаге поведение байт-в-байт как до 435b.
+
+### Формат лога
+
+Каждый вызов `resolveScopeCodesMeta` под флагом пишет JSON:
+
+```json
+{
+  "evt": "effective_scope.shadow_diff",
+  "endpoint": "resolveScopeCodesMeta",
+  "userId": "...",
+  "role": "rop",
+  "equal": false,
+  "legacy_count": 1241,
+  "shadow_count": 1241,
+  "missing_sample": ["client-ma-..."],
+  "extra_sample": []
+}
+```
+
+Греп в Vercel: `effective_scope.shadow_diff`.
+
+### Как читать diff
+
+| Поле | Значение |
+|------|----------|
+| `missing_in_shadow` | есть в legacy (`allCodes` → `client-{release_code}`), нет в view — shadow не догоняет |
+| `extra_in_shadow` | есть в view, нет в legacy — shadow видит лишнее |
+
+Сравнение нормализует legacy `release_code` → `client-{lowercase}` для честного diff с `dealer_external_key`.
+
+### Диагностический endpoint
+
+`GET /api/diag/effective-scope-shadow-stats?userId=<uuid>&role=<role>` — admin/director, синхронный отчёт без записи в лог.
+
+```bash
+curl -s -b /tmp/lk-smoke.cookies \
+  "https://lk.tandoor.ru/api/diag/effective-scope-shadow-stats?userId=3f67f770-f5cd-4257-a4b2-1cefa65fbfaa&role=rop" \
+  | jq '{legacy: .legacy.all_codes, shadow: .shadow.external_keys, equal}'
+```
+
+## План перехода
 
 | Промт | Содержание |
 |-------|------------|
-| **435b** | Переключить `computeDbScopeForUser` и связанные читалки на `effective_scope` + shadow-сравнение со старым путём + diff в `real_scope_audit_log` |
-| **435c** | После нескольких дней чистого shadow — удалить JOIN-ы через `client_assignments` / legacy-читалки |
+| **435b** (текущий) | Shadow-чтение + diff-лог под флагом `READ_FROM_EFFECTIVE_SCOPE_SHADOW` |
+| **435c** | Переключить `resolveScopeCodesMeta` на view как primary |
+| **435d** | Удаление колонки `dealer_overrides.rop_id` |
+
+## Дорожная карта (архив)
+
+| Промт | Содержание |
+|-------|------------|
+| **435а** | View + backfill `responsibility_assignments` |
+| **435а-hotfix / hotfix2** | JOIN fix, manager scope_key, rop via team only |
 
 ## Контрольные запросы
 
