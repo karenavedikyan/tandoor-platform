@@ -1641,6 +1641,21 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const mergedRowsForDealerBase = useMemo(() => {
+    // [411] Manager в real-режиме: scope от сервера через my-scope — actualization plane не нужен.
+    // releaseDealerRowsForScope УЖЕ отфильтрован по visPayload.codes (56). Не пускаем через
+    // buildDealerBaseRowsWithActualization, чтобы не потерять строки из-за неполного плана.
+    if (
+      isRealUser &&
+      !authLoading &&
+      !authError &&
+      snap &&
+      effectiveVisPayload &&
+      !orgSnapQ.isError &&
+      !visCodesQ.isError &&
+      me?.role === "manager"
+    ) {
+      return releaseDealerRowsForScope;
+    }
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
@@ -1674,6 +1689,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     catalogRows,
     applyWorkingBaseTrashInvariant,
     releaseDealerRowsForScope,
+    me?.role,
   ]);
 
   useEffect(() => {
@@ -1737,6 +1753,18 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
+    if (
+      isRealUser &&
+      !authLoading &&
+      !authError &&
+      snap &&
+      effectiveVisPayload &&
+      !orgSnapQ.isError &&
+      !visCodesQ.isError &&
+      me?.role === "manager"
+    ) {
+      return releaseDealerRowsForScope;
+    }
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
@@ -1766,6 +1794,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     catalogRows,
     applyWorkingBaseTrashInvariant,
     releaseDealerRowsForScope,
+    me?.role,
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
