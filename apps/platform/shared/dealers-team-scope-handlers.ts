@@ -45,7 +45,7 @@ export async function fetchTeamMembersForTeam(
      FROM user_team_memberships m
      INNER JOIN users u ON u.id = m.user_id
      WHERE m.team_id = $1::uuid
-       AND m.role IN ('manager', 'regional_manager')
+       AND m.role_in_team IN ('manager', 'regional_manager')
        AND u.status = 'active'
      ORDER BY u.full_name, u.email`,
     [teamId],
