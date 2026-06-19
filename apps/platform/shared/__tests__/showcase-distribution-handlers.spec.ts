@@ -131,13 +131,13 @@ class InMemoryShowcaseDistributionDb implements PoolLike {
 
     if (sql.includes("FROM showcase_distribution_overrides WHERE dealer_id")) {
       const dealerId = params[0] as string;
-      const rows = [...this.overrides.values()].filter((r) => r.dealer_id === dealerId);
+      const rows = Array.from(this.overrides.values()).filter((r) => r.dealer_id === dealerId);
       return Promise.resolve({ rows: rows as T[] });
     }
 
     if (sql.includes("FROM showcase_distribution_task_updates WHERE dealer_id")) {
       const dealerId = params[0] as string;
-      const rows = [...this.taskUpdates.values()].filter((r) => r.dealer_id === dealerId);
+      const rows = Array.from(this.taskUpdates.values()).filter((r) => r.dealer_id === dealerId);
       return Promise.resolve({ rows: rows as T[] });
     }
 
@@ -152,7 +152,7 @@ class InMemoryShowcaseDistributionDb implements PoolLike {
 
     if (sql.includes("FROM showcase_distribution_recommendations WHERE dealer_id")) {
       const dealerId = params[0] as string;
-      const rows = [...this.recommendations.values()].filter((r) => r.dealer_id === dealerId);
+      const rows = Array.from(this.recommendations.values()).filter((r) => r.dealer_id === dealerId);
       return Promise.resolve({ rows: rows as T[] });
     }
 
