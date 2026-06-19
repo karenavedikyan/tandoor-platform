@@ -79,7 +79,7 @@ function writeStateToParams(
   const q = state.query.trim();
   if (q) sp.set(paramName(prefix, "q"), q);
 
-  if (state.source === "matrix") sp.set(paramName(prefix, "source"), "matrix");
+  sp.set(paramName(prefix, "source"), state.source);
 
   return sp;
 }
@@ -104,6 +104,8 @@ export function useCatalogFiltersUrl(opts?: {
   const routeQs = useHashRouteSearchParams();
   const [loc, navigate] = useLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUrlWriteRef = useRef(false);
+  const pendingSourceRef = useRef<CatalogSourceFilter | null>(null);
 
   const parsed = useMemo(
     () => readStateFromParams(routeQs, prefix, syncKeys),
@@ -118,11 +120,54 @@ export function useCatalogFiltersUrl(opts?: {
   const hasUrlSource = routeQs.has(paramName(prefix, "source"));
 
   useEffect(() => {
+    if (pendingUrlWriteRef.current) return;
+
+    if (pendingSourceRef.current !== null && parsed.source !== pendingSourceRef.current) {
+      setFilters(parsed.filters);
+      setCategoriesState(parsed.categories);
+      setQueryState(parsed.query);
+      return;
+    }
+    if (pendingSourceRef.current !== null && parsed.source === pendingSourceRef.current) {
+      pendingSourceRef.current = null;
+    }
+
     setFilters(parsed.filters);
     setCategoriesState(parsed.categories);
     setQueryState(parsed.query);
     setSourceState(parsed.source);
   }, [parsed.filters, parsed.categories, parsed.query, parsed.source]);
+
+  const pushUrlImmediate = useCallback(
+    (next: {
+      filters: CatalogFiltersValue;
+      query: string;
+      source: CatalogSourceFilter;
+      categories: string[];
+    }) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const sp = writeStateToParams(routeQs, prefix, syncKeys, next);
+      const entries: Record<string, string> = {};
+      sp.forEach((v, k) => {
+        entries[k] = v;
+      });
+      const path = loc.split("?")[0] || loc;
+      pendingUrlWriteRef.current = true;
+      try {
+        navigate(buildHashPath(path, Object.keys(entries).length > 0 ? entries : undefined), {
+          replace: true,
+        });
+      } finally {
+        queueMicrotask(() => {
+          pendingUrlWriteRef.current = false;
+        });
+      }
+    },
+    [loc, navigate, prefix, routeQs, syncKeys],
+  );
 
   const pushUrl = useCallback(
     (next: {
@@ -133,15 +178,22 @@ export function useCatalogFiltersUrl(opts?: {
     }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        const sp = writeStateToParams(routeQs, prefix, syncKeys, next);
-        const entries: Record<string, string> = {};
-        sp.forEach((v, k) => {
-          entries[k] = v;
-        });
-        const path = loc.split("?")[0] || loc;
-        navigate(buildHashPath(path, Object.keys(entries).length > 0 ? entries : undefined), {
-          replace: true,
-        });
+        pendingUrlWriteRef.current = true;
+        try {
+          const sp = writeStateToParams(routeQs, prefix, syncKeys, next);
+          const entries: Record<string, string> = {};
+          sp.forEach((v, k) => {
+            entries[k] = v;
+          });
+          const path = loc.split("?")[0] || loc;
+          navigate(buildHashPath(path, Object.keys(entries).length > 0 ? entries : undefined), {
+            replace: true,
+          });
+        } finally {
+          queueMicrotask(() => {
+            pendingUrlWriteRef.current = false;
+          });
+        }
       }, URL_DEBOUNCE_MS);
     },
     [loc, navigate, prefix, routeQs, syncKeys],
@@ -185,14 +237,16 @@ export function useCatalogFiltersUrl(opts?: {
 
   const setSource = useCallback(
     (s: CatalogSourceFilter) => {
+      pendingSourceRef.current = s;
       setSourceState(s);
-      pushUrl({ filters, query, source: s, categories });
+      pushUrlImmediate({ filters, query, source: s, categories });
     },
-    [categories, filters, pushUrl, query],
+    [categories, filters, pushUrlImmediate, query],
   );
 
   const resetAll = useCallback(() => {
     const empty = { filters: {}, query: "", source: "all" as const, categories: [] as string[] };
+    pendingSourceRef.current = "all";
     setFilters({});
     setCategoriesState([]);
     setQueryState("");
