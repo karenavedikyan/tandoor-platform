@@ -15,6 +15,7 @@
     "test:schema-version-handshake": "vitest run schema-version-handshake",
     "test:build-version-poll": "vitest run build-version-poll",
     "test:effective-scope-foundation": "vitest run effective-scope-foundation",
+    "test:effective-scope-hotfix": "vitest run effective-scope-hotfix",
     "lint:shadow-write": "node scripts/check-shadow-write-coverage.mjs",
     "lint:db-source-of-truth": "node ../../scripts/lint-db-source-of-truth.mjs",
     "lint:db-source-of-truth-full": "node scripts/check-db-source-invariant.mjs",
