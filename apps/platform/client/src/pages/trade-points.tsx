@@ -314,6 +314,7 @@ export default function TradePointsPage({
     enabled: viewingOtherUserScope,
     forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
   });
+  const selfDbScopeQ = useMyScopeFromDB({ enabled: isRealUser && !viewingOtherUserScope });
   const user = me ?? undefined;
   const isRealUser = Boolean(me?.id);
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
@@ -327,6 +328,25 @@ export default function TradePointsPage({
       grantedCodes: myCodesQ.data.grantedCodes,
     };
   }, [myCodesQ.data]);
+
+  const dbScopedExternalKeys = useMemo((): Set<string> | null => {
+    if (viewingOtherUserScope) {
+      if (!targetScopeQ.ready || targetScopeQ.scope_explanation.full_catalog) return null;
+      return targetScopeQ.activeDealerExternalKeySet;
+    }
+    if (selfDbScopeQ.ready && !selfDbScopeQ.scope_explanation.full_catalog) {
+      return selfDbScopeQ.activeDealerExternalKeySet;
+    }
+    return null;
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    targetScopeQ.scope_explanation.full_catalog,
+    targetScopeQ.activeDealerExternalKeySet,
+    selfDbScopeQ.ready,
+    selfDbScopeQ.scope_explanation.full_catalog,
+    selfDbScopeQ.activeDealerExternalKeySet,
+  ]);
   const snap = orgSnapQ.data ?? null;
   const visPayload = visCodesQ.data ?? null;
 
@@ -450,6 +470,10 @@ export default function TradePointsPage({
     if (viewingOtherUserScope && targetScopeQ.ready) {
       return mergedRowsActivePortfolioForManagement;
     }
+    // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
+    if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
+      return mergedRowsActivePortfolioForManagement.filter((r) => dbScopedExternalKeys.has(r.id));
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsActivePortfolioForManagement,
@@ -460,16 +484,34 @@ export default function TradePointsPage({
       );
     }
     return roleScopedDealerRows(mergedRowsActivePortfolioForManagement, profile);
-  }, [viewingOtherUserScope, targetScopeQ.ready, useReal, snap, mergedRowsActivePortfolioForManagement, profile, access, assignmentsScope]);
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    useReal,
+    snap,
+    access,
+    selfDbScopeQ.ready,
+    dbScopedExternalKeys,
+    mergedRowsActivePortfolioForManagement,
+    profile,
+    assignmentsScope,
+  ]);
 
   const tpListRealOpts = useMemo(() => {
     if (!useReal || !snap || !effectiveVisPayload) return undefined;
-    const releaseRows = getVisibleDealerRows(catalogRows, effectiveVisPayload.all, effectiveVisPayload.codes);
+    const releaseRows = getVisibleDealerRows(
+      catalogRows,
+      effectiveVisPayload.all,
+      effectiveVisPayload.codes,
+      dbScopedExternalKeys,
+    );
+    const managerDbScopeDirect =
+      access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0;
     return {
       releaseDealerRows: releaseRows,
-      orgScope: { snap, access },
+      ...(managerDbScopeDirect ? {} : { orgScope: { snap, access } }),
     } as const;
-  }, [useReal, snap, effectiveVisPayload, access, catalogRows]);
+  }, [useReal, snap, effectiveVisPayload, access, catalogRows, dbScopedExternalKeys, selfDbScopeQ.ready]);
 
   const sidebarRealScope = useMemo(
     () =>
@@ -496,7 +538,10 @@ export default function TradePointsPage({
         visCodesLoading: viewingOtherUserScope ? targetScopeQ.loading : visCodesQ.isLoading,
         assignmentsScope: viewingOtherUserScope ? undefined : assignmentsScope,
         catalogRows: catalogQ.data,
-        dbScopedExternalKeys: viewingOtherUserScope && targetScopeQ.ready ? targetScopeQ.activeDealerExternalKeySet : undefined,
+        dbScopedExternalKeys:
+          viewingOtherUserScope && targetScopeQ.ready
+            ? targetScopeQ.activeDealerExternalKeySet
+            : dbScopedExternalKeys ?? undefined,
       }),
     [
       viewingOtherUserScope,
@@ -518,6 +563,7 @@ export default function TradePointsPage({
       visCodesQ.isLoading,
       assignmentsScope,
       catalogQ.data,
+      dbScopedExternalKeys,
     ],
   );
 

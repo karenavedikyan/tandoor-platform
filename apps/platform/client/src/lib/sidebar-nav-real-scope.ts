@@ -18,6 +18,8 @@ export type SidebarNavRealScope = {
   releaseDealerRows?: DealerRow[];
   orgScope?: { snap: OrgSnapshot; access: DealerBaseAccessRole };
   assignmentsScope?: AssignmentsScope;
+  /** Промт 410: releaseDealerRows уже отфильтрованы по my-scope; не применять roleScopedDealerRowsForReal. */
+  dbScopeDirect?: boolean;
 };
 
 export type BuildSidebarNavRealScopeInput = {
@@ -74,6 +76,7 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
   }
 
   let releaseDealerRows: DealerRow[];
+  const dbScopeDirect = Boolean(input.dbScopedExternalKeys && input.dbScopedExternalKeys.size > 0);
   if (input.dbScopedExternalKeys) {
     releaseDealerRows = catalog.filter((r) => input.dbScopedExternalKeys!.has(r.id));
   } else {
@@ -88,5 +91,6 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
     releaseDealerRows,
     orgScope: { snap: snap!, access },
     assignmentsScope: assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+    dbScopeDirect,
   };
 }

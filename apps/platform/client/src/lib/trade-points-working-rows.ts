@@ -34,10 +34,12 @@ export function buildTradePointsWorkingRowsForCount(
     includeArchivedTradePoints: false,
   };
 
-  if (realScope?.ready && realScope.releaseDealerRows && realScope.orgScope) {
+  if (realScope?.ready && realScope.releaseDealerRows) {
     opts.releaseDealerRows = realScope.releaseDealerRows;
-    opts.orgScope = realScope.orgScope;
-    opts.assignmentsScope = realScope.assignmentsScope;
+    if (!realScope.dbScopeDirect && realScope.orgScope) {
+      opts.orgScope = realScope.orgScope;
+      opts.assignmentsScope = realScope.assignmentsScope;
+    }
   }
 
   return buildTradePointListForActualization(state, profile, opts);
