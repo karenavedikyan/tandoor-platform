@@ -16,6 +16,7 @@ import {
 } from "./bulk-archive-to-trash-core.js";
 import { logDealerAuditEvent } from "./override-audit-events.js";
 import { auditTrashArchiveAction } from "./trash-archive-mutation-guard.js";
+import { cascadeDealersTradePointsToTrash } from "./record-status-cascade.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -81,6 +82,8 @@ export async function handleBulkMoveArchiveToTrash(
        WHERE dealer_overrides.status IS DISTINCT FROM 'purged'`,
       [allowedIds, me.id],
     );
+
+    await cascadeDealersTradePointsToTrash(pool, allowedIds, me.id);
 
     await removeFromArchivedStates(pool, allowedIds, "archivedDealersById", scopeUserIds);
 

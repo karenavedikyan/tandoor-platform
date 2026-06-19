@@ -13,6 +13,8 @@ import {
   resolveSidebarTrashCount,
   resolveSidebarWorkingDealerClientCount,
 } from "../dealer-base-sidebar-client-count";
+import { buildTrashNavBadge } from "../auth-access";
+import { sidebarCountsFromDbScope, type MyScopeFromDB } from "../../hooks/use-my-scope-from-db.js";
 import {
   countDealerBaseHeaderTotal,
   defaultDealerBasePickerArgsForCount,
@@ -156,8 +158,88 @@ for (const { label, profile, scope } of roles) {
     enabled: true,
     loading: false,
     state: act,
+    role: "admin",
+    userId: "admin-1",
   });
   assert.equal(navTrash, trashPageTotal(act));
+}
+
+// --- Промт 418: active-only scope и бейдж корзины `dealers/tp` ---
+
+function mockDbScope(totals: {
+  active_dealers: number;
+  active_trade_points: number;
+  trashed_dealers: number;
+  trashed_trade_points: number;
+}): MyScopeFromDB {
+  return {
+    success: true,
+    loading: false,
+    ready: true,
+    error: false,
+    forbidden: false,
+    user: { id: "u1", email: "u@test", role: "manager" },
+    scopeSubject: { id: "u1", email: "u@test", role: "manager" },
+    totals,
+    active_dealer_ids: [],
+    active_dealer_external_keys: [],
+    trashed_dealer_ids: [],
+    trashed_dealer_external_keys: [],
+    scope_explanation: {
+      role: "manager",
+      team_ids: [],
+      own_codes: 56,
+      team_codes: 0,
+      granted_codes: 0,
+      all_codes: 56,
+      full_catalog: false,
+    },
+    activeDealerIdSet: new Set(),
+    trashedDealerIdSet: new Set(),
+    activeDealerExternalKeySet: new Set(),
+    trashedDealerExternalKeySet: new Set(),
+  };
+}
+
+{
+  const counts = sidebarCountsFromDbScope(
+    mockDbScope({
+      active_dealers: 44,
+      active_trade_points: 33,
+      trashed_dealers: 12,
+      trashed_trade_points: 10,
+    }),
+  );
+  assert.equal(counts.dealers, 44, "418: sidebar dealers = active only");
+  assert.equal(counts.trashDealers, 12);
+  assert.equal(counts.trashTradePoints, 10);
+  assert.deepEqual(buildTrashNavBadge(counts.trashDealers, counts.trashTradePoints), { badge: "12/10" });
+  assert.notEqual(counts.dealers, 56, "418: active 44 ≠ assignments 56");
+}
+
+{
+  const activeKeys = new Set(
+    Array.from({ length: 44 }, (_, i) => `client-ma-ma${String(100000 + i).padStart(6, "0")}`),
+  );
+  const catalog = allRows.slice(0, 100);
+  const visible = catalog.filter((r) => activeKeys.has(r.id));
+  const scope: SidebarNavRealScope = {
+    isRealUser: true,
+    loading: false,
+    ready: true,
+    releaseDealerRows: visible,
+    orgScope: { snap: managerSnapFromRow(firstManagerRow()), access: "sales_manager" },
+    assignmentsScope: {
+      ownCodes: new Set(Array.from(activeKeys).map((k) => k.replace(/^client-/, "").toUpperCase())),
+      teamCodes: new Set(),
+      grantedCodes: new Set(),
+    },
+  };
+  const profile = { personaUserId: firstManagerRow().releaseManagerId!, role: "sales_manager" } as ReleaseDemoProfile;
+  const act = createEmptyActualizationState();
+  const page = countDealerBaseHeaderTotal({ profile, actEnabled: true, actState: act, realScope: scope });
+  assert.equal(page, visible.length, "418: page count follows active scope rows");
+  assert.ok(page != null && page <= 44 + 10, "418: page is not inflated by in_trash dealers");
 }
 
 // --- Промт 334: real-РОП не должен резаться profile-based ropTeam ---

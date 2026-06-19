@@ -1439,16 +1439,47 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const visPayload = visCodesQ.data ?? null;
 
   const effectiveVisPayload = useMemo(() => {
-    if (!viewingOtherUserScope) return visPayload;
-    if (!targetScopeQ.ready) return null;
-    if (targetScopeQ.scope_explanation.full_catalog) {
-      return { all: true, codes: null };
+    if (viewingOtherUserScope) {
+      if (!targetScopeQ.ready) return null;
+      if (targetScopeQ.scope_explanation.full_catalog) {
+        return { all: true, codes: null };
+      }
+      const rawCodes = externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet);
+      return { all: false, codes: rawCodes };
     }
-    const rawCodes = externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet);
-    return { all: false, codes: rawCodes };
-  }, [viewingOtherUserScope, targetScopeQ, visPayload]);
+    if (selfDbScopeQ.ready && !selfDbScopeQ.scope_explanation.full_catalog) {
+      const rawCodes = externalKeysToReleaseCodes(selfDbScopeQ.activeDealerExternalKeySet);
+      return { all: false, codes: rawCodes };
+    }
+    return visPayload;
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    targetScopeQ.scope_explanation.full_catalog,
+    targetScopeQ.activeDealerExternalKeySet,
+    selfDbScopeQ.ready,
+    selfDbScopeQ.scope_explanation.full_catalog,
+    selfDbScopeQ.activeDealerExternalKeySet,
+    visPayload,
+  ]);
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
+    if (viewingOtherUserScope && targetScopeQ.ready && !targetScopeQ.scope_explanation.full_catalog) {
+      const activeCodes = externalKeysToReleaseCodes(targetScopeQ.activeDealerExternalKeySet);
+      if (activeCodes.length === 0) return undefined;
+      return buildAssignmentsScopeFromSources({
+        visibleCodes: activeCodes,
+        visibleAll: false,
+      });
+    }
+    if (!viewingOtherUserScope && selfDbScopeQ.ready && !selfDbScopeQ.scope_explanation.full_catalog) {
+      const activeCodes = externalKeysToReleaseCodes(selfDbScopeQ.activeDealerExternalKeySet);
+      if (activeCodes.length === 0) return undefined;
+      return buildAssignmentsScopeFromSources({
+        visibleCodes: activeCodes,
+        visibleAll: false,
+      });
+    }
     return buildAssignmentsScopeFromSources({
       ownCodes: myCodesQ.data?.ownCodes,
       teamCodes: myCodesQ.data?.teamCodes,
@@ -1456,7 +1487,17 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       visibleCodes: visPayload?.codes,
       visibleAll: visPayload?.all,
     });
-  }, [myCodesQ.data, visPayload]);
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    targetScopeQ.scope_explanation.full_catalog,
+    targetScopeQ.activeDealerExternalKeySet,
+    selfDbScopeQ.ready,
+    selfDbScopeQ.scope_explanation.full_catalog,
+    selfDbScopeQ.activeDealerExternalKeySet,
+    myCodesQ.data,
+    visPayload,
+  ]);
 
   const dbScopedExternalKeys = useMemo((): Set<string> | null => {
     if (viewingOtherUserScope) {
