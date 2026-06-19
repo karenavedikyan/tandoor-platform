@@ -67,8 +67,7 @@ function mockPool(role: string): PoolLike {
         const rows = DEALERS.filter((d) => codes.includes(d.release_code)).map((d) => ({
           id: d.id,
           external_key: d.external_key,
-          is_purged: false,
-          is_employee_trash: d.trashed,
+          status: d.trashed ? "in_trash" : "active",
           trashed_by: d.trashed_by,
         }));
         return { rows };
@@ -77,16 +76,15 @@ function mockPool(role: string): PoolLike {
         const rows = DEALERS.map((d) => ({
           id: d.id,
           external_key: d.external_key,
-          is_purged: false,
-          is_employee_trash: d.trashed,
+          status: d.trashed ? "in_trash" : "active",
           trashed_by: d.trashed_by,
         }));
         return { rows };
       }
-      if (s.includes("FROM dealer_overrides d_ov") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM dealer_overrides d_ov") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
-      if (s.includes("FROM trade_point_overrides tpo") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM trade_point_overrides tpo") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
       if (s.includes("FROM trade_points tp") && s.includes("dealer_id = ANY")) {

@@ -28,6 +28,7 @@ type ActualizationBlobRow = {
 
 type OverrideRow = {
   dealer_id: string;
+  status: "active" | "in_trash" | "pending_admin" | "purged";
   trashed_at: string | null;
   trashed_by: string | null;
   purge_requested_at: string | null;
@@ -86,6 +87,7 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
   });
   const row: OverrideRow = {
     dealer_id: DEALER_ID,
+    status: "in_trash",
     trashed_at: new Date().toISOString(),
     trashed_by: MANAGER_ID,
     purge_requested_at: null,
@@ -96,6 +98,11 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
     updated_by: MANAGER_ID,
     ...initial,
   };
+  if (initial.status) row.status = initial.status;
+  else if (initial.purged_at || row.purged_at) row.status = "purged";
+  else if (initial.purge_requested_at || row.purge_requested_at) row.status = "pending_admin";
+  else if (initial.trashed_at || row.trashed_at) row.status = "in_trash";
+  else row.status = "active";
   overrides.set(DEALER_ID, row);
 
   const pool: PoolLike = {
@@ -111,21 +118,26 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
         const id = params?.[0] as string;
         const ov = overrides.get(id);
         if (!ov) return { rows: [] };
-        if (s.includes("purge_requested_at = NOW()")) {
+        if (s.includes("SET status = 'pending_admin'") && s.includes("purge_requested_at = NOW()")) {
+          ov.status = "pending_admin";
           ov.purge_requested_at = new Date().toISOString();
           ov.purge_requested_by = params?.[1] as string;
-        } else if (s.includes("purged_at = NOW()")) {
+        } else if (s.includes("SET status = 'purged'")) {
+          ov.status = "purged";
           ov.purged_at = new Date().toISOString();
           ov.purged_by = params?.[1] as string;
-        } else if (s.includes("purged_at = NULL")) {
+        } else if (s.includes("SET status = 'pending_admin'") && s.includes("purged_at = NULL")) {
+          ov.status = "pending_admin";
           ov.purged_at = null;
           ov.purged_by = null;
-        } else if (s.includes("purge_requested_at = NULL") && s.includes("trashed_at = NULL")) {
+        } else if (s.includes("SET status = 'active'")) {
+          ov.status = "active";
           ov.trashed_at = null;
           ov.trashed_by = null;
           ov.purge_requested_at = null;
           ov.purge_requested_by = null;
-        } else if (s.includes("purge_requested_at = NULL") && !s.includes("trashed_at = NULL")) {
+        } else if (s.includes("SET status = 'in_trash'") && s.includes("purge_requested_at = NULL")) {
+          ov.status = "in_trash";
           ov.purge_requested_at = null;
           ov.purge_requested_by = null;
         }
@@ -165,21 +177,26 @@ function createTrashPool(initial: Partial<OverrideRow> = {}): {
       }
       if (s.includes("FROM dealers d") && s.includes("dealer_overrides")) {
         const ov = overrides.get(DEALER_ID)!;
-        const is_purged = ov.purged_at != null;
-        const is_employee_trash =
-          ov.trashed_at != null && ov.purge_requested_at == null && ov.purged_at == null;
         return {
-          rows: is_purged
-            ? []
-            : [{ id: DEALER_ID, external_key: "client-x", is_purged, is_employee_trash }],
+          rows:
+            ov.status === "purged"
+              ? []
+              : [
+                  {
+                    id: DEALER_ID,
+                    external_key: "client-x",
+                    status: ov.status,
+                    trashed_by: ov.trashed_by,
+                  },
+                ],
         };
       }
-      if (s.includes("FROM dealer_overrides d_ov") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM dealer_overrides d_ov") && s.includes("status = 'pending_admin'")) {
         const ov = overrides.get(DEALER_ID)!;
-        const n = ov.purge_requested_at && !ov.purged_at ? "1" : "0";
+        const n = ov.status === "pending_admin" ? "1" : "0";
         return { rows: [{ n }] };
       }
-      if (s.includes("FROM trade_point_overrides tpo") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM trade_point_overrides tpo") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
       if (s.includes("COUNT(*) FILTER") && s.includes("trade_points")) {
@@ -283,6 +300,7 @@ const director = { id: DIRECTOR_ID, role: "director", status: "active" };
     purge_requested_at: new Date().toISOString(),
     purge_requested_by: MANAGER_ID,
   });
+  overrides.get(DEALER_ID)!.status = "purged";
   overrides.get(DEALER_ID)!.purged_at = new Date().toISOString();
   overrides.get(DEALER_ID)!.purged_by = DIRECTOR_ID;
   const scope = await computeDbScopeForUser(pool, DIRECTOR_ID, "director");
@@ -298,6 +316,7 @@ const director = { id: DIRECTOR_ID, role: "director", status: "active" };
     purged_at: new Date().toISOString(),
     purged_by: DIRECTOR_ID,
   });
+  overrides.get(DEALER_ID)!.status = "pending_admin";
   overrides.get(DEALER_ID)!.purged_at = null;
   overrides.get(DEALER_ID)!.purged_by = null;
   const scope = await computeDbScopeForUser(pool, DIRECTOR_ID, "director");

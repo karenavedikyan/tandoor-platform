@@ -4,6 +4,7 @@
 import type { PoolLike } from "./admin/admin-auth.js";
 import { fetchMyClientCodes } from "./my-client-codes-handlers.js";
 import { buildCatalogProductWhere } from "../api/catalog/_catalog-query.js";
+import { dealerJoinStatusActive, tpJoinStatusActive } from "./record-status.js";
 
 export type GlobalSearchResultItem = {
   id: string;
@@ -127,7 +128,7 @@ async function searchClients(
   limit: number,
 ): Promise<GlobalSearchResultItem[]> {
   const params: unknown[] = [];
-  const conds: string[] = ["dov.trashed_at IS NULL"];
+  const conds: string[] = [dealerJoinStatusActive("dov")];
   pushClientScopeClause("dov.dealer_id", scope, params, conds);
   pushHaystackTokenClauses(
     `COALESCE(dov.name, '') || ' ' || COALESCE(dov.city, '') || ' ' || upper(regexp_replace(dov.dealer_id, '^client-', ''))`,
@@ -242,7 +243,7 @@ async function searchTradePoints(
   limit: number,
 ): Promise<GlobalSearchTradePointItem[]> {
   const params: unknown[] = [];
-  const conds: string[] = ["tpo.trashed_at IS NULL", "tpo.dealer_id IS NOT NULL"];
+  const conds: string[] = [tpJoinStatusActive("tpo"), "tpo.dealer_id IS NOT NULL"];
   pushClientScopeClause("tpo.dealer_id", scope, params, conds);
   pushHaystackTokenClauses(
     `COALESCE(tpo.name, '') || ' ' || COALESCE(tpo.city, '') || ' ' || COALESCE(tpo.address, '') || ' ' || COALESCE(dov.name, '')`,

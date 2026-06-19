@@ -112,7 +112,7 @@ import { CityConcentrationBlock } from "@/components/city-concentration-block";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { buildDealerBaseRowsWithActualization, excludeTrashedDealersFromWorkingRows } from "@/lib/client-base-actualization-data-merge";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cockpit";
 import {
@@ -1635,27 +1635,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   /** Real-режим: список только архивных клиентов (toggle «Режим архива»). */
   const dealerBaseArchiveListMode = useReal && actx.enabled && showArchivedDealers;
 
-  const applyWorkingBaseTrashInvariant = useCallback(
-    (rows: DealerRow[]) => excludeTrashedDealersFromWorkingRows(rows, teamActualizationPlane),
-    [teamActualizationPlane],
-  );
-
   const mergedRowsForDealerBase = useMemo(() => {
-    // [411] Manager в real-режиме: scope от сервера через my-scope — actualization plane не нужен.
-    // releaseDealerRowsForScope УЖЕ отфильтрован по visPayload.codes (56). Не пускаем через
-    // buildDealerBaseRowsWithActualization, чтобы не потерять строки из-за неполного плана.
-    if (
-      isRealUser &&
-      !authLoading &&
-      !authError &&
-      snap &&
-      effectiveVisPayload &&
-      !orgSnapQ.isError &&
-      !visCodesQ.isError &&
-      me?.role === "manager"
-    ) {
-      return releaseDealerRowsForScope;
-    }
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
@@ -1664,15 +1644,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         includeArchivedDealers: includeArchived,
         releaseDealerRows: releaseRows,
       });
-      const listed = !includeArchived ? merged : merged.filter((r) => Boolean((teamActualizationPlane.archivedDealersById ?? {})[r.id]));
-      return !showArchivedDealers ? applyWorkingBaseTrashInvariant(listed) : listed;
+      if (!includeArchived) return merged;
+      return merged.filter((r) => Boolean((teamActualizationPlane.archivedDealersById ?? {})[r.id]));
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    const merged = buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
       includeArchivedDealers: showArchivedDealers,
     });
-    return !showArchivedDealers ? applyWorkingBaseTrashInvariant(merged) : merged;
   }, [
     isRealUser,
     authLoading,
@@ -1687,9 +1666,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     showArchivedDealers,
     hydrationVersion,
     catalogRows,
-    applyWorkingBaseTrashInvariant,
     releaseDealerRowsForScope,
-    me?.role,
   ]);
 
   const mergedRowsRef = useRef(mergedRowsForDealerBase);
@@ -1758,33 +1735,17 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
-    if (
-      isRealUser &&
-      !authLoading &&
-      !authError &&
-      snap &&
-      effectiveVisPayload &&
-      !orgSnapQ.isError &&
-      !visCodesQ.isError &&
-      me?.role === "manager"
-    ) {
-      return releaseDealerRowsForScope;
-    }
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
-      return applyWorkingBaseTrashInvariant(
-        buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
-          includeArchivedDealers: false,
-          releaseDealerRows: releaseRows,
-        }),
-      );
+      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+        includeArchivedDealers: false,
+        releaseDealerRows: releaseRows,
+      });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return applyWorkingBaseTrashInvariant(
-      buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false }),
-    );
+    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, { includeArchivedDealers: false });
   }, [
     isRealUser,
     authLoading,
@@ -1797,9 +1758,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     teamActualizationPlane,
     profile,
     catalogRows,
-    applyWorkingBaseTrashInvariant,
     releaseDealerRowsForScope,
-    me?.role,
   ]);
 
   const scopedActivePortfolioRows = useMemo(() => {
@@ -3094,66 +3053,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [profile.role, defaultRopManager]);
 
   const rowsFinalForList = useMemo(() => {
-    const base =
-      stockListFilter === "all"
-        ? rowsAfterCityFilter
-        : rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-    // [414] Manager в real-режиме доверяет серверному my-scope: trashed уже отфильтрованы сервером
-    // (отдельный список trashed_dealer_external_keys, в active_dealer_external_keys их нет).
-    // applyWorkingBaseTrashInvariant использует client-side actualization plane, который для
-    // real-manager неполный и режет валидные строки. Не применяем его для manager.
-    if (isRealUser && me?.role === "manager") {
-      return base;
-    }
-    return !showArchivedDealers ? applyWorkingBaseTrashInvariant(base) : base;
-  }, [
-    rowsAfterCityFilter,
-    stockListFilter,
-    showArchivedDealers,
-    applyWorkingBaseTrashInvariant,
-    isRealUser,
-    me?.role,
-  ]);
-
-  const trashInWorkingBaseDiagLoggedRef = useRef(false);
-  useEffect(() => {
-    const DIAG_TRASH_LEAK_KEY = "tandoor-diag-trash-in-working-base-v1";
-    try {
-      if (trashInWorkingBaseDiagLoggedRef.current) return;
-      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(DIAG_TRASH_LEAK_KEY)) return;
-      if (!actx.enabled || showArchivedDealers) return;
-
-      const trashedDealersById = teamActualizationPlane.trashedDealersById ?? {};
-      const leakedIds = rowsFinalForList.filter((r) => trashedDealersById[r.id]).map((r) => r.id);
-      if (leakedIds.length === 0) return;
-
-      trashInWorkingBaseDiagLoggedRef.current = true;
-      if (typeof sessionStorage !== "undefined") {
-        sessionStorage.setItem(DIAG_TRASH_LEAK_KEY, "1");
-      }
-      console.warn("[dealer-base scope] trashed dealers leaked into rowsFinalForList", {
-        leakedIds,
-        isRealUser,
-        useReal,
-        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
-        access,
-        workView,
-        rowsFinalForListLen: rowsFinalForList.length,
-      });
-    } catch (e) {
-      console.warn("[dealer-base scope] trash leak diag failed", e);
-    }
-  }, [
-    actx.enabled,
-    showArchivedDealers,
-    teamActualizationPlane.trashedDealersById,
-    rowsFinalForList,
-    isRealUser,
-    useReal,
-    assignmentsScope,
-    access,
-    workView,
-  ]);
+    return stockListFilter === "all"
+      ? rowsAfterCityFilter
+      : rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterCityFilter, stockListFilter]);
 
   const isFocusView = useMemo(() => isDealerBaseFocusViewParams(routeQs), [routeQs, routeKey]);
 
@@ -3909,48 +3812,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         ) : null}
       </div>
       ) : null}
-
-      {useReal && access === "sales_manager" && typeof localStorage !== "undefined" && localStorage.getItem("tandoor-hide-scope-diag") !== "1" && (
-        <div
-          style={{
-            margin: "8px 0",
-            padding: "8px 12px",
-            background: "#fff8e1",
-            border: "1px solid #e0c068",
-            borderRadius: 8,
-            fontSize: 12,
-            fontFamily: "monospace",
-            lineHeight: 1.5,
-            color: "#5a4400",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {`[scope-diag 410]
-catalog=${catalogRows.length}
-visPayload=${!effectiveVisPayload ? "null" : effectiveVisPayload.all ? "ALL" : `codes(${effectiveVisPayload.codes?.length ?? 0})`}
-releaseDealerRowsForScope=${releaseDealerRowsForScope.length}
-mergedRowsForDealerBase=${mergedRowsForDealerBase.length}
-scopedRows=${scopedRows.length}
-pickerFiltered=${pickerFiltered.length}
-managerScopedRows=${managerScopedRows.length}
-displayRows=${displayRows.length}
-rowsForWorkPlan=${rowsForWorkPlan.length}
-rowsAfterSegmentFilter=${rowsAfterSegmentFilter.length}
-rowsAfterShipmentDay=${rowsAfterShipmentDay.length}
-rowsAfterPrograms=${rowsAfterPrograms.length}
-rowsAfterUrlFocus=${rowsAfterUrlFocus.length}
-rowsAfterCityFilter=${rowsAfterCityFilter.length}
-rowsFinalForList=${rowsFinalForList.length}
-workPlanFilter=${workPlanFilter} segmentList=${segmentList.length} programs=${programFilters.length}
-assignments=${assignmentsScopeIsActive(assignmentsScope) ? "active" : "inactive"} own=${assignmentsScope?.ownCodes.size ?? 0}
-dbScopedExtKeys=${dbScopedExternalKeys?.size ?? "null"}
-selfDbScopeReady=${String(selfDbScopeQ.ready)}
-ropTeam=${ropTeam} mgr=${manager}
-view=${workView} archived=${String(showArchivedDealers)} actx=${String(actx.enabled)}
-me=${me?.id?.slice(0, 8) ?? "?"} role=${me?.role ?? "?"}`}
-        </div>
-      )}
 
       {!embedListOnly && showActualizationSync ? (
         <div className="space-y-3">

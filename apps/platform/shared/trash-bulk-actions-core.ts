@@ -3,6 +3,7 @@
  * Опирается только на dealer_overrides / trade_point_overrides (trashed_by uuid) + user_team_memberships.
  */
 import type { PoolLike } from "./admin/admin-auth.js";
+import { dealerStatusTrash, tpStatusTrash } from "./record-status.js";
 
 export const BULK_TRASH_MAX_IDS = 5000;
 export const BULK_TRASH_SQL_CHUNK = 500;
@@ -74,9 +75,7 @@ async function fetchDealerTrashRows(pool: PoolLike, ids: string[]): Promise<Over
     `SELECT dealer_id, trashed_by::text AS trashed_by
      FROM dealer_overrides
      WHERE dealer_id = ANY($1::text[])
-       AND trashed_at IS NOT NULL
-       AND purge_requested_at IS NULL
-       AND purged_at IS NULL`,
+       AND ${dealerStatusTrash("dealer_overrides")}`,
     [ids],
   );
   return r.rows.map((row) => ({ entity_id: row.dealer_id, trashed_by: row.trashed_by }));
@@ -87,9 +86,7 @@ async function fetchTradePointTrashRows(pool: PoolLike, ids: string[]): Promise<
     `SELECT tp_id, trashed_by::text AS trashed_by
      FROM trade_point_overrides
      WHERE tp_id = ANY($1::text[])
-       AND trashed_at IS NOT NULL
-       AND purge_requested_at IS NULL
-       AND purged_at IS NULL`,
+       AND ${tpStatusTrash("trade_point_overrides")}`,
     [ids],
   );
   return r.rows.map((row) => ({ entity_id: row.tp_id, trashed_by: row.trashed_by }));

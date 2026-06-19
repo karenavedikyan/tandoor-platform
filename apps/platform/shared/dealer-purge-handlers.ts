@@ -7,6 +7,12 @@ import type { PoolLike } from "./admin/admin-auth.js";
 import { removeDealerFromArchiveEverywhere } from "./archive-trash-invariant.js";
 import { canUserTrashDealer } from "./dealer-trash-scope-server.js";
 import { mapDealerOverrideRow, type DealerOverrideRow } from "./dealer-overrides-types.js";
+import {
+  isEmployeeTrashStatus,
+  isPendingAdminStatus,
+  isPurgedStatus,
+  parseRecordStatus,
+} from "./record-status.js";
 import { logDealerAuditEvent } from "./override-audit-events.js";
 import { removeDealerFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
@@ -41,15 +47,15 @@ async function fetchOverride(pool: PoolLike, dealerId: string): Promise<DealerOv
 }
 
 function isEmployeeTrash(ov: DealerOverrideRow | null): boolean {
-  return Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at);
+  return isEmployeeTrashStatus(parseRecordStatus(ov?.status));
 }
 
 function isAdminQueue(ov: DealerOverrideRow | null): boolean {
-  return Boolean(ov?.purge_requested_at && !ov.purged_at);
+  return isPendingAdminStatus(parseRecordStatus(ov?.status));
 }
 
 function isPurged(ov: DealerOverrideRow | null): boolean {
-  return Boolean(ov?.purged_at);
+  return isPurgedStatus(parseRecordStatus(ov?.status));
 }
 
 function assertActiveUser(me: SessionUser, res: VercelResponse): boolean {
@@ -110,8 +116,10 @@ export async function handleDealerOverridesRequestPurge(
     async () => {
       await pool.query(
         `UPDATE dealer_overrides
-         SET purge_requested_at = NOW(), purge_requested_by = $2::uuid, updated_at = NOW(), updated_by = $2::uuid
-         WHERE dealer_id = $1`,
+         SET status = 'pending_admin',
+             purge_requested_at = NOW(), purge_requested_by = $2::uuid,
+             updated_at = NOW(), updated_by = $2::uuid
+         WHERE dealer_id = $1 AND status = 'in_trash'`,
         [dealerId, me.id],
       );
       await logDealerAuditEvent(pool, {
@@ -163,10 +171,11 @@ export async function handleDealerOverridesRestore(
         if (target === "active") {
           await pool.query(
             `UPDATE dealer_overrides
-             SET trashed_at = NULL, trashed_by = NULL,
+             SET status = 'active',
+                 trashed_at = NULL, trashed_by = NULL,
                  purge_requested_at = NULL, purge_requested_by = NULL,
                  updated_at = NOW(), updated_by = $2::uuid
-             WHERE dealer_id = $1`,
+             WHERE dealer_id = $1 AND status IN ('in_trash', 'pending_admin')`,
             [dealerId, me.id],
           );
           await logDealerAuditEvent(pool, {
@@ -178,9 +187,10 @@ export async function handleDealerOverridesRestore(
         } else {
           await pool.query(
             `UPDATE dealer_overrides
-             SET purge_requested_at = NULL, purge_requested_by = NULL,
+             SET status = 'in_trash',
+                 purge_requested_at = NULL, purge_requested_by = NULL,
                  updated_at = NOW(), updated_by = $2::uuid
-             WHERE dealer_id = $1`,
+             WHERE dealer_id = $1 AND status = 'pending_admin'`,
             [dealerId, me.id],
           );
           await logDealerAuditEvent(pool, {
@@ -210,10 +220,11 @@ export async function handleDealerOverridesRestore(
       async () => {
         await pool.query(
           `UPDATE dealer_overrides
-           SET trashed_at = NULL, trashed_by = NULL,
+           SET status = 'active',
+               trashed_at = NULL, trashed_by = NULL,
                purge_requested_at = NULL, purge_requested_by = NULL,
                updated_at = NOW(), updated_by = $2::uuid
-           WHERE dealer_id = $1`,
+           WHERE dealer_id = $1 AND status IN ('in_trash', 'pending_admin')`,
           [dealerId, me.id],
         );
         await logDealerAuditEvent(pool, {
@@ -263,8 +274,10 @@ export async function handleDealerOverridesPurge(
   await runOverridesHandlerSafe(pool, "dealer_purge", dealerId, { dealer_id: dealerId }, me.id, async () => {
     await pool.query(
       `UPDATE dealer_overrides
-       SET purged_at = NOW(), purged_by = $2::uuid, updated_at = NOW(), updated_by = $2::uuid
-       WHERE dealer_id = $1`,
+       SET status = 'purged',
+           purged_at = NOW(), purged_by = $2::uuid,
+           updated_at = NOW(), updated_by = $2::uuid
+       WHERE dealer_id = $1 AND status = 'pending_admin'`,
       [dealerId, me.id],
     );
     await logDealerAuditEvent(pool, {
@@ -304,8 +317,10 @@ export async function handleDealerOverridesAdminRestore(
   await runOverridesHandlerSafe(pool, "dealer_admin_restore", dealerId, { dealer_id: dealerId }, me.id, async () => {
     await pool.query(
       `UPDATE dealer_overrides
-       SET purged_at = NULL, purged_by = NULL, updated_at = NOW(), updated_by = $2::uuid
-       WHERE dealer_id = $1`,
+       SET status = 'pending_admin',
+           purged_at = NULL, purged_by = NULL,
+           updated_at = NOW(), updated_by = $2::uuid
+       WHERE dealer_id = $1 AND status = 'purged'`,
       [dealerId, me.id],
     );
     await logDealerAuditEvent(pool, {

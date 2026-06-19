@@ -62,15 +62,15 @@ function mockPool(): PoolLike {
       if (s.includes("FROM dealers d") && s.includes("dealer_overrides")) {
         return {
           rows: [
-            { id: "d1", external_key: "client-a", is_purged: false, is_employee_trash: false },
-            { id: "d2", external_key: "client-b", is_purged: false, is_employee_trash: false },
+            { id: "d1", external_key: "client-a", status: "active" },
+            { id: "d2", external_key: "client-b", status: "active" },
           ],
         };
       }
-      if (s.includes("FROM dealer_overrides d_ov") && s.includes("purge_requested_at")) {
+      if (s.includes("FROM dealer_overrides d_ov") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
-      if (s.includes("FROM trade_point_overrides tpo") && s.includes("purge_requested_at")) {
+      if (s.includes("FROM trade_point_overrides tpo") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
       if (s.includes("COUNT(*) FILTER") && s.includes("trade_points")) {
@@ -81,7 +81,7 @@ function mockPool(): PoolLike {
       }
       if (s.includes("rop_client_grants")) return { rows: [] };
       if (s.includes("FROM dealers d") && s.includes("release_code = ANY")) {
-        return { rows: [{ id: "d1", external_key: "client-a", is_purged: false, is_employee_trash: false }] };
+        return { rows: [{ id: "d1", external_key: "client-a", status: "active" }] };
       }
       void params;
       return { rows: [] };

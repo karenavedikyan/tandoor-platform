@@ -282,16 +282,35 @@ async function setTrash(
     async () => {
       const prev = await fetchOverride(pool, tpId);
       await logEvents(pool, tpId, prev, patch, me.id);
-      await pool.query(
-        `INSERT INTO trade_point_overrides (tp_id, trashed_at, trashed_by, updated_by)
-         VALUES ($1, $2, $3::uuid, $4::uuid)
-         ON CONFLICT (tp_id) DO UPDATE SET
-           trashed_at = EXCLUDED.trashed_at,
-           trashed_by = EXCLUDED.trashed_by,
-           updated_at = NOW(),
-           updated_by = EXCLUDED.updated_by`,
-        [tpId, trash ? new Date().toISOString() : null, trash ? me.id : null, me.id],
-      );
+      if (trash) {
+        await pool.query(
+          `INSERT INTO trade_point_overrides (tp_id, status, trashed_at, trashed_by, updated_by)
+           VALUES ($1, 'in_trash', $2, $3::uuid, $4::uuid)
+           ON CONFLICT (tp_id) DO UPDATE SET
+             status = CASE
+               WHEN trade_point_overrides.status = 'purged' THEN trade_point_overrides.status
+               ELSE 'in_trash'::record_status
+             END,
+             trashed_at = EXCLUDED.trashed_at,
+             trashed_by = EXCLUDED.trashed_by,
+             updated_at = NOW(),
+             updated_by = EXCLUDED.updated_by`,
+          [tpId, new Date().toISOString(), me.id, me.id],
+        );
+      } else {
+        await pool.query(
+          `UPDATE trade_point_overrides
+           SET status = 'active',
+               trashed_at = NULL,
+               trashed_by = NULL,
+               purge_requested_at = NULL,
+               purge_requested_by = NULL,
+               updated_at = NOW(),
+               updated_by = $2::uuid
+           WHERE tp_id = $1 AND status IN ('in_trash', 'pending_admin')`,
+          [tpId, me.id],
+        );
+      }
     },
   );
   if (trash) {

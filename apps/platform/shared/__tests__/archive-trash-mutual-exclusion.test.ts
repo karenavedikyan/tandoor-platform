@@ -25,6 +25,7 @@ type BlobRow = {
 
 type OverrideRow = {
   dealer_id: string;
+  status: "active" | "in_trash" | "pending_admin" | "purged";
   trashed_at: string | null;
   trashed_by: string | null;
   purge_requested_at: string | null;
@@ -86,44 +87,39 @@ function createPool(seed: { blobs?: BlobRow[]; overrides?: OverrideRow[] }): {
         return { rows: [] };
       }
 
-      if (s.includes("FROM dealer_overrides") && s.includes("trashed_at IS NOT NULL")) {
+      if (s.includes("FROM dealer_overrides") && s.includes("status = 'in_trash'")) {
         const ids = params?.[0] as string[];
         const rows = ids
           .map((id) => overrides.get(id))
-          .filter((ov): ov is OverrideRow =>
-            Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at),
-          )
+          .filter((ov): ov is OverrideRow => ov?.status === "in_trash")
           .map((ov) => ({ dealer_id: ov.dealer_id, trashed_by: ov.trashed_by }));
         return { rows };
       }
 
-      if (s.includes("SELECT dealer_id FROM dealer_overrides") && s.includes("trashed_at IS NOT NULL")) {
+      if (s.includes("SELECT dealer_id FROM dealer_overrides") && s.includes("status = 'in_trash'")) {
         const ids = params?.[0] as string[];
         const rows = ids
           .map((id) => overrides.get(id))
-          .filter((ov): ov is OverrideRow =>
-            Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at),
-          )
+          .filter((ov): ov is OverrideRow => ov?.status === "in_trash")
           .map((ov) => ({ dealer_id: ov.dealer_id }));
         return { rows };
       }
 
-      if (s.includes("FROM dealer_overrides") && s.includes("trashed_at IS NOT NULL") && s.includes("ANY")) {
+      if (s.includes("FROM dealer_overrides") && s.includes("status = 'in_trash'") && s.includes("ANY")) {
         const ids = params?.[0] as string[];
         const rows = ids
           .map((id) => overrides.get(id))
-          .filter((ov): ov is OverrideRow =>
-            Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at),
-          )
+          .filter((ov): ov is OverrideRow => ov?.status === "in_trash")
           .map((ov) => ({ dealer_id: ov.dealer_id }));
         return { rows };
       }
 
-      if (s.includes("UPDATE dealer_overrides") && s.includes("trashed_at = NULL")) {
+      if (s.includes("UPDATE dealer_overrides") && s.includes("status = 'active'")) {
         const ids = params?.[0] as string[];
         for (const id of ids) {
           const ov = overrides.get(id);
           if (!ov) continue;
+          ov.status = "active";
           ov.trashed_at = null;
           ov.trashed_by = null;
           ov.purge_requested_at = null;
@@ -182,6 +178,7 @@ const seedBlobs: BlobRow[] = [
     overrides: [
       {
         dealer_id: DEALER_ID,
+        status: "in_trash",
         trashed_at: new Date().toISOString(),
         trashed_by: ACTOR,
         purge_requested_at: null,
@@ -207,6 +204,7 @@ const seedBlobs: BlobRow[] = [
     overrides: [
       {
         dealer_id: DEALER_ID,
+        status: "in_trash",
         trashed_at: new Date().toISOString(),
         trashed_by: MGR_A,
         purge_requested_at: null,
