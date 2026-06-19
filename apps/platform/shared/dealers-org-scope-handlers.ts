@@ -54,7 +54,7 @@ async function fetchOrphanRegionalManagers(pool: PoolLike): Promise<
          SELECT 1 FROM user_team_memberships m
          INNER JOIN teams t ON t.id = m.team_id
          WHERE m.user_id = u.id
-           AND m.role IN ('manager', 'regional_manager')
+           AND m.role_in_team IN ('manager', 'regional_manager')
        )
      ORDER BY u.full_name, u.email`,
   );
