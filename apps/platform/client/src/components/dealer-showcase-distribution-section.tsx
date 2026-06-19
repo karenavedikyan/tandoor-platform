@@ -138,8 +138,6 @@ export function DealerShowcaseDistributionSection({
   const [categoryExpanded, setCategoryExpanded] = useState<Record<string, boolean>>({});
   const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
   const [outdatedOpen, setOutdatedOpen] = useState(false);
-
-  const [outdatedOpen, setOutdatedOpen] = useState(false);
   const [mutating, setMutating] = useState(false);
   const [importing, setImporting] = useState(false);
   const legacyDraft = useMemo(() => readLegacyShowcaseStorage(), []);
