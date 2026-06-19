@@ -27,7 +27,10 @@
 member.totals → team_totals → org_totals
 ```
 
-`org_totals` = объединение всех `team_totals` + `orphan.totals` через SET-union по `external_key`.
+`org_totals` = объединение всех members команд + orphan через SET-union:
+
+- **dealers** — по `external_key` (`unionExternalKeys`);
+- **trade_points** — по `tp_id` из `active_trade_points[]` (`unionTradePointIds`), **не суммой** `member.totals.active_trade_points`, потому что regional_manager покрывает тех же dealer/TP, что и менеджеры команды.
 
 ## Роли и endpoints
 

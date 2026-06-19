@@ -35,14 +35,22 @@ const TEAM_C = "team-c";
       totals: teamTotals[0]!,
       active_dealer_external_keys: Array.from({ length: 100 }, (_, i) => `a-${i}`),
       trashed_dealer_external_keys: [],
-      active_trade_points: [],
+      active_trade_points: Array.from({ length: 269 }, (_, i) => ({
+        tp_id: `tp-a-${i}`,
+        dealer_id: `a-${i % 100}`,
+        is_primary: false,
+      })),
     },
     {
       user: { id: "m2", name: "M2", email: "", role: "manager" },
       totals: teamTotals[1]!,
       active_dealer_external_keys: Array.from({ length: 80 }, (_, i) => `b-${i}`),
       trashed_dealer_external_keys: [],
-      active_trade_points: [],
+      active_trade_points: Array.from({ length: 500 }, (_, i) => ({
+        tp_id: `tp-b-${i}`,
+        dealer_id: `b-${i % 80}`,
+        is_primary: false,
+      })),
     },
     {
       user: { id: "orph", name: "O", email: "", role: "manager" },
@@ -54,7 +62,7 @@ const TEAM_C = "team-c";
   ];
   const org = aggregateOrgTotals(teamTotals, orphanTotals, members);
   assert.equal(org.active_dealers, 182);
-  assert.equal(org.active_trade_points, 269 + 500 + 627 + 0);
+  assert.equal(org.active_trade_points, 269 + 500, "SET-union tp_id across members, not sum of team_totals");
 }
 
 function mockPool(): PoolLike {
