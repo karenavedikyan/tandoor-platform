@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { CatalogFiltersPanel } from "@/components/catalog/CatalogFiltersPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,6 +95,19 @@ import {
 } from "@/lib/trade-point-showcase-matrix-storage";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useCatalogFiltersUrl } from "@/hooks/use-catalog-filters-url";
+import { computeCatalogFacets, countActiveCatalogFilters, filterCatalogProductsByFilters } from "@/lib/catalog-facets";
+import {
+  DISTRIBUTION_CATALOG_CATEGORIES,
+  productDistributionCategory,
+  type DistributionCatalogCategoryId,
+} from "@/lib/distribution-catalog-categories";
+import {
+  DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
+  distributionEntryVirtualItemStyle,
+  useDistributionEntryCatalogGridColumns,
+  useDistributionEntryVirtualizer,
+} from "@/lib/distribution-entry-element-virtualizer";
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import {
   assignmentShareUrl,
@@ -156,16 +170,31 @@ function fullscreenEntryProductGridClass(size: CatalogCardSize, compact: boolean
 }
 
 type SourceTab = "matrix" | "catalog";
-type DoorFilter = "all" | "vh" | "mk";
 type StatusFilter = "all" | ShowcaseMatrixStatusId;
 
+function matrixModelCategory(m: ShowcaseMatrixModelDefinition): DistributionCatalogCategoryId {
+  if (m.type === "hardware") return "hardware";
+  if (m.type === "interior") return "mk";
+  return "vh";
+}
+
+function modelMatchesCategories(
+  category: DistributionCatalogCategoryId,
+  selected: readonly DistributionCatalogCategoryId[],
+): boolean {
+  if (selected.length === 0) return true;
+  return selected.includes(category);
+}
+
 function segmentFromProduct(p: CatalogProduct): ShowcasePlacementSegment {
-  if (p.category.includes("Фурнитура") || p.doorKind === "Фурнитура") return "hardware";
-  if (p.doorKind === "Межкомнатная" || p.category.includes("Межкомнат")) return "mk";
+  const cat = productDistributionCategory(p);
+  if (cat === "hardware") return "hardware";
+  if (cat === "mk") return "mk";
   return "vh";
 }
 
 function segmentFromMatrixModel(m: ShowcaseMatrixModelDefinition): ShowcasePlacementSegment {
+  if (m.type === "hardware") return "hardware";
   return m.type === "interior" ? "mk" : "vh";
 }
 
@@ -250,8 +279,11 @@ function countMarkedOursInPlacement(
   return count;
 }
 
-function segmentContextFromDoorFilter(doorFilter: DoorFilter): ShowcasePlacementSegment {
-  if (doorFilter === "mk") return "mk";
+function segmentContextFromCategories(
+  categories: readonly DistributionCatalogCategoryId[],
+): ShowcasePlacementSegment {
+  if (categories.includes("mk")) return "mk";
+  if (categories.includes("hardware")) return "hardware";
   return "vh";
 }
 
@@ -290,13 +322,26 @@ export function DistributionFullscreenEntry({
   const { toast } = useToast();
   const { user } = useCurrentUser();
   const [bump, setBump] = useState(0);
-  const [sourceTab, setSourceTab] = useState<SourceTab>("matrix");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [doorFilter, setDoorFilter] = useState<DoorFilter>("all");
+  const {
+    filters: catalogFilters,
+    setFilter: setCatalogFilter,
+    categories: selectedCategoryIds,
+    setCategories: setSelectedCategoryIds,
+    query: searchQuery,
+    setQuery: setSearchQuery,
+    source,
+    setSource,
+    resetAll: resetCatalogFilters,
+  } = useCatalogFiltersUrl({ prefix: "dx" });
+  const sourceTab: SourceTab = source === "matrix" ? "matrix" : "catalog";
+  const setSourceTab = useCallback(
+    (tab: SourceTab) => setSource(tab === "matrix" ? "matrix" : "all"),
+    [setSource],
+  );
   /** Единый селектор: фильтр списка + кисть в compact-режиме (кроме «Все статусы»). */
   const [workStatus, setWorkStatus] = useState<StatusFilter>("all");
   const [cardSize, setCardSize] = useState<FullscreenViewMode>(() => readFullscreenViewMode());
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersPanelOpen, setFiltersPanelOpen] = useState(true);
   const [compactMode, setCompactMode] = useState<boolean>(() => {
     try {
       return localStorage.getItem(COMPACT_STORAGE_KEY) === "1";
@@ -334,7 +379,11 @@ export function DistributionFullscreenEntry({
     writeCatalogCardSizeToStorage(CARD_SIZE_STORAGE_KEY, cardSize);
   }, [cardSize]);
 
-  const filtersActive = sourceTab !== "matrix" || doorFilter !== "all";
+  const filtersActive =
+    source === "matrix" ||
+    selectedCategoryIds.length > 0 ||
+    Object.keys(catalogFilters).length > 0 ||
+    searchQuery.trim().length > 0;
 
   useEffect(() => {
     try {
@@ -504,31 +553,61 @@ export function DistributionFullscreenEntry({
     return out;
   }, [matrixModels, baselineForProduct]);
 
+  const selectedCategories = selectedCategoryIds as DistributionCatalogCategoryId[];
+
+  const matrixCatalogProducts = useMemo(() => {
+    const products: CatalogProduct[] = [];
+    for (const m of matrixModels) {
+      const p = getProductById(m.id);
+      if (p) products.push(p);
+    }
+    return products;
+  }, [matrixModels]);
+
   const catalogProducts = useMemo(() => {
     const q = searchQuery.trim();
     let list: CatalogProduct[] = q
       ? searchCatalog(q, 500)
       : [...CATALOG_PRODUCTS].sort((a, b) => a.showcasePriority - b.showcasePriority);
-
-    if (doorFilter === "vh") {
-      list = list.filter((p) => segmentFromProduct(p) === "vh");
-    } else if (doorFilter === "mk") {
-      list = list.filter((p) => segmentFromProduct(p) === "mk");
-    }
+    list = filterCatalogProductsByFilters(list, catalogFilters, selectedCategories);
     return list;
-  }, [doorFilter, searchQuery]);
+  }, [catalogFilters, searchQuery, selectedCategories]);
+
+  const facetBaseProducts = useMemo(
+    () => (sourceTab === "matrix" ? matrixCatalogProducts : catalogProducts),
+    [sourceTab, matrixCatalogProducts, catalogProducts],
+  );
+
+  const catalogFacets = useMemo(
+    () => computeCatalogFacets(facetBaseProducts, catalogFilters, selectedCategories),
+    [facetBaseProducts, catalogFilters, selectedCategories],
+  );
+
+  const categoryChips = useMemo(() => {
+    const pool = sourceTab === "matrix" ? matrixCatalogProducts : [...CATALOG_PRODUCTS];
+    return DISTRIBUTION_CATALOG_CATEGORIES.map((cat) => ({
+      ...cat,
+      count: pool.filter((p) => productDistributionCategory(p) === cat.id).length,
+    })).filter((c) => c.count > 0);
+  }, [matrixCatalogProducts, sourceTab]);
+
+  const activeFilterCount = useMemo(
+    () =>
+      countActiveCatalogFilters(catalogFilters, selectedCategories, searchQuery) +
+      (source === "matrix" ? 1 : 0),
+    [catalogFilters, selectedCategories, searchQuery, source],
+  );
 
   const visibleProducts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     let list: CatalogProduct[];
     if (sourceTab === "matrix") {
-      let models = matrixModels;
-      if (doorFilter === "vh") models = models.filter((m) => m.type === "entrance");
-      if (doorFilter === "mk") models = models.filter((m) => m.type === "interior");
       const products: CatalogProduct[] = [];
-      for (const m of models) {
+      for (const m of matrixModels) {
+        if (!modelMatchesCategories(matrixModelCategory(m), selectedCategories)) continue;
         const p = getProductById(m.id);
         if (!p) continue;
+        if (!filterCatalogProductsByFilters([p], catalogFilters, []).length) continue;
         if (q) {
           const haystack = buildCatalogProductSearchHaystack(p);
           if (!catalogSearchQueryMatchesHaystack(q, haystack)) continue;
@@ -545,7 +624,17 @@ export function DistributionFullscreenEntry({
       const status = draft[p.id]?.status ?? baselines[p.id]?.status ?? "need_install";
       return status === workStatus;
     });
-  }, [baselines, catalogProducts, doorFilter, draft, matrixModels, searchQuery, sourceTab, workStatus]);
+  }, [
+    baselines,
+    catalogFilters,
+    catalogProducts,
+    draft,
+    matrixModels,
+    searchQuery,
+    selectedCategories,
+    sourceTab,
+    workStatus,
+  ]);
 
   useEffect(() => {
     setDraft((prev) => {
@@ -585,14 +674,17 @@ export function DistributionFullscreenEntry({
     (onBackToList ?? onClose)();
   }, [onBackToList, onClose]);
 
-  const handleWorkStatusChange = useCallback((value: StatusFilter) => {
-    setWorkStatus(value);
-    if (value === "need_install") {
-      setSourceTab("matrix");
-    } else if (value !== "all") {
-      setSourceTab("catalog");
-    }
-  }, []);
+  const handleWorkStatusChange = useCallback(
+    (value: StatusFilter) => {
+      setWorkStatus(value);
+      if (value === "need_install") {
+        setSourceTab("matrix");
+      } else if (value !== "all") {
+        setSourceTab("catalog");
+      }
+    },
+    [setSourceTab],
+  );
 
   const workStatusHint = useMemo(() => {
     if (workStatus === "all") {
@@ -646,8 +738,8 @@ export function DistributionFullscreenEntry({
 
   const placementTypeMode = workStatus === "installed";
   const placementSegmentContext = useMemo(
-    () => segmentContextFromDoorFilter(doorFilter),
-    [doorFilter],
+    () => segmentContextFromCategories(selectedCategories),
+    [selectedCategories],
   );
   const placementTypeOptions = useMemo(
     () => allowedTypesForSegment(placementSegmentContext),
@@ -1159,6 +1251,62 @@ export function DistributionFullscreenEntry({
   const compactSaveCount = needInstallMode ? needInstallCount : changedIds.length;
 
   const gridClass = fullscreenEntryProductGridClass(cardSize, compactMode);
+  const productScrollRef = useRef<HTMLDivElement>(null);
+  const catalogGridColumns = useDistributionEntryCatalogGridColumns(gridClass);
+  const matrixEmpty = sourceTab === "matrix" && matrixModels.length === 0;
+  const listVirtualizer = useDistributionEntryVirtualizer({
+    count:
+      cardSize === "list"
+        ? productsForList.length
+        : Math.ceil(productsForList.length / Math.max(catalogGridColumns, 1)),
+    estimateSize:
+      cardSize === "list"
+        ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.catalogList
+        : DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.catalogGridRow,
+    scrollRef: productScrollRef,
+  });
+
+  const renderProductItem = (p: CatalogProduct) => {
+    const seg = matrixModelById.get(p.id)
+      ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
+      : segmentFromProduct(p);
+    if (cardSize === "list") {
+      return (
+        <FullscreenProductRow
+          key={p.id}
+          product={p}
+          draft={draft[p.id]}
+          matrixModel={matrixModelById.get(p.id)}
+          onDraftChange={updateDraft}
+          placementTypeMode={placementTypeMode}
+          activePlacementType={activePlacementType}
+          canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
+          slotLimitHint={slotLimitMessage}
+        />
+      );
+    }
+    return (
+      <FullscreenProductCard
+        key={p.id}
+        product={p}
+        cardSize={cardSize}
+        draft={draft[p.id]}
+        matrixModel={matrixModelById.get(p.id)}
+        onDraftChange={updateDraft}
+        quickMode={statusBrushActive}
+        quickStatus={brushStatus}
+        baselineStatus={baselines[p.id]?.status ?? "need_install"}
+        isChanged={changedSet.has(p.id)}
+        isMatrixRecommended={matrixModelById.has(p.id)}
+        isExplicitMark={explicitQuickMarks.has(p.id)}
+        onSetExplicitMark={setExplicitQuickMark}
+        placementTypeMode={placementTypeMode}
+        activePlacementType={activePlacementType}
+        canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
+        slotLimitHint={slotLimitMessage}
+      />
+    );
+  };
 
   return createPortal(
     <div
@@ -1318,16 +1466,16 @@ export function DistributionFullscreenEntry({
             <Button
               type="button"
               size="icon"
-              variant={filtersOpen || filtersActive ? "default" : "outline"}
+              variant={filtersPanelOpen || filtersActive ? "default" : "outline"}
               className="relative h-9 w-9 shrink-0"
-              onClick={() => setFiltersOpen((v) => !v)}
+              onClick={() => setFiltersPanelOpen((v) => !v)}
               data-testid="button-fullscreen-entry-filters-toggle"
-              aria-label="Фильтры источника и дверей"
-              aria-expanded={filtersOpen}
-              title="Фильтры источника и дверей"
+              aria-label="Фильтры каталога"
+              aria-expanded={filtersPanelOpen}
+              title="Фильтры каталога"
             >
               <SlidersHorizontal className="h-4 w-4" aria-hidden />
-              {filtersActive && !filtersOpen ? (
+              {filtersActive && !filtersPanelOpen ? (
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary-foreground" aria-hidden />
               ) : null}
             </Button>
@@ -1424,11 +1572,21 @@ export function DistributionFullscreenEntry({
             </div>
           ) : null}
 
-          {filtersOpen ? (
-            <div
-              className="space-y-2 rounded-lg border border-border/80 bg-muted/20 px-2 py-2"
-              data-testid="panel-fullscreen-entry-filters"
-            >
+          {filtersPanelOpen ? (
+            <div className="space-y-2" data-testid="panel-fullscreen-entry-filters">
+              <CatalogFiltersPanel
+                categories={categoryChips}
+                selectedCategories={selectedCategoryIds}
+                onCategoriesChange={setSelectedCategoryIds}
+                facets={catalogFacets}
+                value={catalogFilters}
+                onChange={setCatalogFilter}
+                onResetAll={resetCatalogFilters}
+                activeCount={activeFilterCount}
+                open
+                data-testid="fullscreen-entry-catalog-filters"
+              />
+
               <Tabs
                 value={sourceTab}
                 onValueChange={(v) => setSourceTab(v as SourceTab)}
@@ -1458,28 +1616,6 @@ export function DistributionFullscreenEntry({
                 </TabsList>
               </Tabs>
 
-              <div className="flex flex-wrap gap-1">
-                {(
-                  [
-                    ["all", "Все"],
-                    ["vh", "ВХ"],
-                    ["mk", "МК"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <Button
-                    key={id}
-                    type="button"
-                    size="sm"
-                    variant={doorFilter === id ? "default" : "outline"}
-                    className="h-8 px-2.5 text-xs"
-                    onClick={() => setDoorFilter(id)}
-                    data-testid={`button-fullscreen-entry-door-filter-${id}`}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-
               <p className="text-[10px] leading-snug text-muted-foreground">{workStatusHint}</p>
             </div>
           ) : null}
@@ -1487,59 +1623,72 @@ export function DistributionFullscreenEntry({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-4 sm:px-4 md:pb-28 md:pr-4">
-          {productsForList.length === 0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
-          ) : cardSize === "list" ? (
-            <ul className={gridClass}>
-              {productsForList.map((p) => {
-                const seg = matrixModelById.get(p.id)
-                  ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
-                  : segmentFromProduct(p);
-                return (
-                  <FullscreenProductRow
-                    key={p.id}
-                    product={p}
-                    draft={draft[p.id]}
-                    matrixModel={matrixModelById.get(p.id)}
-                    onDraftChange={updateDraft}
-                    placementTypeMode={placementTypeMode}
-                    activePlacementType={activePlacementType}
-                    canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
-                    slotLimitHint={slotLimitMessage}
-                  />
-                );
-              })}
-            </ul>
-          ) : (
-            <div className={gridClass}>
-              {productsForList.map((p) => {
-                const seg = matrixModelById.get(p.id)
-                  ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
-                  : segmentFromProduct(p);
-                return (
-                  <FullscreenProductCard
-                    key={p.id}
-                    product={p}
-                    cardSize={cardSize}
-                    draft={draft[p.id]}
-                    matrixModel={matrixModelById.get(p.id)}
-                    onDraftChange={updateDraft}
-                    quickMode={statusBrushActive}
-                    quickStatus={brushStatus}
-                    baselineStatus={baselines[p.id]?.status ?? "need_install"}
-                    isChanged={changedSet.has(p.id)}
-                    isMatrixRecommended={matrixModelById.has(p.id)}
-                    isExplicitMark={explicitQuickMarks.has(p.id)}
-                    onSetExplicitMark={setExplicitQuickMark}
-                    placementTypeMode={placementTypeMode}
-                    activePlacementType={activePlacementType}
-                    canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
-                    slotLimitHint={slotLimitMessage}
-                  />
-                );
-              })}
+        <div
+          ref={productScrollRef}
+          className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-4 sm:px-4 md:pb-28 md:pr-4"
+        >
+          {matrixEmpty ? (
+            <div
+              className="flex flex-col items-center gap-3 py-12 text-center"
+              data-testid="fullscreen-entry-empty-matrix"
+            >
+              <p className="max-w-md text-sm text-muted-foreground">
+                На ТТ нет назначенной матрицы. Откройте «Весь каталог», чтобы выбрать модели вручную.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setSourceTab("catalog")}
+                data-testid="button-fullscreen-entry-open-catalog"
+              >
+                Открыть весь каталог
+              </Button>
             </div>
+          ) : productsForList.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Ничего не найдено</p>
+          ) : sourceTab === "catalog" ? (
+            cardSize === "list" ? (
+              <ul className={gridClass}>
+                <div className="relative w-full" style={{ height: listVirtualizer.getTotalSize() }}>
+                  {listVirtualizer.getVirtualItems().map((vi) => {
+                    const p = productsForList[vi.index];
+                    if (!p) return null;
+                    return (
+                      <div
+                        key={vi.key}
+                        data-index={vi.index}
+                        ref={listVirtualizer.measureElement}
+                        style={distributionEntryVirtualItemStyle(listVirtualizer, vi.start)}
+                      >
+                        {renderProductItem(p)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </ul>
+            ) : (
+              <div className="relative w-full" style={{ height: listVirtualizer.getTotalSize() }}>
+                {listVirtualizer.getVirtualItems().map((vi) => {
+                  const startIdx = vi.index * catalogGridColumns;
+                  const slice = productsForList.slice(startIdx, startIdx + catalogGridColumns);
+                  return (
+                    <div
+                      key={vi.key}
+                      data-index={vi.index}
+                      ref={listVirtualizer.measureElement}
+                      style={distributionEntryVirtualItemStyle(listVirtualizer, vi.start)}
+                      className={gridClass}
+                    >
+                      {slice.map((p) => renderProductItem(p))}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : cardSize === "list" ? (
+            <ul className={gridClass}>{productsForList.map((p) => renderProductItem(p))}</ul>
+          ) : (
+            <div className={gridClass}>{productsForList.map((p) => renderProductItem(p))}</div>
           )}
         </div>
 
