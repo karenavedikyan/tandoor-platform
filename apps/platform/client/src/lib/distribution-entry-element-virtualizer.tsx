@@ -69,14 +69,36 @@ export function useDistributionEntryDesktopLayout(): boolean {
   return isDesktop;
 }
 
-function catalogGridColumnsFromClass(gridClass: string, width: number): number {
-  if (gridClass.includes("min-[866px]:grid-cols-6") && width >= 866) return 6;
-  if (gridClass.includes("min-[866px]:grid-cols-4") && width >= 866) return 4;
-  if (gridClass.includes("min-[866px]:grid-cols-3") && width >= 866) return 3;
-  if (gridClass.includes("min-[650px]:grid-cols-4") && width >= 650) return 4;
-  if (gridClass.includes("min-[650px]:grid-cols-3") && width >= 650) return 3;
-  if (gridClass.includes("min-[650px]:grid-cols-2") && width >= 650) return 2;
-  if (gridClass.includes("grid-cols-2")) return 2;
+const TAILWIND_BREAKPOINTS: ReadonlyArray<{ prefix: string; min: number }> = [
+  { prefix: "2xl", min: 1536 },
+  { prefix: "xl", min: 1280 },
+  { prefix: "lg", min: 1024 },
+  { prefix: "md", min: 768 },
+  { prefix: "sm", min: 640 },
+];
+
+export function catalogGridColumnsFromClass(gridClass: string, width: number): number {
+  if (!gridClass.trim()) return 1;
+
+  const customRe = /min-\[(\d+)px\]:grid-cols-(\d+)/g;
+  const customMatches = Array.from(gridClass.matchAll(customRe))
+    .map((m) => ({ min: Number(m[1]), cols: Number(m[2]) }))
+    .filter((x) => Number.isFinite(x.min) && Number.isFinite(x.cols))
+    .sort((a, b) => b.min - a.min);
+  for (const c of customMatches) {
+    if (width >= c.min) return c.cols;
+  }
+
+  for (const bp of TAILWIND_BREAKPOINTS) {
+    if (width < bp.min) continue;
+    const re = new RegExp(`(?:^|\\s)${bp.prefix}:grid-cols-(\\d+)`);
+    const m = gridClass.match(re);
+    if (m) return Number(m[1]);
+  }
+
+  const base = gridClass.match(/(?:^|\s)grid-cols-(\d+)/);
+  if (base) return Number(base[1]);
+
   return 1;
 }
 
