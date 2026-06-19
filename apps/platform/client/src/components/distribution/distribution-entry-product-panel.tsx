@@ -46,9 +46,28 @@ import {
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
 
+import {
+  updateHashRouteParam,
+  updateHashRouteParams,
+  useHashRouteSearchParams,
+} from "@/lib/hash-route-utils";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type Step = "segment" | "model" | "tradePoints" | "showcase";
+
+const STEP_TO_URL: Record<Step, string> = {
+  segment: "segment",
+  model: "model",
+  tradePoints: "tp",
+  showcase: "showcase",
+};
+
+const URL_TO_STEP: Record<string, Step> = {
+  segment: "segment",
+  model: "model",
+  tp: "tradePoints",
+  showcase: "showcase",
+};
 const DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY = "catalog-card-size";
 
 type DistributionEntryProductPanelProps = {
@@ -74,23 +93,90 @@ export function DistributionEntryProductPanel({
 }: DistributionEntryProductPanelProps) {
   const { user } = useCurrentUser();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
-  const [segment, setSegment] = useState<DistributionSegmentFilter>(filter.segment);
-  const [step, setStep] = useState<Step>("segment");
+  const routeParams = useHashRouteSearchParams();
+
+  const urlStep = routeParams.get("de_step");
+  const urlSeg = routeParams.get("de_seg");
+  const urlModel = routeParams.get("de_model");
+  const urlDealer = routeParams.get("de_dealer");
+  const urlTp = routeParams.get("de_tp");
+
+  const [segment, setSegmentState] = useState<DistributionSegmentFilter>(
+    (urlSeg as DistributionSegmentFilter) || filter.segment,
+  );
+  const [step, setStepState] = useState<Step>(URL_TO_STEP[urlStep ?? ""] ?? "segment");
   const [modelQuery, setModelQuery] = useState("");
   const [tpQuery, setTpQuery] = useState("");
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelIdState] = useState<string | null>(urlModel);
+  const [selectedTradePointId, setSelectedTradePointIdState] = useState<string | null>(urlTp);
   const [cacheBump, setCacheBump] = useState(0);
+
+  const writeWizardUrl = useCallback(
+    (next: {
+      step?: Step;
+      segment?: DistributionSegmentFilter;
+      modelId?: string | null;
+      dealerId?: string | null;
+      tradePointId?: string | null;
+      fullscreen?: boolean;
+    }) => {
+      const updates: Record<string, string | null> = {};
+      if (next.step !== undefined) {
+        updates.de_step = next.step === "segment" ? null : STEP_TO_URL[next.step];
+      }
+      if (next.segment !== undefined) {
+        updates.de_seg = next.segment === filter.segment ? null : next.segment;
+      }
+      if (next.modelId !== undefined) updates.de_model = next.modelId;
+      if (next.dealerId !== undefined) updates.de_dealer = next.dealerId;
+      if (next.tradePointId !== undefined) updates.de_tp = next.tradePointId;
+      if (next.fullscreen !== undefined) updates.de_fs = next.fullscreen ? "1" : null;
+      updateHashRouteParams(updates);
+    },
+    [filter.segment],
+  );
+
+  const setSegment = useCallback(
+    (s: DistributionSegmentFilter) => {
+      setSegmentState(s);
+      writeWizardUrl({ segment: s });
+    },
+    [writeWizardUrl],
+  );
+
+  useEffect(() => {
+    const newStep = URL_TO_STEP[routeParams.get("de_step") ?? ""] ?? "segment";
+    if (newStep !== step) setStepState(newStep);
+    const newSeg = (routeParams.get("de_seg") as DistributionSegmentFilter) || filter.segment;
+    if (newSeg !== segment) setSegmentState(newSeg);
+    const newModel = routeParams.get("de_model");
+    if (newModel !== selectedModelId) setSelectedModelIdState(newModel);
+    const newTp = routeParams.get("de_tp");
+    if (newTp !== selectedTradePointId) setSelectedTradePointIdState(newTp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeParams, filter.segment]);
+
+  useEffect(() => {
+    if (routeParams.get("de_fs") === "1" && (!urlDealer || !urlTp)) {
+      updateHashRouteParam("de_fs", null);
+    }
+  }, [routeParams, urlDealer, urlTp]);
 
   useEffect(() => {
     setSegment(filter.segment);
-  }, [filter.segment]);
+  }, [filter.segment, setSegment]);
   useEffect(() => {
     if (filter.segment !== "all") {
       setSegment(filter.segment);
-      setStep((s) => (s === "segment" ? "model" : s));
+      setStepState((s) => {
+        if (s === "segment") {
+          writeWizardUrl({ step: "model" });
+          return "model";
+        }
+        return s;
+      });
     }
-  }, [filter.segment]);
+  }, [filter.segment, setSegment, writeWizardUrl]);
 
 
   useEffect(() => {
@@ -130,6 +216,42 @@ export function DistributionEntryProductPanel({
     [tpRows, selectedTradePointId],
   );
 
+  useEffect(() => {
+    if (urlModel && !selectedModel) {
+      setStepState("model");
+      setSelectedModelIdState(null);
+      updateHashRouteParams({ de_model: null, de_step: "model", de_fs: null });
+    }
+  }, [urlModel, selectedModel]);
+
+  useEffect(() => {
+    if (step !== "showcase") return;
+    if (!urlDealer || !urlTp) {
+      setStepState("tradePoints");
+      setSelectedTradePointIdState(null);
+      updateHashRouteParams({ de_step: "tp", de_dealer: null, de_tp: null, de_fs: null });
+      return;
+    }
+    if (!selectedModel) return;
+    if (!selectedTpRow) {
+      setStepState("tradePoints");
+      setSelectedTradePointIdState(null);
+      updateHashRouteParams({ de_step: "tp", de_dealer: null, de_tp: null, de_fs: null });
+    }
+  }, [step, urlDealer, urlTp, selectedModel, selectedTpRow]);
+
+  const handleFullscreenChange = useCallback(
+    (open: boolean) => {
+      if (open) {
+        if (!urlDealer || !urlTp) return;
+        updateHashRouteParams({ de_dealer: urlDealer, de_tp: urlTp, de_fs: "1" });
+      } else {
+        updateHashRouteParam("de_fs", null);
+      }
+    },
+    [urlDealer, urlTp],
+  );
+
   const selectedRef = useMemo(
     () =>
       selectedTpRow
@@ -154,9 +276,16 @@ export function DistributionEntryProductPanel({
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
 
   const handleSelectModel = useCallback((modelId: string) => {
-    setSelectedModelId(modelId);
-    setSelectedTradePointId(null);
-    setStep("tradePoints");
+    setSelectedModelIdState(modelId);
+    setSelectedTradePointIdState(null);
+    setStepState("tradePoints");
+    updateHashRouteParams({
+      de_model: modelId,
+      de_dealer: null,
+      de_tp: null,
+      de_fs: null,
+      de_step: "tp",
+    });
   }, []);
 
   const furnitureEmpty = segment === "furniture" && allModels.length > 0 && catalogProducts.length === 0;
@@ -174,10 +303,18 @@ export function DistributionEntryProductPanel({
             className="min-h-10"
             data-testid={`distribution-entry-product-segment-${opt.value}`}
             onClick={() => {
-              setSegment(opt.value);
-              setSelectedModelId(null);
-              setSelectedTradePointId(null);
-              setStep("model");
+              setSegmentState(opt.value);
+              setSelectedModelIdState(null);
+              setSelectedTradePointIdState(null);
+              setStepState("model");
+              updateHashRouteParams({
+                de_seg: opt.value === filter.segment ? null : opt.value,
+                de_model: null,
+                de_dealer: null,
+                de_tp: null,
+                de_fs: null,
+                de_step: "model",
+              });
             }}
           >
             {opt.label}
@@ -382,8 +519,13 @@ export function DistributionEntryProductPanel({
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedTradePointId(row.tradePointId);
-                      setStep("showcase");
+                      setSelectedTradePointIdState(row.tradePointId);
+                      setStepState("showcase");
+                      updateHashRouteParams({
+                        de_dealer: row.dealerId,
+                        de_tp: row.tradePointId,
+                        de_step: "showcase",
+                      });
                     }}
                     className={cn(
                       "w-full rounded-xl border px-3 py-3 text-left transition-colors",
@@ -421,6 +563,8 @@ export function DistributionEntryProductPanel({
         profile={profile}
         actorUserId={actorUserId}
         actorName={actorName}
+        initialFullscreenOpen={routeParams.get("de_fs") === "1"}
+        onFullscreenChange={handleFullscreenChange}
       />
     ) : (
       <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
@@ -432,17 +576,32 @@ export function DistributionEntryProductPanel({
 
   const localBack = () => {
     if (step === "showcase") {
-      setSelectedTradePointId(null);
-      setStep("tradePoints");
+      setSelectedTradePointIdState(null);
+      setStepState("tradePoints");
+      updateHashRouteParams({ de_tp: null, de_dealer: null, de_fs: null, de_step: "tp" });
       return;
     }
     if (step === "tradePoints") {
-      setSelectedModelId(null);
-      setStep("model");
+      setSelectedModelIdState(null);
+      setStepState("model");
+      updateHashRouteParams({
+        de_model: null,
+        de_dealer: null,
+        de_tp: null,
+        de_fs: null,
+        de_step: "model",
+      });
       return;
     }
     if (step === "model") {
-      setStep("segment");
+      setStepState("segment");
+      updateHashRouteParams({
+        de_step: null,
+        de_model: null,
+        de_dealer: null,
+        de_tp: null,
+        de_fs: null,
+      });
     }
   };
 
