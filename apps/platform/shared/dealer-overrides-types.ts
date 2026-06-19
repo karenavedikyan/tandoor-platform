@@ -2,8 +2,12 @@
  * Типы оверрайдов дилера (Postgres, prompt 113).
  */
 
+import type { RecordStatus } from "./record-status.js";
+import { parseRecordStatus } from "./record-status.js";
+
 export type DealerOverrideRow = {
   dealer_id: string;
+  status: RecordStatus;
   name: string | null;
   city: string | null;
   contact_name: string | null;
@@ -74,6 +78,7 @@ export type DealerOverrideField = (typeof DEALER_OVERRIDE_FIELDS)[number];
 export function mapDealerOverrideRow(r: Record<string, unknown>): DealerOverrideRow {
   return {
     dealer_id: String(r.dealer_id),
+    status: parseRecordStatus(r.status),
     name: r.name != null ? String(r.name) : null,
     city: r.city != null ? String(r.city) : null,
     contact_name: r.contact_name != null ? String(r.contact_name) : null,

@@ -7,6 +7,12 @@ import type { PoolLike } from "./admin/admin-auth.js";
 import { removeTradePointFromArchiveEverywhere } from "./archive-trash-invariant.js";
 import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
 import { mapTradePointOverrideRow, type TradePointOverrideRow } from "./trade-point-overrides-types.js";
+import {
+  isEmployeeTrashStatus,
+  isPendingAdminStatus,
+  isPurgedStatus,
+  parseRecordStatus,
+} from "./record-status.js";
 import { logTradePointAuditEvent } from "./override-audit-events.js";
 import { removeTradePointFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
@@ -40,15 +46,15 @@ async function fetchOverride(pool: PoolLike, tpId: string): Promise<TradePointOv
 }
 
 function isEmployeeTrash(ov: TradePointOverrideRow | null): boolean {
-  return Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at);
+  return isEmployeeTrashStatus(parseRecordStatus(ov?.status));
 }
 
 function isAdminQueue(ov: TradePointOverrideRow | null): boolean {
-  return Boolean(ov?.purge_requested_at && !ov.purged_at);
+  return isPendingAdminStatus(parseRecordStatus(ov?.status));
 }
 
 function isPurged(ov: TradePointOverrideRow | null): boolean {
-  return Boolean(ov?.purged_at);
+  return isPurgedStatus(parseRecordStatus(ov?.status));
 }
 
 function assertActiveUser(me: SessionUser, res: VercelResponse): boolean {
@@ -88,8 +94,10 @@ export async function handleTradePointOverridesRequestPurge(
   await runOverridesHandlerSafe(pool, "tp_purge_request", tpId, { tp_id: tpId }, me.id, async () => {
     await pool.query(
       `UPDATE trade_point_overrides
-       SET purge_requested_at = NOW(), purge_requested_by = $2::uuid, updated_at = NOW(), updated_by = $2::uuid
-       WHERE tp_id = $1`,
+       SET status = 'pending_admin',
+           purge_requested_at = NOW(), purge_requested_by = $2::uuid,
+           updated_at = NOW(), updated_by = $2::uuid
+       WHERE tp_id = $1 AND status = 'in_trash'`,
       [tpId, me.id],
     );
     await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_purge_requested", userId: me.id });
@@ -125,8 +133,10 @@ export async function handleTradePointOverridesRestore(
       if (target === "active") {
         await pool.query(
           `UPDATE trade_point_overrides
-           SET trashed_at = NULL, trashed_by = NULL, purge_requested_at = NULL, purge_requested_by = NULL,
-               updated_at = NOW(), updated_by = $2::uuid WHERE tp_id = $1`,
+           SET status = 'active',
+               trashed_at = NULL, trashed_by = NULL, purge_requested_at = NULL, purge_requested_by = NULL,
+               updated_at = NOW(), updated_by = $2::uuid
+           WHERE tp_id = $1 AND status IN ('in_trash', 'pending_admin')`,
           [tpId, me.id],
         );
         await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_active", userId: me.id });
@@ -134,8 +144,10 @@ export async function handleTradePointOverridesRestore(
       } else {
         await pool.query(
           `UPDATE trade_point_overrides
-           SET purge_requested_at = NULL, purge_requested_by = NULL, updated_at = NOW(), updated_by = $2::uuid
-           WHERE tp_id = $1`,
+           SET status = 'in_trash',
+               purge_requested_at = NULL, purge_requested_by = NULL,
+               updated_at = NOW(), updated_by = $2::uuid
+           WHERE tp_id = $1 AND status = 'pending_admin'`,
           [tpId, me.id],
         );
         await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_employee_trash", userId: me.id });
@@ -150,8 +162,10 @@ export async function handleTradePointOverridesRestore(
     await runOverridesHandlerSafe(pool, "tp_restore_active", tpId, { tp_id: tpId }, me.id, async () => {
       await pool.query(
         `UPDATE trade_point_overrides
-         SET trashed_at = NULL, trashed_by = NULL, purge_requested_at = NULL, purge_requested_by = NULL,
-             updated_at = NOW(), updated_by = $2::uuid WHERE tp_id = $1`,
+         SET status = 'active',
+             trashed_at = NULL, trashed_by = NULL, purge_requested_at = NULL, purge_requested_by = NULL,
+             updated_at = NOW(), updated_by = $2::uuid
+         WHERE tp_id = $1 AND status IN ('in_trash', 'pending_admin')`,
         [tpId, me.id],
       );
       await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_active", userId: me.id });
@@ -187,7 +201,11 @@ export async function handleTradePointOverridesPurge(
   }
   await runOverridesHandlerSafe(pool, "tp_purge", tpId, { tp_id: tpId }, me.id, async () => {
     await pool.query(
-      `UPDATE trade_point_overrides SET purged_at = NOW(), purged_by = $2::uuid, updated_at = NOW(), updated_by = $2::uuid WHERE tp_id = $1`,
+      `UPDATE trade_point_overrides
+       SET status = 'purged',
+           purged_at = NOW(), purged_by = $2::uuid,
+           updated_at = NOW(), updated_by = $2::uuid
+       WHERE tp_id = $1 AND status = 'pending_admin'`,
       [tpId, me.id],
     );
     await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_purged", userId: me.id });
@@ -218,7 +236,11 @@ export async function handleTradePointOverridesAdminRestore(
   }
   await runOverridesHandlerSafe(pool, "tp_admin_restore", tpId, { tp_id: tpId }, me.id, async () => {
     await pool.query(
-      `UPDATE trade_point_overrides SET purged_at = NULL, purged_by = NULL, updated_at = NOW(), updated_by = $2::uuid WHERE tp_id = $1`,
+      `UPDATE trade_point_overrides
+       SET status = 'pending_admin',
+           purged_at = NULL, purged_by = NULL,
+           updated_at = NOW(), updated_by = $2::uuid
+       WHERE tp_id = $1 AND status = 'purged'`,
       [tpId, me.id],
     );
     await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_admin_restored", userId: me.id });

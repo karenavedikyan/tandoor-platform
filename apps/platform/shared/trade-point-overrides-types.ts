@@ -2,9 +2,13 @@
  * Типы оверрайдов торговых точек (Postgres, prompt 113).
  */
 
+import type { RecordStatus } from "./record-status.js";
+import { parseRecordStatus } from "./record-status.js";
+
 export type TradePointOverrideRow = {
   tp_id: string;
   dealer_id: string | null;
+  status: RecordStatus;
   name: string | null;
   city: string | null;
   address: string | null;
@@ -73,6 +77,7 @@ export function mapTradePointOverrideRow(r: Record<string, unknown>): TradePoint
   return {
     tp_id: String(r.tp_id),
     dealer_id: r.dealer_id != null ? String(r.dealer_id) : null,
+    status: parseRecordStatus(r.status),
     name: r.name != null ? String(r.name) : null,
     city: r.city != null ? String(r.city) : null,
     address: r.address != null ? String(r.address) : null,

@@ -67,14 +67,18 @@ export async function handleBulkMoveArchiveToTrash(
   await pool.query("BEGIN");
   try {
     await pool.query(
-      `INSERT INTO dealer_overrides (dealer_id, trashed_at, trashed_by, updated_by)
-       SELECT unnest($1::text[]), NOW(), $2::uuid, $2::uuid
+      `INSERT INTO dealer_overrides (dealer_id, status, trashed_at, trashed_by, updated_by)
+       SELECT unnest($1::text[]), 'in_trash'::record_status, NOW(), $2::uuid, $2::uuid
        ON CONFLICT (dealer_id) DO UPDATE
-         SET trashed_at = COALESCE(dealer_overrides.trashed_at, EXCLUDED.trashed_at),
+         SET status = CASE
+               WHEN dealer_overrides.status = 'purged' THEN dealer_overrides.status
+               ELSE 'in_trash'::record_status
+             END,
+             trashed_at = COALESCE(dealer_overrides.trashed_at, EXCLUDED.trashed_at),
              trashed_by = COALESCE(dealer_overrides.trashed_by, EXCLUDED.trashed_by),
              updated_at = NOW(),
              updated_by = EXCLUDED.updated_by
-       WHERE dealer_overrides.purged_at IS NULL`,
+       WHERE dealer_overrides.status IS DISTINCT FROM 'purged'`,
       [allowedIds, me.id],
     );
 

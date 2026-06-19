@@ -79,13 +79,15 @@ export async function handleBulkRestoreDealers(
     for (const chunk of chunkIds(allowed)) {
       await pool.query(
         `UPDATE dealer_overrides
-            SET trashed_at = NULL,
+            SET status = 'active',
+                trashed_at = NULL,
                 trashed_by = NULL,
                 purge_requested_at = NULL,
                 purge_requested_by = NULL,
                 updated_at = NOW(),
                 updated_by = $2::uuid
-          WHERE dealer_id = ANY($1::text[])`,
+          WHERE dealer_id = ANY($1::text[])
+            AND status IN ('in_trash', 'pending_admin')`,
         [chunk, me.id],
       );
     }
@@ -138,14 +140,13 @@ export async function handleBulkRequestPurgeDealers(
     for (const chunk of chunkIds(allowed)) {
       await pool.query(
         `UPDATE dealer_overrides
-            SET purge_requested_at = NOW(),
+            SET status = 'pending_admin',
+                purge_requested_at = NOW(),
                 purge_requested_by = $2::uuid,
                 updated_at = NOW(),
                 updated_by = $2::uuid
           WHERE dealer_id = ANY($1::text[])
-            AND trashed_at IS NOT NULL
-            AND purge_requested_at IS NULL
-            AND purged_at IS NULL`,
+            AND status = 'in_trash'`,
         [chunk, me.id],
       );
     }
@@ -197,13 +198,15 @@ export async function handleBulkRestoreTradePoints(
     for (const chunk of chunkIds(allowed)) {
       await pool.query(
         `UPDATE trade_point_overrides
-            SET trashed_at = NULL,
+            SET status = 'active',
+                trashed_at = NULL,
                 trashed_by = NULL,
                 purge_requested_at = NULL,
                 purge_requested_by = NULL,
                 updated_at = NOW(),
                 updated_by = $2::uuid
-          WHERE tp_id = ANY($1::text[])`,
+          WHERE tp_id = ANY($1::text[])
+            AND status IN ('in_trash', 'pending_admin')`,
         [chunk, me.id],
       );
     }
@@ -256,14 +259,13 @@ export async function handleBulkRequestPurgeTradePoints(
     for (const chunk of chunkIds(allowed)) {
       await pool.query(
         `UPDATE trade_point_overrides
-            SET purge_requested_at = NOW(),
+            SET status = 'pending_admin',
+                purge_requested_at = NOW(),
                 purge_requested_by = $2::uuid,
                 updated_at = NOW(),
                 updated_by = $2::uuid
           WHERE tp_id = ANY($1::text[])
-            AND trashed_at IS NOT NULL
-            AND purge_requested_at IS NULL
-            AND purged_at IS NULL`,
+            AND status = 'in_trash'`,
         [chunk, me.id],
       );
     }

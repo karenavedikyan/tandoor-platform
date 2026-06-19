@@ -2,11 +2,12 @@
  * Промт 405: взаимное исключение архива (state) и корзины (overrides БД).
  */
 import type { PoolLike } from "./admin/admin-auth.js";
+import { dealerStatusTrash, tpStatusTrash } from "./record-status.js";
 import { removeFromArchivedStates } from "./bulk-archive-to-trash-core.js";
 
 /**
  * INVARIANT (промт 405): dealer не может одновременно находиться в:
- *   - dealer_overrides.trashed_at (НЕ NULL, purge_requested_at = NULL)  -- "в корзине"
+ *   - dealer_overrides.status = 'in_trash'  -- "в корзине"
  *   - state.archivedDealersById[dealerId]                                -- "в архиве"
  *
  * Источник истины:
@@ -59,9 +60,7 @@ export async function stripArchivedKeysAlreadyInActiveTrash(
     const r = await pool.query<{ dealer_id: string }>(
       `SELECT dealer_id FROM dealer_overrides
        WHERE dealer_id = ANY($1::text[])
-         AND trashed_at IS NOT NULL
-         AND purge_requested_at IS NULL
-         AND purged_at IS NULL`,
+         AND ${dealerStatusTrash("dealer_overrides")}`,
       [dealerKeys],
     );
     const inTrash = new Set(r.rows.map((row) => row.dealer_id));
@@ -79,9 +78,7 @@ export async function stripArchivedKeysAlreadyInActiveTrash(
     const r = await pool.query<{ tp_id: string }>(
       `SELECT tp_id FROM trade_point_overrides
        WHERE tp_id = ANY($1::text[])
-         AND trashed_at IS NOT NULL
-         AND purge_requested_at IS NULL
-         AND purged_at IS NULL`,
+         AND ${tpStatusTrash("trade_point_overrides")}`,
       [tpKeys],
     );
     const inTrash = new Set(r.rows.map((row) => row.tp_id));

@@ -23,6 +23,7 @@ const TEAM_ID = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
 
 type OverrideRow = {
   dealer_id: string;
+  status: "active" | "in_trash" | "pending_admin" | "purged";
   trashed_at: string | null;
   trashed_by: string | null;
   purge_requested_at: string | null;
@@ -60,6 +61,7 @@ function mockReq(body: Record<string, unknown>): VercelRequest {
 function trashRow(dealerId: string, trashedBy: string, purgePending = false): OverrideRow {
   return {
     dealer_id: dealerId,
+    status: purgePending ? "pending_admin" : "in_trash",
     trashed_at: new Date().toISOString(),
     trashed_by: trashedBy,
     purge_requested_at: purgePending ? new Date().toISOString() : null,
@@ -97,22 +99,21 @@ function createPool(seed: { overrides?: OverrideRow[]; blobs?: BlobRow[] } = {})
         return { rows: [...teamMembers].map((user_id) => ({ user_id })) };
       }
 
-      if (s.includes("FROM dealer_overrides") && s.includes("trashed_at IS NOT NULL")) {
+      if (s.includes("FROM dealer_overrides") && s.includes("status = 'in_trash'")) {
         const ids = params?.[0] as string[];
         const rows = ids
           .map((id) => overrides.get(id))
-          .filter((ov): ov is OverrideRow =>
-            Boolean(ov?.trashed_at && !ov.purge_requested_at && !ov.purged_at),
-          )
+          .filter((ov): ov is OverrideRow => ov?.status === "in_trash")
           .map((ov) => ({ dealer_id: ov.dealer_id, trashed_by: ov.trashed_by }));
         return { rows };
       }
 
-      if (s.includes("UPDATE dealer_overrides") && s.includes("trashed_at = NULL")) {
+      if (s.includes("UPDATE dealer_overrides") && s.includes("status = 'active'")) {
         const ids = params?.[0] as string[];
         for (const id of ids) {
           const ov = overrides.get(id);
           if (!ov) continue;
+          ov.status = "active";
           ov.trashed_at = null;
           ov.trashed_by = null;
           ov.purge_requested_at = null;
@@ -120,11 +121,12 @@ function createPool(seed: { overrides?: OverrideRow[]; blobs?: BlobRow[] } = {})
         return { rows: [] };
       }
 
-      if (s.includes("UPDATE dealer_overrides") && s.includes("purge_requested_at = NOW()")) {
+      if (s.includes("UPDATE dealer_overrides") && s.includes("status = 'pending_admin'")) {
         const ids = params?.[0] as string[];
         for (const id of ids) {
           const ov = overrides.get(id);
-          if (!ov || !ov.trashed_at || ov.purge_requested_at) continue;
+          if (!ov || ov.status !== "in_trash") continue;
+          ov.status = "pending_admin";
           ov.purge_requested_at = new Date().toISOString();
         }
         return { rows: [] };

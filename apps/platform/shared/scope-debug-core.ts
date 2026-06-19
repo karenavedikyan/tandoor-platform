@@ -88,8 +88,8 @@ function buildDbScopeExplanation(
   lines.push(
     `totals: active_dealers=${totals.active_dealers}, active_trade_points=${totals.active_trade_points}, trashed_dealers=${totals.trashed_dealers}`,
   );
-  lines.push("dealers: dealers.release_code ∈ scope_codes; trash via dealer_overrides.trashed_at");
-  lines.push("trade_points: tp.dealer_id ∈ active_dealers AND trade_point_overrides.trashed_at IS NULL");
+  lines.push("dealers: dealers.release_code ∈ scope_codes; trash via dealer_overrides.status = 'in_trash'");
+  lines.push("trade_points: tp.dealer_id ∈ active_dealers AND trade_point_overrides.status = 'active'");
   return lines;
 }
 

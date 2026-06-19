@@ -5,6 +5,13 @@
 
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
+import {
+  dealerJoinStatusActive,
+  dealerStatusPendingAdmin,
+  tpJoinStatusActive,
+  tpStatusPendingAdmin,
+  tpStatusTrash,
+} from "./record-status.js";
 
 export type DbScopeCodesMeta = {
   fullCatalog: boolean;
@@ -69,15 +76,6 @@ export const TRADE_POINT_OVERRIDE_JOIN = `
   )
 `;
 
-/** Корзина сотрудника (не purged, не в очереди админа). */
-export const DEALER_IS_EMPLOYEE_TRASH_SQL = `(
-  d_ov.trashed_at IS NOT NULL
-  AND d_ov.purge_requested_at IS NULL
-  AND d_ov.purged_at IS NULL
-)`;
-
-export const DEALER_IS_ACTIVE_SQL = `(d_ov.purged_at IS NULL AND d_ov.trashed_at IS NULL)`;
-
 export type TrashRbacMode = "self" | "team" | "full";
 
 export function resolveTrashRbacMode(role: UserRole): TrashRbacMode {
@@ -129,12 +127,12 @@ export async function computeAdminPurgeQueueCounts(
   const dealersQ = await pool.query<{ n: string }>(
     `SELECT COUNT(*)::text AS n
      FROM dealer_overrides d_ov
-     WHERE d_ov.purge_requested_at IS NOT NULL AND d_ov.purged_at IS NULL`,
+     WHERE ${dealerStatusPendingAdmin("d_ov")}`,
   );
   const tpQ = await pool.query<{ n: string }>(
     `SELECT COUNT(*)::text AS n
      FROM trade_point_overrides tpo
-     WHERE tpo.purge_requested_at IS NOT NULL AND tpo.purged_at IS NULL`,
+     WHERE ${tpStatusPendingAdmin("tpo")}`,
   );
   return {
     dealers: Number(dealersQ.rows[0]?.n ?? 0),
@@ -169,7 +167,7 @@ export async function computeAdminPurgeQueue(pool: PoolLike): Promise<{
      ${DEALER_OVERRIDE_JOIN}
      LEFT JOIN users u_trashed ON u_trashed.id = d_ov.trashed_by
      LEFT JOIN users u_requested ON u_requested.id = d_ov.purge_requested_by
-     WHERE d_ov.purge_requested_at IS NOT NULL AND d_ov.purged_at IS NULL
+     WHERE ${dealerStatusPendingAdmin("d_ov")}
      ORDER BY d_ov.purge_requested_at DESC`,
   );
   const tpQ = await pool.query<Record<string, unknown>>(
@@ -180,7 +178,7 @@ export async function computeAdminPurgeQueue(pool: PoolLike): Promise<{
      FROM trade_point_overrides tpo
      LEFT JOIN users u_trashed ON u_trashed.id = tpo.trashed_by
      LEFT JOIN users u_requested ON u_requested.id = tpo.purge_requested_by
-     WHERE tpo.purge_requested_at IS NOT NULL AND tpo.purged_at IS NULL
+     WHERE ${tpStatusPendingAdmin("tpo")}
      ORDER BY tpo.purge_requested_at DESC`,
   );
   return { dealers: dealersQ.rows, trade_points: tpQ.rows };
@@ -295,12 +293,12 @@ export async function computeDbScopeForUser(
     const dealersQ = await pool.query<{
       id: string;
       external_key: string;
-      is_purged: boolean;
-      is_employee_trash: boolean;
+      status: string | null;
+      trashed_by: string | null;
     }>(
       `SELECT d.id::text AS id, d.external_key,
-              (d_ov.purged_at IS NOT NULL) AS is_purged,
-              ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash
+              d_ov.status::text AS status,
+              d_ov.trashed_by::text AS trashed_by
        FROM dealers d
        ${DEALER_OVERRIDE_JOIN}`,
     );
@@ -309,11 +307,12 @@ export async function computeDbScopeForUser(
     const trashedIds: string[] = [];
     const trashedKeys: string[] = [];
     for (const row of dealersQ.rows) {
-      if (row.is_purged) continue;
-      if (row.is_employee_trash) {
+      const status = row.status ?? "active";
+      if (status === "purged") continue;
+      if (status === "in_trash") {
         trashedIds.push(row.id);
         trashedKeys.push(row.external_key);
-      } else {
+      } else if (status === "active") {
         activeIds.push(row.id);
         activeKeys.push(row.external_key);
       }
@@ -321,13 +320,13 @@ export async function computeDbScopeForUser(
 
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
-         COUNT(*) FILTER (WHERE tpo.purged_at IS NULL AND tpo.trashed_at IS NOT NULL AND tpo.purge_requested_at IS NULL)::text AS trashed_tps
+         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND ${tpJoinStatusActive("tpo")})::text AS active_tps,
+         COUNT(*) FILTER (WHERE ${tpStatusTrash("tpo")})::text AS trashed_tps
        FROM trade_points tp
        INNER JOIN dealers d ON d.id = tp.dealer_id
        ${DEALER_OVERRIDE_JOIN}
        ${TRADE_POINT_OVERRIDE_JOIN}
-       WHERE d_ov.purged_at IS NULL AND d_ov.trashed_at IS NULL`,
+       WHERE ${dealerJoinStatusActive("d_ov")}`,
     );
     const activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
     const trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
@@ -382,13 +381,11 @@ export async function computeDbScopeForUser(
   const dealersQ = await pool.query<{
     id: string;
     external_key: string;
-    is_purged: boolean;
-    is_employee_trash: boolean;
+    status: string | null;
     trashed_by: string | null;
   }>(
     `SELECT d.id::text AS id, d.external_key,
-            (d_ov.purged_at IS NOT NULL) AS is_purged,
-            ${DEALER_IS_EMPLOYEE_TRASH_SQL} AS is_employee_trash,
+            d_ov.status::text AS status,
             d_ov.trashed_by::text AS trashed_by
      FROM dealers d
      ${DEALER_OVERRIDE_JOIN}
@@ -405,16 +402,18 @@ export async function computeDbScopeForUser(
   const trashedIds: string[] = [];
   const trashedKeys: string[] = [];
   for (const row of dealersQ.rows) {
-    if (row.is_purged) continue;
-    const isTrashed = row.is_employee_trash;
-    if (!isTrashed) {
-      activeIds.push(row.id);
-      activeKeys.push(row.external_key);
+    const status = row.status ?? "active";
+    if (status === "purged") continue;
+    if (status === "in_trash") {
+      if (dealerVisibleInTrash(row.trashed_by, trashRbacMode, userId, teamMemberIds)) {
+        trashedIds.push(row.id);
+        trashedKeys.push(row.external_key);
+      }
       continue;
     }
-    if (dealerVisibleInTrash(row.trashed_by, trashRbacMode, userId, teamMemberIds)) {
-      trashedIds.push(row.id);
-      trashedKeys.push(row.external_key);
+    if (status === "active") {
+      activeIds.push(row.id);
+      activeKeys.push(row.external_key);
     }
   }
 
@@ -425,11 +424,9 @@ export async function computeDbScopeForUser(
     const tpTrashFilter = buildTradePointTrashByFilter(trashRbacMode, userId, teamMemberIds);
     const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
       `SELECT
-         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND tpo.purged_at IS NULL AND tpo.trashed_at IS NULL)::text AS active_tps,
+         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND ${tpJoinStatusActive("tpo")})::text AS active_tps,
          COUNT(*) FILTER (
-           WHERE tpo.purged_at IS NULL
-             AND tpo.trashed_at IS NOT NULL
-             AND tpo.purge_requested_at IS NULL
+           WHERE ${tpStatusTrash("tpo")}
              ${tpTrashFilter.sql}
          )::text AS trashed_tps
        FROM trade_points tp

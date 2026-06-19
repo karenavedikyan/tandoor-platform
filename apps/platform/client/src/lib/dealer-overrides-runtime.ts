@@ -11,6 +11,12 @@ import type { ActualizationState, TrashedDealerInfo, TrashedTradePointInfo } fro
 import { computeTrashExpiresAt } from "./client-base-actualization-state.js";
 import type { DealerOverrideRow, DealerTrainingRow } from "../../../shared/dealer-overrides-types";
 import type { TradePointOverrideRow, TradePointTrainingRow } from "../../../shared/trade-point-overrides-types";
+import {
+  isEmployeeTrashStatus,
+  isPendingAdminStatus,
+  isPurgedStatus,
+  parseRecordStatus,
+} from "../../../shared/record-status";
 
 export const OVERRIDES_RUNTIME_CHANGED_EVENT = "tandoor-overrides-runtime-changed";
 
@@ -89,7 +95,7 @@ export function useTradePointOverride(tpId: string | undefined): TradePointOverr
 }
 
 function trashedDealerFromOverride(row: DealerOverrideRow): TrashedDealerInfo | null {
-  if (!row.trashed_at || row.purge_requested_at) return null;
+  if (!isEmployeeTrashStatus(row.status) || !row.trashed_at) return null;
   const trashedAt = row.trashed_at;
   return {
     dealerId: row.dealer_id,
@@ -109,7 +115,7 @@ function trashedDealerFromOverride(row: DealerOverrideRow): TrashedDealerInfo | 
 }
 
 function trashedTpFromOverride(row: TradePointOverrideRow): TrashedTradePointInfo | null {
-  if (!row.trashed_at || row.purge_requested_at || !row.dealer_id) return null;
+  if (!isEmployeeTrashStatus(row.status) || !row.trashed_at || !row.dealer_id) return null;
   const trashedAt = row.trashed_at;
   return {
     tradePointId: row.tp_id,
@@ -144,7 +150,7 @@ export function applyDealerOverridesRuntime(
 
   for (const row of overrides) {
     dbDealerOverridesById[row.dealer_id] = row;
-    if (row.purge_requested_at && !row.purged_at) {
+    if (isPendingAdminStatus(row.status)) {
       dbPurgePendingDealersById[row.dealer_id] = true;
     }
     const tr = trashedDealerFromOverride(row);
@@ -174,7 +180,7 @@ export function applyTradePointOverridesRuntime(
 
   for (const row of overrides) {
     dbTradePointOverridesById[row.tp_id] = row;
-    if (row.purge_requested_at && !row.purged_at) {
+    if (isPendingAdminStatus(row.status)) {
       dbPurgePendingTradePointsById[row.tp_id] = true;
     }
     const tr = trashedTpFromOverride(row);
@@ -265,7 +271,7 @@ export function getDbManualDealerPayload(dealerId: string): Record<string, unkno
 
 export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationState | null): boolean {
   const ov = dbDealerOverridesById[dealerId];
-  if (ov?.purged_at) return false;
+  if (isPurgedStatus(parseRecordStatus(ov?.status))) return false;
   if (dbTrashedDealersById[dealerId]) return true;
   if (dbPurgePendingDealersById[dealerId]) return true;
   if (act?.trashedDealersById?.[dealerId]) return true;
@@ -274,7 +280,7 @@ export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationSt
 
 export function isTradePointTrashedInRuntime(tpId: string, act?: ActualizationState | null): boolean {
   const ov = dbTradePointOverridesById[tpId];
-  if (ov?.purged_at) return false;
+  if (isPurgedStatus(parseRecordStatus(ov?.status))) return false;
   if (dbTrashedTradePointsById[tpId]) return true;
   if (dbPurgePendingTradePointsById[tpId]) return true;
   if (act?.trashedTradePointsById?.[tpId]) return true;

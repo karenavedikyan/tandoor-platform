@@ -29,9 +29,10 @@ const DEALER_PURGE_PENDING = "client-purge-pending";
 const DEALER_PURGED = "client-purged";
 const DEALER_PATCH = "client-patch-purge";
 
-function baseOverride(dealerId: string) {
+function baseOverride(dealerId: string, status: "active" | "in_trash" | "pending_admin" | "purged" = "active") {
   return {
     dealer_id: dealerId,
+    status,
     name: null,
     city: null,
     contact_name: null,
@@ -63,19 +64,19 @@ applyDealerOverridesRuntime(
       client_category: "top150",
     },
     {
-      ...baseOverride(DEALER_EMPLOYEE_TRASH),
+      ...baseOverride(DEALER_EMPLOYEE_TRASH, "in_trash"),
       trashed_at: "2026-06-01T10:00:00.000Z",
       trashed_by: "mgr-1",
     },
     {
-      ...baseOverride(DEALER_PURGE_PENDING),
+      ...baseOverride(DEALER_PURGE_PENDING, "pending_admin"),
       trashed_at: "2026-06-02T10:00:00.000Z",
       trashed_by: "mgr-1",
       purge_requested_at: "2026-06-03T10:00:00.000Z",
       purge_requested_by: "mgr-1",
     },
     {
-      ...baseOverride(DEALER_PURGED),
+      ...baseOverride(DEALER_PURGED, "purged"),
       trashed_at: "2026-06-02T10:00:00.000Z",
       trashed_by: "mgr-1",
       purge_requested_at: "2026-06-03T10:00:00.000Z",

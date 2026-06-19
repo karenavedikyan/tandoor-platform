@@ -148,25 +148,25 @@ function mockPool(): PoolLike {
         const rows = codes
           .map((c) => map[c])
           .filter(Boolean)
-          .map((d) => ({ ...d, is_purged: false, is_employee_trash: false }));
+          .map((d) => ({ ...d, status: "active" }));
         return { rows };
       }
 
       if (s.includes("FROM dealers d") && s.includes("dealer_overrides") && !s.includes("release_code = ANY")) {
         return {
           rows: [
-            { id: "d1", external_key: "client-a", is_purged: false, is_employee_trash: false },
-            { id: "d2", external_key: "client-b", is_purged: false, is_employee_trash: false },
-            { id: "d3", external_key: "client-c", is_purged: false, is_employee_trash: false },
+            { id: "d1", external_key: "client-a", status: "active" },
+            { id: "d2", external_key: "client-b", status: "active" },
+            { id: "d3", external_key: "client-c", status: "active" },
           ],
         };
       }
 
-      if (s.includes("FROM dealer_overrides d_ov") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM dealer_overrides d_ov") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
 
-      if (s.includes("FROM trade_point_overrides tpo") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("FROM trade_point_overrides tpo") && s.includes("status = 'pending_admin'")) {
         return { rows: [{ n: "0" }] };
       }
 

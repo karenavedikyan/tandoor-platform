@@ -9,6 +9,7 @@ import {
   TRADE_POINT_OVERRIDE_JOIN,
   type DbScopeResult,
 } from "./db-scope-formula.js";
+import { dealerJoinStatusActive, tpJoinStatusActive } from "./record-status.js";
 import type { PoolLike } from "./responsibility-resolver.js";
 import {
   canViewerAccessUserScope,
@@ -165,10 +166,8 @@ export async function fetchScopedTradePointsRows(
 ): Promise<ScopedTradePointSqlRow[]> {
   const activeOnly = options?.activeOnly !== false;
   const baseWhere = `
-    d_ov.purged_at IS NULL
-    AND d_ov.trashed_at IS NULL
-    AND tpo.purged_at IS NULL
-    AND tpo.trashed_at IS NULL
+    ${dealerJoinStatusActive("d_ov")}
+    AND ${tpJoinStatusActive("tpo")}
     ${activeOnly ? "AND tp.is_active = TRUE" : ""}
   `;
 

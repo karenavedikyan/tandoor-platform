@@ -112,8 +112,7 @@ export async function excludePurgePendingIds(
   const r = await pool.query<Record<string, string>>(
     `SELECT ${idColumn} FROM ${table}
      WHERE ${idColumn} = ANY($1::text[])
-       AND purge_requested_at IS NOT NULL
-       AND purged_at IS NULL`,
+       AND status = 'pending_admin'`,
     [ids],
   );
   return new Set(r.rows.map((row) => row[idColumn]));

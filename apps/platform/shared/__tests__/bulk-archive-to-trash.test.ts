@@ -24,6 +24,7 @@ type BlobRow = {
 
 type OverrideRow = {
   dealer_id: string;
+  status: "active" | "in_trash" | "pending_admin" | "purged";
   trashed_at: string | null;
   trashed_by: string | null;
   purge_requested_at: string | null;
@@ -121,12 +122,12 @@ function createPool(seed: { blobs?: BlobRow[]; overrides?: OverrideRow[] } = {})
         return { rows: [...found].map((entity_id) => ({ entity_id })) };
       }
 
-      if (s.includes("SELECT dealer_id FROM dealer_overrides") && s.includes("purge_requested_at IS NOT NULL")) {
+      if (s.includes("SELECT dealer_id FROM dealer_overrides") && s.includes("status = 'pending_admin'")) {
         const ids = params?.[0] as string[];
         const rows = ids
           .filter((id) => {
             const ov = overrides.get(id);
-            return ov?.purge_requested_at && !ov.purged_at;
+            return ov?.status === "pending_admin";
           })
           .map((dealer_id) => ({ dealer_id }));
         return { rows };
@@ -139,6 +140,7 @@ function createPool(seed: { blobs?: BlobRow[]; overrides?: OverrideRow[] } = {})
           const prev = overrides.get(dealer_id);
           overrides.set(dealer_id, {
             dealer_id,
+            status: prev?.status === "purged" ? "purged" : "in_trash",
             trashed_at: new Date().toISOString(),
             trashed_by: by,
             purge_requested_at: prev?.purge_requested_at ?? null,
@@ -380,6 +382,7 @@ function seedTeamArchive(): BlobRow[] {
     overrides: [
       {
         dealer_id: id,
+        status: "pending_admin",
         trashed_at: null,
         trashed_by: null,
         purge_requested_at: new Date().toISOString(),
