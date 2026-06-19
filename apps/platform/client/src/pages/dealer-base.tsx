@@ -80,7 +80,7 @@ import { useMyTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope } from "@/hooks/use-org-scope";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   buildDayPlanTeamRows,
   dealerNeedsAttention,
@@ -1803,16 +1803,18 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
       return mergedRowsForDealerBase.filter((r) => dbScopedExternalKeys.has(r.id));
     }
-    if (useReal && access === "team_lead" && teamScopeQ.ready && teamScopeQ.data) {
+    if (useReal && access === "team_lead") {
+      if (!teamScopeQ.ready || !teamScopeQ.data) return [];
       const keys = dealerExternalKeysFromTeamScope(teamScopeQ.data);
       return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
     }
-    if (useReal && access === "sales_director" && orgScopeQ.ready && orgScopeQ.data) {
+    if (useReal && access === "sales_director") {
+      if (!orgScopeQ.ready || !orgScopeQ.data) return [];
       const keys = dealerExternalKeysFromOrgScope(orgScopeQ.data);
       return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
     }
     if (useReal && snap) {
-      return roleScopedDealerRowsForReal(
+      return safeRoleScopedDealerRowsForReal(
         mergedRowsForDealerBase,
         snap,
         access,
@@ -1873,16 +1875,18 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
       return mergedRowsActivePortfolio.filter((r) => dbScopedExternalKeys.has(r.id));
     }
-    if (useReal && access === "team_lead" && teamScopeQ.ready && teamScopeQ.data) {
+    if (useReal && access === "team_lead") {
+      if (!teamScopeQ.ready || !teamScopeQ.data) return [];
       const keys = dealerExternalKeysFromTeamScope(teamScopeQ.data);
       return mergedRowsActivePortfolio.filter((r) => keys.has(r.id));
     }
-    if (useReal && access === "sales_director" && orgScopeQ.ready && orgScopeQ.data) {
+    if (useReal && access === "sales_director") {
+      if (!orgScopeQ.ready || !orgScopeQ.data) return [];
       const keys = dealerExternalKeysFromOrgScope(orgScopeQ.data);
       return mergedRowsActivePortfolio.filter((r) => keys.has(r.id));
     }
     if (useReal && snap) {
-      return roleScopedDealerRowsForReal(
+      return safeRoleScopedDealerRowsForReal(
         mergedRowsActivePortfolio,
         snap,
         access,
@@ -2276,7 +2280,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
     const scoped =
       useReal && snap
-        ? roleScopedDealerRowsForReal(
+        ? safeRoleScopedDealerRowsForReal(
             mergedRowsRef.current,
             snap,
             access,

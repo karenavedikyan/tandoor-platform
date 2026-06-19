@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { roleScopedDealerRows } from "@/lib/dealer-base-role-views";
-import { roleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
+import { safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
@@ -12,11 +12,13 @@ export function getRoleScopedDealerRowsAuto(
   realScope?: SidebarNavRealScope,
 ): DealerRow[] {
   if (realScope?.ready && realScope.orgScope) {
-    return roleScopedDealerRowsForReal(
+    const { snap, access } = realScope.orgScope;
+    const options = access === "team_lead" && snap.me?.id ? { ropUserId: snap.me.id } : undefined;
+    return safeRoleScopedDealerRowsForReal(
       rows,
-      realScope.orgScope.snap,
-      realScope.orgScope.access,
-      undefined,
+      snap,
+      access,
+      options,
       realScope.assignmentsScope,
     );
   }
