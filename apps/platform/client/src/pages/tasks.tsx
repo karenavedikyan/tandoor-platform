@@ -49,7 +49,7 @@ import {
   type DealerBaseAccessRole,
 } from "@/lib/dealer-base-role-views";
 import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
-import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
+import { SHOWCASE_DISTRIBUTION_CHANGED_EVENT } from "@/lib/showcase-distribution-data";
 import { SHOWCASE_MATRIX_CHANGED_EVENT } from "@/lib/trade-point-showcase-matrix-storage";
 import {
   SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT,
@@ -715,15 +715,16 @@ export default function TasksPage() {
 
   const [showcaseTick, setShowcaseTick] = useState(0);
   const [backendDeficitTasks, setBackendDeficitTasks] = useState<MatrixTaskWithContext[]>([]);
+  const [showcasePlanTasks, setShowcasePlanTasks] = useState<MatrixTaskWithContext[]>([]);
 
   useEffect(() => {
     const onBump = () => setShowcaseTick((n) => n + 1);
-    window.addEventListener(SHOWCASE_STORAGE_EVENT, onBump);
+    window.addEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, onBump);
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onBump);
     window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onBump);
     window.addEventListener(SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT, onBump);
     return () => {
-      window.removeEventListener(SHOWCASE_STORAGE_EVENT, onBump);
+      window.removeEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, onBump);
       window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onBump);
       window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onBump);
       window.removeEventListener(SHOWCASE_MATRIX_REMOTE_UPDATE_EVENT, onBump);
@@ -846,6 +847,32 @@ export default function TasksPage() {
     };
   }, [actualizationLoading, scopedDealerRows, showcaseTick]);
 
+  useEffect(() => {
+    if (actualizationLoading || directorRopFactualShowcaseTasks) {
+      setShowcasePlanTasks([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const plan = await getShowcaseDistributionPlanTasksForDealers(workingDealerRows);
+      if (cancelled) return;
+      if (!actx.enabled) {
+        setShowcasePlanTasks([...getAllMatrixTasks(), ...plan]);
+      } else {
+        setShowcasePlanTasks(plan);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    actualizationLoading,
+    directorRopFactualShowcaseTasks,
+    actx.enabled,
+    workingDealerRows,
+    showcaseTick,
+  ]);
+
   const hasPersistedShowcaseTasksInRoleScope = useMemo(() => {
     if (!directorRopFactualShowcaseTasks || actualizationLoading) return false;
     const raw = getManagementFactualShowcaseTasksForDealers(
@@ -869,25 +896,23 @@ export default function TasksPage() {
   const showcaseTasks = useMemo(() => {
     if (actualizationLoading) return [] as MatrixTaskWithContext[];
     let rawSource: MatrixTaskWithContext[];
-    if (!actx.enabled) {
-      rawSource = getAllMatrixTasks();
-    } else if (directorRopFactualShowcaseTasks) {
+    if (directorRopFactualShowcaseTasks) {
       rawSource = getManagementFactualShowcaseTasksForDealers(workingDealerRows, managementPlane.mergedState);
     } else {
-      rawSource = getShowcaseDistributionPlanTasksForDealers(workingDealerRows);
+      rawSource = showcasePlanTasks;
     }
     const rawWithDeficit = [...rawSource, ...backendDeficitTasks];
     const raw = sortTasks(rawWithDeficit).filter((t) => allowedDealerIds.has(t.dealerId));
     return getShowcaseOnlyTasks(raw);
   }, [
     actualizationLoading,
-    actx.enabled,
     directorRopFactualShowcaseTasks,
     workingDealerRows,
     managementPlane.mergedState,
     allowedDealerIds,
     showcaseTick,
     backendDeficitTasks,
+    showcasePlanTasks,
   ]);
 
   const filteredByScope = useMemo(() => {

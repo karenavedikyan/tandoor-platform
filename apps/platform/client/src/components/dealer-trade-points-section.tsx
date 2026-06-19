@@ -33,7 +33,7 @@ import {
   getMergedDealerTradePoints,
   isVirtualDefaultTradePointId,
 } from "@/lib/dealer-trade-points-overrides";
-import { getShowcaseTasksForDealerDisplay, loadShowcaseStorage, userLabelFromProfile } from "@/lib/showcase-distribution-data";
+import { getShowcaseTasksForDealerDisplay, type ShowcaseStorageV1Dto, userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
@@ -76,6 +76,7 @@ type Props = {
   sectionDomId?: string;
   profile: ReleaseDemoProfile;
   readOnly?: boolean;
+  showcaseState?: ShowcaseStorageV1Dto;
 };
 
 function isFilled(v: string | undefined): boolean {
@@ -93,9 +94,8 @@ function tradePointContact(tp: DealerTradePoint, dealer: DealerRow, mergedActive
   return "";
 }
 
-function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): number | undefined {
+function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number, storage: ShowcaseStorageV1Dto): number | undefined {
   if (mergedActiveCount !== 1) return undefined;
-  const storage = loadShowcaseStorage();
   const tasks = getShowcaseTasksForDealerDisplay(dealer, storage);
   return tasks.filter((t) => t.status !== "done").length;
 }
@@ -184,7 +184,12 @@ function LocalSuggestInput(props: {
   );
 }
 
-export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) {
+export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseState }: Props) {
+  const emptyShowcase: ShowcaseStorageV1Dto = useMemo(
+    () => ({ overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} }),
+    [],
+  );
+  const resolvedShowcase = showcaseState ?? emptyShowcase;
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
   const hideSyntheticTpChrome = actx.enabled && CLIENT_BASE_ACTUALIZATION_CLEAN_MODE;
@@ -267,8 +272,8 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
 
   const showcaseOpen = useMemo(() => {
     if (hideSyntheticTpChrome) return undefined;
-    return openShowcaseTasksCount(row, mergedActive.length);
-  }, [hideSyntheticTpChrome, row, mergedActive.length, tpBump]);
+    return openShowcaseTasksCount(row, mergedActive.length, resolvedShowcase);
+  }, [hideSyntheticTpChrome, row, mergedActive.length, resolvedShowcase, tpBump]);
 
   const dealerCityOptions = useMemo(
     () =>

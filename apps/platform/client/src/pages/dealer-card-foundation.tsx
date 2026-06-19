@@ -63,11 +63,13 @@ import {
   getShowcaseHistoryForDealer,
   getShowcaseKpis,
   getShowcaseTasksForDealerDisplay,
-  loadShowcaseStorage,
   mergeDistributionWithOverrides,
   canViewShowcaseDistribution,
   userLabelFromProfile,
+  type ShowcaseStorageV1Dto,
+  SHOWCASE_DISTRIBUTION_CHANGED_EVENT,
 } from "@/lib/showcase-distribution-data";
+import { useShowcaseDistributionState } from "@/hooks/use-showcase-distribution-state";
 import {
   CLIENT_NEXT_STEP_CHANGED_EVENT,
   clientNextStepActionLabel,
@@ -376,10 +378,9 @@ function addCalendarDaysIso(base: Date, days: number): string {
 }
 
 /** Лента: витрина, шаги, обучение, комментарии, системные шаблоны; сортировка по дате по убыванию. */
-function buildHistoryEvents(row: DealerRow): DealerHistoryEvent[] {
+function buildHistoryEvents(row: DealerRow, showcaseStorage: ShowcaseStorageV1Dto): DealerHistoryEvent[] {
   if (isManualActualizationDealerId(row.id)) return [];
-  const storage = loadShowcaseStorage();
-  const showcaseHist: DealerHistoryEvent[] = getShowcaseHistoryForDealer(row.id, storage).map((e) => ({
+  const showcaseHist: DealerHistoryEvent[] = getShowcaseHistoryForDealer(row.id, showcaseStorage).map((e) => ({
     id: e.id,
     meta: e.meta,
     body: e.body,
@@ -898,6 +899,15 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
     [baseRow, actx.state, dealerDataBump, overridesVersion],
   );
 
+  const canViewShowcaseCardEarly = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
+  const showcaseDistQ = useShowcaseDistributionState(canViewShowcaseCardEarly ? row.id : "");
+  const showcaseStorage = showcaseDistQ.state ?? {
+    overrides: {},
+    taskUpdates: {},
+    historyByDealer: {},
+    recommendationTaskEntries: {},
+  };
+
   const isManualDealerRow = isManualActualizationDealerId(baseRow.id);
   const isDealerTrashed = isDealerTrashedInRuntime(baseRow.id, actx.state);
   /**
@@ -957,8 +967,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const rowView = row;
   const activeSection = useActiveSection(row.id);
   const historyEvents = useMemo(
-    () => buildHistoryEvents(row),
-    [row, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump, unloadBump, regionalBump],
+    () => buildHistoryEvents(row, showcaseStorage),
+    [row, showcaseStorage, showcaseBump, showcaseMatrixBump, nextStepBump, trainingFlagsBump, commentsBump, legalBump, dealerDataBump, unloadBump, regionalBump],
   );
   const historyTimeline = useMemo(() => {
     const sorted = [...historyEvents].sort((a, b) => historySortKey(b) - historySortKey(a));
@@ -976,12 +986,11 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   );
 
   const showcaseDailySignals = useMemo(() => {
-    const s = loadShowcaseStorage();
-    const tasks = getShowcaseTasksForDealerDisplay(row, s);
-    const rows = mergeDistributionWithOverrides(row, s);
+    const tasks = getShowcaseTasksForDealerDisplay(row, showcaseStorage);
+    const rows = mergeDistributionWithOverrides(row, showcaseStorage);
     const kpis = getShowcaseKpis(rows, tasks);
     return { openCt: kpis.openTasks, hasDeficit: kpis.deficitTotal > 0, deficitTotal: kpis.deficitTotal };
-  }, [row, showcaseBump]);
+  }, [row, showcaseStorage]);
 
   const canViewShowcaseCard = useMemo(() => canViewShowcaseDistribution(profile, row), [profile, row]);
 
@@ -1841,6 +1850,9 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                 distributionSnapshotStale={distributionSnap.isStale}
                 distributionSnapshotLabel={distributionSnap.displayLabel}
                 onPlanShowcaseCheck={onPlanShowcaseCheck}
+                showcaseState={showcaseStorage}
+                showcaseLoading={showcaseDistQ.loading}
+                onShowcaseRefresh={showcaseDistQ.refresh}
                 onApplied={() => setShowcaseBump((n) => n + 1)}
               />
             ) : null}
@@ -1849,7 +1861,12 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               <DealerShowcaseMatrixSummarySection row={row} profile={profile} />
             ) : null}
 
-            <DealerTradePointsSection row={row} sectionDomId={SECTION_DOM_IDS.points} profile={profile} />
+            <DealerTradePointsSection
+              row={row}
+              sectionDomId={SECTION_DOM_IDS.points}
+              profile={profile}
+              showcaseState={showcaseStorage}
+            />
 
             {competitorActivityRows.length > 0 || canEditCardComments || isManualDealerRow ? (
               <section

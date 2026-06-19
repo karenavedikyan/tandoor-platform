@@ -34,9 +34,10 @@ import {
 } from "@/lib/trade-point-showcase-matrix-storage";
 import {
   getShowcaseTasksForDealerDisplay,
-  loadShowcaseStorage,
-  SHOWCASE_STORAGE_EVENT,
+  SHOWCASE_DISTRIBUTION_CHANGED_EVENT,
+  type ShowcaseStorageV1Dto,
 } from "@/lib/showcase-distribution-data";
+import { useShowcaseDistributionState } from "@/hooks/use-showcase-distribution-state";
 import { cn } from "@/lib/utils";
 
 export function freshnessLabel(lastUpdatedAt: string | null): string {
@@ -123,11 +124,22 @@ export function DistributionTradePointMatrixEntry({
   const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
   const [matrixTaskFilter, setMatrixTaskFilter] = useState<MatrixTaskFilterId>("all");
 
+  const showcaseDistQ = useShowcaseDistributionState(dealer.id);
+  const showcaseStorage: ShowcaseStorageV1Dto = showcaseDistQ.state ?? {
+    overrides: {},
+    taskUpdates: {},
+    historyByDealer: {},
+    recommendationTaskEntries: {},
+  };
+
   useEffect(() => {
-    const fn = () => setShowcaseBump((n) => n + 1);
-    window.addEventListener(SHOWCASE_STORAGE_EVENT, fn);
-    return () => window.removeEventListener(SHOWCASE_STORAGE_EVENT, fn);
-  }, []);
+    const fn = () => {
+      setShowcaseBump((n) => n + 1);
+      void showcaseDistQ.refresh();
+    };
+    window.addEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, fn);
+  }, [showcaseDistQ.refresh]);
 
   useEffect(() => {
     const fn = () => {
@@ -197,10 +209,9 @@ export function DistributionTradePointMatrixEntry({
   }, [createdTasks, matrixTaskFilter]);
 
   const showcaseTasksOpen = useMemo(() => {
-    const storage = loadShowcaseStorage();
-    const tasks = getShowcaseTasksForDealerDisplay(dealer, storage);
+    const tasks = getShowcaseTasksForDealerDisplay(dealer, showcaseStorage);
     return tasks.filter((t) => t.status !== "done").slice(0, 8);
-  }, [dealer, showcaseBump]);
+  }, [dealer, showcaseStorage, showcaseBump]);
 
   const openShowcaseTasksCount = useMemo(() => {
     const pointOpen = point.tasks.filter((t) => t.status !== "Закрыта").length;

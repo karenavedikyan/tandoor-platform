@@ -2,11 +2,8 @@ import type { ActualizationState, ShowcaseMatrixTask } from "./client-base-actua
 import { type DealerRow } from "./dealer-base-mock-data";
 import { getCatalogDealerRows } from "./dealer-base-source";
 import { getDealerTrainingAttentionSignal, TRAINING_PROGRAM_PRODUCT_BASE } from "./training-attention";
-import {
-  getAllShowcaseGlobalTaskRows,
-  SHOWCASE_CATEGORY_LABEL,
-  type ShowcaseGlobalTaskRow,
-} from "./showcase-distribution-data";
+import { fetchShowcaseGlobalTasks } from "./showcase-distribution-api";
+import { SHOWCASE_CATEGORY_LABEL, type ShowcaseGlobalTaskRow } from "./showcase-distribution-data";
 import {
   fetchShowcaseMatrixDeficitTasksForDealers,
   getCachedShowcaseMatrixDeficitTasksForDealers,
@@ -329,8 +326,11 @@ function mapShowcaseGlobalToMatrixTask(g: ShowcaseGlobalTaskRow): MatrixTaskWith
   };
 }
 
-function computeShowcaseMatrixTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
-  return getAllShowcaseGlobalTaskRows(dealers).map(mapShowcaseGlobalToMatrixTask);
+async function computeShowcaseMatrixTasksForDealers(dealers: DealerRow[]): Promise<MatrixTaskWithContext[]> {
+  if (dealers.length === 0) return [];
+  const globalRows = await fetchShowcaseGlobalTasks();
+  const allowed = new Set(dealers.map((d) => d.id));
+  return globalRows.filter((g) => allowed.has(g.dealerId)).map(mapShowcaseGlobalToMatrixTask);
 }
 
 /**
@@ -342,19 +342,22 @@ export function getShowcaseMatrixDeficitTasksForTradePoint(dealer: DealerRow, po
 }
 
 /**
- * Реальные открытые задачи по витрине: план витрины (sessionStorage) + дефицит матрицы из БД.
+ * Реальные открытые задачи по витрине: план витрины (БД) + дефицит матрицы из БД.
  */
 export async function getShowcaseBackedTasksForDealers(dealers: DealerRow[]): Promise<MatrixTaskWithContext[]> {
   if (dealers.length === 0) return [];
-  const deficit = await fetchShowcaseMatrixDeficitTasksForDealers(dealers);
-  return [...computeShowcaseMatrixTasksForDealers(dealers), ...deficit];
+  const [plan, deficit] = await Promise.all([
+    computeShowcaseMatrixTasksForDealers(dealers),
+    fetchShowcaseMatrixDeficitTasksForDealers(dealers),
+  ]);
+  return [...plan, ...deficit];
 }
 
 /**
- * Только записи плана витрины из sessionStorage (`source: showcase_distribution`).
+ * Только записи плана витрины из БД (`source: showcase_distribution`).
  * Без автогенерации дефицита матрицы по каталогу — для KPI РОП/директора, где нельзя показывать вычисленные «задачи» как факт.
  */
-export function getShowcaseDistributionPlanTasksForDealers(dealers: DealerRow[]): MatrixTaskWithContext[] {
+export async function getShowcaseDistributionPlanTasksForDealers(dealers: DealerRow[]): Promise<MatrixTaskWithContext[]> {
   if (dealers.length === 0) return [];
   return computeShowcaseMatrixTasksForDealers(dealers);
 }
@@ -490,12 +493,12 @@ function computeAllMatrixTasks(): MatrixTaskWithContext[] {
 }
 
 /**
- * Сводный список задач по всем дилерам и их торговым точкам.
- * Матрица товаров кэшируется; задачи витрины (план/факт) подмешиваются из sessionStorage без кэша.
+ * Сводный список задач по всем дилерам и их торговым точкам (матрица товаров).
+ * Задачи плана витрины подгружаются отдельно через API (`getShowcaseDistributionPlanTasksForDealers`).
  */
 export function getAllMatrixTasks(): MatrixTaskWithContext[] {
   if (!matrixBaseTasksCache) matrixBaseTasksCache = computeAllMatrixTasks();
-  return [...matrixBaseTasksCache, ...computeShowcaseMatrixTasksForDealers(getCatalogDealerRows())];
+  return matrixBaseTasksCache;
 }
 
 function buildProductTrainingTasks(dealers: DealerRow[]): MatrixTaskWithContext[] {
