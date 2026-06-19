@@ -231,7 +231,19 @@ export async function resolveScopeCodesMeta(
   const teamIds = await resolveUserTeamIds(pool, userId, role);
 
   let ownCodes: string[] = [];
-  if (role === "rop" || role === "manager" || role === "regional_manager") {
+
+  if (role === "regional_manager") {
+    // [prompt-427] RM scope: только dealer_overrides.regional_manager_id.
+    // НЕ client_assignments (там RM не пишется), НЕ teamCodes (RM не видит чужих клиентов команды).
+    const ownQ = await pool.query<{ client_code: string }>(
+      `SELECT DISTINCT upper(regexp_replace(dealer_id, '^client-', '')) AS client_code
+       FROM dealer_overrides
+       WHERE regional_manager_id = $1::uuid
+       ORDER BY client_code`,
+      [userId],
+    );
+    ownCodes = ownQ.rows.map((r) => r.client_code).filter(Boolean);
+  } else if (role === "rop" || role === "manager") {
     const ownQ = await pool.query<{ client_code: string }>(
       `SELECT DISTINCT client_code FROM client_assignments WHERE responsible_user_id = $1::uuid ORDER BY client_code`,
       [userId],
@@ -240,7 +252,8 @@ export async function resolveScopeCodesMeta(
   }
 
   let teamCodes: string[] = [];
-  if ((role === "rop" || role === "regional_manager") && teamIds.length > 0) {
+  if (role === "rop" && teamIds.length > 0) {
+    // [prompt-427] teamCodes — ТОЛЬКО для РОПа. Для RM teamCodes пуст.
     const teamQ = await pool.query<{ client_code: string }>(
       `SELECT DISTINCT ca.client_code
        FROM client_assignments ca

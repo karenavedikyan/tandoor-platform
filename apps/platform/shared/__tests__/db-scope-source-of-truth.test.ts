@@ -161,12 +161,12 @@ function mockPool(role: string): PoolLike {
   assert.equal(scope.totals.trashed_dealers, 1);
 }
 
-// regional_manager: team without grants
+// regional_manager: ownCodes из dealer_overrides, teamCodes пуст (prompt 427)
 {
   const pool = mockPool("regional_manager");
   const meta = await resolveScopeCodesMeta(pool, RM_ID, "regional_manager");
   assert.equal(meta.grantedCodes.length, 0);
-  assert.ok(meta.teamCodes.length >= 1);
+  assert.equal(meta.teamCodes.length, 0);
 }
 
 // scope-debug uses same DB pipeline
