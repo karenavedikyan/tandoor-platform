@@ -5,7 +5,10 @@ import type { Request } from "express";
  * Совпадает с логикой `enforceCsrfOrigin` в `api/admin/[action].ts` и `api/auth/[action].ts`.
  */
 export function enforceCsrfOrigin(req: Request): boolean {
-  const allowed = new Set<string>(["https://tandoor-platform.vercel.app"]);
+  const allowed = new Set<string>([
+    "https://tandoor-platform.vercel.app",
+    "https://lk.tandoor.ru",
+  ]);
   if (process.env.NODE_ENV !== "production") {
     allowed.add("http://localhost:5173");
     allowed.add("http://localhost:3000");
