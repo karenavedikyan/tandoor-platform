@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -64,6 +64,8 @@ type DistributionTradePointMatrixEntryProps = {
   actorUserId: string;
   actorName: string;
   onBackToList?: () => void;
+  initialFullscreenOpen?: boolean;
+  onFullscreenChange?: (open: boolean) => void;
 };
 
 export function DistributionTradePointMatrixEntry({
@@ -73,6 +75,8 @@ export function DistributionTradePointMatrixEntry({
   actorUserId,
   actorName,
   onBackToList,
+  initialFullscreenOpen = false,
+  onFullscreenChange,
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
@@ -93,7 +97,19 @@ export function DistributionTradePointMatrixEntry({
   const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
-  const [showcaseFullscreenOpen, setShowcaseFullscreenOpen] = useState(false);
+  const [showcaseFullscreenOpen, setShowcaseFullscreenOpenState] = useState(initialFullscreenOpen);
+
+  const setShowcaseFullscreenOpen = useCallback(
+    (open: boolean) => {
+      setShowcaseFullscreenOpenState(open);
+      onFullscreenChange?.(open);
+    },
+    [onFullscreenChange],
+  );
+
+  useEffect(() => {
+    setShowcaseFullscreenOpenState(initialFullscreenOpen);
+  }, [initialFullscreenOpen]);
 
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
@@ -150,12 +166,16 @@ export function DistributionTradePointMatrixEntry({
     return () => window.removeEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, fn);
   }, []);
 
+  const prevPointRef = useRef({ dealerId: dealer.id, pointId: point.id });
   useEffect(() => {
+    const prev = prevPointRef.current;
+    if (prev.dealerId === dealer.id && prev.pointId === point.id) return;
+    prevPointRef.current = { dealerId: dealer.id, pointId: point.id };
     setCreatedTasks([]);
     setExpandedTaskIds(new Set());
     setMatrixTaskFilter("all");
     setMatrixFilter("all");
-    setShowcaseFullscreenOpen(false);
+    setShowcaseFullscreenOpenState(false);
   }, [dealer.id, point.id]);
 
   const createdTaskByProductId = useMemo(() => {
@@ -334,7 +354,6 @@ export function DistributionTradePointMatrixEntry({
           actorName={actorName}
           onClose={() => {
             setShowcaseFullscreenOpen(false);
-            onBackToList?.();
           }}
           onBackToList={() => {
             setShowcaseFullscreenOpen(false);

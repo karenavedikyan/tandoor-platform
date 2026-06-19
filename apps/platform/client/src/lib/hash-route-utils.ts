@@ -99,3 +99,32 @@ export function useHashRouteSearchParams(): URLSearchParams {
   }, []);
   return useMemo(() => readHashRouteQuery(), [loc, tick]);
 }
+
+/**
+ * Обновляет несколько query-параметров в hash атомарно (один replaceState + один hashchange).
+ * null → удалить ключ.
+ */
+export function updateHashRouteParams(updates: Record<string, string | null>): void {
+  if (typeof window === "undefined") return;
+  const hash = window.location.hash || "#/";
+  const qIdx = hash.indexOf("?");
+  const hashBase = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
+  const sp = new URLSearchParams(qIdx >= 0 ? hash.slice(qIdx + 1) : "");
+  for (const [k, v] of Object.entries(updates)) {
+    if (v === null) sp.delete(k);
+    else sp.set(k, v);
+  }
+  const qs = sp.toString();
+  const nextHash = qs ? `${hashBase}?${qs}` : hashBase;
+  if (nextHash === window.location.hash) return;
+  window.history.replaceState(null, "", `${window.location.search}${nextHash}`);
+  const HashChange = window.HashChangeEvent ?? Event;
+  window.dispatchEvent(new HashChange("hashchange"));
+}
+
+/**
+ * Одиночный апдейт — обёртка над updateHashRouteParams.
+ */
+export function updateHashRouteParam(key: string, value: string | null): void {
+  updateHashRouteParams({ [key]: value });
+}

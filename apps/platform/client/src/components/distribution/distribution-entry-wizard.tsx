@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,11 @@ import {
   sanitizeDistributionFilterForScope,
   type DistributionFilterState,
 } from "@/lib/distribution-filters";
+import {
+  updateHashRouteParam,
+  updateHashRouteParams,
+  useHashRouteSearchParams,
+} from "@/lib/hash-route-utils";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
 type DistributionEntryWizardProps = {
@@ -29,7 +34,37 @@ type DistributionEntryWizardProps = {
 };
 
 export function DistributionEntryWizard({ profile, onAxisChange }: DistributionEntryWizardProps) {
-  const [axis, setAxis] = useState<DistributionEntryAxis | null>(null);
+  const routeParams = useHashRouteSearchParams();
+  const rawAxis = routeParams.get("de_axis");
+  const axis: DistributionEntryAxis | null =
+    rawAxis === "city" || rawAxis === "product" || rawAxis === "tradePoint" ? rawAxis : null;
+
+  const setAxis = useCallback((next: DistributionEntryAxis | null) => {
+    if (next === null) {
+      updateHashRouteParams({
+        de_axis: null,
+        de_dealer: null,
+        de_tp: null,
+        de_fs: null,
+        de_step: null,
+        de_seg: null,
+        de_model: null,
+        de_city: null,
+      });
+    } else {
+      updateHashRouteParams({
+        de_axis: next,
+        de_dealer: null,
+        de_tp: null,
+        de_fs: null,
+        de_step: null,
+        de_seg: null,
+        de_model: null,
+        de_city: null,
+      });
+    }
+  }, []);
+
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
   const scoped = useDistributionScopedDealers(profile);
 
@@ -37,6 +72,13 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
     onAxisChange?.(axis !== null);
     return () => onAxisChange?.(false);
   }, [axis, onAxisChange]);
+
+  useEffect(() => {
+    if (axis !== null) return;
+    if (routeParams.get("de_fs") === "1") {
+      updateHashRouteParam("de_fs", null);
+    }
+  }, [axis, routeParams]);
 
   const filterScope = useMemo(() => {
     const access = mapSalesRoleToDealerBaseAccess(profile.role);
