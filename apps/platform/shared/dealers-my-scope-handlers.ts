@@ -5,6 +5,7 @@
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
 import { computeDbScopeForUser, type DbScopeResult } from "./db-scope-formula.js";
+import { tpJoinStatusActive } from "./record-status.js";
 import {
   canViewerAccessUserScope,
   fetchScopeTargetUser,
@@ -18,6 +19,12 @@ export type MyDealerScopeUser = {
   full_name?: string;
 };
 
+export type MyDealerScopeTradePoint = {
+  tp_id: string;
+  dealer_id: string;
+  is_primary: boolean;
+};
+
 export type MyDealerScopePayload = {
   success: true;
   user: { id: string; email: string; role: UserRole; full_name?: string };
@@ -27,6 +34,7 @@ export type MyDealerScopePayload = {
   active_dealer_external_keys: string[];
   trashed_dealer_ids: string[];
   trashed_dealer_external_keys: string[];
+  active_trade_points: MyDealerScopeTradePoint[];
   scope_explanation: DbScopeResult["scope_explanation"];
 };
 
@@ -47,6 +55,7 @@ function toScopeUser(u: ScopeTargetUser | MyDealerScopeUser): {
 function buildPayload(
   scopeUser: ScopeTargetUser | MyDealerScopeUser,
   scope: DbScopeResult,
+  activeTradePoints: MyDealerScopeTradePoint[],
   viewedUser?: ScopeTargetUser | MyDealerScopeUser,
 ): MyDealerScopePayload {
   return {
@@ -58,8 +67,48 @@ function buildPayload(
     active_dealer_external_keys: scope.active_dealer_external_keys,
     trashed_dealer_ids: scope.trashed_dealer_ids,
     trashed_dealer_external_keys: scope.trashed_dealer_external_keys,
+    active_trade_points: activeTradePoints,
     scope_explanation: scope.scope_explanation,
   };
+}
+
+async function fetchActiveTradePointsForScope(
+  pool: PoolLike,
+  scope: DbScopeResult,
+): Promise<MyDealerScopeTradePoint[]> {
+  if (scope.scope_explanation.full_catalog) {
+    const r = await pool.query<MyDealerScopeTradePoint>(
+      `SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
+              d.external_key AS dealer_id,
+              COALESCE(tpo.is_primary, FALSE) AS is_primary
+         FROM trade_points tp
+         INNER JOIN dealers d ON d.id = tp.dealer_id
+         LEFT JOIN trade_point_overrides tpo ON (
+           tpo.tp_id = tp.id::text OR tpo.tp_id = tp.external_key
+         )
+        WHERE tp.is_active = TRUE
+          AND ${tpJoinStatusActive("tpo")}
+        ORDER BY d.external_key, tp.external_key`,
+    );
+    return r.rows;
+  }
+  if (scope.active_dealer_external_keys.length === 0) return [];
+  const r = await pool.query<MyDealerScopeTradePoint>(
+    `SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
+            d.external_key AS dealer_id,
+            COALESCE(tpo.is_primary, FALSE) AS is_primary
+       FROM trade_points tp
+       INNER JOIN dealers d ON d.id = tp.dealer_id
+       LEFT JOIN trade_point_overrides tpo ON (
+         tpo.tp_id = tp.id::text OR tpo.tp_id = tp.external_key
+       )
+      WHERE d.external_key = ANY($1::text[])
+        AND tp.is_active = TRUE
+        AND ${tpJoinStatusActive("tpo")}
+      ORDER BY d.external_key, tp.external_key`,
+    [scope.active_dealer_external_keys],
+  );
+  return r.rows;
 }
 
 export async function fetchMyDealerScope(
@@ -67,7 +116,8 @@ export async function fetchMyDealerScope(
   user: MyDealerScopeUser,
 ): Promise<MyDealerScopePayload> {
   const scope = await computeDbScopeForUser(pool, user.id, user.role);
-  return buildPayload(user, scope);
+  const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
+  return buildPayload(user, scope, activeTradePoints);
 }
 
 export async function fetchMyDealerScopeForRequest(
@@ -87,5 +137,6 @@ export async function fetchMyDealerScopeForRequest(
   if (!target || target.status !== "active") return { notFound: true };
 
   const scope = await computeDbScopeForUser(pool, target.id, target.role);
-  return buildPayload(viewer, scope, target);
+  const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
+  return buildPayload(viewer, scope, activeTradePoints, target);
 }

@@ -15,6 +15,7 @@ type TpRow = {
   tp_id: string;
   dealer_external_key: string;
   status: string;
+  is_primary: boolean;
   trashed_at: string | null;
   trashed_by: string | null;
 };
@@ -70,6 +71,7 @@ void (async () => {
       tp_id: "a1111111-1111-1111-1111-111111111111",
       dealer_external_key: TEXT_DEALER_A,
       status: "active",
+      is_primary: true,
       trashed_at: null,
       trashed_by: null,
     },
@@ -77,6 +79,7 @@ void (async () => {
       tp_id: "a2222222-2222-2222-2222-222222222222",
       dealer_external_key: TEXT_DEALER_A,
       status: "active",
+      is_primary: false,
       trashed_at: null,
       trashed_by: null,
     },
@@ -84,6 +87,7 @@ void (async () => {
       tp_id: "b3333333-3333-3333-3333-333333333333",
       dealer_external_key: TEXT_DEALER_B,
       status: "active",
+      is_primary: true,
       trashed_at: null,
       trashed_by: null,
     },
@@ -106,6 +110,7 @@ void (async () => {
     2,
     "restore cascades TPs back to active",
   );
+  assert.equal(tps.find((t) => t.tp_id.endsWith("1111"))?.is_primary, true, "primary preserved on cascade restore");
 
   const unknownPool = makePool([], { knownDealers: new Set([TEXT_DEALER_A]) });
   await cascadeDealerTradePointsToTrash(unknownPool, "client-ma-unknown9999", userId);

@@ -24,6 +24,7 @@ export type TradePointAuditEventKind =
   | "tp_archive_to_trash_bulk"
   | "tp_trash_restore_bulk"
   | "tp_trash_request_purge_bulk"
+  | "tp_set_primary"
   | "field_change";
 
 export async function logDealerAuditEvent(

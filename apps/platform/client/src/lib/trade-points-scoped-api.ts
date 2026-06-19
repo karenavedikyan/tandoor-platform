@@ -10,6 +10,7 @@ export type ScopedTradePointDto = {
   address: string | null;
   format: string | null;
   isActive: boolean;
+  isPrimary: boolean;
   importanceTier: string | null;
   dealerId: string;
   dealerExternalKey: string;

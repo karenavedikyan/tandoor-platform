@@ -97,6 +97,7 @@ function stubTradePoint(tp: ScopedTradePointDto): DealerTradePoint {
     photos: { attached: false },
     productTrainingCompleted: false,
     productTrainingStatus: "not_required",
+    isPrimary: tp.isPrimary,
   };
 }
 

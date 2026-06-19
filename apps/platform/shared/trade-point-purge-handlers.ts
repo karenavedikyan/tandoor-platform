@@ -13,6 +13,7 @@ import {
   parseRecordStatus,
 } from "./record-status.js";
 import { logTradePointAuditEvent } from "./override-audit-events.js";
+import { ensurePrimaryOnUntrash, resolveTradePointDealerId } from "./trade-point-primary.js";
 import { removeTradePointFromActualizationTrashBlob } from "./actualization-blob-trash.js";
 import { runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { roleHasPermission } from "./auth-rbac.js";
@@ -167,6 +168,10 @@ export async function handleTradePointOverridesRestore(
         [tpId, me.id],
       );
       await logTradePointAuditEvent(pool, { tpId, eventKind: "tp_restored_to_active", userId: me.id });
+      const dealerId = ov?.dealer_id?.trim() ?? (await resolveTradePointDealerId(pool, tpId));
+      if (dealerId) {
+        await ensurePrimaryOnUntrash(pool, dealerId, tpId, me.id);
+      }
     });
   } else {
     sendJson(res, 409, { success: false, code: "INVALID_STATE", message: "Запись не в корзине." });

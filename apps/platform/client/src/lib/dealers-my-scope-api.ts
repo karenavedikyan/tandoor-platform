@@ -25,6 +25,12 @@ export type MyDealerScopeExplanation = {
   full_catalog: boolean;
 };
 
+export type MyDealerScopeTradePoint = {
+  tp_id: string;
+  dealer_id: string;
+  is_primary: boolean;
+};
+
 export type MyDealerScopePayload = {
   success: true;
   user: { id: string; email: string; role: UserRole; full_name?: string };
@@ -34,6 +40,7 @@ export type MyDealerScopePayload = {
   active_dealer_external_keys: string[];
   trashed_dealer_ids: string[];
   trashed_dealer_external_keys: string[];
+  active_trade_points: MyDealerScopeTradePoint[];
   scope_explanation: MyDealerScopeExplanation;
 };
 

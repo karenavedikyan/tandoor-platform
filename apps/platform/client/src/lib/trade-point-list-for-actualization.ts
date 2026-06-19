@@ -23,6 +23,7 @@ import {
 import { getProductById } from "./catalog-data.js";
 import type { MergedTradePointEntry } from "./dealer-trade-points-overrides.js";
 import { isVirtualDefaultTradePointId } from "./dealer-trade-points-overrides.js";
+import { isDealerTrashedInRuntime, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
 import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "./dealer-base-mock-data.js";
 
 export type TradePointShowcaseBucket =
@@ -218,9 +219,9 @@ export function buildTradePointListForActualization(
       rop,
     ]);
 
-    // Корзина: ТТ корзинного клиента или сама ТТ в корзине — не показываем (Промт 45).
-    if (act.trashedDealersById?.[dealer.id]) return;
-    if (act.trashedTradePointsById?.[tp.id]) return;
+    // Корзина: ТТ корзинного клиента или сама ТТ в корзине — не показываем (Промт 45 / 422).
+    if (isDealerTrashedInRuntime(dealer.id, act)) return;
+    if (isTradePointTrashedInRuntime(tp.id, act)) return;
     byTradePointId.set(tp.id, {
       tradePointId: tp.id,
       dealerId: dealer.id,
@@ -272,7 +273,7 @@ export function buildTradePointListForActualization(
         )
       : roleScopedDealerRows(dealers, profile);
     for (const dealer of scoped) {
-      if (act.trashedDealersById?.[dealer.id]) continue;
+      if (isDealerTrashedInRuntime(dealer.id, act)) continue;
       const merged = mergeTradePointsForActualization(dealer, act);
       for (const entry of merged) {
         if (!keepEntry(entry)) continue;

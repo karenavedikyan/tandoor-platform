@@ -139,6 +139,7 @@ export async function finalizeOverridesApiAccessLog(
 const WRITE_ACTIONS = new Set([
   "upsert",
   "set-training",
+  "set-primary",
   "trash",
   "untrash",
   "create-manual",

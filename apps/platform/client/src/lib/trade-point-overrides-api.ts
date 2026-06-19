@@ -129,6 +129,28 @@ export async function setTradePointTraining(
   return r.ok ? r.data.training : null;
 }
 
+export async function setPrimaryTradePointStrict(
+  tpId: string,
+): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
+  traceOverridesStrictCalled("setPrimaryTradePointStrict", { tpId });
+  const body = { tp_id: tpId };
+  const r = await overridesApiPost<{ override: TradePointOverrideRow | null }>({
+    scope: "trade-point",
+    action: "set-primary",
+    url: "/api/trade-point-overrides/set-primary",
+    entityId: tpId,
+    body,
+    traceFn: "setPrimaryTradePointStrict",
+  });
+  if (r.ok) invalidateMyDealerScope();
+  return r;
+}
+
+export async function setPrimaryTradePoint(tpId: string): Promise<TradePointOverrideRow | null> {
+  const r = await setPrimaryTradePointStrict(tpId);
+  return r.ok ? r.data.override : null;
+}
+
 export async function trashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
   traceOverridesStrictCalled("trashTradePointStrict", { tpId });
   const body = { tp_id: tpId };
@@ -143,6 +165,7 @@ export async function trashTradePointStrict(tpId: string): Promise<OverridesApiR
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-trash", tpId), kind: "tp-trash", payload: body });
   }
+  if (r.ok) invalidateMyDealerScope();
   return r;
 }
 

@@ -15,6 +15,12 @@ import {
 import { logOverridesWriteError, runOverridesHandlerSafe } from "./overrides-write-errors.js";
 import { OverridesValidationError, sanitizeTradePointOverrideUuidFields } from "./overrides-uuid-validation.js";
 import { canUserTrashTradePoint } from "./dealer-trash-scope-server.js";
+import {
+  autoPromoteSolePrimaryForDealer,
+  resolveTradePointDealerId,
+  setPrimaryTradePointInTransaction,
+  validateTradePointTrashAllowed,
+} from "./trade-point-primary.js";
 
 type SessionUser = { id: string; role: string; status: string };
 
@@ -268,10 +274,11 @@ async function setTrash(
   tpId: string,
   trash: boolean,
   res: VercelResponse,
-): Promise<void> {
+): Promise<boolean> {
   const patch: Partial<Record<TradePointOverrideField, unknown>> = trash
     ? { trashed_at: new Date().toISOString(), trashed_by: me.id }
     : { trashed_at: null, trashed_by: null };
+  let dealerIdForPromote: string | null = null;
   await runOverridesHandlerSafe(
     pool,
     trash ? "trade_point_trash" : "trade_point_untrash",
@@ -282,19 +289,21 @@ async function setTrash(
       const prev = await fetchOverride(pool, tpId);
       await logEvents(pool, tpId, prev, patch, me.id);
       if (trash) {
+        dealerIdForPromote = prev?.dealer_id?.trim() ?? (await resolveTradePointDealerId(pool, tpId));
         await pool.query(
-          `INSERT INTO trade_point_overrides (tp_id, status, trashed_at, trashed_by, updated_by)
-           VALUES ($1, 'in_trash', $2, $3::uuid, $4::uuid)
+          `INSERT INTO trade_point_overrides (tp_id, dealer_id, status, is_primary, trashed_at, trashed_by, updated_by)
+           VALUES ($1, $2, 'in_trash', FALSE, $3, $4::uuid, $5::uuid)
            ON CONFLICT (tp_id) DO UPDATE SET
              status = CASE
                WHEN trade_point_overrides.status = 'purged' THEN trade_point_overrides.status
                ELSE 'in_trash'::record_status
              END,
+             is_primary = FALSE,
              trashed_at = EXCLUDED.trashed_at,
              trashed_by = EXCLUDED.trashed_by,
              updated_at = NOW(),
              updated_by = EXCLUDED.updated_by`,
-          [tpId, new Date().toISOString(), me.id, me.id],
+          [tpId, dealerIdForPromote, new Date().toISOString(), me.id, me.id],
         );
       } else {
         await pool.query(
@@ -312,10 +321,12 @@ async function setTrash(
       }
     },
   );
-  if (trash) {
+  if (trash && dealerIdForPromote) {
+    await autoPromoteSolePrimaryForDealer(pool, dealerIdForPromote, me.id);
   }
   const override = await fetchOverride(pool, tpId);
   sendJson(res, 200, { success: true, data: { override } });
+  return true;
 }
 
 function denyTrashOutOfScope(res: VercelResponse, reason?: string): void {
@@ -346,6 +357,11 @@ export async function handleTradePointOverridesTrash(
     denyTrashOutOfScope(res, check.reason);
     return;
   }
+  const guard = await validateTradePointTrashAllowed(pool, tpId);
+  if (guard) {
+    sendJson(res, 400, { success: false, code: guard.code, message: guard.message });
+    return;
+  }
   await setTrash(pool, me, tpId, true, res);
 }
 
@@ -360,4 +376,36 @@ export async function handleTradePointOverridesUntrash(
   if (body.target === undefined) body.target = "active";
   req.body = body;
   await handleTradePointOverridesRestore(req, res, pool, me);
+}
+
+export async function handleTradePointOverridesSetPrimary(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (!assertCanWrite(me, res)) return;
+  const tpId = typeof (req.body as Record<string, unknown>)?.tp_id === "string"
+    ? String((req.body as Record<string, unknown>).tp_id).trim()
+    : "";
+  if (!tpId) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите tp_id." });
+    return;
+  }
+  const check = await canUserTrashTradePoint(pool, me.id, me.role, tpId);
+  if (!check.allowed) {
+    denyTrashOutOfScope(res, check.reason);
+    return;
+  }
+  const result = await setPrimaryTradePointInTransaction(pool, tpId, me.id);
+  if ("code" in result) {
+    sendJson(res, result.code === "NOT_FOUND" ? 404 : 400, {
+      success: false,
+      code: result.code,
+      message: result.message,
+    });
+    return;
+  }
+  const override = await fetchOverride(pool, tpId);
+  sendJson(res, 200, { success: true, data: { override } });
 }

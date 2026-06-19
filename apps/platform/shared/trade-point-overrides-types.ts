@@ -8,6 +8,7 @@ import { parseRecordStatus } from "./record-status.js";
 export type TradePointOverrideRow = {
   tp_id: string;
   dealer_id: string | null;
+  is_primary: boolean;
   status: RecordStatus;
   name: string | null;
   city: string | null;
@@ -77,6 +78,7 @@ export function mapTradePointOverrideRow(r: Record<string, unknown>): TradePoint
   return {
     tp_id: String(r.tp_id),
     dealer_id: r.dealer_id != null ? String(r.dealer_id) : null,
+    is_primary: r.is_primary === true || r.is_primary === "t",
     status: parseRecordStatus(r.status),
     name: r.name != null ? String(r.name) : null,
     city: r.city != null ? String(r.city) : null,
