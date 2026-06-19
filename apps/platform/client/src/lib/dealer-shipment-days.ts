@@ -9,8 +9,8 @@ import { getDistributionSnapshotForCard } from "./dealer-card-release-signals.js
 import {
   getShowcaseKpis,
   getShowcaseTasksForDealerDisplay,
-  loadShowcaseStorage,
   mergeDistributionWithOverrides,
+  type ShowcaseStorageV1Dto,
 } from "./showcase-distribution-data.js";
 import { isDealerHiddenForUser, loadDealerWorkPlanState, type DealerWorkPlanState } from "./dealer-work-plan.js";
 
@@ -162,10 +162,16 @@ export type DealerShipmentStatusResult = {
   reason: string;
 };
 
-function showcaseSignals(row: DealerRow) {
-  const s = loadShowcaseStorage();
-  const tasks = getShowcaseTasksForDealerDisplay(row, s);
-  const rows = mergeDistributionWithOverrides(row, s);
+const EMPTY_SHOWCASE_STORAGE: ShowcaseStorageV1Dto = {
+  overrides: {},
+  taskUpdates: {},
+  historyByDealer: {},
+  recommendationTaskEntries: {},
+};
+
+function showcaseSignals(row: DealerRow, storage: ShowcaseStorageV1Dto = EMPTY_SHOWCASE_STORAGE) {
+  const tasks = getShowcaseTasksForDealerDisplay(row, storage);
+  const rows = mergeDistributionWithOverrides(row, storage);
   return getShowcaseKpis(rows, tasks);
 }
 
@@ -178,10 +184,11 @@ export function getDealerShipmentStatus(
   _dayId: DealerShipmentDayId,
   userId: string,
   workPlanState: DealerWorkPlanState = loadDealerWorkPlanState(),
+  showcaseStorage?: ShowcaseStorageV1Dto,
 ): DealerShipmentStatusResult {
   const hidden = userId ? isDealerHiddenForUser(userId, row.id, workPlanState) : false;
   const snap = getDistributionSnapshotForCard(row);
-  const { deficitTotal, openTasks, criticalZones } = showcaseSignals(row);
+  const { deficitTotal, openTasks, criticalZones } = showcaseSignals(row, showcaseStorage);
   const next = getClientNextStepForDealer(row.id, loadClientNextStepsStorage());
   const hasNextDate = Boolean(next?.contactDate?.trim());
 

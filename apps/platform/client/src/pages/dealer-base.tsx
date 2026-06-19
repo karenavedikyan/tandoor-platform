@@ -240,7 +240,7 @@ import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useMainDashboardCityFilterOptional } from "@/context/main-dashboard-city-filter-context";
 import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
-import { SHOWCASE_STORAGE_EVENT } from "@/lib/showcase-distribution-data";
+import { SHOWCASE_DISTRIBUTION_CHANGED_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
 import {
@@ -2812,10 +2812,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   useEffect(() => {
     const h = () => setTrafficBump((n) => n + 1);
     window.addEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, h);
-    window.addEventListener(SHOWCASE_STORAGE_EVENT, h);
+    window.addEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, h);
     return () => {
       window.removeEventListener(CLIENT_NEXT_STEP_CHANGED_EVENT, h);
-      window.removeEventListener(SHOWCASE_STORAGE_EVENT, h);
+      window.removeEventListener(SHOWCASE_DISTRIBUTION_CHANGED_EVENT, h);
     };
   }, []);
 

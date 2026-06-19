@@ -1,6 +1,6 @@
 /**
- * План/факт витрины по категориям и задачи (Release 1, без backend).
- * Изменения — sessionStorage (ключ tandoor-showcase-distribution-v1).
+ * План/факт витрины по категориям и задачи — pure helpers + RBAC.
+ * Персистентное состояние в Postgres (Промт 426), см. showcase-distribution-api.ts.
  */
 
 import type { ClientCategoryId } from "./client-category.js";
@@ -74,7 +74,6 @@ export type ShowcaseTaskUpdate = {
   completedAt?: string;
   updatedBy?: string;
   resultKind?: ShowcaseCompleteResultKind;
-  /** После «Выполнить» — новый факт по категории */
   resolvedActualCount?: number;
 };
 
@@ -95,18 +94,28 @@ export type ShowcaseRecommendationTaskStored = {
   createdBy: string;
 };
 
-type ShowcaseStorageV1 = {
+export type ShowcaseStorageV1Dto = {
   overrides: Record<string, ShowcaseRowOverride>;
   taskUpdates: Record<string, ShowcaseTaskUpdate>;
   historyByDealer: Record<string, ShowcaseHistoryEntry[]>;
-  /** Задачи, добавленные из блока «Рекомендуем выставить». */
   recommendationTaskEntries?: Record<string, ShowcaseRecommendationTaskStored[]>;
 };
 
-const STORAGE_KEY = "tandoor-showcase-distribution-v1";
+/** Событие после успешной мутации через API — для /tasks и карточки дилера. */
+export const SHOWCASE_DISTRIBUTION_CHANGED_EVENT = "tandoor-showcase-distribution-changed";
 
-/** Событие после изменения sessionStorage витрины — для обновления /tasks и кэша матрицы. */
-export const SHOWCASE_STORAGE_EVENT = "tandoor-showcase-distribution-changed";
+export type ShowcaseCompletePayload = {
+  taskId: string;
+  dealerId: string;
+  categoryId: ShowcaseCategoryId;
+  newActualCount: number;
+  resultKind: ShowcaseCompleteResultKind;
+  comment: string;
+  nextActionDate: string;
+  nextActionText: string;
+  actorUserId: string;
+  actorLabel: string;
+};
 
 export const SHOWCASE_CATEGORIES: ShowcaseCategoryId[] = ["entrance_doors", "interior_doors", "hardware", "molding"];
 
@@ -129,6 +138,10 @@ export function showcaseCompleteResultLabel(k: ShowcaseCompleteResultKind): stri
   return RESULT_LABEL[k];
 }
 
+export function showcaseOverrideStorageKey(dealerId: string, categoryId: ShowcaseCategoryId): string {
+  return `${dealerId}|${categoryId}`;
+}
+
 function charSum(s: string): number {
   let sum = 0;
   for (let i = 0; i < s.length; i += 1) sum += s.charCodeAt(i);
@@ -137,40 +150,6 @@ function charSum(s: string): number {
 
 function hash01(dealerId: string, categoryId: string): number {
   return (charSum(dealerId) * 31 + charSum(categoryId)) % 1000;
-}
-
-function emptyStorage(): ShowcaseStorageV1 {
-  return { overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} };
-}
-
-export function loadShowcaseStorage(): ShowcaseStorageV1 {
-  if (typeof window === "undefined" || !window.sessionStorage) return emptyStorage();
-  try {
-    const raw = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyStorage();
-    const p = JSON.parse(raw) as Partial<ShowcaseStorageV1>;
-    return {
-      overrides: p.overrides && typeof p.overrides === "object" ? p.overrides : {},
-      taskUpdates: p.taskUpdates && typeof p.taskUpdates === "object" ? p.taskUpdates : {},
-      historyByDealer: p.historyByDealer && typeof p.historyByDealer === "object" ? p.historyByDealer : {},
-      recommendationTaskEntries:
-        p.recommendationTaskEntries && typeof p.recommendationTaskEntries === "object"
-          ? (p.recommendationTaskEntries as Record<string, ShowcaseRecommendationTaskStored[]>)
-          : {},
-    };
-  } catch {
-    return emptyStorage();
-  }
-}
-
-export function saveShowcaseStorage(data: ShowcaseStorageV1): void {
-  if (typeof window === "undefined" || !window.sessionStorage) return;
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  window.dispatchEvent(new CustomEvent(SHOWCASE_STORAGE_EVENT));
-}
-
-export function showcaseOverrideStorageKey(dealerId: string, categoryId: ShowcaseCategoryId): string {
-  return `${dealerId}|${categoryId}`;
 }
 
 function targetsForClientCategory(cat: ClientCategoryId): Record<ShowcaseCategoryId, number> {
@@ -237,7 +216,7 @@ export function buildBaseDistributionRows(dealer: DealerRow): ShowcaseDistributi
   });
 }
 
-export function mergeDistributionWithOverrides(dealer: DealerRow, storage: ShowcaseStorageV1): ShowcaseDistributionRow[] {
+export function mergeDistributionWithOverrides(dealer: DealerRow, storage: ShowcaseStorageV1Dto): ShowcaseDistributionRow[] {
   if (isManualActualizationDealerId(dealer.id)) return [];
   const base = buildBaseDistributionRows(dealer);
   return base.map((row) => {
@@ -283,7 +262,7 @@ export function buildShowcaseTasksFromRows(rows: ShowcaseDistributionRow[]): Sho
   return out;
 }
 
-export function mergeTasksWithStorage(tasks: ShowcaseTask[], storage: ShowcaseStorageV1): ShowcaseTask[] {
+export function mergeTasksWithStorage(tasks: ShowcaseTask[], storage: ShowcaseStorageV1Dto): ShowcaseTask[] {
   return tasks.map((t) => {
     const u = storage.taskUpdates[t.taskId];
     if (!u) return t;
@@ -303,8 +282,7 @@ export function mergeTasksWithStorage(tasks: ShowcaseTask[], storage: ShowcaseSt
   });
 }
 
-/** Активные и выполненные задачи по витрине для карточки клиента. */
-export function getShowcaseTasksForDealerDisplay(dealer: DealerRow, storage: ShowcaseStorageV1): ShowcaseTask[] {
+export function getShowcaseTasksForDealerDisplay(dealer: DealerRow, storage: ShowcaseStorageV1Dto): ShowcaseTask[] {
   if (isManualActualizationDealerId(dealer.id)) return [];
   const rows = mergeDistributionWithOverrides(dealer, storage);
   const fromDeficit = mergeTasksWithStorage(buildShowcaseTasksFromRows(rows), storage);
@@ -373,132 +351,10 @@ export function getShowcaseKpis(rows: ShowcaseDistributionRow[], tasks: Showcase
   return { completionPct, deficitTotal, openTasks, criticalZones };
 }
 
-export function getShowcaseHistoryForDealer(dealerId: string, storage: ShowcaseStorageV1): ShowcaseHistoryEntry[] {
+export function getShowcaseHistoryForDealer(dealerId: string, storage: ShowcaseStorageV1Dto): ShowcaseHistoryEntry[] {
   return [...(storage.historyByDealer[dealerId] ?? [])].sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
-export type ShowcaseCompletePayload = {
-  taskId: string;
-  dealerId: string;
-  categoryId: ShowcaseCategoryId;
-  newActualCount: number;
-  resultKind: ShowcaseCompleteResultKind;
-  comment: string;
-  nextActionDate: string;
-  nextActionText: string;
-  actorUserId: string;
-  actorLabel: string;
-};
-
-/** Упрощённый пересчёт override status после смены actual (без лишней рекурсии). */
-function recomputeOverrideStatus(target: number, actual: number): ShowcaseRowStatus {
-  const deficit = Math.max(0, target - actual);
-  const completionPct = target <= 0 ? 100 : Math.min(100, Math.round((actual / target) * 100));
-  return rowStatus(completionPct, deficit, target);
-}
-
-export function applyShowcaseTaskCompleteSafe(
-  dealer: DealerRow,
-  payload: Omit<ShowcaseCompletePayload, "dealerId" | "categoryId"> & { categoryId: ShowcaseCategoryId },
-): ShowcaseStorageV1 {
-  const storage = loadShowcaseStorage();
-  const now = new Date().toISOString();
-  const day = now.slice(0, 10);
-  const target =
-    buildBaseDistributionRows(dealer).find((r) => r.categoryId === payload.categoryId)?.targetCount ?? 0;
-
-  storage.taskUpdates[payload.taskId] = {
-    status: "done",
-    resultComment: payload.comment,
-    nextActionDate: payload.nextActionDate,
-    nextActionText: payload.nextActionText,
-    completedAt: day,
-    updatedBy: payload.actorLabel,
-    resultKind: payload.resultKind,
-    resolvedActualCount: payload.newActualCount,
-  };
-
-  storage.overrides[showcaseOverrideStorageKey(dealer.id, payload.categoryId)] = {
-    actualCount: payload.newActualCount,
-    status: recomputeOverrideStatus(target, payload.newActualCount),
-    comment: payload.comment,
-    updatedAt: now,
-    updatedBy: payload.actorLabel,
-  };
-
-  const catLabel = SHOWCASE_CATEGORY_LABEL[payload.categoryId];
-  const hist: ShowcaseHistoryEntry = {
-    id: `sh-${dealer.id}-${payload.taskId}-${Date.now()}`,
-    at: now,
-    meta: `${day} · ${payload.actorLabel}`,
-    body: `Менеджер обновил витрину: ${catLabel}, факт ${payload.newActualCount} из плана ${target}. Результат: ${showcaseCompleteResultLabel(payload.resultKind)}. Комментарий: ${payload.comment}`,
-  };
-  const prev = storage.historyByDealer[dealer.id] ?? [];
-  storage.historyByDealer[dealer.id] = [hist, ...prev].slice(0, 40);
-
-  saveShowcaseStorage(storage);
-  return storage;
-}
-
-export function addRecommendationShowcaseTaskToStorage(
-  dealer: DealerRow,
-  payload: {
-    modelId: string;
-    modelLabel: string;
-    categoryId: ShowcaseCategoryId;
-    bucket: "top20" | "novelty";
-    reason: string;
-    actorLabel: string;
-  },
-): boolean {
-  const storage = loadShowcaseStorage();
-  const dealerId = dealer.id;
-  const prevList = storage.recommendationTaskEntries?.[dealerId] ?? [];
-  if (prevList.some((x) => x.modelId === payload.modelId)) return false;
-  const now = new Date().toISOString();
-  const day = now.slice(0, 10);
-  const entry: ShowcaseRecommendationTaskStored = {
-    modelId: payload.modelId,
-    modelLabel: payload.modelLabel,
-    categoryId: payload.categoryId,
-    bucket: payload.bucket,
-    reason: payload.reason,
-    createdAt: now,
-    createdBy: payload.actorLabel,
-  };
-  const entries = { ...(storage.recommendationTaskEntries ?? {}), [dealerId]: [...prevList, entry] };
-  storage.recommendationTaskEntries = entries;
-
-  const bucketRu = payload.bucket === "top20" ? "ТОП 20" : "Новинка";
-  const hist: ShowcaseHistoryEntry = {
-    id: `sh-rec-${dealerId}-${payload.modelId}-${Date.now()}`,
-    at: now,
-    meta: `${day} · ${payload.actorLabel}`,
-    body: `Добавлена задача по витрине из рекомендации: ${payload.modelLabel} (${bucketRu}). ${payload.reason}`,
-  };
-  const prevH = storage.historyByDealer[dealerId] ?? [];
-  storage.historyByDealer[dealerId] = [hist, ...prevH].slice(0, 40);
-  saveShowcaseStorage(storage);
-  return true;
-}
-
-export function applyShowcaseTaskStatus(
-  taskId: string,
-  status: ShowcaseTaskStatus,
-  actorLabel: string,
-): ShowcaseStorageV1 {
-  const storage = loadShowcaseStorage();
-  const prev = storage.taskUpdates[taskId] ?? {};
-  storage.taskUpdates[taskId] = {
-    ...prev,
-    status,
-    updatedBy: actorLabel,
-  };
-  saveShowcaseStorage(storage);
-  return storage;
-}
-
-/** Глобальный список для /tasks — плоские строки (маппинг в Matrix в trade-point-task-data). */
 export type ShowcaseGlobalTaskRow = {
   taskId: string;
   dealerId: string;
@@ -516,48 +372,15 @@ export type ShowcaseGlobalTaskRow = {
   deficitCount: number;
 };
 
-export function getAllShowcaseGlobalTaskRows(dealers: DealerRow[]): ShowcaseGlobalTaskRow[] {
-  const storage = loadShowcaseStorage();
-  const out: ShowcaseGlobalTaskRow[] = [];
-  for (const dealer of dealers) {
-    const tasks = getShowcaseTasksForDealerDisplay(dealer, storage);
-    const tp = dealer.tradePoints[0];
-    const tpId = tp?.id ?? `${dealer.id}-tp`;
-    const tpName = tp?.name ?? "Торговая точка";
-    for (const t of tasks) {
-      if (t.status === "done") continue;
-      out.push({
-        taskId: t.taskId,
-        dealerId: dealer.id,
-        dealerName: dealer.name,
-        tradePointId: tpId,
-        tradePointName: tpName,
-        categoryId: t.categoryId,
-        title: t.title,
-        description: t.description,
-        priority: t.priority,
-        showcaseStatus: t.status,
-        dueDate: t.dueDate,
-        targetCount: t.targetCount,
-        actualCount: t.actualCount,
-        deficitCount: t.deficitCount,
-      });
-    }
-  }
-  return out;
-}
-
 export function userLabelFromProfile(profile: ReleaseDemoProfile): string {
   const u = getSalesUserById(profile.personaUserId);
   return u?.name ?? profile.personaUserId;
 }
 
-/** Закрытие задачи с вводом факта — только менеджер «своего» клиента. */
 export function canCompleteShowcaseTask(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
   return profile.role === "sales_manager" && dealer.releaseManagerId === profile.personaUserId;
 }
 
-/** Смена статуса (в работу, РОП, отложить) — менеджер своего клиента или РОП команды. */
 export function canWorkflowShowcaseTask(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
   if (profile.role === "sales_manager") return dealer.releaseManagerId === profile.personaUserId;
   if (profile.role === "team_lead") return dealer.releaseTeamId === getEffectiveTeamLeadTeamId(profile);

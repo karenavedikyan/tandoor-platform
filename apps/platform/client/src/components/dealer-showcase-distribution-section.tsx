@@ -19,31 +19,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useShowcaseDistributionState } from "@/hooks/use-showcase-distribution-state";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
-  applyShowcaseTaskCompleteSafe,
-  applyShowcaseTaskStatus,
-  addRecommendationShowcaseTaskToStorage,
   canCompleteShowcaseTask,
   canViewShowcaseDistribution,
   canWorkflowShowcaseTask,
   getShowcaseKpis,
   getShowcaseTasksForDealerDisplay,
   isShowcaseReadOnly,
-  loadShowcaseStorage,
   mergeDistributionWithOverrides,
   SHOWCASE_CATEGORY_LABEL,
-  showcaseOverrideStorageKey,
   type ShowcaseCompleteResultKind,
   type ShowcaseDistributionRow,
+  type ShowcaseStorageV1Dto,
   type ShowcaseTask,
   type ShowcaseTaskStatus,
   showcaseCompleteResultLabel,
   userLabelFromProfile,
 } from "@/lib/showcase-distribution-data";
+import {
+  postShowcaseRecommendation,
+  postShowcaseTaskComplete,
+  postShowcaseTaskStatus,
+  postShowcaseDistributionImport,
+} from "@/lib/showcase-distribution-api";
+import {
+  clearLegacyShowcaseStorage,
+  readLegacyShowcaseStorage,
+} from "@/lib/showcase-distribution-import-legacy";
 import {
   getDistributionSnapshotForCard,
   getOutdatedShowcaseBundle,
@@ -85,6 +94,9 @@ type Props = {
   distributionSnapshotStale?: boolean;
   distributionSnapshotLabel?: string;
   onPlanShowcaseCheck?: () => void;
+  showcaseState?: ShowcaseStorageV1Dto | null;
+  showcaseLoading?: boolean;
+  onShowcaseRefresh?: () => Promise<void>;
 };
 
 function scrollToAnchor(id: string) {
@@ -102,8 +114,17 @@ export function DealerShowcaseDistributionSection({
   distributionSnapshotStale,
   distributionSnapshotLabel,
   onPlanShowcaseCheck,
+  showcaseState: showcaseStateProp,
+  showcaseLoading: showcaseLoadingProp,
+  onShowcaseRefresh,
 }: Props) {
+  const { toast } = useToast();
   const canView = canViewShowcaseDistribution(profile, row);
+  const hookState = useShowcaseDistributionState(canView && showcaseStateProp === undefined ? row.id : "");
+  const storage = showcaseStateProp ?? hookState.state;
+  const loading = showcaseLoadingProp ?? (showcaseStateProp === undefined ? hookState.loading : false);
+  const refresh = onShowcaseRefresh ?? hookState.refresh;
+
   if (!canView) return null;
 
   const readOnly = isShowcaseReadOnly(profile);
@@ -118,15 +139,19 @@ export function DealerShowcaseDistributionSection({
   const [taskExpanded, setTaskExpanded] = useState<Record<string, boolean>>({});
   const [outdatedOpen, setOutdatedOpen] = useState(false);
 
-  const [tick, setTick] = useState(0);
-  const bump = useCallback(() => {
-    setTick((n) => n + 1);
-    onApplied();
-  }, [onApplied]);
+  const [outdatedOpen, setOutdatedOpen] = useState(false);
+  const [mutating, setMutating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const legacyDraft = useMemo(() => readLegacyShowcaseStorage(), []);
 
-  const storage = useMemo(() => loadShowcaseStorage(), [tick]);
-  const rows = useMemo(() => mergeDistributionWithOverrides(row, storage), [row, storage]);
-  const tasks = useMemo(() => getShowcaseTasksForDealerDisplay(row, storage), [row, storage]);
+  const emptyStorage: ShowcaseStorageV1Dto = useMemo(
+    () => ({ overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} }),
+    [],
+  );
+  const resolvedStorage = storage ?? emptyStorage;
+
+  const rows = useMemo(() => mergeDistributionWithOverrides(row, resolvedStorage), [row, resolvedStorage]);
+  const tasks = useMemo(() => getShowcaseTasksForDealerDisplay(row, resolvedStorage), [row, resolvedStorage]);
   const kpis = useMemo(() => getShowcaseKpis(rows, tasks), [rows, tasks]);
 
   const displayedCategoryRows = useMemo(() => {
@@ -153,26 +178,65 @@ export function DealerShowcaseDistributionSection({
     setNextText("");
   };
 
-  const submitComplete = () => {
-    if (!completeTask || !canComplete) return;
+  const submitComplete = async () => {
+    if (!completeTask || !canComplete || mutating) return;
     const n = parseInt(actualInput, 10);
     if (!Number.isFinite(n) || n < 0) return;
-    applyShowcaseTaskCompleteSafe(row, {
-      taskId: completeTask.taskId,
-      categoryId: completeTask.categoryId,
-      newActualCount: n,
-      resultKind,
-      comment: comment.trim() || "—",
-      nextActionDate: nextDate.trim() || "—",
-      nextActionText: nextText.trim() || "—",
-      actorUserId: profile.personaUserId,
-      actorLabel,
-    });
-    setCompleteTask(null);
-    bump();
+    setMutating(true);
+    try {
+      await postShowcaseTaskComplete({
+        taskId: completeTask.taskId,
+        dealerId: row.id,
+        categoryId: completeTask.categoryId,
+        newActualCount: n,
+        resultKind,
+        comment: comment.trim() || "—",
+        nextActionDate: nextDate.trim() || "—",
+        nextActionText: nextText.trim() || "—",
+        actorUserId: profile.personaUserId,
+        actorLabel,
+      });
+      setCompleteTask(null);
+      await refresh();
+      onApplied();
+    } catch (e) {
+      toast({
+        title: e instanceof Error ? e.message : "Не удалось сохранить, попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const changeTaskStatus = async (task: ShowcaseTask, status: ShowcaseTaskStatus) => {
+    if (mutating) return;
+    setMutating(true);
+    try {
+      await postShowcaseTaskStatus(task.taskId, status, row.id, task.categoryId);
+      await refresh();
+      onApplied();
+    } catch (e) {
+      toast({
+        title: e instanceof Error ? e.message : "Не удалось сохранить, попробуйте ещё раз.",
+        variant: "destructive",
+      });
+    } finally {
+      setMutating(false);
+    }
   };
 
   const tasksHref = useMemo(() => buildHashPath("/tasks", { dealerId: row.id }), [row.id]);
+
+  if (loading) {
+    return (
+      <section id="dealer-section-showcase-distribution" className="space-y-3">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </section>
+    );
+  }
 
   return (
     <section
@@ -184,7 +248,7 @@ export function DealerShowcaseDistributionSection({
         <div className="min-w-0 space-y-1">
           <h2 className="text-base font-semibold tracking-tight text-foreground sm:text-lg">Витрина и задачи</h2>
           <p className="text-xs text-muted-foreground sm:text-sm">
-            План и факт по категориям и открытые задачи. Данные раздела сохраняются до закрытия вкладки.
+            План и факт по категориям и открытые задачи. Данные сохраняются в базе.
           </p>
           <p className="text-xs text-muted-foreground sm:text-sm">
             {kpis.openTasks > 0
@@ -200,6 +264,38 @@ export function DealerShowcaseDistributionSection({
           Задачи клиента
         </Link>
       </div>
+
+      {legacyDraft ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs"
+            disabled={importing}
+            data-testid="button-import-legacy-showcase-storage"
+            onClick={async () => {
+              setImporting(true);
+              try {
+                await postShowcaseDistributionImport(legacyDraft);
+                clearLegacyShowcaseStorage();
+                await refresh();
+                onApplied();
+                toast({ title: "Данные перенесены" });
+              } catch (e) {
+                toast({
+                  title: e instanceof Error ? e.message : "Не удалось перенести данные.",
+                  variant: "destructive",
+                });
+              } finally {
+                setImporting(false);
+              }
+            }}
+          >
+            {importing ? "Перенос…" : "Перенести черновики в БД"}
+          </Button>
+        </div>
+      ) : null}
 
       {readOnly ? (
         <p className="text-xs text-muted-foreground">Режим просмотра: выполнение и смена статусов недоступны.</p>
@@ -288,7 +384,7 @@ export function DealerShowcaseDistributionSection({
       {(() => {
         const recommendations = getShowcaseRecommendationItems(row);
         if (recommendations.length === 0) return null;
-        const addedRec = new Set((storage.recommendationTaskEntries?.[row.id] ?? []).map((x) => x.modelId));
+        const addedRec = new Set((resolvedStorage.recommendationTaskEntries?.[row.id] ?? []).map((x) => x.modelId));
         return (
           <section data-testid="section-dealer-showcase-recommendations" className="rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-2">
             <h3 className="text-sm font-semibold text-foreground">Рекомендуем выставить</h3>
@@ -314,16 +410,32 @@ export function DealerShowcaseDistributionSection({
                       className="h-8 shrink-0 text-xs font-semibold"
                       disabled={readOnly || addedRec.has(item.modelId)}
                       data-testid={`button-dealer-add-recommendation-task-${item.modelId}`}
-                      onClick={() => {
-                        addRecommendationShowcaseTaskToStorage(row, {
-                          modelId: item.modelId,
-                          modelLabel: item.name,
-                          categoryId: item.categoryId,
-                          bucket: item.bucket,
-                          reason: item.reason,
-                          actorLabel: userLabelFromProfile(profile),
-                        });
-                        bump();
+                      onClick={async () => {
+                        if (mutating) return;
+                        setMutating(true);
+                        try {
+                          const r = await postShowcaseRecommendation({
+                            dealerId: row.id,
+                            modelId: item.modelId,
+                            modelLabel: item.name,
+                            categoryId: item.categoryId,
+                            bucket: item.bucket,
+                            reason: item.reason,
+                          });
+                          if (!r.ok) {
+                            toast({ title: r.reason ?? "Уже добавлена.", variant: "destructive" });
+                            return;
+                          }
+                          await refresh();
+                          onApplied();
+                        } catch (e) {
+                          toast({
+                            title: e instanceof Error ? e.message : "Не удалось сохранить, попробуйте ещё раз.",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setMutating(false);
+                        }
                       }}
                     >
                       {addedRec.has(item.modelId) ? "В задачах" : "Добавить в задачи по витрине"}
@@ -597,8 +709,7 @@ export function DealerShowcaseDistributionSection({
                           data-testid={`button-showcase-task-postpone-${t.taskId}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            applyShowcaseTaskStatus(t.taskId, "postponed", actorLabel);
-                            bump();
+                            void changeTaskStatus(t, "postponed");
                           }}
                         >
                           Отложить
@@ -612,8 +723,7 @@ export function DealerShowcaseDistributionSection({
                           data-testid={`button-showcase-task-needs-rop-${t.taskId}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            applyShowcaseTaskStatus(t.taskId, "needs_rop", actorLabel);
-                            bump();
+                            void changeTaskStatus(t, "needs_rop");
                           }}
                         >
                           Нужна помощь РОПа
@@ -627,8 +737,7 @@ export function DealerShowcaseDistributionSection({
                           data-testid={`button-showcase-task-start-${t.taskId}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            applyShowcaseTaskStatus(t.taskId, "in_progress", actorLabel);
-                            bump();
+                            void changeTaskStatus(t, "in_progress");
                           }}
                         >
                           В работу
