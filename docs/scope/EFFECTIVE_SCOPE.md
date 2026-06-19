@@ -22,13 +22,34 @@ Read-only SQL-view `effective_scope` — единая проекция «как�
 
 При смене `release_code` scope-записи остаются корректными, пока `external_key` стабилен.
 
-## Откуда наполняется (миграция 435а + hotfix)
+## Источники правды по ролям
+
+| Роль | Источник правды | Поле |
+|------|-----------------|------|
+| manager | `client_assignments` | `responsible_user_id` |
+| team дилера | `client_assignments` | `team_id` |
+| rop | `teams` (через `client_assignments.team_id`) | `rop_user_id` |
+| regional_manager | `dealer_overrides` | `regional_manager_id` |
+
+Цепочка для РОП (единственный путь после hotfix2):
+
+```
+дилер → client_assignments.team_id → teams.rop_user_id → user_id
+```
+
+## Deprecated поля
+
+| Поле | Статус |
+|------|--------|
+| `dealer_overrides.rop_id` | **НЕ используется** для scope. Исторически рассинхронизирован с `client_assignments.team_id`. Колонка остаётся в схеме до отдельного промта на удаление; приложение не должно её читать для scope. |
+
+## Откуда наполняется (миграции 435а + hotfix + hotfix2)
 
 View читает из `responsibility_assignments` (`scope_kind = 'dealer'`). Материализация:
 
-1. **manager** — уже были в `responsibility_assignments` (совпадают с `client_assignments`); hotfix нормализовал `scope_key` с `release_code` → `external_key`
+1. **manager** — уже были в `responsibility_assignments`; hotfix нормализовал `scope_key` с `release_code` → `external_key`
 2. **RM** — из `dealer_overrides.regional_manager_id` (JOIN `dealers.external_key = dealer_overrides.dealer_id`)
-3. **РОП** — из `teams.rop_user_id` через `client_assignments` + персональные override из `dealer_overrides.rop_id`
+3. **РОП** — **только** через `client_assignments.team_id` → `teams.rop_user_id` (hotfix2; без `dealer_overrides.rop_id`)
 
 ## История hotfix 2026-06-24 (промт 435а-hotfix)
 
@@ -39,21 +60,28 @@ View читает из `responsibility_assignments` (`scope_kind = 'dealer'`). �
 | **1. RM backfill = 0** | `regional_manager`: 0 в `effective_scope` | JOIN `dealer_overrides.dealer_id = dealers.id::text` — но `dealer_id` хранит `external_key` | Hotfix: `JOIN dealers d ON d.external_key = ov.dealer_id` |
 | **2. manager scope_key** | `effective_scope` manager: 2 из 2861 | 2859 manager-записей имели `scope_key = release_code`, view JOIN-ит по `external_key` | Hotfix: UPDATE `scope_key` через `dealers.release_code` → `external_key` |
 
-Миграция hotfix также создаёт аудит-копию `responsibility_assignments_pre_hotfix_435a` для отката.
+Аудит-копия: `responsibility_assignments_pre_hotfix_435a`.
 
-Ожидаемые counts после hotfix:
+## История hotfix2 2026-06-24 (промт 435а-hotfix2)
 
-```
-manager           ~2861
-regional_manager  ~2595
-rop               ~2860
-total effective_scope ~8316
-```
+Hotfix1 дополнительно сделал UPSERT rop из `dealer_overrides.rop_id` и обнажил рассинхрон: у 843 дилеров команды Скалабана в override был указан Сапожков. UI показывал 575 вместо 1241.
+
+**Решение:** удалить все rop-записи и пересоздать **только** через team-путь (`client_assignments` → `teams.rop_user_id`). `dealer_overrides.rop_id` исключён из scope.
+
+Ожидаемые rop-counts после hotfix2:
+
+| РОП | Дилеров |
+|-----|---------|
+| Скалабан | 1241 |
+| Сапожков | 970 |
+| Купянский | 649 |
+
+Аудит-копия: `responsibility_assignments_pre_hotfix2_435a`.
 
 ## Что 435а НЕ делает
 
 - **Не переключает** `db-scope-formula`, `my-scope`, `list-scoped`, `trade-points-overview` на чтение из view.
-- **Не удаляет** `client_assignments` и legacy-пути в `dealer_overrides`.
+- **Не удаляет** `client_assignments` и колонку `dealer_overrides.rop_id` (отдельный промт).
 - Только материализация + диагностика: `GET /api/diag/effective-scope` (admin).
 
 ## Дорожная карта
@@ -61,7 +89,7 @@ total effective_scope ~8316
 | Промт | Содержание |
 |-------|------------|
 | **435b** | Переключить `computeDbScopeForUser` и связанные читалки на `effective_scope` + shadow-сравнение со старым путём + diff в `real_scope_audit_log` |
-| **435c** | После нескольких дней чистого shadow — удалить JOIN-ы через `client_assignments` / прямые читалки `dealer_overrides.rop_id` |
+| **435c** | После нескольких дней чистого shadow — удалить JOIN-ы через `client_assignments` / legacy-читалки |
 
 ## Контрольные запросы
 
@@ -74,20 +102,21 @@ SELECT * FROM effective_scope WHERE user_id = '<uuid>' LIMIT 10;
 ```
 
 ```sql
--- scope_key вне канона (после hotfix должно быть 0–2)
-SELECT COUNT(*) FROM responsibility_assignments
- WHERE scope_kind = 'dealer' AND scope_key NOT LIKE 'client-%';
+SELECT u.full_name, COUNT(*) AS dealers
+FROM effective_scope es
+JOIN users u ON u.id::text = es.user_id
+WHERE responsible_role = 'rop'
+GROUP BY 1 ORDER BY 2 DESC;
 ```
 
 ## Диагностика в проде
 
 ```bash
-# totals + legacy counts (только admin)
 curl -s -b "$ADMIN_COOKIE" https://lk.tandoor.ru/api/diag/effective-scope | jq .
 
-# per-user sample
 curl -s -b "$ADMIN_COOKIE" \
   'https://lk.tandoor.ru/api/diag/effective-scope?userId=3f67f770-f5cd-4257-a4b2-1cefa65fbfaa' | jq .
+# ожидание perUser.count: 1241
 ```
 
 Миграции (вручную на Neon):
@@ -95,9 +124,21 @@ curl -s -b "$ADMIN_COOKIE" \
 ```bash
 psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_foundation.sql
 psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_hotfix.sql
+psql "$DATABASE_URL" -f apps/platform/server/migrations/2026_06_24_effective_scope_hotfix2_rop_via_team.sql
 ```
 
-## Откат hotfix
+## Откат hotfix2 (только rop-записи)
+
+```sql
+BEGIN;
+DELETE FROM responsibility_assignments WHERE scope_kind='dealer' AND responsible_role='rop';
+INSERT INTO responsibility_assignments
+SELECT * FROM responsibility_assignments_pre_hotfix2_435a
+WHERE scope_kind='dealer' AND responsible_role='rop';
+COMMIT;
+```
+
+## Откат hotfix1 (полный снапшот до hotfix)
 
 ```sql
 BEGIN;
