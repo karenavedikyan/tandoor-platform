@@ -1707,6 +1707,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (viewingOtherUserScope && targetScopeQ.ready) {
       return mergedRowsForDealerBase;
     }
+    // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
+    // catalogRows фильтруется по active_dealer_external_keys — никаких UUID/ФИО матчингов.
+    if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
+      return mergedRowsForDealerBase.filter((r) => dbScopedExternalKeys.has(r.id));
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsForDealerBase,
@@ -1722,9 +1727,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     targetScopeQ.ready,
     useReal,
     snap,
+    access,
+    selfDbScopeQ.ready,
+    dbScopedExternalKeys,
     mergedRowsForDealerBase,
     profile,
-    access,
     assignmentsScope,
   ]);
 
@@ -1765,6 +1772,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (viewingOtherUserScope && targetScopeQ.ready) {
       return mergedRowsActivePortfolio;
     }
+    // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
+    if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
+      return mergedRowsActivePortfolio.filter((r) => dbScopedExternalKeys.has(r.id));
+    }
     if (useReal && snap) {
       return roleScopedDealerRowsForReal(
         mergedRowsActivePortfolio,
@@ -1775,7 +1786,18 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       );
     }
     return roleScopedDealerRows(mergedRowsActivePortfolio, profile);
-  }, [viewingOtherUserScope, targetScopeQ.ready, useReal, snap, mergedRowsActivePortfolio, profile, access, assignmentsScope]);
+  }, [
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    useReal,
+    snap,
+    access,
+    selfDbScopeQ.ready,
+    dbScopedExternalKeys,
+    mergedRowsActivePortfolio,
+    profile,
+    assignmentsScope,
+  ]);
 
   useEffect(() => {
     const DIAG_SCOPE_SHRINK_KEY = "tandoor-diag-scope-shrink-v2";
@@ -1986,8 +2008,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   // При просмотре scope другого пользователя (штаб менеджера) scope уже задан через scopeUserId,
   // поэтому picker-фильтры РОП/менеджер должны быть "all", чтобы не сравнивать UUID реальных команд
   // с mock-строками release_team_id/release_manager_id в dealers.
-  const ropTeamForPicker = viewingOtherUserScope ? "all" : ropTeam;
-  const ropTeamLabelForPicker = viewingOtherUserScope ? undefined : ropTeamLabel;
+  const ropTeamForPicker =
+    viewingOtherUserScope || (useReal && access === "sales_manager") ? "all" : ropTeam;
+  const ropTeamLabelForPicker =
+    viewingOtherUserScope || (useReal && access === "sales_manager") ? undefined : ropTeamLabel;
   const managerForPicker =
     viewingOtherUserScope || (useReal && access === "sales_manager") ? "all" : manager;
 
@@ -2385,104 +2409,16 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [actx.enabled, showArchivedDealers, access, workView, manager, selectedManagerLabel, teamRopDisplayLabel]);
 
   const managerScopedRows = useMemo(() => {
+    // [410] Manager в real-режиме: pickerFiltered УЖЕ содержит только его клиентов (из my-scope),
+    // никаких дополнительных фильтров по releaseManagerId/ФИО не нужно.
+    if (useReal && access === "sales_manager") return pickerFiltered;
     if (isRopOrManagerAllFilter(manager)) return pickerFiltered;
     const cat = managerCatalogForRop.find((m) => m.id === manager);
     return pickerFiltered.filter((row) => {
       if (row.releaseManagerId === manager) return true;
       return Boolean(cat && managerDisplayMatchesCatalogName(row.manager, cat.name));
     });
-  }, [pickerFiltered, manager, managerCatalogForRop]);
-
-  const scopeTrace409WarnedRef = useRef(false);
-
-  useEffect(() => {
-    try {
-      if (scopeTrace409WarnedRef.current) return;
-      if (!useReal || access !== "sales_manager" || !snap || me?.role !== "manager") return;
-      if (authLoading || visCodesQ.isLoading || orgSnapQ.isLoading || myCodesQ.isLoading) return;
-      scopeTrace409WarnedRef.current = true;
-      console.warn("[409-scope-trace]", {
-        meId: snap.me.id,
-        meRole: me?.role,
-        access,
-        useReal,
-        authLoading,
-        visCodesReady: !visCodesQ.isLoading && !visCodesQ.isError,
-        orgSnapReady: !orgSnapQ.isLoading && !orgSnapQ.isError,
-        myCodesReady: !myCodesQ.isLoading && !myCodesQ.isError,
-        effectiveVisPayloadKind: !effectiveVisPayload
-          ? "null"
-          : effectiveVisPayload.all
-            ? "all"
-            : `codes(${effectiveVisPayload.codes?.length ?? 0})`,
-        catalogRowsLen: catalogRows.length,
-        releaseDealerRowsForScopeLen: releaseDealerRowsForScope.length,
-        mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
-        scopedRowsLen: scopedRows.length,
-        pickerFilteredLen: pickerFiltered.length,
-        managerScopedRowsLen: managerScopedRows.length,
-        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
-        assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
-        assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
-        dbScopedExternalKeysSize: dbScopedExternalKeys?.size ?? null,
-        selfDbScopeReady: selfDbScopeQ.ready,
-        selfDbScopeError: selfDbScopeQ.error,
-        ropTeam,
-        manager,
-        ropTeamForPicker,
-        managerForPicker,
-        workView,
-        showArchivedDealers,
-        actxEnabled: actx.enabled,
-        catalogSample: catalogRows.slice(0, 2).map((r) => ({
-          id: r.id,
-          releaseCode: r.releaseCode,
-          releaseManagerId: r.releaseManagerId,
-          manager: r.manager,
-        })),
-        mergedSample: mergedRowsForDealerBase.slice(0, 2).map((r) => ({
-          id: r.id,
-          releaseCode: r.releaseCode,
-          releaseManagerId: r.releaseManagerId,
-        })),
-        scopedSample: scopedRows.slice(0, 2).map((r) => ({ id: r.id, releaseCode: r.releaseCode })),
-        ownCodesSample: assignmentsScope ? Array.from(assignmentsScope.ownCodes).slice(0, 5) : null,
-        dbExtKeysSample: dbScopedExternalKeys ? Array.from(dbScopedExternalKeys).slice(0, 5) : null,
-      });
-    } catch {
-      /* ignore */
-    }
-  }, [
-    pickerFiltered.length,
-    scopedRows.length,
-    mergedRowsForDealerBase.length,
-    useReal,
-    access,
-    snap,
-    me?.role,
-    authLoading,
-    visCodesQ.isLoading,
-    visCodesQ.isError,
-    orgSnapQ.isLoading,
-    orgSnapQ.isError,
-    myCodesQ.isLoading,
-    myCodesQ.isError,
-    effectiveVisPayload,
-    catalogRows.length,
-    releaseDealerRowsForScope.length,
-    managerScopedRows.length,
-    assignmentsScope,
-    dbScopedExternalKeys,
-    selfDbScopeQ.ready,
-    selfDbScopeQ.error,
-    ropTeam,
-    manager,
-    ropTeamForPicker,
-    managerForPicker,
-    workView,
-    showArchivedDealers,
-    actx.enabled,
-  ]);
+  }, [pickerFiltered, manager, managerCatalogForRop, useReal, access]);
 
   useEffect(() => {
     try {
@@ -3925,6 +3861,39 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         ) : null}
       </div>
       ) : null}
+
+      {useReal && access === "sales_manager" && typeof localStorage !== "undefined" && localStorage.getItem("tandoor-hide-scope-diag") !== "1" && (
+        <div
+          style={{
+            margin: "8px 0",
+            padding: "8px 12px",
+            background: "#fff8e1",
+            border: "1px solid #e0c068",
+            borderRadius: 8,
+            fontSize: 12,
+            fontFamily: "monospace",
+            lineHeight: 1.5,
+            color: "#5a4400",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {`[scope-diag 410]
+catalog=${catalogRows.length}
+visPayload=${!effectiveVisPayload ? "null" : effectiveVisPayload.all ? "ALL" : `codes(${effectiveVisPayload.codes?.length ?? 0})`}
+releaseDealerRowsForScope=${releaseDealerRowsForScope.length}
+mergedRowsForDealerBase=${mergedRowsForDealerBase.length}
+scopedRows=${scopedRows.length}
+pickerFiltered=${pickerFiltered.length}
+managerScopedRows=${managerScopedRows.length}
+assignments=${assignmentsScopeIsActive(assignmentsScope) ? "active" : "inactive"} own=${assignmentsScope?.ownCodes.size ?? 0}
+dbScopedExtKeys=${dbScopedExternalKeys?.size ?? "null"}
+selfDbScopeReady=${String(selfDbScopeQ.ready)}
+ropTeam=${ropTeam} mgr=${manager}
+view=${workView} archived=${String(showArchivedDealers)} actx=${String(actx.enabled)}
+me=${me?.id?.slice(0, 8) ?? "?"} role=${me?.role ?? "?"}`}
+        </div>
+      )}
 
       {!embedListOnly && showActualizationSync ? (
         <div className="space-y-3">

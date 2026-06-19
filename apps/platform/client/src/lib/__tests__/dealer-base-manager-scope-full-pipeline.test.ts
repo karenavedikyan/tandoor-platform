@@ -15,6 +15,8 @@ import {
   roleScopedDealerRowsForReal,
 } from "../dealer-base-real-scope";
 import { filterDealerRowsByExternalKeys, getVisibleDealerRows } from "../dealer-base-source";
+import { isRopOrManagerAllFilter } from "../rop-manager-filters";
+import { realInitialRopManagerDefaults } from "../real-org-adapter";
 import type { OrgSnapshot } from "../use-org-snapshot";
 import type { ReleaseDemoProfile } from "../release-demo-profile";
 
@@ -44,13 +46,12 @@ function makeRow(i: number, managerName: string): DealerRow {
   } as DealerRow;
 }
 
+function makeCatalog(n: number): DealerRow[] {
+  return Array.from({ length: n }, (_, i) => makeRow(i, SKLYAROV_NAME));
+}
+
 const codes = Array.from({ length: 56 }, (_, i) => `MA-MA${String(100000 + i).padStart(6, "0")}`);
 const externalKeys = new Set(codes.map((c) => `client-${c.toLowerCase()}`));
-
-// 39 с ФИО Склярова, 17 с «чужим» manager_name (как в dealers.manager_name при client_assignments на Склярова).
-const catalogRows: DealerRow[] = codes.map((_, i) =>
-  makeRow(i, i < 39 ? SKLYAROV_NAME : "Другой Менеджер ООО"),
-);
 
 const snap = {
   me: { id: SKLYAROV_UUID, role: "manager", fullName: SKLYAROV_NAME, teamId: "team-uuid" },
@@ -65,6 +66,82 @@ const profile = {
 } as ReleaseDemoProfile;
 
 const act = createEmptyActualizationState();
+
+function scopedRowsForManager410(
+  merged: DealerRow[],
+  useReal: boolean,
+  access: string,
+  selfDbScopeReady: boolean,
+  dbKeys: Set<string> | null,
+): DealerRow[] {
+  if (useReal && access === "sales_manager" && selfDbScopeReady && dbKeys && dbKeys.size > 0) {
+    return merged.filter((r) => dbKeys.has(r.id));
+  }
+  return merged;
+}
+
+function managerScopedRows410(
+  pickerFiltered: DealerRow[],
+  useReal: boolean,
+  access: string,
+  manager: string,
+): DealerRow[] {
+  if (useReal && access === "sales_manager") return pickerFiltered;
+  if (isRopOrManagerAllFilter(manager)) return pickerFiltered;
+  return pickerFiltered.filter((row) => row.releaseManagerId === manager);
+}
+
+// Промт 410: catalog ∩ dbScopedExternalKeys.
+{
+  const catalog = makeCatalog(100);
+  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
+  const out = catalog.filter((r) => dbKeys.has(r.id));
+  assert.equal(out.length, 56, "manager (real) — scopedRows = catalog ∩ dbScopedExternalKeys");
+}
+
+// Промт 410: полный pipeline — manager real, dbScopedExternalKeys=56 → managerScopedRows=56.
+{
+  const catalog = makeCatalog(100);
+  const dbKeys = new Set(catalog.slice(0, 56).map((r) => r.id));
+  const visible = getVisibleDealerRows(catalog, false, codes, dbKeys);
+  assert.equal(visible.length, 56);
+
+  const merged = excludeTrashedDealersFromWorkingRows(
+    buildDealerBaseRowsWithActualization(act, profile, {
+      includeArchivedDealers: false,
+      releaseDealerRows: visible,
+    }),
+    act,
+  );
+
+  const scoped = scopedRowsForManager410(merged, true, "sales_manager", true, dbKeys);
+  assert.equal(scoped.length, 56, "scopedRows direct my-scope: 56");
+
+  const realDefaults = realInitialRopManagerDefaults(snap, "sales_manager");
+  const pickerFiltered = applyDealerBasePickerFilters(scoped, {
+    search: "",
+    quick: "all",
+    cities: [],
+    categories: [],
+    ropTeam: realDefaults.ropTeam,
+    ropTeamLabel: undefined,
+    manager: realDefaults.manager,
+    managerCatalogForRop: [],
+    geoRegion: "",
+    geoDistrict: "",
+    geoLocality: "",
+  });
+  assert.equal(pickerFiltered.length, 56, "picker all/all: 56");
+
+  const wrongManager = "dc958e02-d80e-4615-bb8a-8a46be70daed";
+  const finalRows = managerScopedRows410(pickerFiltered, true, "sales_manager", wrongManager);
+  assert.equal(finalRows.length, 56, "managerScopedRows ignores manager/ropTeam filter in real: 56");
+}
+
+// 39 с ФИО Склярова, 17 с «чужим» manager_name (как в dealers.manager_name при client_assignments на Склярова).
+const catalogRows: DealerRow[] = codes.map((_, i) =>
+  makeRow(i, i < 39 ? SKLYAROV_NAME : "Другой Менеджер ООО"),
+);
 
 const assignmentsScope = buildAssignmentsScopeFromSources({
   ownCodes: new Set(codes),
