@@ -46,6 +46,7 @@ export type DbTradePointRow = {
   address: string | null;
   format: string | null;
   is_active: boolean;
+  is_primary: boolean;
   importance_tier: string | null;
 };
 
@@ -78,6 +79,7 @@ function mapTradePoint(tp: DbTradePointRow, dealerActive: boolean): DealerTradeP
     photos: { attached: false },
     productTrainingCompleted: false,
     productTrainingStatus: "not_required",
+    isPrimary: tp.is_primary,
   };
 }
 

@@ -38,7 +38,6 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
@@ -51,6 +50,16 @@ import { mapActualizationTpFieldsToOverrides, saveTradePointFields } from "@/lib
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { trashTradePointStrict, setPrimaryTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import { isTradePointTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
+import {
+  canTrashTradePointUi,
+  resolveTradePointIsPrimary,
+  tradePointTrashDisabledReason,
+} from "@/lib/trade-point-primary-ui";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -91,11 +100,11 @@ function openShowcaseTasksCount(dealer: DealerRow, mergedActiveCount: number): n
   return tasks.filter((t) => t.status !== "done").length;
 }
 
-/** Подписи кнопки архивации: ручная ТТ — «удалить», релизная — «в архив». */
+/** Подписи кнопки удаления в корзину. */
 function tradePointArchiveActionLabels(isManual: boolean): { action: string; confirm: string } {
   return isManual
-    ? { action: "Удалить ТТ", confirm: "Удалить ТТ" }
-    : { action: "В архив", confirm: "В архив" };
+    ? { action: "В корзину", confirm: "В корзину" }
+    : { action: "В корзину", confirm: "В корзину" };
 }
 
 function LocalSuggestInput(props: {
@@ -211,6 +220,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     isManual: boolean;
   } | null>(null);
   const [singleDeleteBusy, setSingleDeleteBusy] = useState(false);
+  const [primaryBusyId, setPrimaryBusyId] = useState<string | null>(null);
   const addTpSave = useSectionSaveFeedback();
   const editTpSave = useSectionSaveFeedback();
 
@@ -226,8 +236,18 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
 
   const rawMergedActive = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
   const mergedActive = useMemo(() => {
-    if (useAct) return mergeTradePointsActiveForActualization(row, actx.state);
-    return getEffectiveDealerTradePoints(row, { includeArchived: false });
+    const base = useAct
+      ? mergeTradePointsActiveForActualization(row, actx.state)
+      : getEffectiveDealerTradePoints(row, { includeArchived: false });
+    const visible = base.filter((entry) => !isTradePointTrashedInRuntime(entry.point.id, actx.state));
+    const activeCount = visible.length;
+    return visible.map((entry) => ({
+      ...entry,
+      point: {
+        ...entry.point,
+        isPrimary: resolveTradePointIsPrimary(entry.point, activeCount),
+      },
+    }));
   }, [useAct, actx.state, row, tpBump]);
   const hasSeeds = row.tradePoints.length > 0;
   const hasManualStored = getManualTradePoints(row.id).length > 0;
@@ -645,38 +665,48 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return false;
   }, [useAct, editId, editName, editCity, editAddress, editFormat, editContactName, editContactPhone, editContactEmail, editComment, actx, row.id, profile]);
 
-  /** Промт 46: удаление ТТ из карточки клиента шлёт в КОРЗИНУ. */
+  /** Промт 422: удаление ТТ из карточки клиента — trash API (БД). */
+  const refreshTradePointsFromServer = useCallback(async () => {
+    await hydrateTradePointOverridesFromServer({ dealerId: row.id });
+    setTpBump((n) => n + 1);
+  }, [row.id]);
+
   const onArchive = useCallback(
     async (tp: DealerTradePoint): Promise<boolean> => {
       if (!useAct || !canArchiveTradePointDuringActualization(profile, row, tp)) return false;
-      const info = makeTrashedTradePointInfo({
-        tradePointId: tp.id,
-        dealerId: row.id,
-        by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
-        snapshot: snapshotTradePointFromRow({
-          name: tp.name,
-          address: tp.address,
-          city: tp.city,
-          tradePointCode: tp.releaseCode ?? null,
-          dealerFullName: row.name,
-        }),
-        source: "client_card_delete",
-      });
-      const r = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
-        }),
-      );
-      if (r.success)
+      const r = await trashTradePointStrict(tp.id);
+      if (r.ok) {
+        await refreshTradePointsFromServer();
         toast({ title: "Точка перемещена в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
-      else
+        return true;
+      }
+      toast({
+        title: "Не удалось переместить в корзину",
+        description: r.message ?? "Ошибка запроса",
+        variant: "destructive",
+      });
+      return false;
+    },
+    [useAct, profile, row, refreshTradePointsFromServer],
+  );
+
+  const onSetPrimary = useCallback(
+    async (tpId: string) => {
+      if (!useAct || !canEdit) return;
+      setPrimaryBusyId(tpId);
+      const r = await setPrimaryTradePointStrict(tpId);
+      setPrimaryBusyId(null);
+      if (r.ok) {
+        await refreshTradePointsFromServer();
+      } else {
         toast({
-          title: "Не удалось переместить в корзину. Проверьте соединение и попробуйте ещё раз.",
+          title: "Не удалось назначить основную точку",
+          description: r.message ?? "Ошибка запроса",
           variant: "destructive",
         });
-      return r.success;
+      }
     },
-    [useAct, actx, row, profile],
+    [useAct, canEdit, refreshTradePointsFromServer],
   );
 
   const confirmSingleArchiveTradePoint = useCallback(async () => {
@@ -688,6 +718,11 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
   }, [singleDeleteTarget, onArchive]);
 
 
+  const primaryTpId = useMemo(
+    () => mergedActive.find((e) => e.point.isPrimary)?.point.id ?? mergedActive[0]?.point.id ?? "",
+    [mergedActive],
+  );
+  const showPrimaryRadios = useAct && canEdit && mergedActive.length >= 2;
   const listToShow = mergedActive;
   void hasAnyTradePointEver;
 
@@ -721,6 +756,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       const tp = entry.point;
       if (isVirtualDefaultTradePointId(row.id, tp.id)) continue;
       if (!canArchiveTradePointDuringActualization(profile, row, tp)) continue;
+      if (!canTrashTradePointUi(tp, mergedActive.length)) continue;
       s.add(tp.id);
     }
     return s;
@@ -779,7 +815,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
     return n;
   }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull]);
 
-  /** Промт 46: bulk-delete ТТ из карточки клиента — в КОРЗИНУ. */
+  /** Промт 422: bulk-delete ТТ из карточки клиента — trash API (БД). */
   const confirmBulkArchiveTradePoints = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveTpIds).filter((id) => archivableTradePointIdsFull.has(id));
     if (ids.length === 0) {
@@ -787,38 +823,27 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
       return;
     }
     setBulkArchiveTpBusy(true);
-    const uid = profile.personaUserId;
-    const uname = userLabelFromProfile(profile);
-    const tpById = new Map<string, DealerTradePoint>(mergedActive.map((e) => [e.point.id, e.point]));
-    const r = await actx.persist((prev) => {
-      const nextTrash = { ...prev.trashedTradePointsById };
-      for (const id of ids) {
-        const tp = tpById.get(id);
-        nextTrash[id] = makeTrashedTradePointInfo({
-          tradePointId: id,
-          dealerId: row.id,
-          by: { userId: uid, userName: uname },
-          snapshot: snapshotTradePointFromRow({
-            name: tp?.name ?? null,
-            address: tp?.address ?? null,
-            city: tp?.city ?? null,
-            tradePointCode: tp?.releaseCode ?? null,
-            dealerFullName: row.name,
-          }),
-          source: "client_bulk_delete",
-        });
-      }
-      return mergeActualizationState(prev, { trashedTradePointsById: nextTrash });
-    });
+    let okCount = 0;
+    let lastError: string | undefined;
+    for (const id of ids) {
+      const r = await trashTradePointStrict(id);
+      if (r.ok) okCount += 1;
+      else lastError = r.message;
+    }
+    if (okCount > 0) await refreshTradePointsFromServer();
     setBulkArchiveTpBusy(false);
-    if (r.success) {
+    if (okCount === ids.length) {
       toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkArchiveTpIds(new Set());
       setBulkArchiveTpDialogOpen(false);
     } else {
-      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
+      toast({
+        title: okCount > 0 ? "Часть точек не удалось переместить" : "Не удалось переместить в корзину",
+        description: lastError ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
-  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, actx, profile, row, mergedActive]);
+  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, refreshTradePointsFromServer]);
 
   if (mergedActive.length === 0 && !hasAnyTradePointEver) {
     return (
@@ -1251,18 +1276,65 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
         </div>
       ) : null}
 
+      <TooltipProvider delayDuration={200}>
       <div className="space-y-2">
+        <RadioGroup
+          value={primaryTpId}
+          onValueChange={(value) => {
+            if (value && value !== primaryTpId) void onSetPrimary(value);
+          }}
+          className="space-y-2"
+        >
         {tpListSlice.map((entry) => {
           const { point: tp, isManual, isEdited, isArchived } = entry;
           const contact = tradePointContact(tp, row, mergedActive.length);
           const showBadge = isFilled(tp.showcaseStatus);
           const isVirtual = isVirtualDefaultTradePointId(row.id, tp.id);
+          const isPrimary = tp.isPrimary === true;
+          const showPrimaryRadio = showPrimaryRadios && !isVirtual;
+          const trashDisabledReason = tradePointTrashDisabledReason(tp, mergedActive.length);
           const rowTestId = isVirtual ? "row-dealer-trade-point-default" : `row-dealer-trade-point-${tp.id}`;
           const openButtonTestId = isVirtual
             ? "button-dealer-open-default-trade-point"
             : `button-dealer-trade-point-open-${tp.id}`;
           const canArchiveThisTp =
             useAct && canEdit && !isVirtual && !isArchived && canArchiveTradePointDuringActualization(profile, row, tp);
+          const trashButton = canArchiveThisTp ? (
+            trashDisabledReason ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block w-full">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="inline-flex h-8 w-full items-center justify-center gap-1 border-destructive/30 px-2 text-xs font-medium text-destructive opacity-70 sm:justify-start"
+                      data-testid={`button-trade-point-delete-${tp.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span className="max-sm:sr-only">В корзину</span>
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">{trashDisabledReason}</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="inline-flex h-8 w-full items-center justify-center gap-1 border-destructive/30 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.06] sm:justify-start"
+                data-testid={`button-trade-point-delete-${tp.id}`}
+                onClick={() => setSingleDeleteTarget({ tp, isManual })}
+                title="В корзину"
+                aria-label="В корзину"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <span className="max-sm:sr-only">В корзину</span>
+              </Button>
+            )
+          ) : null;
           return (
             <Card
               key={tp.id}
@@ -1292,6 +1364,15 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                         className="shrink-0"
                       />
                       <p className="text-sm font-semibold leading-snug text-foreground">{tp.name}</p>
+                      {isPrimary && !showPrimaryRadio ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px]"
+                          data-testid={`badge-dealer-trade-point-primary-${tp.id}`}
+                        >
+                          Основная
+                        </Badge>
+                      ) : null}
                       {isVirtual ? (
                         <Badge
                           variant="outline"
@@ -1327,6 +1408,22 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                       <p className="text-xs text-muted-foreground" data-testid={`text-dealer-trade-point-contact-${tp.id}`}>
                         {contact}
                       </p>
+                    ) : null}
+                    {showPrimaryRadio ? (
+                      <div
+                        className="flex items-center gap-2 pt-1"
+                        data-testid={`trade-point-primary-radio-${tp.id}`}
+                      >
+                        <RadioGroupItem
+                          value={tp.id}
+                          id={`tp-primary-${tp.id}`}
+                          disabled={primaryBusyId !== null}
+                          data-testid={`radio-trade-point-primary-${tp.id}`}
+                        />
+                        <Label htmlFor={`tp-primary-${tp.id}`} className="text-xs font-medium text-foreground">
+                          Основная
+                        </Label>
+                      </div>
                     ) : null}
                   </div>
                   <div className="flex w-full min-w-0 shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[14rem] sm:items-stretch">
@@ -1381,21 +1478,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
                           Редактировать
                         </Button>
                       ) : null}
-                      {canArchiveThisTp ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="inline-flex h-8 w-full items-center justify-center gap-1 border-destructive/30 px-2 text-xs font-medium text-destructive hover:bg-destructive/[0.06] sm:justify-start"
-                          data-testid={`button-trade-point-delete-${tp.id}`}
-                          onClick={() => setSingleDeleteTarget({ tp, isManual })}
-                          title={tradePointArchiveActionLabels(isManual).action}
-                          aria-label={tradePointArchiveActionLabels(isManual).action}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                          <span className="max-sm:sr-only">{tradePointArchiveActionLabels(isManual).action}</span>
-                        </Button>
-                      ) : null}
+                      {trashButton}
                     </div>
                   </div>
                 </div>
@@ -1403,7 +1486,9 @@ export function DealerTradePointsSection({ row, sectionDomId, profile }: Props) 
             </Card>
           );
         })}
+        </RadioGroup>
       </div>
+      </TooltipProvider>
 
       {listToShow.length > 3 ? (
         <div className="flex flex-col gap-2 sm:flex-row">

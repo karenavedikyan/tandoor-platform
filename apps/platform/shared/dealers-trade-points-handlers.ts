@@ -3,6 +3,7 @@
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
+import { TRADE_POINT_OVERRIDE_JOIN } from "./db-scope-formula.js";
 import {
   mapDbRowsToDealerRow,
   type DbDealerRow,
@@ -147,11 +148,13 @@ async function fetchTradePointsForDealers(
             tp.address,
             tp.format,
             tp.is_active,
+            COALESCE(tpo.is_primary, FALSE) AS is_primary,
             tp.importance_tier
        FROM trade_points tp
        JOIN dealers d ON d.id = tp.dealer_id
-      WHERE d.external_key = ANY($1::text[])
-      ORDER BY tp.external_key`,
+       ${TRADE_POINT_OVERRIDE_JOIN}
+       WHERE d.external_key = ANY($1::text[])
+       ORDER BY tp.external_key`,
     [dealerKeys],
   );
 

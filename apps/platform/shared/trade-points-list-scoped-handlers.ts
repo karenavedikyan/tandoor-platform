@@ -25,6 +25,7 @@ export type ScopedTradePointDto = {
   address: string | null;
   format: string | null;
   isActive: boolean;
+  isPrimary: boolean;
   importanceTier: string | null;
   dealerId: string;
   dealerExternalKey: string;
@@ -48,6 +49,7 @@ type ScopedTradePointSqlRow = {
   address: string | null;
   format: string | null;
   is_active: boolean;
+  is_primary: boolean;
   importance_tier: string | null;
   dealer_id: string;
   dealer_external_key: string;
@@ -86,6 +88,7 @@ const SCOPED_TP_SELECT = `
   tp.address,
   tp.format,
   tp.is_active,
+  COALESCE(tpo.is_primary, FALSE) AS is_primary,
   tp.importance_tier,
   d.id::text AS dealer_id,
   d.external_key AS dealer_external_key,
@@ -110,6 +113,7 @@ export function mapScopedTradePointRow(row: ScopedTradePointSqlRow): ScopedTrade
     address: row.address,
     format: row.format,
     isActive: row.is_active,
+    isPrimary: row.is_primary,
     importanceTier: row.importance_tier,
     dealerId: row.dealer_id,
     dealerExternalKey: row.dealer_external_key,

@@ -148,6 +148,8 @@ export type DealerTradePoint = {
   /** Главное фото ТТ (URL из актуализации). */
   coverPhotoUrl?: string;
   coverPhotoThumbnailUrl?: string;
+  /** Основная торговая точка клиента (Промт 422, из БД). */
+  isPrimary?: boolean;
 } & ProductTrainingFields;
 
 export type DealerRow = {

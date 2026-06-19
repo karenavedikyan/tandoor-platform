@@ -58,7 +58,6 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
-import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
@@ -88,6 +87,13 @@ import {
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
+import { trashTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import {
+  canTrashTradePointUi,
+  resolveTradePointIsPrimary,
+  tradePointTrashDisabledReason,
+} from "@/lib/trade-point-primary-ui";
 import { CLIENT_CATEGORY_META, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
@@ -752,6 +758,15 @@ export default function TradePointsPage({
     [profile, assignmentsScope],
   );
 
+  const activeTpCountByDealerId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of filteredSorted) {
+      if (row.isArchived || row.isVirtual) continue;
+      map.set(row.dealerId, (map.get(row.dealerId) ?? 0) + 1);
+    }
+    return map;
+  }, [filteredSorted]);
+
   const canArchiveRow = useCallback(
     (row: TradePointListRow) => {
       if (!actx.enabled || row.isVirtual || row.isArchived) return false;
@@ -759,21 +774,27 @@ export default function TradePointsPage({
       const baseArchive =
         canEditDealerDuringActualization(profile, row.dealer) &&
         canArchiveTradePointDuringActualization(profile, row.dealer, row.point);
-      return baseArchive || inScope;
+      if (!(baseArchive || inScope)) return false;
+      const activeCount = activeTpCountByDealerId.get(row.dealerId) ?? 1;
+      return canTrashTradePointUi(row.point, activeCount);
     },
-    [actx.enabled, profile, assignmentsScope],
+    [actx.enabled, profile, assignmentsScope, activeTpCountByDealerId],
   );
 
   const archiveBlockReason = useCallback(
     (row: TradePointListRow): string | null => {
       if (!actx.enabled) return "Актуализация недоступна.";
       if (row.isVirtual) return "Виртуальная точка не архивируется.";
-      if (assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope)) return null;
+      if (assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope)) {
+        const activeCount = activeTpCountByDealerId.get(row.dealerId) ?? 1;
+        return tradePointTrashDisabledReason(row.point, activeCount);
+      }
       if (!canEditDealerDuringActualization(profile, row.dealer)) return "Нет прав на редактирование этого клиента.";
       if (!canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) return "Нет прав на удаление торговых точек.";
-      return null;
+      const activeCount = activeTpCountByDealerId.get(row.dealerId) ?? 1;
+      return tradePointTrashDisabledReason(row.point, activeCount);
     },
-    [actx.enabled, profile, assignmentsScope],
+    [actx.enabled, profile, assignmentsScope, activeTpCountByDealerId],
   );
 
   const canShowBulkTradePointControls = !readOnlyScope && actx.enabled && canActualizeClientBase(profile);
@@ -1011,46 +1032,33 @@ export default function TradePointsPage({
 
   const activeFilterCount = activeFilterChips.length;
 
-  const trashActor = useMemo(
-    () => ({
-      userId: user?.id ?? profile.personaUserId,
-      userName: displayUserName(user).trim() || userLabelFromProfile(profile),
-    }),
-    [user, profile],
+  const rowIsPrimary = useCallback(
+    (row: TradePointListRow) => {
+      const activeCount = activeTpCountByDealerId.get(row.dealerId) ?? 1;
+      return resolveTradePointIsPrimary(row.point, activeCount);
+    },
+    [activeTpCountByDealerId],
   );
 
   const handleRowTrashTp = useCallback(
     async (row: TradePointListRow) => {
       if (!actx.enabled) return;
-      const tp = row.point;
-      const info = makeTrashedTradePointInfo({
-        tradePointId: tp.id,
-        dealerId: row.dealerId,
-        by: trashActor,
-        snapshot: snapshotTradePointFromRow({
-          name: tp.name,
-          address: tp.address,
-          city: tp.city,
-          tradePointCode: tp.releaseCode ?? null,
-          dealerFullName: row.dealerName ?? row.dealer?.name ?? null,
-        }),
-        source: "client_card_delete",
-      });
-      const r = await actx.persist((prev) =>
-        mergeActualizationState(prev, {
-          trashedTradePointsById: { ...prev.trashedTradePointsById, [tp.id]: info },
-        }),
-      );
-      if (r.success) {
+      const r = await trashTradePointStrict(row.tradePointId);
+      if (r.ok) {
+        await hydrateTradePointOverridesFromServer({ dealerId: row.dealerId });
         toast({
           title: "Торговая точка перемещена в Корзину",
           description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
         });
       } else {
-        toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
+        toast({
+          title: "Не удалось переместить в корзину",
+          description: r.message ?? "Ошибка запроса",
+          variant: "destructive",
+        });
       }
     },
-    [actx, trashActor],
+    [actx],
   );
 
   const tpRowQuickMoveProps = useMemo((): TradePointListRowQuickMoveProps | undefined => {
@@ -1063,7 +1071,7 @@ export default function TradePointsPage({
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
-  /** Промт 46: bulk-delete ТТ на /trade-points шлёт в КОРЗИНУ. */
+  /** Промт 422: bulk-delete ТТ на /trade-points — trash API (БД). */
   const confirmBulkArchive = useCallback(async () => {
     if (!actx.enabled) return;
     const keys = Array.from(selectedBulkTpKeys).filter((k) => archivableTpKeysInView.has(k));
@@ -1072,45 +1080,37 @@ export default function TradePointsPage({
       return;
     }
     setBulkArchiveBusy(true);
-    const uid = user?.id ?? profile.personaUserId;
-    const uname = displayUserName(user).trim() || userLabelFromProfile(profile);
-    const r = await actx.persist((prev) => {
-      const next = { ...prev.trashedTradePointsById };
-      for (const key of keys) {
-        const row = rowsByCompositeKey.get(key);
-        if (!row || row.isArchived || row.isVirtual) continue;
-        const inScope = assignmentsScopeIsActive(assignmentsScope) && rowInAssignmentsScope(row.dealer, assignmentsScope);
-        const canTrash =
-          (canEditDealerDuringActualization(profile, row.dealer) &&
-            canArchiveTradePointDuringActualization(profile, row.dealer, row.point)) ||
-          inScope;
-        if (!canTrash) continue;
-        next[row.tradePointId] = makeTrashedTradePointInfo({
-          tradePointId: row.tradePointId,
-          dealerId: row.dealerId,
-          by: { userId: uid, userName: uname },
-          snapshot: snapshotTradePointFromRow({
-            name: row.point.name,
-            address: row.point.address,
-            city: row.point.city,
-            tradePointCode: row.point.releaseCode ?? null,
-            dealerFullName: row.dealerName ?? row.dealer?.name ?? null,
-          }),
-          source: "client_bulk_delete",
-        });
+    let okCount = 0;
+    let lastError: string | undefined;
+    const dealerIds = new Set<string>();
+    for (const key of keys) {
+      const row = rowsByCompositeKey.get(key);
+      if (!row) continue;
+      const r = await trashTradePointStrict(row.tradePointId);
+      if (r.ok) {
+        okCount += 1;
+        dealerIds.add(row.dealerId);
+      } else {
+        lastError = r.message;
       }
-      return mergeActualizationState(prev, { trashedTradePointsById: next });
-    });
+    }
+    if (dealerIds.size > 0) {
+      await Promise.all(Array.from(dealerIds).map((id) => hydrateTradePointOverridesFromServer({ dealerId: id })));
+    }
     setBulkArchiveBusy(false);
-    if (r.success) {
+    if (okCount === keys.length) {
       toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkTpKeys(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDialogOpen(false);
     } else {
-      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
+      toast({
+        title: okCount > 0 ? "Часть точек не удалось переместить" : "Не удалось переместить в корзину",
+        description: lastError ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
-  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, profile, user, rowsByCompositeKey, assignmentsScope]);
+  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, rowsByCompositeKey]);
 
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
@@ -1953,6 +1953,11 @@ export default function TradePointsPage({
                     <td className="p-2 align-middle">
                       <p className="font-mono text-[10px] text-muted-foreground">{r.tradePointDisplayCode}</p>
                       <p className="line-clamp-2 font-medium leading-snug">{r.tradePointName}</p>
+                      {rowIsPrimary(r) ? (
+                        <Badge variant="outline" className="mt-1 text-[10px]" data-testid={`badge-trade-point-primary-${r.tradePointId}`}>
+                          Основная
+                        </Badge>
+                      ) : null}
                     </td>
                     <td className="p-2 align-middle">
                       <p className="line-clamp-2 text-sm">{r.dealerName}</p>

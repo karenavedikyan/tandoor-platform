@@ -80,6 +80,12 @@ export function getTradePointOverride(tpId: string): TradePointOverrideRow | nul
   return dbTradePointOverridesById[tpId] ?? null;
 }
 
+export function getTradePointIsPrimary(tpId: string, fallback?: boolean): boolean {
+  const ov = dbTradePointOverridesById[tpId];
+  if (ov) return ov.is_primary === true;
+  return fallback === true;
+}
+
 export function useDealerOverride(dealerId: string | undefined): DealerOverrideRow | null {
   const version = useOverridesRuntimeVersion();
   void version;

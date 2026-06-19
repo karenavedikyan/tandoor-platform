@@ -16,6 +16,7 @@ import {
   handleTradePointOverridesGet,
   handleTradePointOverridesList,
   handleTradePointOverridesSetTraining,
+  handleTradePointOverridesSetPrimary,
   handleTradePointOverridesTrash,
   handleTradePointOverridesUntrash,
   handleTradePointOverridesUpsert,
@@ -91,6 +92,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "set-training" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesSetTraining(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "set-primary" && req.method === "POST") {
+      await runLogged(() => handleTradePointOverridesSetPrimary(req, res, pool, sessionUser));
       return;
     }
     if (action === "trash" && req.method === "POST") {
