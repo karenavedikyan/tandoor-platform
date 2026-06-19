@@ -57,14 +57,13 @@ import {
 } from "@/lib/rop-manager-filters";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { loadReleaseDemoProfile, getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { getEffectiveTeamLeadTeamId, type ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getSalesUserById, getTeamManagers, getAllSalesManagers, type SalesUser } from "@/lib/sales-control-data";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildAssignmentsMap, getVisibleReleaseClients } from "@/lib/real-client-base";
 import {
   realAllSalesManagers,
   realEffectiveTeamLeadTeamId,
-  realInitialRopManagerDefaults,
   realManagerOptionsForAccess,
   realRopOptions,
   realRopOptionsForAccess,
@@ -1514,10 +1513,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     [useReal, snap, access],
   );
 
-  const [workView, setWorkView] = useState<DealerBaseWorkView>(() => {
-    const p = loadReleaseDemoProfile();
-    return defaultWorkViewForAccess(mapSalesRoleToDealerBaseAccess(p.role));
-  });
+  const defaultRopManager = useMemo(
+    () => initialRopManagerForProfile(profile, access),
+    [profile, access],
+  );
+
+  const userTouchedPickerRef = useRef(false);
+
+  const [workView, setWorkView] = useState<DealerBaseWorkView>(() => defaultWorkViewForAccess(access));
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const searchFilterPending = search !== deferredSearch;
@@ -1536,14 +1539,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const [quick, setQuick] = useState<QuickFilter>("all");
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<ClientCategorySelection[]>([]);
-  const [ropTeam, setRopTeam] = useState<string>(() => {
-    const p = loadReleaseDemoProfile();
-    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).ropTeam;
-  });
-  const [manager, setManager] = useState<string>(() => {
-    const p = loadReleaseDemoProfile();
-    return initialRopManagerForProfile(p, mapSalesRoleToDealerBaseAccess(p.role)).manager;
-  });
+  const [ropTeam, setRopTeam] = useState<string>(defaultRopManager.ropTeam);
+  const [manager, setManager] = useState<string>(defaultRopManager.manager);
   const [geoRegion, setGeoRegion] = useState("");
   const [geoDistrict, setGeoDistrict] = useState("");
   const [geoLocality, setGeoLocality] = useState("");
@@ -1564,6 +1561,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const routeQs = useRouteSearchParams();
   const routeKey = useMemo(() => routeQs.toString(), [routeQs]);
+
+  useEffect(() => {
+    if (userTouchedPickerRef.current) return;
+    if (viewingOtherUserScope) return;
+    if (routeKey) return;
+    setRopTeam(defaultRopManager.ropTeam);
+    setManager(defaultRopManager.manager);
+  }, [defaultRopManager.ropTeam, defaultRopManager.manager, viewingOtherUserScope, routeKey]);
+
   const isTaskSelectMode = isTaskSelectModeFromParams(routeQs);
   const taskSelectFiltersInitedRef = useRef(false);
   const mainCityFilter = useMainDashboardCityFilterOptional();
@@ -1969,11 +1975,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     }
   }, []);
 
-  const defaultRopManager = useMemo(
-    () => (useReal && snap ? realInitialRopManagerDefaults(snap, access) : initialRopManagerForProfile(profile, access)),
-    [useReal, snap, profile, access],
-  );
-
   const ropTeamLabel = useMemo(() => {
     if (isRopOrManagerAllFilter(ropTeam)) return undefined;
     return ropSelectOptions.find((o) => o.teamId === ropTeam)?.label;
@@ -2123,10 +2124,12 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       taskSelectFiltersInitedRef.current = true;
     }
 
-    const d = useReal && snap ? realInitialRopManagerDefaults(snap, access) : initialRopManagerForProfile(profile, access);
+    const d = initialRopManagerForProfile(profile, access);
     if (!routeKey) {
-      setRopTeam(d.ropTeam);
-      setManager(d.manager);
+      if (!userTouchedPickerRef.current) {
+        setRopTeam(d.ropTeam);
+        setManager(d.manager);
+      }
       setQuick("all");
       setCities([]);
       setCategories([]);
@@ -2531,6 +2534,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const onRopChange = useCallback(
     (v: string) => {
+      userTouchedPickerRef.current = true;
       setRopTeam(v);
       setManager((prev) => {
         if (prev === "all") return prev;
@@ -2554,6 +2558,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const handleManagerChange = useCallback(
     (v: string) => {
+      userTouchedPickerRef.current = true;
       setManager(v);
       if (isTaskSelectMode) return;
       if (!isRopOrManagerAllFilter(v)) {
@@ -2606,6 +2611,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   ]);
 
   const setRopManagerFromClick = (tid: string, mid: string) => {
+    userTouchedPickerRef.current = true;
     setRopTeam(tid);
     setManager(mid);
     if (workViewsForAccess(access).includes("my_clients")) setWorkView("my_clients");
@@ -2819,6 +2825,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       previous: { ropTeam, manager },
       defaults: defaultRopManager,
     });
+    userTouchedPickerRef.current = false;
     setRopTeam(defaultRopManager.ropTeam);
     setManager(defaultRopManager.manager);
   }, [
@@ -2960,6 +2967,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         key: "rop",
         label: `РОП: ${lab}`,
         onRemove: () => {
+          userTouchedPickerRef.current = false;
           setRopTeam(defaultRopManager.ropTeam);
           setManager(defaultRopManager.manager);
         },
@@ -3013,6 +3021,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     setGeoRegion("");
     setGeoDistrict("");
     setGeoLocality("");
+    userTouchedPickerRef.current = false;
     setRopTeam(defaultRopManager.ropTeam);
     setManager(defaultRopManager.manager);
   }, [profile.role, defaultRopManager]);
