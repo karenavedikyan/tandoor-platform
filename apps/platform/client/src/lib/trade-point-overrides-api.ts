@@ -13,7 +13,7 @@ export {
 } from "./overrides-api-result.js";
 import { sanitizeTradePointOverrideFieldsForApi } from "./overrides-persona-fields.js";
 import { traceOverridesStrictCalled } from "./overrides-strict-trace.js";
-import { invalidateMyDealerScope } from "./dealers-my-scope-api.js";
+import { invalidateAllDealerScopes } from "./dealers-team-scope-api.js";
 
 type ApiOk<T> = { success: true; data: T };
 type ApiErr = { success: false; code?: string; message?: string };
@@ -142,7 +142,7 @@ export async function setPrimaryTradePointStrict(
     body,
     traceFn: "setPrimaryTradePointStrict",
   });
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -165,7 +165,7 @@ export async function trashTradePointStrict(tpId: string): Promise<OverridesApiR
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-trash", tpId), kind: "tp-trash", payload: body });
   }
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -188,7 +188,7 @@ export async function untrashTradePointStrict(tpId: string): Promise<OverridesAp
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-untrash", tpId), kind: "tp-untrash", payload: body });
   }
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 
@@ -211,7 +211,7 @@ async function postTradePointPurgeAction<T>(
     body,
     traceFn,
   });
-  if (r.ok) invalidateMyDealerScope();
+  if (r.ok) invalidateAllDealerScopes();
   return r;
 }
 

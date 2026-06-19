@@ -158,7 +158,7 @@ export function teamUuidForRopUserId(snap: OrgSnapshot, ropUserId: string): stri
   return team?.id ?? null;
 }
 
-/** Catalog teamId (`team-kupiansky`) для РОПа в real-режиме. */
+/** Catalog teamId (`team-kupiansky`) для РОПа в real-режиме. @deprecated Промт 423: только подписи ФИО/команды, не для счётчиков. */
 export function catalogTeamIdForRealTeamLead(snap: OrgSnapshot): string | null {
   const teamUuid = realEffectiveTeamLeadTeamIdFromSnap(snap);
   if (!teamUuid) return null;
@@ -171,7 +171,7 @@ export function catalogTeamIdForRealTeamLead(snap: OrgSnapshot): string | null {
   return null;
 }
 
-/** Catalog teamId для команды конкретного РОПа (drilldown директора). */
+/** Catalog teamId для команды конкретного РОПа (drilldown директора). @deprecated Промт 423: только подписи ФИО/команды, не для счётчиков. */
 export function catalogTeamIdForRopUserId(snap: OrgSnapshot, ropUserId: string): string | null {
   const mapped = ROP_UUID_TO_CATALOG_TEAM[ropUserId];
   if (mapped) return mapped;
@@ -198,7 +198,7 @@ function rowBelongsToRealTeam(row: DealerRow, snap: OrgSnapshot, teamUuid: strin
   return false;
 }
 
-/** Строки клиентской базы команды РОПа (по UUID РОПа). */
+/** Строки клиентской базы команды РОПа (по UUID РОПа). @deprecated Промт 423: только подписи ФИО/команды, не для счётчиков — useMyTeamScope. */
 export function realRowsForRopTeam(rows: DealerRow[], snap: OrgSnapshot, ropUserId: string): DealerRow[] {
   const teamUuid = teamUuidForRopUserId(snap, ropUserId);
   if (!teamUuid) return [];
@@ -206,10 +206,10 @@ export function realRowsForRopTeam(rows: DealerRow[], snap: OrgSnapshot, ropUser
   return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
 }
 
-/** @alias realRowsForRopTeam */
+/** @deprecated Промт 423: только подписи ФИО/команды, не для счётчиков — useMyTeamScope. */
 export const realRowsForTeam = realRowsForRopTeam;
 
-/** Строки клиентской базы, закреплённые за менеджером по UUID (catalog id + ФИО). */
+/** Строки клиентской базы, закреплённые за менеджером по UUID (catalog id + ФИО). @deprecated Промт 423: только подписи, не для счётчиков — useMyScopeFromDB. */
 export function realRowsForManagerByUUID(rows: DealerRow[], snap: OrgSnapshot, managerUserId: string): DealerRow[] {
   const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[managerUserId];
   const managerName = snap.users.find((u) => u.id === managerUserId)?.fullName?.trim() ?? "";
@@ -264,6 +264,11 @@ export function roleScopedDealerRowsForReal(
   if (options?.ropUserId) {
     return realRowsForRopTeam(rows, snap, options.ropUserId);
   }
+  if (access === "sales_director" || access === "team_lead") {
+    throw new Error(
+      "RoleScope: team_lead/sales_director обслуживаются через useMyTeamScope/useOrgScope, не через snap",
+    );
+  }
   if (snap.me.role === "regional_manager") {
     // [prompt-354] личный scope по dealer_overrides.regional_manager_id (выдаётся сервером в assignmentsScope.ownCodes)
     if (assignmentsScopeIsActive(assignmentsScope)) {
@@ -306,13 +311,6 @@ export function roleScopedDealerRowsForReal(
       return result;
     }
     return rowsForAssignmentsScope(rows, access, assignmentsScope!);
-  }
-  if (access === "sales_director") return rows;
-  if (access === "team_lead") {
-    const teamUuid = realEffectiveTeamUuidFromSnap(snap);
-    if (!teamUuid) return [];
-    const catalogTeam = catalogTeamIdForRealTeamLead(snap) ?? catalogTeamIdForTeamUuid(snap, teamUuid);
-    return rows.filter((r) => rowBelongsToRealTeam(r, snap, teamUuid, catalogTeam));
   }
   const selfName = snap.users.find((u) => u.id === snap.me.id)?.fullName?.trim() ?? "";
   return rows.filter((r) => {

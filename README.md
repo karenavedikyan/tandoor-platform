@@ -29,8 +29,15 @@ tandoor-platform/
     adr/                   # architectural decision records
 ```
 
+## Архитектурный инвариант
+
+**БД — единственный источник правды.** Подробнее: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+Перед мержем любого PR — пройти чек-лист в этом документе.
+
 ## Документация
 
+- [Архитектурный инвариант (БД — source of truth)](docs/ARCHITECTURE.md)
 - [Стратегия доработки экосистемы](docs/strategy/tandoor_strategy.md)
 - [Архитектурные принципы](docs/architecture/principles.md)
 - [Preview-режим](docs/architecture/preview-mode.md)

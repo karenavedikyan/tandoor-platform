@@ -275,13 +275,12 @@ export function getDbManualDealerPayload(dealerId: string): Record<string, unkno
   return dbManualDealerPayloads[dealerId];
 }
 
-export function isDealerTrashedInRuntime(dealerId: string, act?: ActualizationState | null): boolean {
+export function isDealerTrashedInRuntime(dealerId: string, _act?: ActualizationState | null): boolean {
+  void _act;
   const ov = dbDealerOverridesById[dealerId];
   if (isPurgedStatus(parseRecordStatus(ov?.status))) return false;
   if (dbTrashedDealersById[dealerId]) return true;
   if (dbPurgePendingDealersById[dealerId]) return true;
-  // Промт 420: после гидрации оверрайдов jsonb trashedDealersById не участвует в чтении.
-  if (!dealerHydrated && act?.trashedDealersById?.[dealerId]) return true;
   return false;
 }
 

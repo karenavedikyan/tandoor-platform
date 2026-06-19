@@ -39,6 +39,8 @@ import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
+import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
@@ -301,8 +303,20 @@ function AuthenticatedShell({
     salesRole === "sales_manager" ||
     salesRole === "marketer" ||
     salesRole === "analyst";
-  const dbScope = useMyScopeFromDB(Boolean(user?.id));
-  const dbSidebarCounts = sidebarCountsFromDbScope(dbScope);
+
+  const isManagerLike = user.role === "manager" || user.role === "regional_manager";
+  const isRop = user.role === "rop";
+  const isDirector = user.role === "director";
+
+  const dbScope = useMyScopeFromDB(Boolean(user?.id) && (isManagerLike || user.role === "admin"));
+  const teamScope = useMyTeamScope({ enabled: Boolean(user?.id) && isRop });
+  const orgScope = useOrgScope({ enabled: Boolean(user?.id) && isDirector });
+
+  const dbSidebarCounts = isDirector
+    ? sidebarCountsFromOrgScope(orgScope)
+    : isRop
+      ? sidebarCountsFromTeamScope(teamScope)
+      : sidebarCountsFromDbScope(dbScope);
   const dealerNavCount = dbSidebarCounts.dealers;
   const tradePointNavCount = showTradePointsNav ? dbSidebarCounts.tradePoints : undefined;
   const trashDealersNavCount = dbSidebarCounts.trashDealers;

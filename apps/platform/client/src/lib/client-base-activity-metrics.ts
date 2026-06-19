@@ -882,6 +882,9 @@ export type ActivityDashboardKpiScope = {
 export type ComputeTopKpisOptions = {
   /** События с типом «все», уже отфильтрованы по периоду и географии дашборда. */
   kpiBaseEvents?: ActivityEvent[];
+  /** Промт 423: ключи корзины из БД-payload. */
+  trashedDealerExternalKeys?: ReadonlySet<string>;
+  trashedTradePointIds?: ReadonlySet<string>;
 };
 
 export function computeTopKpis(
@@ -904,6 +907,11 @@ export function computeTopKpis(
   let legalTouches = 0;
   let photos = 0;
 
+  const trashedDealers = options?.trashedDealerExternalKeys;
+  const trashedTps = options?.trashedTradePointIds;
+  const isTrashedDealer = (did: string) => Boolean(trashedDealers?.has(did));
+  const isTrashedTp = (tpId: string) => Boolean(trashedTps?.has(tpId));
+
   const fromEv = options?.kpiBaseEvents;
   if (fromEv != null) {
     const md = new Set<string>();
@@ -913,14 +921,9 @@ export function computeTopKpis(
       const dealerId = resolvedEventDealerId(e, state) ?? e.dealerId;
       const did = normalizeText(dealerId);
       if (!did || !inScope(did)) continue;
-      if (e.kind === "manual_dealer" && !state.trashedDealersById?.[did]) md.add(did);
+      if (e.kind === "manual_dealer" && !isTrashedDealer(did)) md.add(did);
       else if (e.kind === "dealer_updated") ud.add(did);
-      else if (
-        e.kind === "manual_trade_point" &&
-        e.tradePointId &&
-        !state.trashedDealersById?.[did] &&
-        !state.trashedTradePointsById?.[e.tradePointId]
-      ) {
+      else if (e.kind === "manual_trade_point" && e.tradePointId && !isTrashedDealer(did) && !isTrashedTp(e.tradePointId)) {
         mtp.add(e.tradePointId);
       } else if (e.kind === "legal_entity") {
         legalTouches += 1;
@@ -934,7 +937,7 @@ export function computeTopKpis(
   } else {
     for (const d of Object.values(state.manuallyCreatedDealersById)) {
       if (!inScope(d.id)) continue;
-      if (state.trashedDealersById?.[d.id]) continue;
+      if (isTrashedDealer(d.id)) continue;
       const t = firstResolvedActivityMs(d.createdAt, d.updatedAt);
       if (t == null) {
         if (range != null) continue;
@@ -950,8 +953,8 @@ export function computeTopKpis(
     }
     for (const tp of Object.values(state.manuallyCreatedTradePointsById)) {
       if (!inScope(tp.dealerId)) continue;
-      if (state.trashedDealersById?.[tp.dealerId]) continue;
-      if (state.trashedTradePointsById?.[tp.id]) continue;
+      if (isTrashedDealer(tp.dealerId)) continue;
+      if (isTrashedTp(tp.id)) continue;
       const t = firstResolvedActivityMs(tp.createdAt, tp.updatedAt);
       if (t == null) {
         if (range != null) continue;
@@ -1125,7 +1128,14 @@ export type DashboardGeoFilterPack = {
   regionalManager: string | "__all__";
   city: string | "__all__";
   dealerById: Map<string, DealerRow>;
+  /** Промт 423: ключи корзины из БД-payload (my-scope / team-scope / org-scope). */
+  trashedDealerExternalKeys?: ReadonlySet<string>;
 };
+
+function isDealerTrashedFromDbPack(dealerId: string, pack: DashboardGeoFilterPack): boolean {
+  if (pack.trashedDealerExternalKeys?.has(dealerId)) return true;
+  return false;
+}
 
 export function passesContributionGeoFilters(
   dealerId: string,
@@ -1133,7 +1143,7 @@ export function passesContributionGeoFilters(
   manualCityFallback?: string,
 ): boolean {
   if (!pack.scopedDealerIds.has(dealerId)) return false;
-  if (pack.act.trashedDealersById?.[dealerId]) return false;
+  if (isDealerTrashedFromDbPack(dealerId, pack)) return false;
   if (pack.ropTeamId !== "__all__") {
     const row = pack.dealerById.get(dealerId);
     if (row && row.releaseTeamId !== pack.ropTeamId) return false;

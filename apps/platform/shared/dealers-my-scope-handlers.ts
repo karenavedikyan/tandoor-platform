@@ -72,7 +72,7 @@ function buildPayload(
   };
 }
 
-async function fetchActiveTradePointsForScope(
+export async function fetchActiveTradePointsForScope(
   pool: PoolLike,
   scope: DbScopeResult,
 ): Promise<MyDealerScopeTradePoint[]> {

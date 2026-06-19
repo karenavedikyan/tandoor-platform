@@ -91,6 +91,7 @@ import {
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
+import type { MemberTotals, TeamTotals } from "@shared/dealers-scope-types";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
@@ -182,12 +183,16 @@ export function DealerBaseManagementCockpit({
   orgTeamCtx,
   overview,
   mergedDealerRowsForCreate,
+  teamTotalsById,
+  membersTotalsByTeamId,
 }: {
   rows: DealerRow[];
   profile: ReleaseDemoProfile;
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
   overview?: ClientBaseOverview | null;
   mergedDealerRowsForCreate?: DealerRow[] | null;
+  teamTotalsById?: Map<string, TeamTotals>;
+  membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
 }) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
@@ -247,8 +252,18 @@ export function DealerBaseManagementCockpit({
   const grantedCodes = myCodesQ.data?.grantedCodes;
 
   const ropGroups = useMemo(
-    () => buildRopGroups(rows, teams, orgTeamCtx?.snap, responsibleByCode, userIdToCatalogMgrId, grantedCodes),
-    [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes],
+    () =>
+      buildRopGroups(
+        rows,
+        teams,
+        orgTeamCtx?.snap,
+        responsibleByCode,
+        userIdToCatalogMgrId,
+        grantedCodes,
+        teamTotalsById,
+        membersTotalsByTeamId,
+      ),
+    [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes, teamTotalsById, membersTotalsByTeamId],
   );
 
   const ownTeamIds = useMemo(
