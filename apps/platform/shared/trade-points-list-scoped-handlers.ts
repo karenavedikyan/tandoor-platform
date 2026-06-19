@@ -225,15 +225,6 @@ export async function handleTradePointsListScoped(
 
   const { subject, scope } = resolved;
 
-  if (subject.role === "regional_manager") {
-    return {
-      success: true,
-      source: "db",
-      tradePoints: [],
-      meta: { total: 0, scope: "team" },
-    };
-  }
-
   const rows = await fetchScopedTradePointsRows(pool, scope, { activeOnly: true });
   const tradePoints = rows.map(mapScopedTradePointRow);
 
