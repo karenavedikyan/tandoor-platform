@@ -714,8 +714,7 @@ export function buildDealerBaseRowsWithActualization(
     return [];
   }
   const archivedListMode = !IGNORE_CLIENT_ARCHIVE_IN_UI && opts?.includeArchivedDealers === true;
-  const isTrashedForList = (id: string) =>
-    Boolean(act.trashedDealersById?.[id]) || isDealerTrashedInRuntime(id, act);
+  const isTrashedForList = (id: string) => isDealerTrashedInRuntime(id, act);
   const includeId = (id: string) => {
     const isArchived = IGNORE_CLIENT_ARCHIVE_IN_UI ? false : Boolean(act.archivedDealersById[id]);
     const isTrashed = isTrashedForList(id);
@@ -747,9 +746,7 @@ export function excludeTrashedDealersFromWorkingRows(
   act: ActualizationState | null | undefined,
 ): DealerRow[] {
   if (!act) return rows;
-  return rows.filter(
-    (r) => !Boolean(act.trashedDealersById?.[r.id]) && !isDealerTrashedInRuntime(r.id, act),
-  );
+  return rows.filter((r) => !isDealerTrashedInRuntime(r.id, act));
 }
 
 /**

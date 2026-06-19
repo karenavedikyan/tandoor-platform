@@ -165,6 +165,7 @@ export async function untrashTradePointStrict(tpId: string): Promise<OverridesAp
   if (!r.ok && r.network) {
     enqueuePendingSync({ id: makePendingId("tp-untrash", tpId), kind: "tp-untrash", payload: body });
   }
+  if (r.ok) invalidateMyDealerScope();
   return r;
 }
 

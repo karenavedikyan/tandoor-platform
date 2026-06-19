@@ -61,8 +61,10 @@ import {
 } from "@/lib/trash-archive-helpers";
 import { resolveTrashedDealerDisplayName } from "@/lib/client-base-actualization-visibility";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
-import { untrashDealer, requestPurgeDealerStrict } from "@/lib/dealer-overrides-api";
-import { untrashTradePoint, requestPurgeTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { untrashDealerStrict, requestPurgeDealerStrict } from "@/lib/dealer-overrides-api";
+import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import { untrashTradePointStrict, requestPurgeTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import {
   mergeTrashedDealersForUi,
   mergeTrashedTradePointsForUi,
@@ -348,23 +350,19 @@ export function TrashBinPage(): ReactElement {
   const onRestoreDealer = async (dealerId: string): Promise<void> => {
     if (busy) return;
     setBusy(`restore-dealer:${dealerId}`);
-    patchDealerTrashRuntime(dealerId, null);
-    const saved = await untrashDealer(dealerId);
-    const r = await actx.persist(
-      (prev) => {
-        const next = { ...prev.trashedDealersById };
-        delete next[dealerId];
-        return mergeActualizationState(prev, { trashedDealersById: next });
-      },
-      { unTrash: { dealers: [dealerId] } },
-    );
-    const blobOk = r.success;
+    const r = await untrashDealerStrict(dealerId);
     setBusy(null);
-    if (saved && blobOk) {
+    if (r.ok) {
+      patchDealerTrashRuntime(dealerId, null);
+      await hydrateDealerOverridesFromServer();
       toast({ title: "Клиент восстановлен в рабочую базу" });
       void teamPlane.refresh();
     } else {
-      toast({ title: "Не удалось восстановить", variant: "destructive" });
+      toast({
+        title: "Не удалось восстановить",
+        description: r.message ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
   };
 
@@ -379,23 +377,19 @@ export function TrashBinPage(): ReactElement {
       return;
     }
     setBusy(`restore-tp:${tp.tradePointId}`);
-    patchTradePointTrashRuntime(tp.tradePointId, null);
-    const saved = await untrashTradePoint(tp.tradePointId);
-    const r = await actx.persist(
-      (prev) => {
-        const next = { ...prev.trashedTradePointsById };
-        delete next[tp.tradePointId];
-        return mergeActualizationState(prev, { trashedTradePointsById: next });
-      },
-      { unTrash: { tradePoints: [tp.tradePointId] } },
-    );
-    const blobOk = r.success;
+    const r = await untrashTradePointStrict(tp.tradePointId);
     setBusy(null);
-    if (saved && blobOk) {
+    if (r.ok) {
+      patchTradePointTrashRuntime(tp.tradePointId, null);
+      await hydrateTradePointOverridesFromServer();
       toast({ title: "Торговая точка восстановлена" });
       void teamPlane.refresh();
     } else {
-      toast({ title: "Не удалось восстановить", variant: "destructive" });
+      toast({
+        title: "Не удалось восстановить",
+        description: r.message ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
   };
 

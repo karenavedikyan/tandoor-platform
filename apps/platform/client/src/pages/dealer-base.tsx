@@ -121,13 +121,15 @@ import {
   canCreateDealerDuringActualization,
 } from "@/lib/client-base-actualization-permissions";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
-import { mergeActualizationState, type TrashedDealerInfo } from "@/lib/client-base-actualization-state";
-import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
+import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
 import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
+import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
+import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import {
   clientNextStepActionLabel,
   getClientNextStepForDealer,
@@ -3157,7 +3159,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     const s = new Set<string>();
     for (const r of rowsFinalForList) {
       if (teamActualizationPlane.archivedDealersById[r.id]) continue;
-      if (teamActualizationPlane.trashedDealersById?.[r.id]) continue;
+      if (isDealerTrashedInRuntime(r.id, teamActualizationPlane)) continue;
       if (canArchiveDealerDuringActualization(profile, r)) s.add(r.id);
     }
     return s;
@@ -3165,7 +3167,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     readOnlyScope,
     actx.enabled,
     teamActualizationPlane.archivedDealersById,
-    teamActualizationPlane.trashedDealersById,
+    teamActualizationPlane,
     profile,
     rowsFinalForList,
     showArchivedDealers,
@@ -3365,33 +3367,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return n;
   }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView]);
 
-  const buildDealerTrashSnapshotForId = useCallback(
-    (id: string, rowById: Map<string, DealerRow>): TrashedDealerInfo["snapshot"] => {
-      const row = rowById.get(id);
-      const manual = actx.state.manuallyCreatedDealersById?.[id];
-      const manualFields = (manual?.fields ?? {}) as Record<string, unknown>;
-      const fullName = row?.name ?? (typeof manualFields.name === "string" ? (manualFields.name as string) : null);
-      const city = row?.city ?? (typeof manualFields.city === "string" ? (manualFields.city as string) : null);
-      const inn = row?.actualizationInn ?? (typeof manualFields.inn === "string" ? (manualFields.inn as string) : null);
-      const dealerCode = row?.releaseCode ?? manual?.internalCode ?? null;
-      const legalEntityName = (() => {
-        const le = actx.state.legalEntityOverridesByDealerId?.[id];
-        if (!le) return null;
-        const ov = le.overridesById as Record<string, unknown> | undefined;
-        if (!ov) return null;
-        const first = Object.values(ov)[0];
-        if (first && typeof first === "object" && first !== null) {
-          const f = first as Record<string, unknown>;
-          if (typeof f.name === "string") return f.name as string;
-          if (typeof f.fullName === "string") return f.fullName as string;
-        }
-        return null;
-      })();
-      return snapshotDealerFromRow({ fullName, city, inn, dealerCode, legalEntityName });
-    },
-    [actx.state],
-  );
-
   const handleRowArchiveDealer = useCallback(
     async (row: DealerRow) => {
       const now = new Date().toISOString();
@@ -3418,36 +3393,28 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     [actx, profile],
   );
 
+  const refreshDealerTrashFromServer = useCallback(async () => {
+    await hydrateDealerOverridesFromServer();
+  }, []);
+
   const handleRowTrashDealer = useCallback(
     async (row: DealerRow) => {
-    const uid = me?.id ?? profile.personaUserId;
-    const uname = userLabelFromProfile(profile);
-    const ownerTeamAtTrash = snap?.me.teamId ?? null;
-    const rowById = new Map<string, DealerRow>([[row.id, row]]);
-    const r = await actx.persist((prev) =>
-      mergeActualizationState(prev, {
-        trashedDealersById: {
-          ...prev.trashedDealersById,
-          [row.id]: makeTrashedDealerInfo({
-            dealerId: row.id,
-            by: { userId: uid, userName: uname },
-            snapshot: buildDealerTrashSnapshotForId(row.id, rowById),
-            source: "client_bulk_delete",
-            ownerTeamAtTrash,
-          }),
-        },
-      }),
-    );
-      if (r.success) {
+      const r = await trashDealerStrict(row.id);
+      if (r.ok) {
+        await refreshDealerTrashFromServer();
         toast({
           title: "Клиент перемещён в Корзину",
           description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
         });
       } else {
-        toast({ title: "Не удалось сохранить", variant: "destructive" });
+        toast({
+          title: "Не удалось переместить в корзину",
+          description: r.message ?? "Ошибка запроса",
+          variant: "destructive",
+        });
       }
     },
-    [actx, profile, buildDealerTrashSnapshotForId, me?.id, snap?.me.teamId],
+    [refreshDealerTrashFromServer],
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
@@ -3499,8 +3466,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile]);
 
   /**
-   * Bulk-delete отправляет клиентов в КОРЗИНУ (`trashedDealersById`).
-   * Снапшоты — через хелпер `snapshotDealerFromRow` (Промт 46).
+   * Bulk-delete отправляет клиентов в КОРЗИНУ через dealer_overrides (Промт 420).
    */
   const confirmBulkArchiveDealers = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveDealerIds).filter((id) => archivableDealerIdsInView.has(id));
@@ -3509,33 +3475,22 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       return;
     }
     setBulkArchiveDealerBusy(true);
-    const uid = me?.id ?? profile.personaUserId;
-    const uname = userLabelFromProfile(profile);
-    const ownerTeamAtTrash = snap?.me.teamId ?? null;
-    const rowById = new Map<string, DealerRow>(rowsFinalForList.map((r) => [r.id, r]));
-    const r = await actx.persist((prev) => {
-      const nextTrash = { ...prev.trashedDealersById };
-      for (const id of ids) {
-        nextTrash[id] = makeTrashedDealerInfo({
-          dealerId: id,
-          by: { userId: uid, userName: uname },
-          snapshot: buildDealerTrashSnapshotForId(id, rowById),
-          source: "client_bulk_delete",
-          ownerTeamAtTrash,
-        });
-      }
-      return mergeActualizationState(prev, { trashedDealersById: nextTrash });
-    });
+    const r = await bulkTrashDealersStrict(ids);
     setBulkArchiveDealerBusy(false);
-    if (r.success) {
+    if (r.ok) {
+      await refreshDealerTrashFromServer();
       toast({ title: "Клиенты перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
       setSelectedBulkArchiveDealerIds(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDealerDialogOpen(false);
     } else {
-      toast({ title: "Не удалось сохранить", variant: "destructive" });
+      toast({
+        title: "Не удалось переместить в корзину",
+        description: r.message ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
-  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, actx, profile, rowsFinalForList, buildDealerTrashSnapshotForId]);
+  }, [selectedBulkArchiveDealerIds, archivableDealerIdsInView, refreshDealerTrashFromServer]);
 
   const selectedWpRows = useMemo(
     () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),

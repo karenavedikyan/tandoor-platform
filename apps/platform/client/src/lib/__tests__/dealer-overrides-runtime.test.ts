@@ -139,17 +139,15 @@ applyDealerOverridesRuntime(
 // optimistic patch: purge pending hides from active + trash
 {
   const act = createEmptyActualizationState();
-  act.trashedDealersById = {
-    [DEALER_PATCH]: {
-      dealerId: DEALER_PATCH,
-      trashedAt: "2026-06-10T10:00:00.000Z",
-      trashedBy: "mgr-1",
-      trashedByName: "M",
-      expiresAt: "2026-06-24T10:00:00.000Z",
-      source: "client_bulk_delete",
-      snapshot: { fullName: null, city: null, inn: null, dealerCode: null, legalEntityName: null },
-    },
-  };
+  patchDealerTrashRuntime(DEALER_PATCH, {
+    dealerId: DEALER_PATCH,
+    trashedAt: "2026-06-10T10:00:00.000Z",
+    trashedBy: "mgr-1",
+    trashedByName: "M",
+    expiresAt: "2026-06-24T10:00:00.000Z",
+    source: "client_bulk_delete",
+    snapshot: { fullName: null, city: null, inn: null, dealerCode: null, legalEntityName: null },
+  });
   assert.equal(isDealerTrashedInRuntime(DEALER_PATCH, act), true);
   patchDealerPurgePendingRuntime(DEALER_PATCH, true);
   patchDealerTrashRuntime(DEALER_PATCH, null);

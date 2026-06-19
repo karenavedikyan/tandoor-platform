@@ -36,6 +36,7 @@ function trashDealer(id: string) {
 
 function buildMergedState(): ActualizationState {
   const state = createEmptyActualizationState();
+  state.updatedAt = nowIso;
   state.trashedDealersById = {
     "client-ma-001": trashDealer("client-ma-001"),
     "client-ma-002": trashDealer("client-ma-002"),
@@ -121,7 +122,7 @@ vi.mock("@/context/client-base-team-actualization-context", () => ({
   useClientBaseTeamActualization: () => ({
     dashboardRopTeamId: "all",
     publishDashboardRopTeamId: vi.fn(),
-    mergedState,
+    mergedState: { ...mergedState, updatedAt: nowIso },
     teamParts: [],
     teamFetchLoading: false,
     refresh: vi.fn(),
@@ -141,8 +142,39 @@ vi.mock("@/context/client-base-team-actualization-context", () => ({
 }));
 
 vi.mock("@/hooks/use-dealer-tp-overrides-hydration", () => ({
-  useDealerTpOverridesHydration: () => ({ ready: true, hydrationVersion: 0 }),
+  useDealerTpOverridesHydration: () => ({ ready: true, hydrationVersion: 1 }),
 }));
+
+import { applyDealerOverridesRuntime } from "@/lib/dealer-overrides-runtime";
+
+function seedTrashRuntimeFromState(state: ActualizationState): void {
+  const overrides = Object.values(state.trashedDealersById ?? {}).map((info) => ({
+    dealer_id: info.dealerId,
+    status: "in_trash" as const,
+    name: null,
+    city: null,
+    contact_name: null,
+    contact_phone: null,
+    contact_email: null,
+    general_comment: null,
+    client_category: null,
+    trashed_at: info.trashedAt,
+    trashed_by: info.trashedBy,
+    purge_requested_at: null,
+    purge_requested_by: null,
+    purged_at: null,
+    purged_by: null,
+    unloading_order: null,
+    regional_manager_id: null,
+    regional_manager_name: null,
+    rop_id: null,
+    rop_name: null,
+    created_at: nowIso,
+    updated_at: nowIso,
+    updated_by: info.trashedBy,
+  }));
+  applyDealerOverridesRuntime(overrides, [], []);
+}
 
 vi.mock("@/hooks/use-scroll-restoration", () => ({
   useScrollRestoration: () => undefined,
@@ -157,6 +189,7 @@ import { TrashBinPage } from "../trash-bin";
 describe("trash-bin-shows-personal-deletions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    seedTrashRuntimeFromState(mergedState);
   });
 
   afterEach(() => {

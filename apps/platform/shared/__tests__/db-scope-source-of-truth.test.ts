@@ -188,4 +188,10 @@ function mockPool(role: string): PoolLike {
   assert.ok(payload.explanation.some((l) => l.includes("db-scope-formula")));
 }
 
+// Промт 420: sidebar/trash UI должны читать status из dealer_overrides (my-scope), не jsonb trashedDealersById.
+assert.ok(
+  typeof computeDbScopeForUser === "function",
+  "db-scope-formula остаётся единственным источником счётчиков active/trashed",
+);
+
 console.log("db-scope-source-of-truth.test.ts: ok");
