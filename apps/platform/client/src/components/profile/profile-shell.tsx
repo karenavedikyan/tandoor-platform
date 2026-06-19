@@ -58,8 +58,8 @@ function buildProfileNav(role: UserRole | null): SubNavGroup[] {
     admin.push({ href: "/admin/invitations", label: "Приглашения", testId: "profile-nav-item-admin-invitations" });
   }
   admin.push({ href: "/reset-requests", label: "Запросы на сброс", testId: "profile-nav-item-reset-requests" });
-  if (userHas(role, "audit.read")) {
-    admin.push({ href: "/admin/audit", label: "Журнал событий", testId: "profile-nav-item-admin-audit" });
+  if (role === "admin" || role === "director") {
+    admin.push({ href: "/admin/audit", label: "Аудит", testId: "profile-nav-item-admin-audit" });
   }
   if (role === "admin") {
     admin.push({
