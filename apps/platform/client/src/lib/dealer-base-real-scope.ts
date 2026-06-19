@@ -283,6 +283,28 @@ export function roleScopedDealerRowsForReal(
     return [];
   }
   if (assignmentsScopeIsActive(assignmentsScope)) {
+    if (access === "sales_manager") {
+      const before = rows.length;
+      const result = rowsForAssignmentsScope(rows, access, assignmentsScope!);
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("[409-scope-mgr] assignments filter", {
+          meId: snap.me.id,
+          rowsIn: before,
+          rowsOut: result.length,
+          ownCodes: assignmentsScope!.ownCodes.size,
+          teamCodes: assignmentsScope!.teamCodes.size,
+          sampleIn: rows.slice(0, 3).map((r) => ({ id: r.id, releaseCode: r.releaseCode })),
+          sampleOwn: Array.from(assignmentsScope!.ownCodes).slice(0, 3),
+        });
+      }
+      if (result.length === 0 && assignmentsScope!.ownCodes.size > 0) {
+        console.warn(
+          "[409-scope-mgr] empty result with non-empty ownCodes — fallback to manager UUID/name match",
+        );
+        return realRowsForManagerByUUID(rows, snap, snap.me.id);
+      }
+      return result;
+    }
     return rowsForAssignmentsScope(rows, access, assignmentsScope!);
   }
   if (access === "sales_director") return rows;

@@ -2393,6 +2393,97 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     });
   }, [pickerFiltered, manager, managerCatalogForRop]);
 
+  const scopeTrace409WarnedRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      if (scopeTrace409WarnedRef.current) return;
+      if (!useReal || access !== "sales_manager" || !snap || me?.role !== "manager") return;
+      if (authLoading || visCodesQ.isLoading || orgSnapQ.isLoading || myCodesQ.isLoading) return;
+      scopeTrace409WarnedRef.current = true;
+      console.warn("[409-scope-trace]", {
+        meId: snap.me.id,
+        meRole: me?.role,
+        access,
+        useReal,
+        authLoading,
+        visCodesReady: !visCodesQ.isLoading && !visCodesQ.isError,
+        orgSnapReady: !orgSnapQ.isLoading && !orgSnapQ.isError,
+        myCodesReady: !myCodesQ.isLoading && !myCodesQ.isError,
+        effectiveVisPayloadKind: !effectiveVisPayload
+          ? "null"
+          : effectiveVisPayload.all
+            ? "all"
+            : `codes(${effectiveVisPayload.codes?.length ?? 0})`,
+        catalogRowsLen: catalogRows.length,
+        releaseDealerRowsForScopeLen: releaseDealerRowsForScope.length,
+        mergedRowsForDealerBaseLen: mergedRowsForDealerBase.length,
+        scopedRowsLen: scopedRows.length,
+        pickerFilteredLen: pickerFiltered.length,
+        managerScopedRowsLen: managerScopedRows.length,
+        assignmentsScopeActive: assignmentsScopeIsActive(assignmentsScope),
+        assignmentsOwnSize: assignmentsScope?.ownCodes.size ?? null,
+        assignmentsTeamSize: assignmentsScope?.teamCodes.size ?? null,
+        dbScopedExternalKeysSize: dbScopedExternalKeys?.size ?? null,
+        selfDbScopeReady: selfDbScopeQ.ready,
+        selfDbScopeError: selfDbScopeQ.error,
+        ropTeam,
+        manager,
+        ropTeamForPicker,
+        managerForPicker,
+        workView,
+        showArchivedDealers,
+        actxEnabled: actx.enabled,
+        catalogSample: catalogRows.slice(0, 2).map((r) => ({
+          id: r.id,
+          releaseCode: r.releaseCode,
+          releaseManagerId: r.releaseManagerId,
+          manager: r.manager,
+        })),
+        mergedSample: mergedRowsForDealerBase.slice(0, 2).map((r) => ({
+          id: r.id,
+          releaseCode: r.releaseCode,
+          releaseManagerId: r.releaseManagerId,
+        })),
+        scopedSample: scopedRows.slice(0, 2).map((r) => ({ id: r.id, releaseCode: r.releaseCode })),
+        ownCodesSample: assignmentsScope ? Array.from(assignmentsScope.ownCodes).slice(0, 5) : null,
+        dbExtKeysSample: dbScopedExternalKeys ? Array.from(dbScopedExternalKeys).slice(0, 5) : null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [
+    pickerFiltered.length,
+    scopedRows.length,
+    mergedRowsForDealerBase.length,
+    useReal,
+    access,
+    snap,
+    me?.role,
+    authLoading,
+    visCodesQ.isLoading,
+    visCodesQ.isError,
+    orgSnapQ.isLoading,
+    orgSnapQ.isError,
+    myCodesQ.isLoading,
+    myCodesQ.isError,
+    effectiveVisPayload,
+    catalogRows.length,
+    releaseDealerRowsForScope.length,
+    managerScopedRows.length,
+    assignmentsScope,
+    dbScopedExternalKeys,
+    selfDbScopeQ.ready,
+    selfDbScopeQ.error,
+    ropTeam,
+    manager,
+    ropTeamForPicker,
+    managerForPicker,
+    workView,
+    showArchivedDealers,
+    actx.enabled,
+  ]);
+
   useEffect(() => {
     try {
       if (typeof localStorage === "undefined" || localStorage.getItem("tandoor-debug-scope") !== "1") return;

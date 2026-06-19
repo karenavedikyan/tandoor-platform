@@ -144,4 +144,36 @@ assert.equal(assignmentsScope!.ownCodes.size, 56);
   assert.equal(scoped.length, 56, "mixed-case ownCodes: 56");
 }
 
+// Промт 409: MA-MAxxx ownCodes + catalog id client-ma-maxxx → 56 строк.
+{
+  const maCodes = ["MA-MA121186", "MA-MA121653", "MA-MA129050"];
+  const maRows: DealerRow[] = maCodes.map((code, i) => ({
+    ...makeRow(i, SKLYAROV_NAME),
+    id: `client-${code.toLowerCase()}`,
+    releaseCode: code,
+    releaseManagerId: MGR_SLUG,
+  }));
+  const maScope = buildAssignmentsScopeFromSources({ ownCodes: new Set(maCodes) });
+  assert.ok(maScope);
+  const scoped = roleScopedDealerRowsForReal(maRows, snap, "sales_manager", undefined, maScope);
+  assert.equal(scoped.length, 3, "MA-MAxxx ownCodes vs client-ma-maxxx ids: все 3");
+}
+
+// Промт 409: fail-safe — ownCodes не матчит коды, но releaseManagerId = mgr-sklyarov-dv.
+{
+  const brokenRows: DealerRow[] = catalogRows.map((r, i) => ({
+    ...r,
+    id: `broken-key-${i}`,
+    releaseCode: `WRONG-CODE-${i}`,
+  }));
+  const scoped = roleScopedDealerRowsForReal(
+    brokenRows,
+    snap,
+    "sales_manager",
+    undefined,
+    assignmentsScope,
+  );
+  assert.equal(scoped.length, 56, "fail-safe: realRowsForManagerByUUID по releaseManagerId");
+}
+
 console.log("dealer-base-manager-scope-full-pipeline: ok");
