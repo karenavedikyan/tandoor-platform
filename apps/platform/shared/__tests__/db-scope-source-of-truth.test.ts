@@ -13,12 +13,13 @@ const MGR_ID = "44444444-4444-4444-4444-444444444444";
 const DIRECTOR_ID = "11111111-1111-1111-1111-111111111111";
 const RM_ID = "55555555-5555-5555-5555-555555555555";
 const TEAM_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const TEAM_MEMBER_ID = "66666666-6666-6666-6666-666666666666";
 
 const DEALERS = [
-  { id: "d1", external_key: "client-a", release_code: "C001", trashed: false },
-  { id: "d2", external_key: "client-b", release_code: "C002", trashed: false },
-  { id: "d3", external_key: "client-c", release_code: "C003", trashed: true },
-  { id: "d4", external_key: "client-d", release_code: "C004", trashed: false },
+  { id: "d1", external_key: "client-a", release_code: "C001", trashed: false, trashed_by: null as string | null },
+  { id: "d2", external_key: "client-b", release_code: "C002", trashed: false, trashed_by: null as string | null },
+  { id: "d3", external_key: "client-c", release_code: "C003", trashed: true, trashed_by: TEAM_MEMBER_ID },
+  { id: "d4", external_key: "client-d", release_code: "C004", trashed: false, trashed_by: null as string | null },
 ];
 
 const TRADE_POINTS = [
@@ -33,6 +34,9 @@ function mockPool(role: string): PoolLike {
       const s = sql.replace(/\s+/g, " ").trim();
       if (s.includes("FROM teams t") && s.includes("rop_user_id")) {
         return { rows: [{ team_id: TEAM_A }] };
+      }
+      if (s.includes("FROM user_team_memberships") && s.includes("team_id IN")) {
+        return { rows: [{ user_id: TEAM_MEMBER_ID }, { user_id: ROP_ID }] };
       }
       if (s.includes("FROM user_team_memberships") && s.includes("UNION")) {
         return { rows: [{ team_id: TEAM_A }] };
@@ -65,6 +69,7 @@ function mockPool(role: string): PoolLike {
           external_key: d.external_key,
           is_purged: false,
           is_employee_trash: d.trashed,
+          trashed_by: d.trashed_by,
         }));
         return { rows };
       }
@@ -74,6 +79,7 @@ function mockPool(role: string): PoolLike {
           external_key: d.external_key,
           is_purged: false,
           is_employee_trash: d.trashed,
+          trashed_by: d.trashed_by,
         }));
         return { rows };
       }
@@ -85,12 +91,24 @@ function mockPool(role: string): PoolLike {
       }
       if (s.includes("FROM trade_points tp") && s.includes("dealer_id = ANY")) {
         const dealerIds = (params?.[0] as string[]) ?? [];
+        const trashByParam = params?.[1];
+        const trashBySet =
+          Array.isArray(trashByParam) ? new Set(trashByParam as string[]) : null;
         const rows = TRADE_POINTS.filter((tp) => dealerIds.includes(tp.dealer_id));
         let active = 0;
         let trashed = 0;
         for (const tp of rows) {
-          if (tp.trashed) trashed++;
-          else active++;
+          if (!tp.trashed) {
+            active++;
+            continue;
+          }
+          if (s.includes("tpo.trashed_by = $2")) {
+            if (trashByParam) trashed++;
+          } else if (s.includes("tpo.trashed_by = ANY($2")) {
+            if (trashBySet && trashBySet.size > 0) trashed++;
+          } else {
+            trashed++;
+          }
         }
         return { rows: [{ active_tps: String(active), trashed_tps: String(trashed) }] };
       }
