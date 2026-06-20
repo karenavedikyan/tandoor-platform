@@ -174,6 +174,22 @@ export async function trashTradePoint(tpId: string): Promise<TradePointOverrideR
   return r.ok ? r.data.override : null;
 }
 
+export async function bulkTrashTradePointsStrict(
+  tradePointIds: string[],
+): Promise<OverridesApiResult<{ moved: number; skipped: number; skippedIds?: string[] }>> {
+  traceOverridesStrictCalled("bulkTrashTradePointsStrict", { tradePointIds });
+  const body = { trade_point_ids: tradePointIds };
+  const r = await overridesApiPost<{ moved: number; skipped: number; skippedIds?: string[] }>({
+    scope: "trade-point",
+    action: "bulk-trash",
+    url: "/api/trade-point-overrides/bulk-trash",
+    body,
+    traceFn: "bulkTrashTradePointsStrict",
+  });
+  if (r.ok) invalidateAllDealerScopes();
+  return r;
+}
+
 export async function untrashTradePointStrict(tpId: string): Promise<OverridesApiResult<{ override: TradePointOverrideRow | null }>> {
   traceOverridesStrictCalled("untrashTradePointStrict", { tpId });
   const body = { tp_id: tpId };

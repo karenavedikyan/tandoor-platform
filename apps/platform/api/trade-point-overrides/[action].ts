@@ -31,6 +31,7 @@ import {
   handleBulkRequestPurgeTradePoints,
   handleBulkRestoreTradePoints,
 } from "../../shared/trash-bulk-actions-handlers.js";
+import { handleBulkTrashTradePoints } from "../../shared/trade-point-bulk-trash-handlers.js";
 import {
   isOverridesWriteAction,
   withOverridesApiAccessLog,
@@ -100,6 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "trash" && req.method === "POST") {
       await runLogged(() => handleTradePointOverridesTrash(req, res, pool, sessionUser));
+      return;
+    }
+    if (action === "bulk-trash" && req.method === "POST") {
+      await runLogged(() => handleBulkTrashTradePoints(req, res, pool, sessionUser));
       return;
     }
     if (action === "untrash" && req.method === "POST") {

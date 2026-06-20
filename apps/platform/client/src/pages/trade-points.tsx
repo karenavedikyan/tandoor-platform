@@ -4,10 +4,11 @@
 
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ChevronDown,
   ChevronUp,
+  CheckSquare,
   Info,
   LayoutGrid,
   LayoutTemplate,
@@ -87,8 +88,9 @@ import {
 import { cleanContactDisplay, mailtoHref, telHref, whatsAppHref } from "@/lib/dealer-contact-links";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
-import { trashTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { bulkTrashTradePointsStrict, trashTradePointStrict } from "@/lib/trade-point-overrides-api";
 import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import {
   canTrashTradePointUi,
   resolveTradePointIsPrimary,
@@ -311,6 +313,7 @@ export default function TradePointsPage({
   const catalogRows = catalogQ.data ?? [];
   const actx = useClientBaseActualization();
   const { profile } = useReleaseDemoProfile();
+  const [, setLocation] = useLocation();
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
   const readOnlyScope = viewingOtherUserScope;
@@ -1055,9 +1058,9 @@ export default function TradePointsPage({
       const r = await trashTradePointStrict(row.tradePointId);
       if (r.ok) {
         await hydrateTradePointOverridesFromServer({ dealerId: row.dealerId });
-        toast({
-          title: "Торговая точка перемещена в Корзину",
-          description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
+        toastTrashMoveSuccess({
+          title: "Торговая точка перемещена в корзину",
+          onOpenTrash: () => setLocation("/trash"),
         });
       } else {
         toast({
@@ -1067,7 +1070,7 @@ export default function TradePointsPage({
         });
       }
     },
-    [actx],
+    [actx.enabled, setLocation],
   );
 
   const tpRowQuickMoveProps = useMemo((): TradePointListRowQuickMoveProps | undefined => {
@@ -1080,7 +1083,7 @@ export default function TradePointsPage({
 
   const rowsByCompositeKey = useMemo(() => new Map(filteredSorted.map((x) => [rowKey(x), x])), [filteredSorted]);
 
-  /** Промт 422: bulk-delete ТТ на /trade-points — trash API (БД). */
+  /** Промт 422/439: bulk-delete ТТ на /trade-points — один bulk-trash API (БД). */
   const confirmBulkArchive = useCallback(async () => {
     if (!actx.enabled) return;
     const keys = Array.from(selectedBulkTpKeys).filter((k) => archivableTpKeysInView.has(k));
@@ -1088,38 +1091,43 @@ export default function TradePointsPage({
       setBulkArchiveDialogOpen(false);
       return;
     }
+    const tpIds = keys
+      .map((k) => rowsByCompositeKey.get(k)?.tradePointId)
+      .filter((id): id is string => Boolean(id));
+    if (tpIds.length === 0) {
+      setBulkArchiveDialogOpen(false);
+      return;
+    }
     setBulkArchiveBusy(true);
-    let okCount = 0;
-    let lastError: string | undefined;
-    const dealerIds = new Set<string>();
-    for (const key of keys) {
-      const row = rowsByCompositeKey.get(key);
-      if (!row) continue;
-      const r = await trashTradePointStrict(row.tradePointId);
-      if (r.ok) {
-        okCount += 1;
-        dealerIds.add(row.dealerId);
-      } else {
-        lastError = r.message;
+    const r = await bulkTrashTradePointsStrict(tpIds);
+    if (r.ok) {
+      const dealerIds = new Set<string>();
+      for (const key of keys) {
+        const row = rowsByCompositeKey.get(key);
+        if (row) dealerIds.add(row.dealerId);
       }
-    }
-    if (dealerIds.size > 0) {
-      await Promise.all(Array.from(dealerIds).map((id) => hydrateTradePointOverridesFromServer({ dealerId: id })));
-    }
-    setBulkArchiveBusy(false);
-    if (okCount === keys.length) {
-      toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
+      if (dealerIds.size > 0) {
+        await Promise.all(Array.from(dealerIds).map((id) => hydrateTradePointOverridesFromServer({ dealerId: id })));
+      }
+      toastBulkTrashMoveResult({
+        ok: true,
+        moved: r.data.moved,
+        skipped: r.data.skipped,
+        onOpenTrash: () => setLocation("/trash"),
+      });
       setSelectedBulkTpKeys(new Set());
       setBulkDeleteMode(false);
       setBulkArchiveDialogOpen(false);
     } else {
-      toast({
-        title: okCount > 0 ? "Часть точек не удалось переместить" : "Не удалось переместить в корзину",
-        description: lastError ?? "Ошибка запроса",
-        variant: "destructive",
+      toastBulkTrashMoveResult({
+        ok: false,
+        moved: 0,
+        skipped: 0,
+        errorMessage: r.message,
       });
     }
-  }, [selectedBulkTpKeys, archivableTpKeysInView, actx, rowsByCompositeKey]);
+    setBulkArchiveBusy(false);
+  }, [selectedBulkTpKeys, archivableTpKeysInView, actx.enabled, rowsByCompositeKey, setLocation]);
 
   const tpHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}/trade-points/${encodeURIComponent(r.tradePointId)}`;
   const dealerHref = (r: TradePointListRow) => `/dealers/${encodeURIComponent(r.dealerId)}`;
@@ -1655,8 +1663,8 @@ export default function TradePointsPage({
                   setBulkDeleteMode(true);
                 }}
               >
-                <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="hidden sm:inline">Выбрать для перемещения</span>
+                <CheckSquare className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="hidden sm:inline">Выбрать несколько</span>
                 <span className="sm:hidden">Выбрать ТТ</span>
               </Button>
             ) : (
@@ -1668,7 +1676,7 @@ export default function TradePointsPage({
                 data-testid="button-trade-points-bulk-delete-mode-cancel"
                 onClick={exitBulkDeleteMode}
               >
-                Отменить выбор
+                Отмена выбора
               </Button>
             )}
           </div>
