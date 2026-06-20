@@ -28,8 +28,14 @@ describe("dealer-base trash via API (420)", () => {
       dealerBaseSource.indexOf("const selectedWpRows"),
     );
     expect(bulkHandler).toContain("bulkTrashDealersStrict");
+    expect(bulkHandler).toContain("toastBulkTrashMoveResult");
     expect(bulkHandler).not.toContain("trashedDealersById");
     expect(bulkHandler).not.toContain("actx.persist");
+  });
+
+  it("supports bulkMode=1 deep link", () => {
+    expect(dealerBaseSource).toContain('hashQuery.get("bulkMode") === "1"');
+    expect(dealerBaseSource).toContain("Выбрать несколько");
   });
 
   it("trashableDealerIdsInView uses isDealerTrashedInRuntime not jsonb trashedDealersById", () => {

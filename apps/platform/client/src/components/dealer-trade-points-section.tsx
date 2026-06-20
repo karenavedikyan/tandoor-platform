@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { MapPin, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,8 @@ import { SectionSaveButton } from "@/components/section-save-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { trashTradePointStrict, setPrimaryTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { trashTradePointStrict, bulkTrashTradePointsStrict, setPrimaryTradePointStrict } from "@/lib/trade-point-overrides-api";
+import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import { isTradePointTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import {
@@ -185,6 +186,7 @@ function LocalSuggestInput(props: {
 }
 
 export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseState }: Props) {
+  const [, setLocation] = useLocation();
   const emptyShowcase: ShowcaseStorageV1Dto = useMemo(
     () => ({ overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} }),
     [],
@@ -682,7 +684,10 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
       const r = await trashTradePointStrict(tp.id);
       if (r.ok) {
         await refreshTradePointsFromServer();
-        toast({ title: "Точка перемещена в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
+        toastTrashMoveSuccess({
+          title: "Точка перемещена в корзину",
+          onOpenTrash: () => setLocation("/trash"),
+        });
         return true;
       }
       toast({
@@ -692,7 +697,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
       });
       return false;
     },
-    [useAct, profile, row, refreshTradePointsFromServer],
+    [useAct, profile, row, refreshTradePointsFromServer, setLocation],
   );
 
   const onSetPrimary = useCallback(
@@ -820,7 +825,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
     return n;
   }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull]);
 
-  /** Промт 422: bulk-delete ТТ из карточки клиента — trash API (БД). */
+  /** Промт 422/439: bulk-delete ТТ из карточки клиента — один bulk-trash API (БД). */
   const confirmBulkArchiveTradePoints = useCallback(async () => {
     const ids = Array.from(selectedBulkArchiveTpIds).filter((id) => archivableTradePointIdsFull.has(id));
     if (ids.length === 0) {
@@ -828,27 +833,27 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
       return;
     }
     setBulkArchiveTpBusy(true);
-    let okCount = 0;
-    let lastError: string | undefined;
-    for (const id of ids) {
-      const r = await trashTradePointStrict(id);
-      if (r.ok) okCount += 1;
-      else lastError = r.message;
-    }
-    if (okCount > 0) await refreshTradePointsFromServer();
-    setBulkArchiveTpBusy(false);
-    if (okCount === ids.length) {
-      toast({ title: "Торговые точки перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
+    const r = await bulkTrashTradePointsStrict(ids);
+    if (r.ok) {
+      await refreshTradePointsFromServer();
+      toastBulkTrashMoveResult({
+        ok: true,
+        moved: r.data.moved,
+        skipped: r.data.skipped,
+        onOpenTrash: () => setLocation("/trash"),
+      });
       setSelectedBulkArchiveTpIds(new Set());
       setBulkArchiveTpDialogOpen(false);
     } else {
-      toast({
-        title: okCount > 0 ? "Часть точек не удалось переместить" : "Не удалось переместить в корзину",
-        description: lastError ?? "Ошибка запроса",
-        variant: "destructive",
+      toastBulkTrashMoveResult({
+        ok: false,
+        moved: 0,
+        skipped: 0,
+        errorMessage: r.message,
       });
     }
-  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, refreshTradePointsFromServer]);
+    setBulkArchiveTpBusy(false);
+  }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, refreshTradePointsFromServer, setLocation]);
 
   if (mergedActive.length === 0 && !hasAnyTradePointEver) {
     return (

@@ -5,7 +5,7 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Trash2 } from "lucide-react";
+import { CheckSquare, Trash2 } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,7 +52,9 @@ import {
   type ActualizationState,
   type DealerActualizationContact,
 } from "@/lib/client-base-actualization-state";
-import { makeTrashedDealerInfo, snapshotDealerFromRow } from "@/lib/trash-dealer-helper";
+import { trashDealerStrict } from "@/lib/dealer-overrides-api";
+import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
+import { toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import { computePortalSummary } from "@/lib/client-base-actualization-portal-math";
 import {
   getPrimaryActualizationContact,
@@ -340,39 +342,30 @@ export function DealerManualActualizationPage(props: {
   const canEdit = canEditDealerDuringActualization(profile, row, user?.role) && !readOnly;
   const canEditCardComments = canEditDealerCardComments(profile, row, user?.role);
   const canArchive = canArchiveDealerDuringActualization(profile, row, user?.role);
-  const isDealerTrashed = Boolean(actx.state.trashedDealersById?.[baseRow.id]);
+  const isDealerTrashed = isDealerTrashedInRuntime(baseRow.id, actx.state);
   /** Промт 46: «Удалить» с этой страницы тоже идёт в Корзину. */
   const canTrash = canArchive && !isDealerTrashed;
 
   const trashDealer = useCallback(async () => {
     if (!canTrash) return;
     setBusy(true);
-    const info = makeTrashedDealerInfo({
-      dealerId: baseRow.id,
-      by: { userId: profile.personaUserId, userName: userLabelFromProfile(profile) },
-      snapshot: snapshotDealerFromRow({
-        fullName: row.name,
-        city: row.city,
-        inn: row.actualizationInn,
-        dealerCode: row.releaseCode,
-        legalEntityName: null,
-      }),
-      source: "manual_actualization",
-    });
-    const r = await actx.persist((prev) =>
-      mergeActualizationState(prev, {
-        trashedDealersById: { ...prev.trashedDealersById, [baseRow.id]: info },
-      }),
-    );
+    const r = await trashDealerStrict(baseRow.id);
     setBusy(false);
-    if (r.success) {
-      toast({ title: "Клиент перемещён в корзину", description: "Хранится 14 дней. Восстановить можно из раздела «Корзина»." });
+    if (r.ok) {
+      toastTrashMoveSuccess({
+        title: "Клиент перемещён в корзину",
+        onOpenTrash: () => setLocation("/trash"),
+      });
       setDeleteOpen(false);
       setLocation("/dealer-base");
     } else {
-      toast({ title: "Не удалось переместить в корзину", variant: "destructive" });
+      toast({
+        title: "Не удалось переместить в корзину",
+        description: r.message ?? "Ошибка запроса",
+        variant: "destructive",
+      });
     }
-  }, [actx, baseRow.id, canTrash, profile, row, setLocation]);
+  }, [canTrash, baseRow.id, setLocation]);
 
   const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
 
@@ -583,6 +576,18 @@ export function DealerManualActualizationPage(props: {
                 onClick={() => setEditOpen(true)}
               >
                 Редактировать
+              </Button>
+            ) : null}
+            {canArchive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs font-medium"
+                data-testid="button-dealer-bulk-select-from-card"
+                onClick={() => setLocation("/dealer-base?bulkMode=1")}
+              >
+                <CheckSquare className="mr-1 h-4 w-4" />
+                Выбрать несколько
               </Button>
             ) : null}
             {canTrash ? (

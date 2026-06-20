@@ -4,6 +4,7 @@ import { Link, useLocation } from "wouter";
 import {
   ChevronDown,
   ChevronRight,
+  CheckSquare,
   Info,
   LayoutGrid,
   LayoutTemplate,
@@ -129,6 +130,8 @@ import { toast } from "@/hooks/use-toast";
 import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
+import { useHashQuery } from "@/lib/hash-location-router";
+import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import {
   clientNextStepActionLabel,
   getClientNextStepForDealer,
@@ -2758,6 +2761,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const [batchCreateOpen, setBatchCreateOpen] = useState(false);
   /** Режим массового удаления: чекбоксы показываются только после явного включения. */
   const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const hashQuery = useHashQuery();
+  useEffect(() => {
+    if (hashQuery.get("bulkMode") === "1") setBulkDeleteMode(true);
+  }, [hashQuery]);
   const [bulkTrashDealerDialogOpen, setBulkTrashDealerDialogOpen] = useState(false);
   const [bulkTrashDealerBusy, setBulkTrashDealerBusy] = useState(false);
   const [wpScheduleDate, setWpScheduleDate] = useState("");
@@ -3403,9 +3410,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       const r = await trashDealerStrict(row.id);
       if (r.ok) {
         await refreshDealerTrashFromServer();
-        toast({
-          title: "Клиент перемещён в Корзину",
-          description: "Хранится 14 дней. Восстановить можно из раздела «Корзина».",
+        toastTrashMoveSuccess({
+          title: "Клиент перемещён в корзину",
+          onOpenTrash: () => setLocation("/trash"),
         });
       } else {
         toast({
@@ -3415,7 +3422,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         });
       }
     },
-    [refreshDealerTrashFromServer],
+    [refreshDealerTrashFromServer, setLocation],
   );
 
   const dealerRowQuickMoveProps = useMemo((): DealerListRowQuickMoveProps | undefined => {
@@ -3442,18 +3449,24 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     setBulkTrashDealerBusy(false);
     if (r.ok) {
       await refreshDealerTrashFromServer();
-      toast({ title: "Клиенты перемещены в корзину", description: "Хранятся 14 дней. Восстановить можно из раздела «Корзина»." });
+      toastBulkTrashMoveResult({
+        ok: true,
+        moved: r.data.moved,
+        skipped: r.data.skipped,
+        onOpenTrash: () => setLocation("/trash"),
+      });
       setSelectedBulkTrashDealerIds(new Set());
       setBulkDeleteMode(false);
       setBulkTrashDealerDialogOpen(false);
     } else {
-      toast({
-        title: "Не удалось переместить в корзину",
-        description: r.message ?? "Ошибка запроса",
-        variant: "destructive",
+      toastBulkTrashMoveResult({
+        ok: false,
+        moved: 0,
+        skipped: 0,
+        errorMessage: r.message,
       });
     }
-  }, [selectedBulkTrashDealerIds, trashableDealerIdsInView, refreshDealerTrashFromServer]);
+  }, [selectedBulkTrashDealerIds, trashableDealerIdsInView, refreshDealerTrashFromServer, setLocation]);
 
   const selectedWpRows = useMemo(
     () => rowsFinalForList.filter((r) => selectedWpIds.has(r.id)),
@@ -4491,8 +4504,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                   }
                   onClick={() => setBulkDeleteMode(true)}
                 >
-                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="hidden sm:inline">Выбрать для перемещения</span>
+                  <CheckSquare className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden sm:inline">Выбрать несколько</span>
                   <span className="sm:hidden">Выбрать</span>
                 </Button>
               ) : (
@@ -4504,7 +4517,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                   data-testid="button-dealer-bulk-delete-mode-cancel"
                   onClick={exitBulkDeleteMode}
                 >
-                  Отменить выбор
+                  Отмена выбора
                 </Button>
               )}
             </div>
