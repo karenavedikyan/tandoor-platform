@@ -56,6 +56,25 @@ export function useDistributionAnalyticsData(
   const mergedState = managementPlane.mergedState;
   const act = actx.enabled ? mergedState : actx.state;
   const tradePointShowcaseActualizationById = act.tradePointShowcaseActualizationById;
+
+  const actContentKey = useMemo(() => {
+    const tp = act.tradePointShowcaseActualizationById;
+    const ov = act.dealerOverridesById;
+    return [
+      act.updatedAt ?? "",
+      tp ? Object.keys(tp).length : 0,
+      ov ? Object.keys(ov).length : 0,
+    ].join("|");
+  }, [act.updatedAt, act.tradePointShowcaseActualizationById, act.dealerOverridesById]);
+
+  const actStableRef = useRef(act);
+  const actKeyRef = useRef(actContentKey);
+  if (actKeyRef.current !== actContentKey) {
+    actKeyRef.current = actContentKey;
+    actStableRef.current = act;
+  }
+  const actStable = actStableRef.current;
+
   const scopeTooLarge =
     scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
     !hasAnyDistributionAnalyticsFilters(filters);
@@ -89,7 +108,7 @@ export function useDistributionAnalyticsData(
   const scopedRowsDepsRef = useRef<Record<string, unknown>>({});
   if (typeof window !== "undefined") {
     const prev = scopedRowsDepsRef.current;
-    const next = { act, profile, scopedDealers, realScope };
+    const next = { act: actStable, profile, scopedDealers, realScope };
     const changed: string[] = [];
     for (const k of Object.keys(next) as (keyof typeof next)[]) {
       if (prev[k] !== next[k]) changed.push(k);
@@ -105,14 +124,14 @@ export function useDistributionAnalyticsData(
     () =>
       scopeTooLarge
         ? []
-        : buildScopedAnalyticsTradePointRows(act, profile, scopedDealers, realScope),
-    [scopeTooLarge, act, profile, scopedDealers, realScope],
+        : buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope),
+    [scopeTooLarge, actStable, profile, scopedDealers, realScope],
   );
 
   const dataDepsRef = useRef<Record<string, unknown>>({});
   if (typeof window !== "undefined") {
     const prev = dataDepsRef.current;
-    const next = { scopedRows, filters, act };
+    const next = { scopedRows, filters, act: actStable };
     const changed: string[] = [];
     for (const k of Object.keys(next) as (keyof typeof next)[]) {
       if (prev[k] !== next[k]) changed.push(k);
@@ -131,9 +150,9 @@ export function useDistributionAnalyticsData(
         : buildDistributionAnalyticsData({
             scopedRows,
             filters,
-            act,
+            act: actStable,
             catalogLookup: getProductById,
           }),
-    [scopeTooLarge, scopedRows, filters, act],
+    [scopeTooLarge, scopedRows, filters, actStable],
   );
 }

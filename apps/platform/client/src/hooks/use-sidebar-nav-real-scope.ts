@@ -50,6 +50,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
           : undefined,
         catalogRows: catalogStable,
         dbScopedExternalKeys: dbScope.ready ? dbExtKeysStable : undefined,
+        dbFullCatalog: dbScope.ready ? dbFullCatalog : false,
       }),
     [
       isRealUser,
