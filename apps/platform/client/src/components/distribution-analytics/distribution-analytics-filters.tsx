@@ -6,20 +6,19 @@ import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
+import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import {
   emptyDistributionAnalyticsFilters,
-  resolveRegionForRow,
   type DistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
+import { buildDistributionAnalyticsFilterOptionsFromDealers } from "@/lib/distribution-analytics/distribution-analytics-filter-options";
 import type { EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { collectAnalyticsCatalogProducts } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import { AnalyticsModelPicker } from "./analytics-model-picker";
 import { CLIENT_CATEGORY_META, type ClientCategoryId } from "@/lib/client-category";
-import { cn } from "@/lib/utils";
 
 type Props = {
-  scopedRows: TradePointListRow[];
+  scopedDealers: DealerRow[];
   filters: DistributionAnalyticsFilters;
   filteredCount: number;
   onApply: (next: DistributionAnalyticsFilters) => void;
@@ -42,7 +41,7 @@ const CATEGORY_CHIPS: { id: ClientCategoryId; label: string }[] = [
 ];
 
 export function DistributionAnalyticsFiltersPanel({
-  scopedRows,
+  scopedDealers,
   filters,
   filteredCount,
   onApply,
@@ -54,50 +53,19 @@ export function DistributionAnalyticsFiltersPanel({
   const open = filtersOpen ?? internalOpen;
   const setOpen = onFiltersOpenChange ?? setInternalOpen;
 
-  const cityOptions = useMemo(
-    () => uniqueOptions(scopedRows.map((r) => r.city).filter(Boolean)),
-    [scopedRows],
+  const filterOptions = useMemo(
+    () => buildDistributionAnalyticsFilterOptionsFromDealers(scopedDealers),
+    [scopedDealers],
   );
-  const regionOptions = useMemo(
-    () => uniqueOptions(scopedRows.map((r) => resolveRegionForRow(r))),
-    [scopedRows],
-  );
-  const dealerOptions = useMemo(
-    () =>
-      uniqueOptions(
-        scopedRows.map((r) => `${r.dealerName} (${r.dealerClientCode})`),
-        scopedRows.map((r) => r.dealerId),
-      ),
-    [scopedRows],
-  );
-  const tpOptions = useMemo(
-    () =>
-      uniqueOptions(
-        scopedRows.map((r) => `${r.tradePointDisplayCode} · ${r.tradePointName}`),
-        scopedRows.map((r) => r.tradePointId),
-      ),
-    [scopedRows],
-  );
-  const managerOptions = useMemo(
-    () => uniqueOptions(scopedRows.map((r) => r.manager).filter((x) => x && x !== "—"), scopedRows.map((r) => `mgr:${r.manager}`)),
-    [scopedRows],
-  );
-  const rmOptions = useMemo(
-    () =>
-      uniqueOptions(
-        scopedRows.map((r) => r.regionalManager).filter((x) => x && x !== "—"),
-        scopedRows.map((r) => `rm:${r.regionalManager}`),
-      ),
-    [scopedRows],
-  );
-  const ropOptions = useMemo(
-    () =>
-      uniqueOptions(
-        scopedRows.map((r) => r.rop).filter((x) => x && x !== "—"),
-        scopedRows.map((r) => `rop:${r.rop}`),
-      ),
-    [scopedRows],
-  );
+  const {
+    cityOptions,
+    regionOptions,
+    dealerOptions,
+    tradePointOptions: tpOptions,
+    managerOptions,
+    regionalManagerOptions: rmOptions,
+    ropOptions,
+  } = filterOptions;
   const analyticsProducts = useMemo(() => collectAnalyticsCatalogProducts(), []);
 
   const chips = useMemo(() => buildFilterChips(filters), [filters]);
@@ -267,19 +235,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
-}
-
-function uniqueOptions(labels: string[], values?: string[]) {
-  const seen = new Set<string>();
-  const out: { value: string; label: string }[] = [];
-  labels.forEach((label, i) => {
-    const value = values?.[i] ?? label;
-    if (!value || seen.has(value)) return;
-    seen.add(value);
-    out.push({ value, label });
-  });
-  out.sort((a, b) => a.label.localeCompare(b.label, "ru"));
-  return out;
 }
 
 function buildFilterChips(filters: DistributionAnalyticsFilters): { key: string; label: string; remove: (f: DistributionAnalyticsFilters) => DistributionAnalyticsFilters }[] {
