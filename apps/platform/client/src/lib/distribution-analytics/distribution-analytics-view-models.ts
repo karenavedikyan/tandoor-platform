@@ -56,10 +56,14 @@ export function buildScopedAnalyticsTradePointRows(
   scopedDealers: DealerRow[],
   realScope?: SidebarNavRealScope,
 ): TradePointListRow[] {
+  // #441: scopedDealers уже корректно ограничен (useDistributionScopedDealers:
+  // full_catalog для admin/sales_director/category_manager, role-scope для остальных).
+  // Результат ниже всё равно сужается scopedIds, поэтому повторная ре-скопировка по
+  // orgScope здесь ИЗБЫТОЧНА и при этом кидает RoleScope-исключение для sales_director/
+  // team_lead (dealer-base-real-scope.ts: roleScopedDealerRowsForReal throw). Не передаём orgScope.
   const scopedIds = new Set(scopedDealers.map((d) => d.id));
   const all = buildTradePointListForActualization(act, profile, {
     releaseDealerRows: realScope?.ready ? realScope.releaseDealerRows : undefined,
-    orgScope: realScope?.ready && realScope.orgScope ? realScope.orgScope : undefined,
     assignmentsScope: realScope?.assignmentsScope,
   });
   return all.filter((r) => scopedIds.has(r.dealerId) && !r.isArchived && r.hasShowcase);
