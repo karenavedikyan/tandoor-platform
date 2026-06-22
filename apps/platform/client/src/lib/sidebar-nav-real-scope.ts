@@ -38,6 +38,8 @@ export type BuildSidebarNavRealScopeInput = {
   catalogRows?: DealerRow[];
   /** Промт 384: фильтр каталога по external_key из /api/dealers/my-scope. */
   dbScopedExternalKeys?: Set<string>;
+  /** Промт 441-fix5: scope_explanation.full_catalog — у admin/sales_director весь каталог. */
+  dbFullCatalog?: boolean;
 };
 
 export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): SidebarNavRealScope {
@@ -76,8 +78,14 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
   }
 
   let releaseDealerRows: DealerRow[];
-  const dbScopeDirect = Boolean(input.dbScopedExternalKeys && input.dbScopedExternalKeys.size > 0);
-  if (input.dbScopedExternalKeys) {
+  // Промт 441-fix5: единый источник истины.
+  //  - full_catalog (admin/sales_director): ВСЕГДА весь каталог, фильтрация по external_keys запрещена.
+  //  - иначе: фильтр по external_keys из БД (если переданы), fallback на visible-codes.
+  const dbFullCatalog = Boolean(input.dbFullCatalog ?? visPayload!.all);
+  const dbScopeDirect = !dbFullCatalog && Boolean(input.dbScopedExternalKeys);
+  if (dbFullCatalog) {
+    releaseDealerRows = getVisibleDealerRows(catalog, true, null);
+  } else if (input.dbScopedExternalKeys) {
     releaseDealerRows = catalog.filter((r) => input.dbScopedExternalKeys!.has(r.id));
   } else {
     releaseDealerRows = getVisibleDealerRows(catalog, visPayload!.all, visPayload!.codes);
