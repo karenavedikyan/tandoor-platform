@@ -6,6 +6,7 @@ import { DistributionScopeSummary } from "@/components/distribution/distribution
 import { DistributionAnalyticsPage, type DistributionAnalyticsTab } from "@/pages/distribution-analytics";
 import { useDistributionScopedTradePoints } from "@/hooks/use-distribution-scoped-dealers";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { isDiag441Enabled } from "@/lib/diag-441-enabled";
 import {
   buildHashWithQuery,
   navigateHashPathInHash,
@@ -54,6 +55,7 @@ export default function DistributionPage() {
         view: "analytics",
         tab: next.tab,
         f: next.f,
+        diag: isDiag441Enabled() ? "1" : undefined,
       });
       if (currentHashPath() === target) return;
       navigateHashPathInHash(target);
@@ -67,7 +69,9 @@ export default function DistributionPage() {
         navigateAnalytics({ tab: analyticsTab, f: filtersEncoded || undefined });
         return;
       }
-      const target = "/distribution";
+      const target = buildHashWithQuery("/distribution", {
+        diag: isDiag441Enabled() ? "1" : undefined,
+      });
       if (currentHashPath() === target) return;
       navigateHashPathInHash(target);
     },

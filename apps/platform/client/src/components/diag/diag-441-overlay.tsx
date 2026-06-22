@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
+import { isDiag441Enabled } from "@/lib/diag-441-enabled";
 import { useHashQuery } from "@/lib/hash-location-router";
 
 const BUFFER_LIMIT = 200;
@@ -108,7 +109,8 @@ function buildSummary(stats: Diag441Stats): string {
 
 export function Diag441Overlay(): ReactElement | null {
   const routeQs = useHashQuery();
-  const enabled = routeQs.get("diag") === "1";
+  void routeQs;
+  const enabled = isDiag441Enabled();
 
   const bufferRef = useRef<string[]>([]);
   const statsRef = useRef<Diag441Stats>(emptyStats());
