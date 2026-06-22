@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildHashWithQuery,
   getHashQueryString,
+  navigateHashPathInHash,
   stripQuery,
   useHashLocation,
   useHashQuery,
@@ -45,6 +46,13 @@ describe("hash-location-router helpers", () => {
     expect(
       buildHashWithQuery("/distribution", { de_axis: "tradePoint", de_tp: "tp-1" }),
     ).toBe("/distribution?de_axis=tradePoint&de_tp=tp-1");
+  });
+
+  it("navigateHashPathInHash keeps query inside hash and clears search", () => {
+    window.history.replaceState(null, "", "/?stale=1#/distribution");
+    navigateHashPathInHash("/distribution?view=analytics&tab=trade-points&f=abc");
+    expect(window.location.search).toBe("");
+    expect(window.location.hash).toBe("#/distribution?view=analytics&tab=trade-points&f=abc");
   });
 });
 

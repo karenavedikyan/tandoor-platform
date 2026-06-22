@@ -1,12 +1,16 @@
 import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { DistributionEntryWizard } from "@/components/distribution/distribution-entry-wizard";
 import { DistributionScopeSummary } from "@/components/distribution/distribution-scope-summary";
 import { DistributionAnalyticsPage, type DistributionAnalyticsTab } from "@/pages/distribution-analytics";
 import { useDistributionScopedTradePoints } from "@/hooks/use-distribution-scoped-dealers";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
-import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
+import {
+  buildHashWithQuery,
+  navigateHashPathInHash,
+  useHashQuery,
+} from "@/lib/hash-location-router";
 import {
   deserializeFilters,
   serializeFilters,
@@ -26,64 +30,65 @@ function parseAnalyticsTab(qs: URLSearchParams): DistributionAnalyticsTab {
   return "trade-points";
 }
 
+function currentHashPath(): string {
+  const hash = window.location.hash;
+  return hash.startsWith("#") ? hash.slice(1) : hash;
+}
+
 export default function DistributionPage() {
   const { profile } = useReleaseDemoProfile();
-  const [, navigate] = useLocation();
-  const routeQs = useHashRouteSearchParams();
+  const routeQs = useHashQuery();
   const [entryAxisActive, setEntryAxisActive] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const tradePoints = useDistributionScopedTradePoints(profile);
 
   const mode = parseMode(routeQs);
   const analyticsTab = parseAnalyticsTab(routeQs);
-  const filters = useMemo(
-    () => deserializeFilters(routeQs.get("f")),
-    [routeQs],
-  );
+  const fParam = routeQs.get("f") ?? "";
+  const filters = useMemo(() => deserializeFilters(fParam || null), [fParam]);
   const filtersEncoded = useMemo(() => serializeFilters(filters), [filters]);
+
+  const navigateAnalytics = useCallback(
+    (next: { tab: DistributionAnalyticsTab; f: string | undefined }) => {
+      const target = buildHashWithQuery("/distribution", {
+        view: "analytics",
+        tab: next.tab,
+        f: next.f,
+      });
+      if (currentHashPath() === target) return;
+      navigateHashPathInHash(target);
+    },
+    [],
+  );
 
   const setMode = useCallback(
     (next: PageMode) => {
       if (next === "analytics") {
-        navigate(
-          buildHashPath("/distribution", {
-            view: "analytics",
-            tab: analyticsTab,
-            f: filtersEncoded || undefined,
-          }),
-        );
+        navigateAnalytics({ tab: analyticsTab, f: filtersEncoded || undefined });
         return;
       }
-      navigate(buildHashPath("/distribution"));
+      const target = "/distribution";
+      if (currentHashPath() === target) return;
+      navigateHashPathInHash(target);
     },
-    [analyticsTab, filtersEncoded, navigate],
+    [analyticsTab, filtersEncoded, navigateAnalytics],
   );
 
   const setAnalyticsTab = useCallback(
     (tab: DistributionAnalyticsTab) => {
-      navigate(
-        buildHashPath("/distribution", {
-          view: "analytics",
-          tab,
-          f: filtersEncoded || undefined,
-        }),
-      );
+      navigateAnalytics({ tab, f: filtersEncoded || undefined });
     },
-    [filtersEncoded, navigate],
+    [filtersEncoded, navigateAnalytics],
   );
 
   const setFilters = useCallback(
-    (next: DistributionAnalyticsFilters) => {
-      const encoded = serializeFilters(next);
-      navigate(
-        buildHashPath("/distribution", {
-          view: "analytics",
-          tab: analyticsTab,
-          f: encoded || undefined,
-        }),
-      );
+    (nextFilters: DistributionAnalyticsFilters) => {
+      navigateAnalytics({
+        tab: analyticsTab,
+        f: serializeFilters(nextFilters) || undefined,
+      });
     },
-    [analyticsTab, navigate],
+    [analyticsTab, navigateAnalytics],
   );
 
   if (summaryOpen) {
