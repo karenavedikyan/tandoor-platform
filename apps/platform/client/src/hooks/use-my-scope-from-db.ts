@@ -2,6 +2,7 @@
  * Единый scope из БД (Промт 384, 388).
  */
 
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchMyDealerScope,
@@ -76,25 +77,56 @@ export function useMyScopeFromDB(enabledOrOptions: boolean | UseMyScopeFromDBOpt
   });
 
   const data = q.data;
-  const activeDealerIdSet = new Set(data?.active_dealer_ids ?? []);
-  const trashedDealerIdSet = new Set(data?.trashed_dealer_ids ?? []);
-  const activeDealerExternalKeySet = new Set(data?.active_dealer_external_keys ?? []);
-  const trashedDealerExternalKeySet = new Set(data?.trashed_dealer_external_keys ?? []);
-  const scopeSubject = data?.viewed_user ?? data?.user ?? EMPTY_SCOPE.scopeSubject;
+
+  const activeDealerIdSet = useMemo(
+    () => new Set(data?.active_dealer_ids ?? []),
+    [data?.active_dealer_ids],
+  );
+  const trashedDealerIdSet = useMemo(
+    () => new Set(data?.trashed_dealer_ids ?? []),
+    [data?.trashed_dealer_ids],
+  );
+  const activeDealerExternalKeySet = useMemo(
+    () => new Set(data?.active_dealer_external_keys ?? []),
+    [data?.active_dealer_external_keys],
+  );
+  const trashedDealerExternalKeySet = useMemo(
+    () => new Set(data?.trashed_dealer_external_keys ?? []),
+    [data?.trashed_dealer_external_keys],
+  );
+
+  const scopeSubject = useMemo(
+    () => data?.viewed_user ?? data?.user ?? EMPTY_SCOPE.scopeSubject,
+    [data?.viewed_user, data?.user],
+  );
+
   const forbidden = q.isError && q.error instanceof Error && q.error.message === SCOPE_FORBIDDEN_ERROR;
 
-  return {
-    ...(data ?? EMPTY_SCOPE),
-    loading: q.isLoading,
-    ready: Boolean(data && !q.isLoading && !q.isError),
-    error: q.isError,
-    forbidden,
-    activeDealerIdSet,
-    trashedDealerIdSet,
-    activeDealerExternalKeySet,
-    trashedDealerExternalKeySet,
-    scopeSubject,
-  };
+  return useMemo<MyScopeFromDB>(
+    () => ({
+      ...(data ?? EMPTY_SCOPE),
+      loading: q.isLoading,
+      ready: Boolean(data && !q.isLoading && !q.isError),
+      error: q.isError,
+      forbidden,
+      activeDealerIdSet,
+      trashedDealerIdSet,
+      activeDealerExternalKeySet,
+      trashedDealerExternalKeySet,
+      scopeSubject,
+    }),
+    [
+      data,
+      q.isLoading,
+      q.isError,
+      forbidden,
+      activeDealerIdSet,
+      trashedDealerIdSet,
+      activeDealerExternalKeySet,
+      trashedDealerExternalKeySet,
+      scopeSubject,
+    ],
+  );
 }
 
 /** Счётчики сайдбара из totals API (null пока грузится). Только для scope текущего юзера. */
