@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, LayoutGrid, List, Search, SlidersHorizontal, Square } from "lucide-react";
+import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
+import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +68,7 @@ export function DistributionEntryTradePointPanel({
   cityOptions,
   hideRegion,
 }: DistributionEntryTradePointPanelProps) {
+  const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
@@ -407,6 +410,11 @@ export function DistributionEntryTradePointPanel({
           )}
         </div>
       )}
+      <DistributionRefreshDiag
+        enabled={diagEnabled}
+        axis="tradePoint"
+        panelState={{ selectedTradePointId, tradePointView, filtersOpen }}
+      />
     </div>
   );
 }

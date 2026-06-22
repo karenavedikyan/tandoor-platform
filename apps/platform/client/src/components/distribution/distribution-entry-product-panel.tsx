@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Grid3x3, LayoutGrid, List, Search, Square } from "lucide-react";
+import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
+import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import {
   ProductCardGrid,
   ProductListHeader,
@@ -72,6 +74,7 @@ export function DistributionEntryProductPanel({
   dealers,
   filter,
 }: DistributionEntryProductPanelProps) {
+  const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [segment, setSegment] = useState<DistributionSegmentFilter>(filter.segment);
@@ -501,6 +504,11 @@ export function DistributionEntryProductPanel({
             )}
           </div>
         ))}
+      <DistributionRefreshDiag
+        enabled={diagEnabled}
+        axis="product"
+        panelState={{ step, segment, selectedModelId, selectedTradePointId }}
+      />
     </div>
   );
 }
