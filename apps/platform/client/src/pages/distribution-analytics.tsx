@@ -1,5 +1,4 @@
-import type { ReactElement } from "react";
-import { useRef, useState } from "react";
+import { useState, type ReactElement } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui-platform";
@@ -35,13 +34,6 @@ export function DistributionAnalyticsPage({
   onTabChange,
   onFiltersChange,
 }: Props): ReactElement {
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
-  if (typeof window !== "undefined") {
-    // eslint-disable-next-line no-console
-    console.log(`[diag-441b] DistributionAnalyticsPage render #${renderCountRef.current}`);
-  }
-
   const [filtersOpen, setFiltersOpen] = useState(false);
   const scopedDealers = useDistributionScopedDealers(profile);
   const data = useDistributionAnalyticsData(profile, filters);

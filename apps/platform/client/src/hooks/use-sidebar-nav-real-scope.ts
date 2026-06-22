@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -70,10 +70,6 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   );
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // eslint-disable-next-line no-console
-      console.log("[diag-441b] effect fired: rm-scope-debug");
-    }
     if (me?.role !== "regional_manager") return;
     console.debug("[rm-scope] useSidebarNavRealScope", {
       ready: scope.ready,
@@ -85,38 +81,6 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       dbScopeActive: dbScope.totals.active_dealers,
     });
   }, [me?.role, scope, dbScope.totals.active_dealers]);
-
-  const scopeRefDiag = useRef<typeof scope | undefined>(undefined);
-  const scopeDepsRef = useRef<Record<string, unknown>>({});
-  if (typeof window !== "undefined") {
-    const sameRef = scopeRefDiag.current === scope;
-    scopeRefDiag.current = scope;
-    const prevDeps = scopeDepsRef.current;
-    const nextDeps = {
-      isRealUser,
-      authLoading,
-      authError,
-      role: me?.role,
-      orgSnapData: orgSnapQ.data,
-      orgSnapError: orgSnapQ.isError,
-      orgSnapLoading: orgSnapQ.isLoading,
-      catalogStable,
-      dbReady: dbScope.ready,
-      dbLoading: dbScope.loading,
-      dbError: dbScope.error,
-      dbFullCatalog,
-      dbExtKeysStable,
-    };
-    const changed: string[] = [];
-    for (const k of Object.keys(nextDeps)) {
-      if (prevDeps[k] !== nextDeps[k as keyof typeof nextDeps]) changed.push(k);
-    }
-    scopeDepsRef.current = nextDeps;
-    // eslint-disable-next-line no-console
-    console.log(
-      `[diag-441b] useSidebarNavRealScope ${sameRef ? "same-ref" : "NEW-ref"} changed=[${changed.join(",")}]`,
-    );
-  }
 
   return scope;
 }
