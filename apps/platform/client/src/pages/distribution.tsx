@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import type { DistributionEntryAxis } from "@/components/distribution/distribution-entry-axis-picker";
 import { DistributionEntryWizard } from "@/components/distribution/distribution-entry-wizard";
 import { DistributionScopeSummary } from "@/components/distribution/distribution-scope-summary";
 import { DistributionAnalyticsPage, type DistributionAnalyticsTab } from "@/pages/distribution-analytics";
@@ -30,6 +31,11 @@ function parseAnalyticsTab(qs: URLSearchParams): DistributionAnalyticsTab {
   return "trade-points";
 }
 
+export function parseEntryAxis(qs: URLSearchParams): DistributionEntryAxis | null {
+  const ax = qs.get("ax");
+  return ax === "tradePoint" || ax === "product" || ax === "city" ? ax : null;
+}
+
 function currentHashPath(): string {
   const hash = window.location.hash;
   return hash.startsWith("#") ? hash.slice(1) : hash;
@@ -44,6 +50,7 @@ export default function DistributionPage() {
 
   const mode = parseMode(routeQs);
   const analyticsTab = parseAnalyticsTab(routeQs);
+  const entryAxis = parseEntryAxis(routeQs);
   const fParam = routeQs.get("f") ?? "";
   const filters = useMemo(() => deserializeFilters(fParam || null), [fParam]);
   const filtersEncoded = useMemo(() => serializeFilters(filters), [filters]);
@@ -60,6 +67,15 @@ export default function DistributionPage() {
     },
     [],
   );
+
+  const navigateEntryAxis = useCallback((next: DistributionEntryAxis | null) => {
+    const target = buildHashWithQuery("/distribution", {
+      view: "entry",
+      ax: next ?? undefined,
+    });
+    if (currentHashPath() === target) return;
+    navigateHashPathInHash(target);
+  }, []);
 
   const setMode = useCallback(
     (next: PageMode) => {
@@ -178,7 +194,12 @@ export default function DistributionPage() {
           onFiltersChange={setFilters}
         />
       ) : (
-        <DistributionEntryWizard profile={profile} onAxisChange={setEntryAxisActive} />
+        <DistributionEntryWizard
+          profile={profile}
+          axis={entryAxis}
+          onAxisChange={setEntryAxisActive}
+          onAxisSelect={navigateEntryAxis}
+        />
       )}
     </div>
   );

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { buildHashWithQuery, navigateHashPathInHash, useHashQuery } from "@/lib/hash-location-router";
 import {
   readDistributionEntryTradePointView,
   writeDistributionEntryTradePointView,
@@ -72,8 +73,9 @@ export function DistributionEntryTradePointPanel({
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
+  const routeQs = useHashQuery();
+  const selectedTradePointId = routeQs.get("tp");
   const [query, setQuery] = useState("");
-  const [selectedTradePointId, setSelectedTradePointId] = useState<string | null>(null);
   const [cacheBump, setCacheBump] = useState(0);
   const isMobile = useIsMobile();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
@@ -112,6 +114,27 @@ export function DistributionEntryTradePointPanel({
     return buildDistributionEntryTradePointRows({ dealers: scopedDealers, query });
   }, [scopedDealers, query, cacheBump]);
 
+  const setSelectedTradePointId = useCallback((tpId: string | null) => {
+    const target = buildHashWithQuery("/distribution", {
+      view: "entry",
+      ax: "tradePoint",
+      tp: tpId ?? undefined,
+    });
+    const current = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+    if (current === target) return;
+    navigateHashPathInHash(target);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTradePointId || scopedDealers.length === 0) return;
+    const exists = rows.some((r) => r.tradePointId === selectedTradePointId);
+    if (!exists) {
+      navigateHashPathInHash(buildHashWithQuery("/distribution", { view: "entry", ax: "tradePoint" }), {
+        replace: true,
+      });
+    }
+  }, [selectedTradePointId, rows, scopedDealers.length]);
+
   const rowRefs = useMemo(() => {
     const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
     for (const row of rows) {
@@ -136,7 +159,7 @@ export function DistributionEntryTradePointPanel({
 
   const handleSelectRow = useCallback((row: DistributionEntryTradePointRow) => {
     setSelectedTradePointId(row.tradePointId);
-  }, []);
+  }, [setSelectedTradePointId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridLanes = useDistributionEntryTradepointGridLanes();
