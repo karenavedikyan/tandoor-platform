@@ -14,21 +14,20 @@ import {
 
 let mockRouteQs = new URLSearchParams("dx_source=matrix");
 let mockLoc = "/distribution";
-const mockNavigate = vi.fn();
+const mockNavigateHashPathInHash = vi.fn();
 
-vi.mock("wouter", () => ({
-  useLocation: () => [mockLoc, mockNavigate],
-}));
-
-vi.mock("@/lib/hash-route-utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/hash-route-utils")>();
+vi.mock("@/lib/hash-location-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/hash-location-router")>();
   return {
     ...actual,
-    useHashRouteSearchParams: () => mockRouteQs,
+    useHashQuery: () => mockRouteQs,
+    useHashLocation: () => [mockLoc, vi.fn()],
+    navigateHashPathInHash: (...args: Parameters<typeof actual.navigateHashPathInHash>) =>
+      mockNavigateHashPathInHash(...args),
   };
 });
 
-function applyNavigatePath(path: string): void {
+function applyNavigateHash(path: string): void {
   const qIdx = path.indexOf("?");
   mockLoc = qIdx >= 0 ? path.slice(0, qIdx) : path;
   mockRouteQs = qIdx >= 0 ? new URLSearchParams(path.slice(qIdx + 1)) : new URLSearchParams();
@@ -82,9 +81,9 @@ describe("useCatalogFiltersUrl", () => {
   beforeEach(() => {
     mockRouteQs = new URLSearchParams("dx_source=matrix");
     mockLoc = "/distribution";
-    mockNavigate.mockReset();
-    mockNavigate.mockImplementation((path: string) => {
-      applyNavigatePath(path);
+    mockNavigateHashPathInHash.mockReset();
+    mockNavigateHashPathInHash.mockImplementation((path: string) => {
+      applyNavigateHash(path);
     });
     vi.useFakeTimers();
   });
@@ -100,9 +99,28 @@ describe("useCatalogFiltersUrl", () => {
       result.current.setSource("all");
     });
 
-    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigateHashPathInHash).toHaveBeenCalledTimes(1);
     expect(mockRouteQs.get("dx_source")).toBe("all");
     expect(result.current.source).toBe("all");
+  });
+
+  it("preserves wizard hash params when setSource writes catalog filters", () => {
+    mockRouteQs = new URLSearchParams("view=entry&ax=tradePoint&tp=manual-tp-1");
+    mockLoc = "/distribution";
+
+    const { result } = renderHook(() => useCatalogFiltersUrl({ prefix: "dx" }));
+
+    act(() => {
+      result.current.setSource("all");
+    });
+
+    expect(mockNavigateHashPathInHash).toHaveBeenCalledTimes(1);
+    const target = mockNavigateHashPathInHash.mock.calls[0]?.[0] as string;
+    expect(target).toContain("view=entry");
+    expect(target).toContain("ax=tradePoint");
+    expect(target).toContain("tp=manual-tp-1");
+    expect(target).toContain("dx_source=all");
+    expect(target.startsWith("/distribution?")).toBe(true);
   });
 
   it("setSource does not get overwritten by URL re-read within debounce window", async () => {
@@ -133,12 +151,12 @@ describe("useCatalogFiltersUrl", () => {
       result.current.setQuery("lobby");
     });
 
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockNavigateHashPathInHash).not.toHaveBeenCalled();
 
     act(() => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigateHashPathInHash).toHaveBeenCalledTimes(1);
   });
 });
