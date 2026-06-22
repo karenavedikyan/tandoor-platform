@@ -199,4 +199,13 @@ describe("useDistributionScopedDealers (440)", () => {
     );
     expect(result.current.map((d) => d.id)).toEqual(["client-rm"]);
   });
+
+  it("keeps stable array reference when raw result ids are unchanged (441-fix2)", () => {
+    const { result, rerender } = renderHook(() =>
+      useDistributionScopedDealers(profile("sales_director", "user-dir")),
+    );
+    const first = result.current;
+    rerender();
+    expect(result.current).toBe(first);
+  });
 });

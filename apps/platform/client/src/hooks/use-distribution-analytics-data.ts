@@ -10,6 +10,10 @@ import {
   type DistributionAnalyticsData,
 } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import type { DistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
+import {
+  DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD,
+  hasAnyDistributionAnalyticsFilters,
+} from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 
@@ -19,6 +23,26 @@ function diagSizeOf(v: unknown): number | string {
   if (v && typeof v === "object") return Object.keys(v).length;
   return typeof v;
 }
+
+const EMPTY_GROUP_AGGREGATE: DistributionAnalyticsData["groupAggregate"] = {
+  byType: {
+    entrance: { capacity: 0, tandoorOnShelf: 0, percent: null },
+    interior: { capacity: 0, tandoorOnShelf: 0, percent: null },
+    hardware: { capacity: 0, tandoorOnShelf: 0, percent: null },
+  },
+  averagePercent: null,
+  tradePointsCount: 0,
+};
+
+const EMPTY_DISTRIBUTION_ANALYTICS_DATA: DistributionAnalyticsData = {
+  filteredRows: [],
+  tradePointRows: [],
+  metricsByTradePointId: {},
+  groupAggregate: EMPTY_GROUP_AGGREGATE,
+  modelCoverageByModelId: {},
+  productRows: [],
+  territoryRows: [],
+};
 
 export function useDistributionAnalyticsData(
   profile: ReleaseDemoProfile,
@@ -32,6 +56,9 @@ export function useDistributionAnalyticsData(
   const mergedState = managementPlane.mergedState;
   const act = actx.enabled ? mergedState : actx.state;
   const tradePointShowcaseActualizationById = act.tradePointShowcaseActualizationById;
+  const scopeTooLarge =
+    scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
+    !hasAnyDistributionAnalyticsFilters(filters);
 
   const refDiag = useRef<Record<string, unknown>>({});
   const check = (key: string, value: unknown): "same" | "NEW" => {
@@ -75,8 +102,11 @@ export function useDistributionAnalyticsData(
   }
 
   const scopedRows = useMemo(
-    () => buildScopedAnalyticsTradePointRows(act, profile, scopedDealers, realScope),
-    [act, profile, scopedDealers, realScope],
+    () =>
+      scopeTooLarge
+        ? []
+        : buildScopedAnalyticsTradePointRows(act, profile, scopedDealers, realScope),
+    [scopeTooLarge, act, profile, scopedDealers, realScope],
   );
 
   const dataDepsRef = useRef<Record<string, unknown>>({});
@@ -96,12 +126,14 @@ export function useDistributionAnalyticsData(
 
   return useMemo(
     () =>
-      buildDistributionAnalyticsData({
-        scopedRows,
-        filters,
-        act,
-        catalogLookup: getProductById,
-      }),
-    [scopedRows, filters, act],
+      scopeTooLarge
+        ? EMPTY_DISTRIBUTION_ANALYTICS_DATA
+        : buildDistributionAnalyticsData({
+            scopedRows,
+            filters,
+            act,
+            catalogLookup: getProductById,
+          }),
+    [scopeTooLarge, scopedRows, filters, act],
   );
 }

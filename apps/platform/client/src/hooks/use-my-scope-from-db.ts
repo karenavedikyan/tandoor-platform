@@ -4,6 +4,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useStableSet } from "@/lib/stable-refs";
 import {
   fetchMyDealerScope,
   myDealerScopeQueryKey,
@@ -78,26 +79,15 @@ export function useMyScopeFromDB(enabledOrOptions: boolean | UseMyScopeFromDBOpt
 
   const data = q.data;
 
-  const activeDealerIdSet = useMemo(
-    () => new Set(data?.active_dealer_ids ?? []),
-    [data?.active_dealer_ids],
-  );
-  const trashedDealerIdSet = useMemo(
-    () => new Set(data?.trashed_dealer_ids ?? []),
-    [data?.trashed_dealer_ids],
-  );
-  const activeDealerExternalKeySet = useMemo(
-    () => new Set(data?.active_dealer_external_keys ?? []),
-    [data?.active_dealer_external_keys],
-  );
-  const trashedDealerExternalKeySet = useMemo(
-    () => new Set(data?.trashed_dealer_external_keys ?? []),
-    [data?.trashed_dealer_external_keys],
-  );
+  const activeDealerIdSet = useStableSet(data?.active_dealer_ids);
+  const trashedDealerIdSet = useStableSet(data?.trashed_dealer_ids);
+  const activeDealerExternalKeySet = useStableSet(data?.active_dealer_external_keys);
+  const trashedDealerExternalKeySet = useStableSet(data?.trashed_dealer_external_keys);
 
+  const scopeSubjectKey = `${data?.viewed_user?.id ?? data?.user?.id ?? ""}|${data?.viewed_user?.role ?? data?.user?.role ?? ""}`;
   const scopeSubject = useMemo(
     () => data?.viewed_user ?? data?.user ?? EMPTY_SCOPE.scopeSubject,
-    [data?.viewed_user, data?.user],
+    [scopeSubjectKey],
   );
 
   const forbidden = q.isError && q.error instanceof Error && q.error.message === SCOPE_FORBIDDEN_ERROR;

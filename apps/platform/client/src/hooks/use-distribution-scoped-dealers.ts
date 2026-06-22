@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
+import { useStableArrayByIds } from "@/lib/stable-refs";
 import {
   buildDistributionScopedDealerRows,
   buildDistributionWorkingDealerRows,
@@ -28,7 +29,7 @@ export function useDistributionScopedDealers(profile: ReleaseDemoProfile): Deale
 
   const isFullView = isDistributionFullView(profile, user?.role);
 
-  const scoped = useMemo(() => {
+  const scopedRaw = useMemo(() => {
     const releaseDealerRows = realScope.ready ? realScope.releaseDealerRows : undefined;
     if (isFullView) {
       return buildDistributionWorkingDealerRows(profile, {
@@ -44,6 +45,8 @@ export function useDistributionScopedDealers(profile: ReleaseDemoProfile): Deale
       releaseDealerRows,
     });
   }, [actx.enabled, managementPlane.mergedState, profile, realScope, isFullView]);
+
+  const scoped = useStableArrayByIds(scopedRaw);
 
   useEffect(() => {
     if (user?.role !== "regional_manager") return;

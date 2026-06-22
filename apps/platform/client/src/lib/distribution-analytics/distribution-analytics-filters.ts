@@ -20,6 +20,23 @@ export type DistributionAnalyticsFilters = {
   modelIds: string[];
 };
 
+export const DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD = 800;
+
+export function hasAnyDistributionAnalyticsFilters(filters: DistributionAnalyticsFilters): boolean {
+  return (
+    filters.cities.length > 0 ||
+    filters.regions.length > 0 ||
+    filters.dealerIds.length > 0 ||
+    filters.tradePointIds.length > 0 ||
+    filters.managerIds.length > 0 ||
+    filters.regionalManagerIds.length > 0 ||
+    filters.ropIds.length > 0 ||
+    filters.clientCategories.length > 0 ||
+    filters.equipmentTypes.length > 0 ||
+    filters.modelIds.length > 0
+  );
+}
+
 export function emptyDistributionAnalyticsFilters(): DistributionAnalyticsFilters {
   return {
     cities: [],
