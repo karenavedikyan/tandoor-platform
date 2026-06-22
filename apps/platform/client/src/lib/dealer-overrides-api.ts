@@ -55,11 +55,16 @@ function enqueueOnNetwork(kind: PendingSyncKind, dealerId: string, payload: unkn
   });
 }
 
-export async function fetchDealerOverridesList(dealerIds?: string[]): Promise<DealerOverridesListData | null> {
-  const q =
-    dealerIds && dealerIds.length > 0
-      ? `?dealer_ids=${encodeURIComponent(dealerIds.join(","))}`
-      : "";
+export async function fetchDealerOverridesList(
+  dealerIds?: string[],
+  status?: "active" | "in_trash" | "pending_admin" | "purged",
+): Promise<DealerOverridesListData | null> {
+  const params = new URLSearchParams();
+  if (dealerIds && dealerIds.length > 0) {
+    params.set("dealer_ids", dealerIds.join(","));
+  }
+  if (status) params.set("status", status);
+  const q = params.toString() ? `?${params}` : "";
   try {
     const res = await fetch(`/api/dealer-overrides/list${q}`, { credentials: "include", cache: "no-store" });
     const data = await parseJson<ApiOk<DealerOverridesListData> | ApiErr>(res);

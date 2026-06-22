@@ -42,9 +42,8 @@ import { untrashDealerStrict, requestPurgeDealerStrict } from "@/lib/dealer-over
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import { untrashTradePointStrict, requestPurgeTradePointStrict } from "@/lib/trade-point-overrides-api";
 import { hydrateTradePointOverridesFromServer } from "@/lib/dealer-overrides-sync";
+import { useTrashFromDb } from "@/hooks/use-trash-from-db";
 import {
-  mergeTrashedDealersForUi,
-  mergeTrashedTradePointsForUi,
   patchDealerTrashRuntime,
   patchDealerPurgePendingRuntime,
   patchTradePointTrashRuntime,
@@ -78,6 +77,8 @@ export function TrashBinPage(): ReactElement {
   const { teamContext } = useTeamContext(true);
   const actx = useClientBaseActualization();
   const teamPlane = useClientBaseTeamActualization();
+  const trashFromDb = useTrashFromDb(Boolean(user?.id));
+  const refetchTrashList = trashFromDb.refetch;
   const [trashTab, setTrashTab] = useState<"clients" | "tps">("clients");
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmFD, setConfirmFD] = useState<ConfirmKind | null>(null);
@@ -115,12 +116,11 @@ export function TrashBinPage(): ReactElement {
   const trashDealersListRef = useRef<HTMLDivElement>(null);
   const trashTpsListRef = useRef<HTMLDivElement>(null);
 
-  useScrollRestoration({ enabled: !actx.loading });
+  useScrollRestoration({ enabled: !actx.loading && !trashFromDb.loading });
 
   const trashedDealerDisplays = useMemo(() => {
-    if (!stateForRead.updatedAt && user?.role === "manager") return [];
-    const map = mergeTrashedDealersForUi(stateForRead);
-    return Object.values(map)
+    if (trashFromDb.loading) return [];
+    return trashFromDb.dealers
       .filter(
         (d) =>
           trashScopeFilter.fullView ||
@@ -128,12 +128,11 @@ export function TrashBinPage(): ReactElement {
       )
       .map((info) => resolveTrashedDealerDisplayName(info, stateForRead, releaseByDealerId))
       .sort((a, b) => compareByExpires(a.info, b.info));
-  }, [stateForRead, trashScopeFilter, releaseByDealerId, user?.role]);
+  }, [trashFromDb.loading, trashFromDb.dealers, trashScopeFilter, releaseByDealerId, stateForRead]);
   const trashedDealers = useMemo(() => trashedDealerDisplays.map((d) => d.info), [trashedDealerDisplays]);
   const trashedTps = useMemo(() => {
-    if (!stateForRead.updatedAt && user?.role === "manager") return [];
-    const map = mergeTrashedTradePointsForUi(stateForRead);
-    return Object.values(map)
+    if (trashFromDb.loading) return [];
+    return trashFromDb.tradePoints
       .filter(
         (t) =>
           trashScopeFilter.fullView ||
@@ -144,7 +143,7 @@ export function TrashBinPage(): ReactElement {
           ),
       )
       .sort(compareByExpires);
-  }, [stateForRead, trashScopeFilter, user?.role]);
+  }, [trashFromDb.loading, trashFromDb.tradePoints, trashScopeFilter]);
 
   useEffect(() => {
     setSelectedTrashDealerIds(new Set());
@@ -191,12 +190,13 @@ export function TrashBinPage(): ReactElement {
     (r: { success: boolean }, okTitle: string, failTitle: string) => {
       if (r.success) {
         toast({ title: okTitle });
+        refetchTrashList();
         void teamPlane.refresh();
       } else {
         toast({ title: failTitle, variant: "destructive" });
       }
     },
-    [teamPlane],
+    [teamPlane, refetchTrashList],
   );
 
   const onRestoreDealer = async (dealerId: string): Promise<void> => {
@@ -208,6 +208,7 @@ export function TrashBinPage(): ReactElement {
       patchDealerTrashRuntime(dealerId, null);
       await hydrateDealerOverridesFromServer();
       toast({ title: "Клиент восстановлен в рабочую базу" });
+      refetchTrashList();
       void teamPlane.refresh();
     } else {
       toast({
@@ -220,7 +221,7 @@ export function TrashBinPage(): ReactElement {
 
   const onRestoreTp = async (tp: TrashedTradePointInfo): Promise<void> => {
     if (busy) return;
-    if (mergeTrashedDealersForUi(stateForRead)[tp.dealerId]) {
+    if (trashFromDb.dealersById[tp.dealerId]) {
       toast({
         title: "Сначала восстановите клиента",
         description: "Клиент-владелец этой точки находится в корзине.",
@@ -235,6 +236,7 @@ export function TrashBinPage(): ReactElement {
       patchTradePointTrashRuntime(tp.tradePointId, null);
       await hydrateTradePointOverridesFromServer();
       toast({ title: "Торговая точка восстановлена" });
+      refetchTrashList();
       void teamPlane.refresh();
     } else {
       toast({
@@ -255,6 +257,7 @@ export function TrashBinPage(): ReactElement {
     if (r.ok) {
       toast({ title: "Запись отправлена админу на окончательное удаление" });
       void actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } else {
       toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
@@ -271,6 +274,7 @@ export function TrashBinPage(): ReactElement {
     if (r.ok) {
       toast({ title: "Запись отправлена админу на окончательное удаление" });
       void actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } else {
       toast({ title: r.message ?? "Не удалось отправить на удаление", variant: "destructive" });
@@ -293,6 +297,7 @@ export function TrashBinPage(): ReactElement {
         variant: ok === 0 ? "destructive" : undefined,
       });
       void actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } finally {
       setBusy(null);
@@ -315,6 +320,7 @@ export function TrashBinPage(): ReactElement {
         variant: ok === 0 ? "destructive" : undefined,
       });
       void actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } finally {
       setBusy(null);
@@ -348,6 +354,7 @@ export function TrashBinPage(): ReactElement {
       });
       setSelectedTrashDealerIds(new Set());
       await actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } catch (e: unknown) {
       toast({
@@ -393,6 +400,7 @@ export function TrashBinPage(): ReactElement {
       });
       setSelectedTrashDealerIds(new Set());
       await actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } catch (e: unknown) {
       toast({
@@ -432,6 +440,7 @@ export function TrashBinPage(): ReactElement {
       });
       setSelectedTrashTpIds(new Set());
       await actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } catch (e: unknown) {
       toast({
@@ -477,6 +486,7 @@ export function TrashBinPage(): ReactElement {
       });
       setSelectedTrashTpIds(new Set());
       await actx.refresh();
+      refetchTrashList();
       void teamPlane.refresh();
     } catch (e: unknown) {
       toast({
@@ -545,6 +555,7 @@ export function TrashBinPage(): ReactElement {
           title: "Очистка выполнена",
           description: `Клиентов удалено: ${json.purgedDealers ?? 0}, ТТ: ${json.purgedTradePoints ?? 0}`,
         });
+        refetchTrashList();
         void teamPlane.refresh();
       }
     } catch (e) {
@@ -758,7 +769,7 @@ export function TrashBinPage(): ReactElement {
     confirmFD?.kind === "request-purge-selected-dealers" ||
     confirmFD?.kind === "request-purge-selected-tps";
 
-  if (actx.loading) {
+  if (actx.loading || trashFromDb.loading) {
     return <TrashBinSkeleton />;
   }
 

@@ -30,10 +30,12 @@ async function parseJson<T>(res: Response): Promise<T> {
 export async function fetchTradePointOverridesList(opts?: {
   tpIds?: string[];
   dealerId?: string;
+  status?: "active" | "in_trash" | "pending_admin" | "purged";
 }): Promise<TradePointOverridesListData | null> {
   const params = new URLSearchParams();
   if (opts?.tpIds?.length) params.set("tp_ids", opts.tpIds.join(","));
   else if (opts?.dealerId) params.set("dealer_id", opts.dealerId);
+  if (opts?.status) params.set("status", opts.status);
   const q = params.toString() ? `?${params}` : "";
   try {
     const res = await fetch(`/api/trade-point-overrides/list${q}`, { credentials: "include", cache: "no-store" });
