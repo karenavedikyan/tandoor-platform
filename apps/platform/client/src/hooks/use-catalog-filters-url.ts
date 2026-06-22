@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
-import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
+import {
+  buildHashWithQuery,
+  navigateHashPathInHash,
+  stripQuery,
+  useHashLocation,
+  useHashQuery,
+} from "@/lib/hash-location-router";
 import type { CatalogFiltersValue } from "@/lib/catalog-facets";
 
 const URL_DEBOUNCE_MS = 300;
@@ -63,7 +68,7 @@ function writeStateToParams(
   },
 ): URLSearchParams {
   const sp = new URLSearchParams(base);
-  const keys = new Set([...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"]);
+  const keys = [...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"];
   for (const key of keys) {
     sp.delete(paramName(prefix, key));
   }
@@ -101,8 +106,8 @@ export function useCatalogFiltersUrl(opts?: {
 } {
   const prefix = opts?.prefix;
   const syncKeys = opts?.syncKeys;
-  const routeQs = useHashRouteSearchParams();
-  const [loc, navigate] = useLocation();
+  const routeQs = useHashQuery();
+  const [loc] = useHashLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingUrlWriteRef = useRef(false);
   const pendingSourceRef = useRef<CatalogSourceFilter | null>(null);
@@ -138,6 +143,43 @@ export function useCatalogFiltersUrl(opts?: {
     setSourceState(parsed.source);
   }, [parsed.filters, parsed.categories, parsed.query, parsed.source]);
 
+  const writeViaHash = useCallback(
+    (next: {
+      filters: CatalogFiltersValue;
+      query: string;
+      source: CatalogSourceFilter;
+      categories: string[];
+    }) => {
+      const merged: Record<string, string | undefined> = {};
+      routeQs.forEach((v, k) => {
+        merged[k] = v;
+      });
+
+      const dxKeys = [...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"].map(
+        (k) => paramName(prefix, k),
+      );
+      dxKeys.forEach((k) => {
+        delete merged[k];
+      });
+
+      const sp = writeStateToParams(new URLSearchParams(), prefix, syncKeys, next);
+      sp.forEach((v, k) => {
+        merged[k] = v;
+      });
+
+      const path = stripQuery(loc) || "/distribution";
+      pendingUrlWriteRef.current = true;
+      try {
+        navigateHashPathInHash(buildHashWithQuery(path, merged), { replace: true });
+      } finally {
+        queueMicrotask(() => {
+          pendingUrlWriteRef.current = false;
+        });
+      }
+    },
+    [loc, prefix, routeQs, syncKeys],
+  );
+
   const pushUrlImmediate = useCallback(
     (next: {
       filters: CatalogFiltersValue;
@@ -149,24 +191,9 @@ export function useCatalogFiltersUrl(opts?: {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      const sp = writeStateToParams(routeQs, prefix, syncKeys, next);
-      const entries: Record<string, string> = {};
-      sp.forEach((v, k) => {
-        entries[k] = v;
-      });
-      const path = loc.split("?")[0] || loc;
-      pendingUrlWriteRef.current = true;
-      try {
-        navigate(buildHashPath(path, Object.keys(entries).length > 0 ? entries : undefined), {
-          replace: true,
-        });
-      } finally {
-        queueMicrotask(() => {
-          pendingUrlWriteRef.current = false;
-        });
-      }
+      writeViaHash(next);
     },
-    [loc, navigate, prefix, routeQs, syncKeys],
+    [writeViaHash],
   );
 
   const pushUrl = useCallback(
@@ -178,25 +205,10 @@ export function useCatalogFiltersUrl(opts?: {
     }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        pendingUrlWriteRef.current = true;
-        try {
-          const sp = writeStateToParams(routeQs, prefix, syncKeys, next);
-          const entries: Record<string, string> = {};
-          sp.forEach((v, k) => {
-            entries[k] = v;
-          });
-          const path = loc.split("?")[0] || loc;
-          navigate(buildHashPath(path, Object.keys(entries).length > 0 ? entries : undefined), {
-            replace: true,
-          });
-        } finally {
-          queueMicrotask(() => {
-            pendingUrlWriteRef.current = false;
-          });
-        }
+        writeViaHash(next);
       }, URL_DEBOUNCE_MS);
     },
-    [loc, navigate, prefix, routeQs, syncKeys],
+    [writeViaHash],
   );
 
   useEffect(
