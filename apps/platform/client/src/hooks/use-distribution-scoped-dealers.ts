@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from "react";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { buildDistributionScopedDealerRows } from "@/lib/distribution-entry-scoped-rows";
+import {
+  buildDistributionScopedDealerRows,
+  buildDistributionWorkingDealerRows,
+} from "@/lib/distribution-entry-scoped-rows";
 import {
   flattenTradePointsForRows,
   type TradePointListRow,
@@ -11,22 +14,36 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
+/** Admin/director (→ sales_director profile) and category_manager (platform role) see full working catalog. */
+function isDistributionFullView(profile: ReleaseDemoProfile, authRole?: string): boolean {
+  if (profile.role === "sales_director") return true;
+  return authRole === "category_manager";
+}
+
 export function useDistributionScopedDealers(profile: ReleaseDemoProfile): DealerRow[] {
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const realScope = useSidebarNavRealScope();
   const { user } = useAuthUser();
 
-  const scoped = useMemo(
-    () =>
-      buildDistributionScopedDealerRows(profile, {
+  const isFullView = isDistributionFullView(profile, user?.role);
+
+  const scoped = useMemo(() => {
+    const releaseDealerRows = realScope.ready ? realScope.releaseDealerRows : undefined;
+    if (isFullView) {
+      return buildDistributionWorkingDealerRows(profile, {
         actualizationEnabled: actx.enabled,
         mergedState: managementPlane.mergedState,
-        realScope,
-        releaseDealerRows: realScope.ready ? realScope.releaseDealerRows : undefined,
-      }),
-    [actx.enabled, managementPlane.mergedState, profile, realScope],
-  );
+        releaseDealerRows,
+      });
+    }
+    return buildDistributionScopedDealerRows(profile, {
+      actualizationEnabled: actx.enabled,
+      mergedState: managementPlane.mergedState,
+      realScope,
+      releaseDealerRows,
+    });
+  }, [actx.enabled, managementPlane.mergedState, profile, realScope, isFullView]);
 
   useEffect(() => {
     if (user?.role !== "regional_manager") return;

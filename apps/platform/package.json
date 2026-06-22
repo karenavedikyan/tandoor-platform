@@ -69,6 +69,8 @@
     "test:showcase-type-capacity": "tsx client/src/lib/__tests__/showcase-type-capacity.test.ts",
     "test:distribution-analytics-math": "tsx client/src/lib/__tests__/distribution-analytics-math.test.ts",
     "test:distribution-analytics-view-models": "tsx client/src/lib/__tests__/distribution-analytics-view-models.test.ts",
+    "test:use-distribution-scoped-dealers": "vitest run client/src/hooks/__tests__/use-distribution-scoped-dealers.test.tsx",
+    "test:distribution-analytics-empty": "vitest run client/src/pages/__tests__/distribution-analytics-empty.test.tsx",
     "test:hash-route-utils": "tsx client/src/lib/__tests__/hash-route-utils.test.ts",
     "test:hash-location-router": "vitest run hash-location-router",
     "test:distribution-empty-data-notice": "vitest run client/src/components/distribution-analytics/__tests__/distribution-empty-data-notice.test.ts",

@@ -49,6 +49,26 @@ export function DistributionAnalyticsPage({
 
   const totalRowsInScope = data.filteredRows.length;
   const hasAnyEligible = data.groupAggregate.tradePointsCount > 0;
+  const hasTradePointsInScope = data.tradePointRows.length > 0;
+
+  if (!hasTradePointsInScope) {
+    return (
+      <div className="space-y-3" data-testid="page-distribution-analytics">
+        <DistributionAnalyticsFiltersPanel
+          scopedRows={scopedRows}
+          filters={filters}
+          filteredCount={data.filteredRows.length}
+          onApply={onFiltersChange}
+        />
+        <div
+          className="py-8 text-center text-sm text-muted-foreground"
+          data-testid="distribution-analytics-empty-scope"
+        >
+          Нет ТТ в вашей зоне ответственности.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3" data-testid="page-distribution-analytics">
