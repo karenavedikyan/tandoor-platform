@@ -26,6 +26,11 @@ export function DistributionAnalyticsKpiTiles({
   tradePointsCount,
   activeEquipmentTypes = [],
 }: Props): ReactElement {
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log("[diag-441b] KpiTiles render");
+  }
+
   const onlyTypes = ALL_EQUIPMENT_TYPES;
 
   return (
