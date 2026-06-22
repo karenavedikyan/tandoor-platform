@@ -27,12 +27,13 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
 type DistributionEntryWizardProps = {
   profile: ReleaseDemoProfile;
+  axis: DistributionEntryAxis | null;
   onAxisChange?: (active: boolean) => void;
+  onAxisSelect: (axis: DistributionEntryAxis | null) => void;
 };
 
-export function DistributionEntryWizard({ profile, onAxisChange }: DistributionEntryWizardProps) {
+export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSelect }: DistributionEntryWizardProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
-  const [axis, setAxis] = useState<DistributionEntryAxis | null>(null);
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
   const scoped = useDistributionScopedDealers(profile);
 
@@ -75,7 +76,7 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
             variant="outline"
             size="sm"
             className="min-h-10"
-            onClick={() => setAxis(null)}
+            onClick={() => onAxisSelect(null)}
             data-testid="distribution-entry-axis-back"
           >
             <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
@@ -119,7 +120,7 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
       ) : null}
 
       {!axis ? (
-        <DistributionEntryAxisPicker onSelect={setAxis} />
+        <DistributionEntryAxisPicker onSelect={onAxisSelect} />
       ) : axis === "tradePoint" ? (
         <DistributionEntryTradePointPanel
           profile={profile}

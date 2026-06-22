@@ -46,6 +46,12 @@ describe("hash-location-router helpers", () => {
     expect(
       buildHashWithQuery("/distribution", { de_axis: "tradePoint", de_tp: "tp-1" }),
     ).toBe("/distribution?de_axis=tradePoint&de_tp=tp-1");
+    expect(
+      buildHashWithQuery("/distribution", { view: "entry", ax: "tradePoint", tp: "X" }),
+    ).toBe("/distribution?view=entry&ax=tradePoint&tp=X");
+    expect(
+      buildHashWithQuery("/distribution", { view: "entry", ax: "tradePoint", tp: undefined }),
+    ).toBe("/distribution?view=entry&ax=tradePoint");
   });
 
   it("navigateHashPathInHash keeps query inside hash and clears search", () => {
