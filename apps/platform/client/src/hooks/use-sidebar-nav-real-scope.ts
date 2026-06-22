@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -75,6 +75,14 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       dbScopeActive: dbScope.totals.active_dealers,
     });
   }, [me?.role, scope, dbScope.totals.active_dealers]);
+
+  const scopeRef = useRef<typeof scope | undefined>(undefined);
+  if (typeof window !== "undefined") {
+    const sameRef = scopeRef.current === scope;
+    scopeRef.current = scope;
+    // eslint-disable-next-line no-console
+    console.log(`[diag-441] useSidebarNavRealScope return: ${sameRef ? "same-ref" : "NEW-ref"}`);
+  }
 
   return scope;
 }
