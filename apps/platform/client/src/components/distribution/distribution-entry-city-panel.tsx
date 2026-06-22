@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
+import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
+import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,6 +43,7 @@ function filterRowsByCity(rows: DistributionEntryTradePointRow[], city: string):
 }
 
 export function DistributionEntryCityPanel({ profile, dealers }: DistributionEntryCityPanelProps) {
+  const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [cityQuery, setCityQuery] = useState("");
@@ -304,6 +307,11 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
           <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
         </Card>
       )}
+      <DistributionRefreshDiag
+        enabled={diagEnabled}
+        axis="city"
+        panelState={{ selectedCity, selectedTradePointId }}
+      />
     </div>
   );
 }

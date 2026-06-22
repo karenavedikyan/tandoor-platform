@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
+import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
+import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +31,7 @@ type DistributionEntryWizardProps = {
 };
 
 export function DistributionEntryWizard({ profile, onAxisChange }: DistributionEntryWizardProps) {
+  const diagEnabled = useDistributionRefreshDiagEnabled();
   const [axis, setAxis] = useState<DistributionEntryAxis | null>(null);
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
   const scoped = useDistributionScopedDealers(profile);
@@ -132,6 +135,7 @@ export function DistributionEntryWizard({ profile, onAxisChange }: DistributionE
       ) : (
         <DistributionEntryCityPanel profile={profile} dealers={filteredDealers} />
       )}
+      <DistributionRefreshDiag enabled={diagEnabled} axis={axis} />
     </div>
   );
 }
