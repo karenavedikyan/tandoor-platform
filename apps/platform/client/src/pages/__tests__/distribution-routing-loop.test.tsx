@@ -34,10 +34,6 @@ vi.mock("@/pages/distribution-analytics", () => ({
   }) => {
     latestOnFiltersChange = onFiltersChange;
     analyticsRenderCount += 1;
-    if (typeof window !== "undefined") {
-      // eslint-disable-next-line no-console
-      console.log(`[diag-441b] DistributionAnalyticsPage render #${analyticsRenderCount}`);
-    }
     return (
       <div data-testid="page-distribution-analytics">
         <button

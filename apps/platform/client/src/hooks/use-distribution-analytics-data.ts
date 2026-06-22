@@ -15,14 +15,6 @@ import {
   hasAnyDistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
-import type { SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
-
-function diagSizeOf(v: unknown): number | string {
-  if (Array.isArray(v)) return v.length;
-  if (v instanceof Set) return v.size;
-  if (v && typeof v === "object") return Object.keys(v).length;
-  return typeof v;
-}
 
 const EMPTY_GROUP_AGGREGATE: DistributionAnalyticsData["groupAggregate"] = {
   byType: {
@@ -79,47 +71,6 @@ export function useDistributionAnalyticsData(
     scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
     !hasAnyDistributionAnalyticsFilters(filters);
 
-  const refDiag = useRef<Record<string, unknown>>({});
-  const check = (key: string, value: unknown): "same" | "NEW" => {
-    const prev = refDiag.current[key];
-    refDiag.current[key] = value;
-    return prev === value ? "same" : "NEW";
-  };
-
-  if (typeof window !== "undefined") {
-    const scopeWithRows = realScope as SidebarNavRealScope & { releaseDealerRows?: unknown[] };
-    // eslint-disable-next-line no-console
-    console.log("[diag-441b] inputs", {
-      realScope: check("realScope", realScope),
-      "realScope.size": diagSizeOf(scopeWithRows.releaseDealerRows ?? realScope),
-      scopedDealers: check("scopedDealers", scopedDealers),
-      "scopedDealers.len": diagSizeOf(scopedDealers),
-      profile: check("profile", profile),
-      tpActualization: check("tpActualization", tradePointShowcaseActualizationById),
-      "tpActualization.size": diagSizeOf(tradePointShowcaseActualizationById),
-      productById: check("productById", getProductById),
-      act: check("act", act),
-      mergedState: check("mergedState", mergedState),
-      filters: check("filters", filters),
-      "filters.json": filters ? JSON.stringify(filters).slice(0, 200) : null,
-    });
-  }
-
-  const scopedRowsDepsRef = useRef<Record<string, unknown>>({});
-  if (typeof window !== "undefined") {
-    const prev = scopedRowsDepsRef.current;
-    const next = { act: actStable, profile, scopedDealers, realScope };
-    const changed: string[] = [];
-    for (const k of Object.keys(next) as (keyof typeof next)[]) {
-      if (prev[k] !== next[k]) changed.push(k);
-    }
-    scopedRowsDepsRef.current = next;
-    if (changed.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[diag-441b] scopedRows useMemo deps changed=[${changed.join(",")}]`);
-    }
-  }
-
   const scopedRows = useMemo(
     () =>
       scopeTooLarge
@@ -127,21 +78,6 @@ export function useDistributionAnalyticsData(
         : buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope),
     [scopeTooLarge, actStable, profile, scopedDealers, realScope],
   );
-
-  const dataDepsRef = useRef<Record<string, unknown>>({});
-  if (typeof window !== "undefined") {
-    const prev = dataDepsRef.current;
-    const next = { scopedRows, filters, act: actStable };
-    const changed: string[] = [];
-    for (const k of Object.keys(next) as (keyof typeof next)[]) {
-      if (prev[k] !== next[k]) changed.push(k);
-    }
-    dataDepsRef.current = next;
-    if (changed.length > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[diag-441b] analyticsData useMemo deps changed=[${changed.join(",")}]`);
-    }
-  }
 
   return useMemo(
     () =>

@@ -43,8 +43,6 @@ import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-
 import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
-import { Diag441ErrorBoundary } from "@/components/diag/diag-441-error-boundary";
-import { Diag441Overlay } from "@/components/diag/diag-441-overlay";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 
@@ -140,16 +138,6 @@ function suspensePageWithErrorBoundary(Lazy: LazyExoticComponent<ComponentType<a
   return Wrapped;
 }
 
-function suspensePageWithDiag441ErrorBoundary(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
-  const Inner = suspensePage(Lazy);
-  const Wrapped: ComponentType<any> = (props) => (
-    <Diag441ErrorBoundary>
-      <Inner {...props} />
-    </Diag441ErrorBoundary>
-  );
-  return Wrapped;
-}
-
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
 const MainManagerDetailRoute = suspensePage(LazyMainManagerDetail);
 const MainRopDetailRoute = suspensePage(LazyMainRopDetail);
@@ -165,7 +153,7 @@ const CatalogPageRoute = suspensePage(LazyCatalogPage);
 const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
 const CatalogLegacyRedirectRoute = suspensePage(LazyCatalogLegacyRedirect);
 const TasksPageRoute = suspensePage(LazyTasksPage);
-const DistributionPageRoute = suspensePageWithDiag441ErrorBoundary(LazyDistributionPage);
+const DistributionPageRoute = suspensePageWithErrorBoundary(LazyDistributionPage);
 const DistributionMatrixCatalogPageRoute = suspensePage(LazyDistributionMatrixCatalogPage);
 const ModelCardPageRoute = suspensePage(LazyModelCardPage);
 const OrdersPageRoute = suspensePage(LazyOrdersPage);
@@ -641,7 +629,6 @@ function App() {
           <Toaster />
           <OnboardingUiProvider>
             <Router hook={useHashLocation}>
-              <Diag441Overlay />
               <AppRouter />
             </Router>
           </OnboardingUiProvider>
