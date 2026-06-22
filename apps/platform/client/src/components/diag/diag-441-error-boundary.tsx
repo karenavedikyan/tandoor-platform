@@ -78,7 +78,14 @@ export class Diag441ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error("[diag-441b] distribution render error", error, info.componentStack);
+    console.error(
+      "[diag-441b] distribution render error: " +
+        (error?.message ?? "") +
+        "\n=== stack ===\n" +
+        (error?.stack ?? "(no stack)") +
+        "\n=== componentStack ===\n" +
+        (info.componentStack ?? "(no component stack)"),
+    );
     this.setState({ componentStack: info.componentStack ?? null });
   }
 
