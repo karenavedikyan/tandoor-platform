@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui-platform";
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
@@ -11,6 +13,10 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
 import type { DistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
+import {
+  DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD,
+  hasAnyDistributionAnalyticsFilters,
+} from "@/lib/distribution-analytics/distribution-analytics-filters";
 import { DistributionAnalyticsFiltersPanel } from "@/components/distribution-analytics/distribution-analytics-filters";
 import { DistributionAnalyticsTabTradePoints } from "@/components/distribution-analytics/distribution-analytics-tab-trade-points";
 import { DistributionAnalyticsTabTerritory } from "@/components/distribution-analytics/distribution-analytics-tab-territory";
@@ -42,21 +48,54 @@ export function DistributionAnalyticsPage({
     console.log(`[diag-441b] DistributionAnalyticsPage render #${renderCountRef.current}`);
   }
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const scopedDealers = useDistributionScopedDealers(profile);
   const data = useDistributionAnalyticsData(profile, filters);
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const realScope = useSidebarNavRealScope();
-  const scopedDealers = useDistributionScopedDealers(profile);
   const act = actx.enabled ? managementPlane.mergedState : actx.state;
 
+  const scopeTooLarge =
+    scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
+    !hasAnyDistributionAnalyticsFilters(filters);
+
   const scopedRows = useMemo(
-    () => buildScopedAnalyticsTradePointRows(act, profile, scopedDealers, realScope),
-    [act, profile, scopedDealers, realScope],
+    () =>
+      scopeTooLarge
+        ? []
+        : buildScopedAnalyticsTradePointRows(act, profile, scopedDealers, realScope),
+    [scopeTooLarge, act, profile, scopedDealers, realScope],
   );
 
   const totalRowsInScope = data.filteredRows.length;
   const hasAnyEligible = data.groupAggregate.tradePointsCount > 0;
   const hasTradePointsInScope = data.tradePointRows.length > 0;
+
+  if (scopeTooLarge) {
+    return (
+      <div className="space-y-3" data-testid="page-distribution-analytics">
+        <DistributionAnalyticsFiltersPanel
+          scopedRows={scopedRows}
+          filters={filters}
+          filteredCount={data.filteredRows.length}
+          onApply={onFiltersChange}
+          filtersOpen={filtersOpen}
+          onFiltersOpenChange={setFiltersOpen}
+        />
+        <EmptyState
+          title="Слишком большой scope"
+          hint={`В вашем доступе ${scopedDealers.length} дилеров. Примените фильтр по региону, городу или сегменту, чтобы построить аналитику.`}
+          cta={
+            <Button type="button" onClick={() => setFiltersOpen(true)}>
+              Открыть фильтры
+            </Button>
+          }
+          testId="distribution-analytics-scope-too-large"
+        />
+      </div>
+    );
+  }
 
   if (!hasTradePointsInScope) {
     return (

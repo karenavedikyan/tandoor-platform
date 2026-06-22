@@ -23,6 +23,8 @@ type Props = {
   filters: DistributionAnalyticsFilters;
   filteredCount: number;
   onApply: (next: DistributionAnalyticsFilters) => void;
+  filtersOpen?: boolean;
+  onFiltersOpenChange?: (open: boolean) => void;
 };
 
 const EQUIPMENT_CHIPS: { id: EquipmentTypeKey; label: string }[] = [
@@ -44,9 +46,13 @@ export function DistributionAnalyticsFiltersPanel({
   filters,
   filteredCount,
   onApply,
+  filtersOpen,
+  onFiltersOpenChange,
 }: Props): ReactElement {
   const [draft, setDraft] = useState(filters);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = filtersOpen ?? internalOpen;
+  const setOpen = onFiltersOpenChange ?? setInternalOpen;
 
   const cityOptions = useMemo(
     () => uniqueOptions(scopedRows.map((r) => r.city).filter(Boolean)),
@@ -207,7 +213,7 @@ export function DistributionAnalyticsFiltersPanel({
     <div className="sticky top-0 z-20 space-y-2 border-b border-border/60 bg-background/95 pb-2 pt-1 backdrop-blur" data-testid="distribution-analytics-filters-bar">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Collapsible className="hidden lg:block">
+          <Collapsible open={open} onOpenChange={setOpen} className="hidden lg:block">
             <CollapsibleTrigger asChild>
               <Button type="button" size="sm" variant="outline" className="h-8" data-testid="button-distribution-analytics-filters">
                 Фильтры

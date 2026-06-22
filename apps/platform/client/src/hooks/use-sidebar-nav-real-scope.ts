@@ -17,6 +17,11 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const catalogQ = useDealerBaseRows();
   const dbScope = useMyScopeFromDB(enabled && isRealUser);
 
+  const catalogKey = catalogQ.data
+    ? `${catalogQ.data.length}|${catalogQ.data[0]?.id ?? ""}|${catalogQ.data[catalogQ.data.length - 1]?.id ?? ""}`
+    : "";
+  const catalogStable = useMemo(() => catalogQ.data, [catalogKey]);
+
   const scope = useMemo(
     () =>
       buildSidebarNavRealScope({
@@ -43,7 +48,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
               ownCodes: dbScope.activeDealerExternalKeySet,
             })
           : undefined,
-        catalogRows: catalogQ.data,
+        catalogRows: catalogStable,
         dbScopedExternalKeys: dbScope.ready ? dbScope.activeDealerExternalKeySet : undefined,
       }),
     [
@@ -54,7 +59,7 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       orgSnapQ.data,
       orgSnapQ.isError,
       orgSnapQ.isLoading,
-      catalogQ.data,
+      catalogStable,
       dbScope.ready,
       dbScope.loading,
       dbScope.error,
