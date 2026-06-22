@@ -66,3 +66,32 @@ export function buildHashWithQuery(path: string, query: Record<string, string | 
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
 }
+
+/**
+ * Programmatic navigation with query kept inside hash (not in location.search).
+ * Wouter's useHashLocation navigate splits `path?query` and moves query to search;
+ * pages that read via useHashQuery must use this helper instead.
+ */
+export function navigateHashPathInHash(to: string, options?: { replace?: boolean }): void {
+  if (typeof window === "undefined") return;
+  const oldURL = window.location.href;
+  const stripped = to.replace(/^#/, "");
+  const hashPath = stripped.startsWith("/") ? stripped : `/${stripped}`;
+
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = hashPath;
+
+  if (options?.replace) {
+    window.history.replaceState(window.history.state, "", url.href);
+  } else {
+    window.history.pushState(window.history.state, "", url.href);
+  }
+
+  const newURL = url.href;
+  const event =
+    typeof HashChangeEvent !== "undefined"
+      ? new HashChangeEvent("hashchange", { oldURL, newURL })
+      : new Event("hashchange");
+  window.dispatchEvent(event);
+}
