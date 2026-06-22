@@ -33,7 +33,9 @@ vi.mock("@/lib/diag-distribution-refresh-enabled", () => ({
   useDistributionRefreshDiagEnabled: () => false,
 }));
 
-const profile = { role: "admin", personaUserId: "admin-1" } as const;
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+
+const profile: ReleaseDemoProfile = { role: "sales_director", personaUserId: "user-dir-goncharenko" };
 
 describe("DistributionEntryWizard controlled axis", () => {
   afterEach(() => {
