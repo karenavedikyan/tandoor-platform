@@ -19,14 +19,14 @@ describe("stable-refs (441-fix2)", () => {
     expect(result.current).not.toBe(initial);
   });
 
-  it("useStableArrayByIds keeps same array reference when ids match", () => {
+  it("useStableArrayByIds keeps same array reference when ids match regardless of order", () => {
     const rowA = { id: "a", name: "A" };
     const rowB = { id: "b", name: "B" };
     const { result, rerender } = renderHook(({ items }) => useStableArrayByIds(items), {
       initialProps: { items: [rowA, rowB] },
     });
     const initial = result.current;
-    rerender({ items: [{ id: "a", name: "A2" }, { id: "b", name: "B2" }] });
+    rerender({ items: [{ id: "b", name: "B2" }, { id: "a", name: "A2" }] });
     expect(result.current).toBe(initial);
     rerender({ items: [{ id: "a", name: "A2" }, { id: "c", name: "C" }] });
     expect(result.current).not.toBe(initial);

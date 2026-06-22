@@ -14,9 +14,9 @@ export function useStableSet(value: readonly string[] | undefined): Set<string> 
   return useMemo(() => new Set(value ?? []), [key]);
 }
 
-/** Array reference stable while item ids sequence matches. */
+/** Array reference stable while item ids set matches (order-independent). */
 export function useStableArrayByIds<T extends { id: string }>(items: readonly T[]): T[] {
-  const idsKey = items.map((item) => item.id).join(",");
+  const idsKey = useStableSortedJoin(items.map((item) => item.id));
   const stableRef = useRef<T[]>([]);
   const keyRef = useRef("");
   return useMemo(() => {

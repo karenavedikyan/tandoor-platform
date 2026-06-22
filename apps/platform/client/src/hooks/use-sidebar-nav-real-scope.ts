@@ -5,6 +5,7 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { buildSidebarNavRealScope, type SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
 import { buildAssignmentsScopeFromSources } from "@/lib/dealer-base-real-scope";
+import { useStableArrayByIds, useStableSet } from "@/lib/stable-refs";
 
 /**
  * Real-scope для списков /dealer-base, /trade-points (Промт 384).
@@ -17,10 +18,11 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const catalogQ = useDealerBaseRows();
   const dbScope = useMyScopeFromDB(enabled && isRealUser);
 
-  const catalogKey = catalogQ.data
-    ? `${catalogQ.data.length}|${catalogQ.data[0]?.id ?? ""}|${catalogQ.data[catalogQ.data.length - 1]?.id ?? ""}`
-    : "";
-  const catalogStable = useMemo(() => catalogQ.data, [catalogKey]);
+  const catalogStable = useStableArrayByIds(catalogQ.data ?? []);
+  const dbExtKeysStable = useStableSet(
+    dbScope.ready ? Array.from(dbScope.activeDealerExternalKeySet) : undefined,
+  );
+  const dbFullCatalog = dbScope.scope_explanation.full_catalog;
 
   const scope = useMemo(
     () =>
@@ -32,10 +34,8 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
         snap: orgSnapQ.data,
         visPayload: dbScope.ready
           ? {
-              all: dbScope.scope_explanation.full_catalog,
-              codes: dbScope.scope_explanation.full_catalog
-                ? null
-                : Array.from(dbScope.activeDealerExternalKeySet),
+              all: dbFullCatalog,
+              codes: dbFullCatalog ? null : Array.from(dbExtKeysStable),
               assignments: null,
             }
           : undefined,
@@ -45,11 +45,11 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
         visCodesLoading: dbScope.loading,
         assignmentsScope: dbScope.ready
           ? buildAssignmentsScopeFromSources({
-              ownCodes: dbScope.activeDealerExternalKeySet,
+              ownCodes: dbExtKeysStable,
             })
           : undefined,
         catalogRows: catalogStable,
-        dbScopedExternalKeys: dbScope.ready ? dbScope.activeDealerExternalKeySet : undefined,
+        dbScopedExternalKeys: dbScope.ready ? dbExtKeysStable : undefined,
       }),
     [
       isRealUser,
@@ -63,8 +63,8 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       dbScope.ready,
       dbScope.loading,
       dbScope.error,
-      dbScope.scope_explanation.full_catalog,
-      dbScope.activeDealerExternalKeySet,
+      dbFullCatalog,
+      dbExtKeysStable,
     ],
   );
 
@@ -99,12 +99,12 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       orgSnapData: orgSnapQ.data,
       orgSnapError: orgSnapQ.isError,
       orgSnapLoading: orgSnapQ.isLoading,
-      catalogData: catalogQ.data,
+      catalogStable,
       dbReady: dbScope.ready,
       dbLoading: dbScope.loading,
       dbError: dbScope.error,
-      dbFullCatalog: dbScope.scope_explanation.full_catalog,
-      dbExtKeys: dbScope.activeDealerExternalKeySet,
+      dbFullCatalog,
+      dbExtKeysStable,
     };
     const changed: string[] = [];
     for (const k of Object.keys(nextDeps)) {
