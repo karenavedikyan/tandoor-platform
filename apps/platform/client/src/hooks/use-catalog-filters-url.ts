@@ -68,7 +68,7 @@ function writeStateToParams(
   },
 ): URLSearchParams {
   const sp = new URLSearchParams(base);
-  const keys = new Set([...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"]);
+  const keys = [...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"];
   for (const key of keys) {
     sp.delete(paramName(prefix, key));
   }
@@ -155,12 +155,12 @@ export function useCatalogFiltersUrl(opts?: {
         merged[k] = v;
       });
 
-      const dxKeys = new Set(
-        [...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"].map(
-          (k) => paramName(prefix, k),
-        ),
+      const dxKeys = [...(syncKeys ?? ["brand", "series", "color", "coating", "openType"]), "cat", "q", "source"].map(
+        (k) => paramName(prefix, k),
       );
-      for (const k of dxKeys) delete merged[k];
+      dxKeys.forEach((k) => {
+        delete merged[k];
+      });
 
       const sp = writeStateToParams(new URLSearchParams(), prefix, syncKeys, next);
       sp.forEach((v, k) => {
