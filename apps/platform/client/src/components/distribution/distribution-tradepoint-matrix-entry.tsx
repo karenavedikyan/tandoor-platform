@@ -40,6 +40,32 @@ import {
 import { useShowcaseDistributionState } from "@/hooks/use-showcase-distribution-state";
 import { cn } from "@/lib/utils";
 
+const FULLSCREEN_OPEN_STORAGE_PREFIX = "tandoor:dx:entry-fs-open";
+
+export function fullscreenOpenStorageKey(dealerId: string, pointId: string): string {
+  return `${FULLSCREEN_OPEN_STORAGE_PREFIX}:${dealerId}:${pointId}`;
+}
+
+export function readFullscreenOpen(dealerId: string, pointId: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.sessionStorage.getItem(fullscreenOpenStorageKey(dealerId, pointId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function writeFullscreenOpen(dealerId: string, pointId: string, open: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    const key = fullscreenOpenStorageKey(dealerId, pointId);
+    if (open) window.sessionStorage.setItem(key, "1");
+    else window.sessionStorage.removeItem(key);
+  } catch {
+    /* sessionStorage недоступен — игнорируем */
+  }
+}
+
 export function freshnessLabel(lastUpdatedAt: string | null): string {
   if (!lastUpdatedAt) return "нет данных";
   return `обновлено ${formatRelativeTime(lastUpdatedAt)}`;
@@ -93,7 +119,9 @@ export function DistributionTradePointMatrixEntry({
   const [paramsOpen, setParamsOpen] = useState(false);
   const [showcaseBump, setShowcaseBump] = useState(0);
   const [matrixBump, setMatrixBump] = useState(0);
-  const [showcaseFullscreenOpen, setShowcaseFullscreenOpen] = useState(false);
+  const [showcaseFullscreenOpen, setShowcaseFullscreenOpen] = useState<boolean>(() =>
+    readFullscreenOpen(dealer.id, point.id),
+  );
 
   const matrixItems = useMemo(() => getTradePointMatrix(dealer.id, point.id), [dealer.id, point.id]);
   const matrixSummary = useMemo(() => summarizeMatrix(matrixItems), [matrixItems]);
@@ -155,7 +183,7 @@ export function DistributionTradePointMatrixEntry({
     setExpandedTaskIds(new Set());
     setMatrixTaskFilter("all");
     setMatrixFilter("all");
-    setShowcaseFullscreenOpen(false);
+    setShowcaseFullscreenOpen(readFullscreenOpen(dealer.id, point.id));
   }, [dealer.id, point.id]);
 
   const createdTaskByProductId = useMemo(() => {
@@ -301,7 +329,10 @@ export function DistributionTradePointMatrixEntry({
           size="sm"
           className="h-10 w-full justify-center gap-1.5 bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-700"
           data-testid="button-enter-distribution"
-          onClick={() => setShowcaseFullscreenOpen(true)}
+          onClick={() => {
+            writeFullscreenOpen(dealer.id, point.id, true);
+            setShowcaseFullscreenOpen(true);
+          }}
         >
           <Maximize2 className="h-4 w-4 shrink-0" aria-hidden />
           Внести дистрибуцию
@@ -333,10 +364,12 @@ export function DistributionTradePointMatrixEntry({
           actorUserId={actorUserId}
           actorName={actorName}
           onClose={() => {
+            writeFullscreenOpen(dealer.id, point.id, false);
             setShowcaseFullscreenOpen(false);
             onBackToList?.();
           }}
           onBackToList={() => {
+            writeFullscreenOpen(dealer.id, point.id, false);
             setShowcaseFullscreenOpen(false);
             onBackToList?.();
           }}
