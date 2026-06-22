@@ -92,16 +92,26 @@ export async function handleTradePointOverridesList(
 ): Promise<void> {
   const tpIds = parseIdList(req.query.tp_ids);
   const dealerId = typeof req.query.dealer_id === "string" ? req.query.dealer_id.trim() : "";
+  const statusRaw = typeof req.query.status === "string" ? req.query.status.trim() : "";
+  const statusFilter =
+    statusRaw === "active" || statusRaw === "in_trash" || statusRaw === "pending_admin" || statusRaw === "purged"
+      ? statusRaw
+      : null;
 
-  let where = "";
+  const conditions: string[] = [];
   const params: unknown[] = [];
   if (tpIds.length > 0) {
     params.push(tpIds);
-    where = `WHERE tp_id = ANY($${params.length}::text[])`;
+    conditions.push(`tp_id = ANY($${params.length}::text[])`);
   } else if (dealerId) {
     params.push(dealerId);
-    where = `WHERE dealer_id = $${params.length}`;
+    conditions.push(`dealer_id = $${params.length}`);
   }
+  if (statusFilter) {
+    params.push(statusFilter);
+    conditions.push(`status = $${params.length}::record_status`);
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const overrides = await pool.query<Record<string, unknown>>(
     `SELECT * FROM trade_point_overrides ${where}`,
