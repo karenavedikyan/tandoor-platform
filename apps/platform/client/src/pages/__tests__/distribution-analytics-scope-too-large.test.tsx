@@ -37,9 +37,28 @@ function makeDealers(count: number): DealerRow[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `dealer-${i}`,
     name: `Dealer ${i}`,
-    city: "Москва",
-    region: "ЦФО",
-    tradePoints: [],
+    city: i % 2 === 0 ? "Москва" : "Казань",
+    region: i % 2 === 0 ? "ЦФО" : "ПФО",
+    releaseCode: `MA${String(i).padStart(4, "0")}`,
+    tradePoints: [
+      {
+        id: `tp-${i}`,
+        name: `ТТ ${i}`,
+        city: i % 2 === 0 ? "Москва" : "Казань",
+        address: "",
+        format: "",
+        status: "",
+        equipment: "",
+        hardwareStockStatus: "",
+        doorsStockStatus: "",
+        distribution: { mk: 0, vh: 0, total: 0 },
+        showcaseStatus: "",
+        showcaseNeeds: "",
+        lastVisitDate: "",
+        nextVisitDate: "",
+        responsibleRegionalManager: "",
+      },
+    ],
   })) as DealerRow[];
 }
 
