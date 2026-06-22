@@ -7,8 +7,9 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { defaultDistributionFilterState } from "@/lib/distribution-filters";
 import * as hashLocationRouter from "@/lib/hash-location-router";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
+import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
-const profile = { role: "admin", personaUserId: "admin-1" } as const;
+const profile: ReleaseDemoProfile = { role: "sales_director", personaUserId: "user-dir-goncharenko" };
 
 const filter = defaultDistributionFilterState();
 
