@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
@@ -35,6 +35,13 @@ export function DistributionAnalyticsPage({
   onTabChange,
   onFiltersChange,
 }: Props): ReactElement {
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  if (typeof window !== "undefined") {
+    // eslint-disable-next-line no-console
+    console.log(`[diag-441b] DistributionAnalyticsPage render #${renderCountRef.current}`);
+  }
+
   const data = useDistributionAnalyticsData(profile, filters);
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
