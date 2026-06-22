@@ -125,16 +125,6 @@ export function DistributionEntryTradePointPanel({
     navigateHashPathInHash(target);
   }, []);
 
-  useEffect(() => {
-    if (!selectedTradePointId || scopedDealers.length === 0) return;
-    const exists = rows.some((r) => r.tradePointId === selectedTradePointId);
-    if (!exists) {
-      navigateHashPathInHash(buildHashWithQuery("/distribution", { view: "entry", ax: "tradePoint" }), {
-        replace: true,
-      });
-    }
-  }, [selectedTradePointId, rows, scopedDealers.length]);
-
   const rowRefs = useMemo(() => {
     const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
     for (const row of rows) {
