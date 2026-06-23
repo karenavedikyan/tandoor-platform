@@ -76,9 +76,9 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
-import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
-import { useMyTeamScope } from "@/hooks/use-my-team-scope";
-import { useOrgScope } from "@/hooks/use-org-scope";
+import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
+import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
@@ -1620,6 +1620,32 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     }
     return null;
   }, [teamScopeQ.ready, teamScopeQ.data, orgScopeQ.ready, orgScopeQ.data]);
+
+  /** Всего дилеров в скоупе — тот же источник, что бейдж «Клиенты-дилеры» в сайдбаре (App.tsx). */
+  const scopeTotalDealers = useMemo<number | null>(() => {
+    if (!useReal) return null;
+    if (viewingOtherUserScope) {
+      return sidebarCountsFromDbScope(targetScopeQ).dealers;
+    }
+    if (me?.role === "director") {
+      return sidebarCountsFromOrgScope(orgScopeQ).dealers;
+    }
+    if (me?.role === "rop") {
+      return sidebarCountsFromTeamScope(teamScopeQ).dealers;
+    }
+    if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
+      return sidebarCountsFromDbScope(selfDbScopeQ).dealers;
+    }
+    return null;
+  }, [
+    useReal,
+    viewingOtherUserScope,
+    targetScopeQ,
+    me?.role,
+    orgScopeQ,
+    teamScopeQ,
+    selfDbScopeQ,
+  ]);
 
   const defaultRopManager = useMemo(() => {
     if (useReal && snap) {
@@ -3689,6 +3715,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         rows={scopedActivePortfolioRows}
         orgTeamCtx={orgTeamCtxForCockpit}
         overview={overviewQ.data ?? null}
+        scopeTotalDealers={scopeTotalDealers}
         teamTotalsById={managementScopeTotals?.teamTotalsById}
         membersTotalsByTeamId={managementScopeTotals?.membersTotalsByTeamId}
         mergedDealerRowsForCreate={

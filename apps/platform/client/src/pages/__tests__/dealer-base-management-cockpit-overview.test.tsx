@@ -91,9 +91,14 @@ describe("DealerBaseManagementCockpit overview branch", () => {
   });
 
   it("renders client KPI cards from overview when catalog rows lack status", () => {
-    const rows = Array.from({ length: 2850 }, (_, i) => makeCatalogRow(`dealer-${i}`));
-
-    render(<DealerBaseManagementCockpit rows={rows} profile={profile} overview={overview} />);
+    render(
+      <DealerBaseManagementCockpit
+        rows={[]}
+        profile={profile}
+        overview={overview}
+        scopeTotalDealers={2850}
+      />,
+    );
 
     expect(screen.getByText("1035")).toBeTruthy();
     expect(screen.getByText("2")).toBeTruthy();
@@ -101,6 +106,16 @@ describe("DealerBaseManagementCockpit overview branch", () => {
     expect(screen.getByText("1813")).toBeTruthy();
     expect(screen.getByText("2850")).toBeTruthy();
     expect(screen.getByTestId("text-client-base-reconcile-note")).toBeTruthy();
+    expect(1035 + 2 + 1813).toBe(2850);
+  });
+
+  it("falls back to rows.length for total catalog when scopeTotalDealers is omitted", () => {
+    const rows = Array.from({ length: 12 }, (_, i) => makeCatalogRow(`dealer-${i}`));
+
+    render(<DealerBaseManagementCockpit rows={rows} profile={profile} overview={overview} />);
+
+    const section = screen.getByTestId("section-client-base-structure-infographic");
+    expect(section.textContent).toMatch(/Всего в каталоге[\s\S]*?12/);
   });
 
   it("renders overview cities and total city count", () => {
