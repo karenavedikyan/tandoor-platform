@@ -22,7 +22,7 @@ function makeCatalogRow(id: string): DealerRow {
     hasRecentActivity: false,
     clientCategory: "top350",
     tradePoints: [],
-  } as DealerRow;
+  } as unknown as DealerRow;
 }
 
 const overview: ClientBaseOverview = {
