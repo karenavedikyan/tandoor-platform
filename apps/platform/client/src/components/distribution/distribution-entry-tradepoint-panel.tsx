@@ -61,8 +61,11 @@ export function shouldShowEntryLoadingPlaceholder(args: {
   selectedTradePointId: string | null;
   hasSelectedRow: boolean;
   isEntryDataLoading: boolean;
+  isWithinResolveGrace: boolean;
 }): boolean {
-  return Boolean(args.selectedTradePointId) && !args.hasSelectedRow && args.isEntryDataLoading;
+  if (!args.selectedTradePointId) return false;
+  if (args.hasSelectedRow) return false;
+  return args.isEntryDataLoading || args.isWithinResolveGrace;
 }
 
 type DistributionEntryTradePointPanelProps = {
@@ -160,6 +163,39 @@ export function DistributionEntryTradePointPanel({
     [scopedDealers, selectedRow],
   );
 
+  const RESOLVE_GRACE_MS = 1200;
+  const [resolveGraceActive, setResolveGraceActive] = useState(false);
+  const resolveGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const needsGrace = Boolean(selectedTradePointId) && selectedRow === null;
+
+    if (selectedRow !== null || !selectedTradePointId) {
+      if (resolveGraceTimerRef.current) {
+        clearTimeout(resolveGraceTimerRef.current);
+        resolveGraceTimerRef.current = null;
+      }
+      setResolveGraceActive(false);
+      return;
+    }
+
+    if (needsGrace && !resolveGraceTimerRef.current) {
+      setResolveGraceActive(true);
+      resolveGraceTimerRef.current = setTimeout(() => {
+        resolveGraceTimerRef.current = null;
+        setResolveGraceActive(false);
+      }, RESOLVE_GRACE_MS);
+    }
+
+    return () => {
+      if (resolveGraceTimerRef.current) {
+        clearTimeout(resolveGraceTimerRef.current);
+        resolveGraceTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- grace tracks tp selection vs row resolve only
+  }, [selectedTradePointId, selectedRow]);
+
   const entryDataLoading = isEntryDataLoading(
     actx.enabled,
     actx.loading,
@@ -169,6 +205,7 @@ export function DistributionEntryTradePointPanel({
     selectedTradePointId,
     hasSelectedRow: selectedRow !== null,
     isEntryDataLoading: entryDataLoading,
+    isWithinResolveGrace: resolveGraceActive,
   });
 
   const actorUserId = user?.id ?? profile.personaUserId;

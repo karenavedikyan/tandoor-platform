@@ -155,30 +155,42 @@ describe("distribution entry tradepoint loading placeholder predicates", () => {
   it("shouldShowEntryLoadingPlaceholder covers tp-resolve combinations", () => {
     expect(
       shouldShowEntryLoadingPlaceholder({
-        selectedTradePointId: "tp-1",
+        selectedTradePointId: null,
         hasSelectedRow: false,
         isEntryDataLoading: true,
+        isWithinResolveGrace: true,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldShowEntryLoadingPlaceholder({
         selectedTradePointId: "tp-1",
         hasSelectedRow: true,
         isEntryDataLoading: true,
-      }),
-    ).toBe(false);
-    expect(
-      shouldShowEntryLoadingPlaceholder({
-        selectedTradePointId: null,
-        hasSelectedRow: false,
-        isEntryDataLoading: true,
+        isWithinResolveGrace: true,
       }),
     ).toBe(false);
     expect(
       shouldShowEntryLoadingPlaceholder({
         selectedTradePointId: "tp-1",
         hasSelectedRow: false,
+        isEntryDataLoading: true,
+        isWithinResolveGrace: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: "tp-1",
+        hasSelectedRow: false,
         isEntryDataLoading: false,
+        isWithinResolveGrace: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: "tp-1",
+        hasSelectedRow: false,
+        isEntryDataLoading: false,
+        isWithinResolveGrace: false,
       }),
     ).toBe(false);
   });
@@ -262,6 +274,26 @@ describe("DistributionEntryTradePointPanel tp hash persistence", () => {
 
     expect(screen.getByTestId("distribution-entry-tradepoint-loading")).toBeTruthy();
     expect(screen.getByText("Загружаем торговую точку…")).toBeTruthy();
+    expect(screen.queryByTestId("list-distribution-entry-tradepoints")).toBeNull();
+  });
+
+  it("shows loading placeholder during resolve grace after fetch completes", async () => {
+    mockActx.enabled = true;
+    mockActx.loading = false;
+    mockTeamPlane.teamFetchLoading = false;
+    mockIsMobile.value = true;
+    mockDesktopLayout.value = false;
+
+    const pendingTp = "manual-tp-grace";
+    setHashRoute(`#/distribution?view=entry&ax=tradePoint&tp=${pendingTp}`);
+
+    renderPanel([]);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId("distribution-entry-tradepoint-loading")).toBeTruthy();
     expect(screen.queryByTestId("list-distribution-entry-tradepoints")).toBeNull();
   });
 });
