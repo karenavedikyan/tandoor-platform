@@ -627,6 +627,65 @@ export function dealerMatchesClientListFilter(row: DealerRow, f: ClientListFilte
   return true;
 }
 
+export type KpiDealerRow = DealerRow & { inCatalog?: boolean };
+
+export function dealerMatchesKpiClientListFilter(row: KpiDealerRow, f: ClientListFilter): boolean {
+  if (f === "all") return row.inCatalog === true;
+  return dealerMatchesClientListFilter(row, f);
+}
+
+export function mapClientsListItemToDealerRow(
+  item: import("./client-base-overview-api.js").ClientBaseClientsListClient,
+): KpiDealerRow {
+  const status: DealerRow["status"] =
+    item.status === "active"
+      ? "активный"
+      : item.status === "potential"
+        ? "потенциальный"
+        : item.status === "attention"
+          ? "требует внимания"
+          : ("" as DealerRow["status"]);
+  return {
+    id: item.id,
+    name: item.fullName,
+    city: item.city ?? "",
+    manager: item.managerFullName ?? "",
+    status,
+    outlets: item.tradePointsCount,
+    distribution: 0,
+    hasProblem: item.status === "attention",
+    hasRecentActivity: true,
+    clientCategory: "top350",
+    tradePoints: item.tradePointIds.map((tpId) => ({
+      id: tpId,
+      name: tpId,
+      city: item.city ?? "",
+      address: "",
+      format: "",
+      isPrimary: false,
+      importanceTier: null,
+    })),
+    inCatalog: item.inCatalog,
+  } as KpiDealerRow;
+}
+
+export function mapClientsListTradePointsToListRows(
+  tradePoints: import("./client-base-overview-api.js").ClientBaseClientsList["tradePoints"],
+  clientsById: Map<string, KpiDealerRow>,
+): TradePointListRow[] {
+  return tradePoints.map((tp) => {
+    const owner = clientsById.get(tp.clientId);
+    return {
+      tpId: tp.id,
+      name: tp.name,
+      city: tp.city,
+      dealerId: tp.clientId,
+      dealerName: owner?.name ?? tp.clientId,
+      manager: owner ? getDealerManagerDisplay(owner) : "—",
+    };
+  });
+}
+
 export type TradePointListRow = {
   tpId: string;
   name: string;
