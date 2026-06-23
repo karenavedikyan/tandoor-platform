@@ -14,6 +14,8 @@ import {
   resolveSidebarWorkingDealerClientCount,
 } from "../dealer-base-sidebar-client-count";
 import { buildTrashNavBadge } from "../auth-access";
+import { splitScopedTrashCounts } from "../dealer-trash-scope";
+import type { TrashedDealerInfo, TrashedTradePointInfo } from "../client-base-actualization-state";
 import { sidebarCountsFromDbScope, type MyScopeFromDB } from "../../hooks/use-my-scope-from-db.js";
 import {
   countDealerBaseHeaderTotal,
@@ -351,6 +353,59 @@ function withBrowserWindow<T>(fn: () => T): T {
 {
   const p = withBrowserWindow(() => loadReleaseDemoProfile("rop", "00000000-0000-0000-0000-000000000000"));
   assert.equal(p.personaUserId, "user-tl-kupiansky", "неизвестный UUID РОПа → fallback");
+}
+
+// --- Trash badge == page counts (splitScopedTrashCounts, not scope totals) ---
+
+{
+  const futureIso = new Date(Date.now() + 86400000).toISOString();
+  const teamCtx = { teamId: "team-a", teamMemberIds: ["mgr-1", "rop-1"], teamCodes: ["MA-001"] };
+  const dealers: TrashedDealerInfo[] = [
+    {
+      dealerId: "d1",
+      trashedAt: new Date().toISOString(),
+      trashedBy: "mgr-1",
+      trashedByName: "M",
+      expiresAt: futureIso,
+      source: "test",
+      ownerTeamAtTrash: "team-a",
+      snapshot: {},
+    },
+    {
+      dealerId: "d2",
+      trashedAt: new Date().toISOString(),
+      trashedBy: "outsider",
+      trashedByName: "X",
+      expiresAt: futureIso,
+      source: "test",
+      ownerTeamAtTrash: "team-z",
+      snapshot: {},
+    },
+  ];
+  const tps: TrashedTradePointInfo[] = [
+    {
+      tradePointId: "tp1",
+      dealerId: "d1",
+      trashedAt: new Date().toISOString(),
+      trashedBy: "mgr-1",
+      trashedByName: "M",
+      expiresAt: futureIso,
+      source: "test",
+      ownerTeamAtTrash: "team-a",
+      snapshot: {},
+    },
+  ];
+  const filter = {
+    isDealerInScope: (_id: string, meta: { trashedBy?: string }) => meta.trashedBy === "mgr-1",
+    isTradePointInScope: (_tpId: string, _dealerId: string | null, meta: { trashedBy?: string }) =>
+      meta.trashedBy === "mgr-1",
+    fullView: false,
+  };
+  const pageCounts = splitScopedTrashCounts(dealers, tps, filter);
+  const scopeTotals = { trashDealers: 5, trashTradePoints: 2 };
+  assert.notEqual(pageCounts.dealers, scopeTotals.trashDealers, "scope totals may differ from RBAC page filter");
+  assert.deepEqual(buildTrashNavBadge(pageCounts.dealers, pageCounts.tradePoints), { badge: "1/1" });
+  assert.deepEqual(buildTrashNavBadge(scopeTotals.trashDealers, scopeTotals.trashTradePoints), { badge: "5/2" });
 }
 
 console.log("sidebar-dealer-count-vs-page: ok");

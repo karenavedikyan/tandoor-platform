@@ -110,6 +110,42 @@ export function trashMetaFromTradePointInfo(info: TrashedTradePointInfo): TrashM
   return trashMetaFromRecord(info);
 }
 
+export function splitScopedTrashCounts(
+  dealers: TrashedDealerInfo[],
+  tradePoints: TrashedTradePointInfo[],
+  filter: TrashScopeFilter,
+): { dealers: number; tradePoints: number } {
+  if (filter.fullView) {
+    const result = { dealers: dealers.length, tradePoints: tradePoints.length };
+    if (import.meta.env.DEV) {
+      if (result.dealers !== dealers.length || result.tradePoints !== tradePoints.length) {
+        console.warn("[splitScopedTrashCounts] fullView count mismatch", result, {
+          dealersLen: dealers.length,
+          tradePointsLen: tradePoints.length,
+        });
+      }
+    }
+    return result;
+  }
+  let d = 0;
+  for (const info of dealers) {
+    if (filter.isDealerInScope(info.dealerId, trashMetaFromDealerInfo(info))) d++;
+  }
+  let tp = 0;
+  for (const info of tradePoints) {
+    if (
+      filter.isTradePointInScope(
+        info.tradePointId,
+        info.dealerId ?? null,
+        trashMetaFromTradePointInfo(info),
+      )
+    ) {
+      tp++;
+    }
+  }
+  return { dealers: d, tradePoints: tp };
+}
+
 export function countScopedTrashItems(
   dealers: Record<string, TrashedDealerInfo>,
   tps: Record<string, TrashedTradePointInfo>,
