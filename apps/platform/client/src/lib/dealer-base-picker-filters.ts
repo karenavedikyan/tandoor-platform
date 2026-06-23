@@ -13,7 +13,7 @@ import type { SalesUser } from "./sales-control-data.js";
 
 import { rowMatchesGeoFilters } from "./dealer-base-geo-parse.js";
 
-export type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed";
+export type QuickFilter = "all" | "active" | "potential" | "attention" | "top" | "no_activity" | "closed" | "no_status";
 
 type ClientCategoryRouteFilter = ClientCategoryId | "all" | "__top_tier__";
 export type ClientCategorySelection = Exclude<ClientCategoryRouteFilter, "all">;
@@ -50,6 +50,8 @@ export function applyQuickFilter(row: DealerRow, q: QuickFilter): boolean {
       return !row.hasRecentActivity;
     case "closed":
       return row.status === "приостановлен";
+    case "no_status":
+      return row.status !== "активный" && row.status !== "потенциальный";
     default:
       return true;
   }

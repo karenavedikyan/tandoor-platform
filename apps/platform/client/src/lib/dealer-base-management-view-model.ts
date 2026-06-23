@@ -615,7 +615,7 @@ export function buildStructureInfographic(rows: DealerRow[], teamIds: string[]):
   };
 }
 
-export type ClientListFilter = "all" | "active" | "potential" | "attention" | "noTp";
+export type ClientListFilter = "all" | "active" | "potential" | "attention" | "noTp" | "no_status";
 
 export function dealerMatchesClientListFilter(row: DealerRow, f: ClientListFilter): boolean {
   if (f === "all") return true;
@@ -623,6 +623,7 @@ export function dealerMatchesClientListFilter(row: DealerRow, f: ClientListFilte
   if (f === "potential") return row.status === "потенциальный";
   if (f === "attention") return dealerNeedsAttention(row);
   if (f === "noTp") return row.status === "активный" && row.outlets === 0;
+  if (f === "no_status") return row.status !== "активный" && row.status !== "потенциальный";
   return true;
 }
 
