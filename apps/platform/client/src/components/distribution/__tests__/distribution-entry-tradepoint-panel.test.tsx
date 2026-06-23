@@ -7,7 +7,29 @@ import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { defaultDistributionFilterState } from "@/lib/distribution-filters";
 import * as hashLocationRouter from "@/lib/hash-location-router";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
+import {
+  isEntryDataLoading,
+  shouldShowEntryLoadingPlaceholder,
+} from "@/components/distribution/distribution-entry-tradepoint-panel";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+
+const mockActx = vi.hoisted(() => ({
+  enabled: false,
+  loading: false,
+}));
+
+const mockTeamPlane = vi.hoisted(() => ({
+  mergedState: {},
+  teamFetchLoading: false,
+}));
+
+const mockIsMobile = vi.hoisted(() => ({
+  value: false,
+}));
+
+const mockDesktopLayout = vi.hoisted(() => ({
+  value: true,
+}));
 
 const profile: ReleaseDemoProfile = { role: "sales_director", personaUserId: "user-dir-goncharenko" };
 
@@ -32,20 +54,21 @@ function makeDealer(tradePointId: string, name: string): DealerRow {
   } as DealerRow;
 }
 
+vi.mock("@/lib/client-base-actualization-data-merge", () => ({
+  buildDealerBaseRowsWithActualization: () => [],
+}));
+
 vi.mock("@/hooks/use-current-user", () => ({
   useCurrentUser: () => ({ user: null }),
   displayUserName: () => "Test User",
 }));
 
 vi.mock("@/context/client-base-actualization-context", () => ({
-  useClientBaseActualization: () => ({ enabled: false }),
+  useClientBaseActualization: () => mockActx,
 }));
 
 vi.mock("@/context/client-base-team-actualization-context", () => ({
-  useClientBaseTeamActualization: () => ({
-    mergedState: {},
-    teamFetchLoading: false,
-  }),
+  useClientBaseTeamActualization: () => mockTeamPlane,
 }));
 
 vi.mock("@/hooks/use-role-scoped-dealer-rows-auto", () => ({
@@ -53,7 +76,7 @@ vi.mock("@/hooks/use-role-scoped-dealer-rows-auto", () => ({
 }));
 
 vi.mock("@/hooks/use-mobile", () => ({
-  useIsMobile: () => false,
+  useIsMobile: () => mockIsMobile.value,
 }));
 
 vi.mock("@/lib/distribution-entry-tradepoint-view", () => ({
@@ -68,7 +91,7 @@ vi.mock("@/lib/distribution-entry-element-virtualizer", () => ({
     tradepointList: 72,
   },
   distributionEntryVirtualItemStyle: () => ({}),
-  useDistributionEntryDesktopLayout: () => true,
+  useDistributionEntryDesktopLayout: () => mockDesktopLayout.value,
   useDistributionEntryTradepointGridLanes: () => 2,
   useDistributionEntryVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
@@ -121,10 +144,55 @@ function renderPanel(dealers: readonly DealerRow[]) {
   );
 }
 
+describe("distribution entry tradepoint loading placeholder predicates", () => {
+  it("isEntryDataLoading is true only when actualization is enabled and loading", () => {
+    expect(isEntryDataLoading(false, true, true)).toBe(false);
+    expect(isEntryDataLoading(true, true, false)).toBe(true);
+    expect(isEntryDataLoading(true, false, true)).toBe(true);
+    expect(isEntryDataLoading(true, false, false)).toBe(false);
+  });
+
+  it("shouldShowEntryLoadingPlaceholder covers tp-resolve combinations", () => {
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: "tp-1",
+        hasSelectedRow: false,
+        isEntryDataLoading: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: "tp-1",
+        hasSelectedRow: true,
+        isEntryDataLoading: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: null,
+        hasSelectedRow: false,
+        isEntryDataLoading: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowEntryLoadingPlaceholder({
+        selectedTradePointId: "tp-1",
+        hasSelectedRow: false,
+        isEntryDataLoading: false,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("DistributionEntryTradePointPanel tp hash persistence", () => {
   let navigateSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    mockActx.enabled = false;
+    mockActx.loading = false;
+    mockTeamPlane.teamFetchLoading = false;
+    mockIsMobile.value = false;
+    mockDesktopLayout.value = true;
     navigateSpy = vi.spyOn(hashLocationRouter, "navigateHashPathInHash");
   });
 
@@ -179,5 +247,21 @@ describe("DistributionEntryTradePointPanel tp hash persistence", () => {
         `/distribution?view=entry&ax=tradePoint&tp=${tpId}`,
       );
     });
+  });
+
+  it("shows loading placeholder on mobile while tp is resolving during data fetch", () => {
+    mockActx.enabled = true;
+    mockActx.loading = true;
+    mockIsMobile.value = true;
+    mockDesktopLayout.value = false;
+
+    const pendingTp = "manual-tp-loading";
+    setHashRoute(`#/distribution?view=entry&ax=tradePoint&tp=${pendingTp}`);
+
+    renderPanel([]);
+
+    expect(screen.getByTestId("distribution-entry-tradepoint-loading")).toBeTruthy();
+    expect(screen.getByText("Загружаем торговую точку…")).toBeTruthy();
+    expect(screen.queryByTestId("list-distribution-entry-tradepoints")).toBeNull();
   });
 });
