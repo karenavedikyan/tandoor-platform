@@ -186,6 +186,7 @@ export function DealerBaseManagementCockpit({
   profile,
   orgTeamCtx,
   overview,
+  scopeTotalDealers,
   mergedDealerRowsForCreate,
   teamTotalsById,
   membersTotalsByTeamId,
@@ -194,6 +195,7 @@ export function DealerBaseManagementCockpit({
   profile: ReleaseDemoProfile;
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
   overview?: ClientBaseOverview | null;
+  scopeTotalDealers?: number | null;
   mergedDealerRowsForCreate?: DealerRow[] | null;
   teamTotalsById?: Map<string, TeamTotals>;
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
@@ -483,7 +485,7 @@ export function DealerBaseManagementCockpit({
     [overview, structure],
   );
 
-  const totalCatalog = rows.length;
+  const totalCatalog = scopeTotalDealers ?? rows.length;
   const otherCount = computeUnstatusedCatalogClients(totalCatalog, clientKpis.active, clientKpis.potential);
 
   const overviewRopGroupForDetail = useMemo(() => {
