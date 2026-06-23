@@ -70,9 +70,13 @@ import {
   resolveManagementCatalogTeamId,
   resolveManagementOrgTeamUuid,
   buildStructureInfographic,
+  buildOverviewCityCardsFromDb,
+  computeUnstatusedCatalogClients,
   dealerMatchesClientListFilter,
   flattenTradePointsForRows,
   mapManagerOverviewClients,
+  mergeOverviewClientCountsIntoRopGroups,
+  resolveClientKpisFromOverview,
   topCitiesForChart,
   teamsForManagementView,
   type CityRowModel,
@@ -251,7 +255,7 @@ export function DealerBaseManagementCockpit({
   const responsibleByCode = myCodesQ.data?.responsibleByCode ?? EMPTY_RESPONSIBLE_BY_CODE;
   const grantedCodes = myCodesQ.data?.grantedCodes;
 
-  const ropGroups = useMemo(
+  const baseRopGroups = useMemo(
     () =>
       buildRopGroups(
         rows,
@@ -265,6 +269,16 @@ export function DealerBaseManagementCockpit({
       ),
     [rows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes, teamTotalsById, membersTotalsByTeamId],
   );
+
+  const ropGroups = useMemo(() => {
+    if (!overview?.ropGroups?.length) return baseRopGroups;
+    return mergeOverviewClientCountsIntoRopGroups(
+      baseRopGroups,
+      overview.ropGroups,
+      orgTeamCtx?.snap,
+      userIdToCatalogMgrId,
+    );
+  }, [baseRopGroups, overview, orgTeamCtx?.snap, userIdToCatalogMgrId]);
 
   const ownTeamIds = useMemo(
     () =>
@@ -440,18 +454,37 @@ export function DealerBaseManagementCockpit({
     return ropGroups.find((g) => g.teamId === selectedManager.teamId)?.ropName ?? "—";
   }, [selectedManager, ropGroups]);
 
-  const overviewTopCities = useMemo(
+  const overviewTopCities = useMemo(() => {
+    if (overview) return buildOverviewCityCardsFromDb(overview);
+    return cities
+      .filter((c) => c.displayName !== "Без города" && c.activeClients > 0)
+      .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru"));
+  }, [overview, cities]);
+
+  const overviewWithoutCity = useMemo(() => {
+    if (overview) {
+      return {
+        cityKey: "__no_city__",
+        displayName: "Без города",
+        activeClients: overview.withoutCity.clients,
+        tradePoints: overview.withoutCity.tradePoints,
+      };
+    }
+    return cities.find((c) => c.displayName === "Без города");
+  }, [overview, cities]);
+
+  const clientKpis = useMemo(
     () =>
-      cities
-        .filter((c) => c.displayName !== "Без города" && c.activeClients > 0)
-        .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru")),
-    [cities],
+      resolveClientKpisFromOverview(overview, {
+        active: structure.active,
+        potential: structure.potential,
+        attention: structure.attention,
+      }),
+    [overview, structure],
   );
 
-  const overviewWithoutCity = useMemo(
-    () => cities.find((c) => c.displayName === "Без города"),
-    [cities],
-  );
+  const totalCatalog = rows.length;
+  const otherCount = computeUnstatusedCatalogClients(totalCatalog, clientKpis.active, clientKpis.potential);
 
   const overviewRopGroupForDetail = useMemo(() => {
     if (detail?.kind !== "rop_overview") return null;
@@ -492,19 +525,26 @@ export function DealerBaseManagementCockpit({
           </div>
         </div>
         <section data-testid="section-client-base-structure-infographic">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             {([
-              ["Активные клиенты", String(structure.active)],
-              ["Торговые точки", tpCountDisplay()],
-              ["Потенциальные", String(structure.potential)],
-              ["Внимание", String(structure.attention)],
-            ] as Array<[string, string]>).map(([label, value]) => (
+              ["Всего в каталоге", String(totalCatalog), null],
+              ["Активные клиенты", String(clientKpis.active), null],
+              ["Потенциальные", String(clientKpis.potential), null],
+              ["Без статуса", String(otherCount), "не проработаны"],
+              ["Внимание", String(clientKpis.attention), null],
+              ["Торговые точки", tpCountDisplay(), null],
+            ] as Array<[string, string, string | null]>).map(([label, value, hint]) => (
               <div key={label} className="rounded-xl border border-border bg-card px-3 py-2.5 text-card-foreground">
                 <p className="text-[11px] leading-tight text-muted-foreground">{label}</p>
                 <p className="mt-0.5 text-lg font-semibold text-foreground tabular-nums sm:text-xl">{value}</p>
+                {hint ? <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{hint}</p> : null}
               </div>
             ))}
           </div>
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground" data-testid="text-client-base-reconcile-note">
+            Активные + Потенциальные + Без статуса = Всего в каталоге. «Внимание» — пересекающийся признак (давно без
+            обновления), не отдельная категория.
+          </p>
         </section>
         <section data-testid="section-client-base-cities">
           <Card className="rounded-xl border border-border bg-card text-card-foreground">
