@@ -666,7 +666,7 @@ export function mapClientsListItemToDealerRow(
       importanceTier: null,
     })),
     inCatalog: item.inCatalog,
-  } as KpiDealerRow;
+  } as unknown as KpiDealerRow;
 }
 
 export function mapClientsListTradePointsToListRows(

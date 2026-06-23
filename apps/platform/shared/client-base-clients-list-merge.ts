@@ -88,7 +88,7 @@ export function mergeClientBaseClientsList(params: {
 
   const out = new Map<string, ClientBaseClientsListClient>();
 
-  for (const key of catalogKeys) {
+  for (const key of Array.from(catalogKeys)) {
     const meta = catalogMeta.get(key);
     const ac = actualByKey.get(key);
     const status = ac
@@ -96,6 +96,7 @@ export function mergeClientBaseClientsList(params: {
       : null;
     if (status === "skip") continue;
     const tpIds = new Set<string>([...(meta?.tradePointIds ?? []), ...(ac?.tradePointIds ?? [])]);
+    const tpIdList = Array.from(tpIds);
     out.set(key, {
       id: key,
       fullName: ac?.fullName ?? meta?.fullName ?? key,
@@ -103,11 +104,11 @@ export function mergeClientBaseClientsList(params: {
       phone: ac?.phone ?? meta?.phone ?? null,
       legalEntity: ac?.legalEntity ?? meta?.legalEntity ?? false,
       city: ac?.city ?? meta?.city ?? null,
-      status: status === "skip" ? null : status,
+      status,
       managerUserId: ac?.managerUserId ?? meta?.managerUserId ?? null,
       managerFullName: ac?.managerFullName ?? meta?.managerFullName ?? null,
-      tradePointIds: Array.from(tpIds),
-      tradePointsCount: tpIds.size || meta?.tradePointsCount || ac?.tradePointIds.length || 0,
+      tradePointIds: tpIdList,
+      tradePointsCount: tpIdList.length || meta?.tradePointsCount || ac?.tradePointIds.length || 0,
       updatedAt: ac?.updatedAt ?? null,
       inCatalog: true,
     });
