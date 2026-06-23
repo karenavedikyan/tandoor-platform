@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+/**
+ * @vitest-environment jsdom
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { filterCatalogProductsByFilters } from "@/lib/catalog-facets";
 import { productDistributionCategory } from "@/lib/distribution-catalog-categories";
 import { readStateFromParams } from "@/hooks/use-catalog-filters-url";
+import {
+  fullscreenOpenStorageKey,
+  readFullscreenOpen,
+  writeFullscreenOpen,
+} from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import type { CatalogProduct } from "@/lib/catalog-product-type";
 
 function makeProduct(partial: Partial<CatalogProduct> & Pick<CatalogProduct, "id" | "name">): CatalogProduct {
@@ -74,5 +82,57 @@ describe("distribution fullscreen entry filters (prompt 428)", () => {
     const sp = new URLSearchParams();
     const state = readStateFromParams(sp, "dx", undefined);
     expect(state.source).toBe("all");
+  });
+});
+
+describe("distribution entry fullscreen session persistence", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    window.sessionStorage.clear();
+  });
+
+  it("writeFullscreenOpen(true) persists until cleared", () => {
+    writeFullscreenOpen("dealer-1", "tp-1", true);
+    expect(readFullscreenOpen("dealer-1", "tp-1")).toBe(true);
+    expect(window.sessionStorage.getItem(fullscreenOpenStorageKey("dealer-1", "tp-1"))).toBe("1");
+  });
+
+  it("writeFullscreenOpen(false) removes the key", () => {
+    writeFullscreenOpen("dealer-1", "tp-1", true);
+    writeFullscreenOpen("dealer-1", "tp-1", false);
+    expect(readFullscreenOpen("dealer-1", "tp-1")).toBe(false);
+    expect(window.sessionStorage.getItem(fullscreenOpenStorageKey("dealer-1", "tp-1"))).toBeNull();
+  });
+
+  it("keeps storage keys independent per trade point", () => {
+    writeFullscreenOpen("dealer-1", "tp-1", true);
+    expect(readFullscreenOpen("dealer-2", "tp-2")).toBe(false);
+    expect(readFullscreenOpen("dealer-1", "tp-1")).toBe(true);
+  });
+
+  it("handles unavailable sessionStorage gracefully", () => {
+    const brokenStorage = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+      clear: () => {},
+      key: () => null,
+      length: 0,
+    };
+    vi.stubGlobal("sessionStorage", brokenStorage);
+
+    expect(() => writeFullscreenOpen("dealer-x", "tp-x", true)).not.toThrow();
+    expect(readFullscreenOpen("dealer-x", "tp-x")).toBe(false);
+
+    vi.unstubAllGlobals();
   });
 });
