@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
@@ -10,12 +10,12 @@ import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cock
 
 const profile: ReleaseDemoProfile = { role: "sales_director", personaUserId: "user-dir-goncharenko" };
 
-function makeCatalogRow(id: string): DealerRow {
+function makeCatalogRow(id: string, status: DealerRow["status"] = "приостановлен"): DealerRow {
   return {
     id,
     name: `Клиент ${id}`,
     city: "Москва",
-    status: "",
+    status,
     outlets: 0,
     distribution: 0,
     hasProblem: false,
@@ -127,5 +127,28 @@ describe("DealerBaseManagementCockpit overview branch", () => {
     expect(citiesSection.textContent).toContain("Краснодар");
     expect(citiesSection.textContent).toContain("73");
     expect(citiesSection.textContent).toMatch(/всего\s+1/);
+  });
+
+  it("opens client list with active filter when KPI card is clicked", () => {
+    const rows = [
+      makeCatalogRow("active-1", "активный"),
+      makeCatalogRow("potential-1", "потенциальный"),
+    ];
+
+    render(
+      <DealerBaseManagementCockpit
+        rows={rows}
+        profile={profile}
+        overview={overview}
+        scopeTotalDealers={2850}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("kpi-card-active"));
+
+    expect(screen.getByTestId("tab-client-base-detail-clients")).toBeTruthy();
+    expect(screen.getByTestId("dialog-client-base-group-detail")).toBeTruthy();
+    const activeFilterBtn = screen.getByRole("button", { name: "Активные" });
+    expect(activeFilterBtn.className).toContain("bg-primary");
   });
 });

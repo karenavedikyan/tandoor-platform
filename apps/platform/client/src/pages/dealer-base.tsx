@@ -336,6 +336,7 @@ const QUICK_FROM_URL: Record<string, QuickFilter> = {
   inactive: "no_activity",
   no_activity: "no_activity",
   closed: "closed",
+  no_status: "no_status",
 };
 
 function parseWorkViewFromQuery(raw: string | null, access: DealerBaseAccessRole): DealerBaseWorkView | null {
@@ -1673,6 +1674,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [searchFilterPending, searchIndicatorVisible]);
 
   const [quick, setQuick] = useState<QuickFilter>("all");
+  const listSectionRef = useRef<HTMLDivElement>(null);
   const [cities, setCities] = useState<string[]>([]);
   const [categories, setCategories] = useState<ClientCategorySelection[]>([]);
   const [ropTeam, setRopTeam] = useState<string>(defaultRopManager.ropTeam);
@@ -2203,6 +2205,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       total > 0 ? Math.round(pickerFiltered.reduce((a, r) => a + r.distribution, 0) / total) : 0;
     return { total, active, potential, attention, avgDist };
   }, [pickerFiltered]);
+
+  const selectQuickAndScrollToList = useCallback((q: QuickFilter) => {
+    setQuick(q);
+    requestAnimationFrame(() => {
+      listSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   const categoryOptions = useMemo(() => {
     const s = new Set<ClientCategoryId>();
@@ -3860,10 +3869,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            { label: "Всего клиентов", value: String(kpis.total) },
-            { label: "Активные", value: String(kpis.active) },
-            { label: "Потенциальные", value: String(kpis.potential) },
-            { label: "Требуют внимания", value: String(kpis.attention) },
+            { label: "Всего клиентов", value: String(kpis.total), quick: "all" as QuickFilter, testId: "kpi-card-total" },
+            { label: "Активные", value: String(kpis.active), quick: "active" as QuickFilter, testId: "kpi-card-active" },
+            { label: "Потенциальные", value: String(kpis.potential), quick: "potential" as QuickFilter, testId: "kpi-card-potential" },
+            { label: "Требуют внимания", value: String(kpis.attention), quick: "attention" as QuickFilter, testId: "kpi-card-attention" },
             {
               label: "Торговые точки",
               value: overviewTradePointsLoading
@@ -3871,16 +3880,35 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 : overviewTradePointsCount != null
                   ? String(overviewTradePointsCount)
                   : "—",
+              quick: "all" as QuickFilter,
+              testId: "kpi-card-trade-points",
             },
-            { label: "Средняя дистрибуция", value: `${kpis.avgDist}%` },
-          ].map((k) => (
-            <Card key={k.label} className="rounded-2xl border border-border/80 bg-card shadow-md">
-              <CardHeader className="p-4 pb-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</p>
-                <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">{k.value}</p>
-              </CardHeader>
-            </Card>
-          ))}
+            { label: "Средняя дистрибуция", value: `${kpis.avgDist}%`, quick: null, testId: "kpi-card-avg-dist" },
+          ].map((k) => {
+            const clickable = k.quick != null;
+            const Comp = clickable ? "button" : "div";
+            return (
+              <Card key={k.label} className="rounded-2xl border border-border/80 bg-card shadow-md">
+                <Comp
+                  {...(clickable
+                    ? {
+                        type: "button" as const,
+                        onClick: () => selectQuickAndScrollToList(k.quick as QuickFilter),
+                        "data-testid": k.testId,
+                      }
+                    : { "data-testid": k.testId })}
+                  className={
+                    clickable
+                      ? "block w-full rounded-2xl p-4 pb-2 text-left transition-colors hover:bg-background/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      : "block w-full p-4 pb-2 text-left"
+                  }
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{k.label}</p>
+                  <p className="text-xl font-bold tabular-nums text-foreground sm:text-2xl">{k.value}</p>
+                </Comp>
+              </Card>
+            );
+          })}
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span data-testid="text-dealer-stock-main-count">Со складом: {stockFilterSummary.main}</span>
@@ -3889,6 +3917,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       </section>
       ) : null}
 
+      <div ref={listSectionRef}>
       <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
         <CardContent className="space-y-2.5 p-3 sm:space-y-3 sm:p-4">
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
@@ -4413,6 +4442,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           </Collapsible>
         </CardContent>
       </Card>
+      </div>
 
       {isTaskSelectMode ? (
         <p className="text-sm text-muted-foreground" data-testid="text-dealer-base-display-cap">
