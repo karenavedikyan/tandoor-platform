@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, LayoutGrid, List, Search, SlidersHorizontal, Square } from "lucide-react";
+import { ArrowLeft, LayoutGrid, List, Loader2, Search, SlidersHorizontal, Square } from "lucide-react";
 import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
 import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
@@ -48,6 +48,22 @@ import {
 } from "@/lib/distribution-entry-element-virtualizer";
 
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
+
+export function isEntryDataLoading(
+  actxEnabled: boolean,
+  actxLoading: boolean,
+  teamFetchLoading: boolean,
+): boolean {
+  return actxEnabled && (actxLoading || teamFetchLoading);
+}
+
+export function shouldShowEntryLoadingPlaceholder(args: {
+  selectedTradePointId: string | null;
+  hasSelectedRow: boolean;
+  isEntryDataLoading: boolean;
+}): boolean {
+  return Boolean(args.selectedTradePointId) && !args.hasSelectedRow && args.isEntryDataLoading;
+}
 
 type DistributionEntryTradePointPanelProps = {
   profile: ReleaseDemoProfile;
@@ -143,6 +159,17 @@ export function DistributionEntryTradePointPanel({
     () => (selectedRow ? findDealerTradePointForEntryRow(scopedDealers, selectedRow) : null),
     [scopedDealers, selectedRow],
   );
+
+  const entryDataLoading = isEntryDataLoading(
+    actx.enabled,
+    actx.loading,
+    managementPlane.teamFetchLoading,
+  );
+  const isResolvingSelectedTradePoint = shouldShowEntryLoadingPlaceholder({
+    selectedTradePointId,
+    hasSelectedRow: selectedRow !== null,
+    isEntryDataLoading: entryDataLoading,
+  });
 
   const actorUserId = user?.id ?? profile.personaUserId;
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
@@ -373,6 +400,18 @@ export function DistributionEntryTradePointPanel({
     </div>
   );
 
+  const loadingEntryPlaceholder = (
+    <Card className="rounded-xl border border-border bg-card shadow-xs">
+      <CardContent
+        className="flex min-h-[min(60vh,520px)] flex-col items-center justify-center gap-3 px-4 py-10 text-center"
+        data-testid="distribution-entry-tradepoint-loading"
+      >
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
+        <p className="text-sm text-muted-foreground">Загружаем торговую точку…</p>
+      </CardContent>
+    </Card>
+  );
+
   const entryColumn = selectedRow && selectedRef ? (
     <DistributionTradePointMatrixEntry
       dealer={selectedRef.dealer}
@@ -382,6 +421,8 @@ export function DistributionEntryTradePointPanel({
       actorName={actorName}
       onBackToList={() => setSelectedTradePointId(null)}
     />
+  ) : isResolvingSelectedTradePoint ? (
+    loadingEntryPlaceholder
   ) : (
     <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
       <CardContent className="px-4 py-10 text-center">
@@ -416,6 +457,8 @@ export function DistributionEntryTradePointPanel({
               </Button>
               {entryColumn}
             </>
+          ) : isResolvingSelectedTradePoint ? (
+            loadingEntryPlaceholder
           ) : (
             <Card className="rounded-xl border border-border bg-card shadow-xs">
               <CardContent className="p-3 sm:p-4">{listColumn}</CardContent>
