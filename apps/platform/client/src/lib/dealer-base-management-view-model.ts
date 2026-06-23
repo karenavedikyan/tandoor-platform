@@ -22,6 +22,7 @@ import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import type { MemberTotals, TeamTotals } from "@shared/dealers-scope-types";
+import type { ClientBaseOverview } from "./client-base-overview-api.js";
 
 export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;
 
@@ -704,4 +705,136 @@ export function findManagerInRopGroups(
     if (manager) return { manager, group };
   }
   return null;
+}
+
+export type ClientBaseClientKpis = {
+  active: number;
+  potential: number;
+  attention: number;
+};
+
+export type OverviewCityCardModel = {
+  cityKey: string;
+  displayName: string;
+  activeClients: number;
+  tradePoints: number;
+};
+
+export function resolveClientKpisFromOverview(
+  overview: ClientBaseOverview | null | undefined,
+  structure: ClientBaseClientKpis,
+): ClientBaseClientKpis {
+  if (overview) {
+    return {
+      active: overview.structure.activeClients,
+      potential: overview.structure.potentialClients,
+      attention: overview.structure.attentionClients,
+    };
+  }
+  return structure;
+}
+
+export function computeUnstatusedCatalogClients(
+  totalCatalog: number,
+  active: number,
+  potential: number,
+): number {
+  return Math.max(0, totalCatalog - active - potential);
+}
+
+export function buildOverviewCityCardsFromDb(overview: ClientBaseOverview): OverviewCityCardModel[] {
+  return overview.cities
+    .filter((c) => c.city != null && c.clients > 0)
+    .map((c) => ({
+      cityKey: c.city!,
+      displayName: c.city!,
+      activeClients: c.clients,
+      tradePoints: c.tradePoints,
+    }))
+    .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru"));
+}
+
+function collectOverviewTeamLookupKeys(
+  g: ClientBaseOverview["ropGroups"][number],
+  orgSnap?: OrgSnapshot | null,
+): string[] {
+  const keys = new Set<string>();
+  if (g.teamId) keys.add(String(g.teamId));
+  if (g.ropUserId) keys.add(String(g.ropUserId));
+  keys.add(String(g.teamId ?? g.ropUserId ?? "__no_rop__"));
+  if (g.teamId && orgSnap) {
+    keys.add(resolveManagementCatalogTeamId(g.teamId, orgSnap));
+    keys.add(resolveManagementOrgTeamUuid(g.teamId, orgSnap));
+  }
+  if (g.ropUserId && orgSnap) {
+    const fromRop = catalogTeamIdForRopUserId(orgSnap, g.ropUserId);
+    if (fromRop) keys.add(fromRop);
+  }
+  return Array.from(keys);
+}
+
+function collectCatalogTeamLookupKeys(teamId: string, orgSnap?: OrgSnapshot | null): string[] {
+  const keys = new Set<string>([teamId, String(teamId ?? "__no_rop__")]);
+  if (orgSnap) {
+    keys.add(resolveManagementCatalogTeamId(teamId, orgSnap));
+    keys.add(resolveManagementOrgTeamUuid(teamId, orgSnap));
+  }
+  return Array.from(keys);
+}
+
+export function mergeOverviewClientCountsIntoRopGroups(
+  ropGroups: RopGroupModel[],
+  overviewRopGroups: ClientBaseOverview["ropGroups"],
+  orgSnap?: OrgSnapshot | null,
+  userIdToCatalogMgrId?: Map<string, string>,
+): RopGroupModel[] {
+  const overviewByTeamKey = new Map<string, ClientBaseOverview["ropGroups"][number]>();
+  for (const g of overviewRopGroups) {
+    for (const key of collectOverviewTeamLookupKeys(g, orgSnap)) {
+      overviewByTeamKey.set(key, g);
+    }
+  }
+
+  const overviewMgrByCatalogId = new Map<
+    string,
+    ClientBaseOverview["ropGroups"][number]["managers"][number]
+  >();
+  for (const g of overviewRopGroups) {
+    for (const m of g.managers) {
+      overviewMgrByCatalogId.set(m.userId, m);
+      const catalogId = userIdToCatalogMgrId?.get(m.userId);
+      if (catalogId) overviewMgrByCatalogId.set(catalogId, m);
+    }
+  }
+
+  return ropGroups.map((group) => {
+    let overviewGroup: ClientBaseOverview["ropGroups"][number] | undefined;
+    for (const key of collectCatalogTeamLookupKeys(group.teamId, orgSnap)) {
+      overviewGroup = overviewByTeamKey.get(key);
+      if (overviewGroup) break;
+    }
+
+    const managers = group.managers.map((manager) => {
+      const overviewManager = overviewMgrByCatalogId.get(manager.managerId);
+      if (!overviewManager) return manager;
+      return {
+        ...manager,
+        active: overviewManager.active,
+        potential: overviewManager.potential,
+        attention: overviewManager.attention,
+      };
+    });
+
+    if (!overviewGroup) {
+      return { ...group, managers };
+    }
+
+    return {
+      ...group,
+      managers,
+      active: overviewGroup.clients,
+      potential: overviewGroup.potential,
+      attention: overviewGroup.attention,
+    };
+  });
 }
