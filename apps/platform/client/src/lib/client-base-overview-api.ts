@@ -102,3 +102,61 @@ export async function fetchClientBaseManagerDetail(managerUserId: string): Promi
   }
   return json;
 }
+
+export type ClientBaseClientsListClient = {
+  id: string;
+  fullName: string;
+  inn: string | null;
+  phone: string | null;
+  legalEntity: boolean;
+  city: string | null;
+  status: "active" | "potential" | "attention" | null;
+  managerUserId: string | null;
+  managerFullName: string | null;
+  tradePointIds: string[];
+  tradePointsCount: number;
+  updatedAt: string | null;
+  inCatalog: boolean;
+};
+
+export type ClientBaseClientsList = {
+  success: true;
+  generatedAt: string;
+  clients: ClientBaseClientsListClient[];
+  tradePoints: Array<{
+    id: string;
+    name: string;
+    address: string;
+    city: string;
+    clientId: string;
+    hasPhoto: boolean;
+    hasStorefront: boolean;
+    updatedAt: string | null;
+  }>;
+  meta?: {
+    catalogTotal: number;
+    activeCount: number;
+    tradePointsCount: number;
+  };
+};
+
+export async function fetchClientBaseClientsList(params: {
+  teamId?: string;
+  managerUserId?: string;
+}): Promise<ClientBaseClientsList> {
+  const sp = new URLSearchParams();
+  if (params.teamId) sp.set("teamId", params.teamId);
+  if (params.managerUserId) sp.set("managerUserId", params.managerUserId);
+  const qs = sp.toString();
+  const res = await fetch(`/api/admin/client-base-clients-list${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    credentials: "same-origin",
+  });
+  const json = (await res.json()) as ClientBaseClientsList | { success?: false; message?: string };
+  if (!res.ok || json.success !== true) {
+    throw new Error(
+      "message" in json && typeof json.message === "string" ? json.message : "Не удалось загрузить список клиентов.",
+    );
+  }
+  return json;
+}

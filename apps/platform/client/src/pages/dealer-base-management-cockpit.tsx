@@ -56,6 +56,7 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
+import { fetchClientBaseClientsList } from "@/lib/client-base-overview-api";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
@@ -73,7 +74,10 @@ import {
   buildOverviewCityCardsFromDb,
   computeUnstatusedCatalogClients,
   dealerMatchesClientListFilter,
+  dealerMatchesKpiClientListFilter,
   flattenTradePointsForRows,
+  mapClientsListItemToDealerRow,
+  mapClientsListTradePointsToListRows,
   mapManagerOverviewClients,
   mergeOverviewClientCountsIntoRopGroups,
   resolveClientKpisFromOverview,
@@ -364,10 +368,8 @@ export function DealerBaseManagementCockpit({
 
   const scrollToDetailPanel = useCallback(() => {
     requestAnimationFrame(() => {
-      document.querySelector('[data-testid="dialog-client-base-group-detail"]')?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      const el = document.querySelector('[data-testid="dialog-client-base-group-detail"]');
+      el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
     });
   }, []);
 
@@ -432,6 +434,12 @@ export function DealerBaseManagementCockpit({
   const tradePointsOverviewQ = useQuery({
     queryKey: ["trade-points-overview"],
     queryFn: fetchTradePointsOverview,
+    staleTime: 30_000,
+  });
+  const clientsListQ = useQuery({
+    queryKey: ["client-base-clients-list"],
+    queryFn: () => fetchClientBaseClientsList({}),
+    enabled: Boolean(overview),
     staleTime: 30_000,
   });
   const overviewTradePointsCount = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;
@@ -551,17 +559,30 @@ export function DealerBaseManagementCockpit({
     [structure, tpKpiCount],
   );
 
-  const detailSourceRows = useMemo(
-    () => detailRows(detail, ropGroups, cities, rows),
-    [detail, ropGroups, cities, rows],
+  const kpiDbRows = useMemo(
+    () => (clientsListQ.data?.clients ?? []).map(mapClientsListItemToDealerRow),
+    [clientsListQ.data],
   );
+  const kpiDbClientsById = useMemo(() => new Map(kpiDbRows.map((r) => [r.id, r])), [kpiDbRows]);
+  const isKpiDetail = detail?.kind === "kpi-clients" || detail?.kind === "kpi-trade-points";
+  const useKpiDbList = Boolean(overview && isKpiDetail);
 
-  const filteredClients = useMemo(
-    () => detailSourceRows.filter((r) => dealerMatchesClientListFilter(r, clientFilter)),
-    [detailSourceRows, clientFilter],
-  );
+  const detailSourceRows = useMemo(() => {
+    if (useKpiDbList && clientsListQ.data) return kpiDbRows;
+    return detailRows(detail, ropGroups, cities, rows);
+  }, [useKpiDbList, clientsListQ.data, kpiDbRows, detail, ropGroups, cities, rows]);
 
-  const tradePointRows = useMemo(() => flattenTradePointsForRows(detailSourceRows), [detailSourceRows]);
+  const filteredClients = useMemo(() => {
+    const match = useKpiDbList ? dealerMatchesKpiClientListFilter : dealerMatchesClientListFilter;
+    return detailSourceRows.filter((r) => match(r, clientFilter));
+  }, [detailSourceRows, clientFilter, useKpiDbList]);
+
+  const tradePointRows = useMemo(() => {
+    if (detail?.kind === "kpi-trade-points" && clientsListQ.data) {
+      return mapClientsListTradePointsToListRows(clientsListQ.data.tradePoints, kpiDbClientsById);
+    }
+    return flattenTradePointsForRows(detailSourceRows);
+  }, [detail, clientsListQ.data, kpiDbClientsById, detailSourceRows]);
 
   const closeDetail = useCallback(() => setDetail(null), []);
 
@@ -728,6 +749,12 @@ export function DealerBaseManagementCockpit({
 
   const detailBody = detail ? (
     <div className="space-y-4">
+      {useKpiDbList && clientsListQ.isLoading ? (
+        <p className="text-sm text-muted-foreground">Загрузка…</p>
+      ) : useKpiDbList && clientsListQ.isError ? (
+        <p className="text-sm text-destructive">Не удалось загрузить список из базы.</p>
+      ) : (
+        <>
       {detailTab === "clients" ? (
         <div className="flex flex-wrap gap-1.5">
           {(Object.keys(FILTER_LABELS) as ClientListFilter[]).map((f) => (
@@ -765,6 +792,8 @@ export function DealerBaseManagementCockpit({
           {renderTpRows(!isMobile)}
         </TabsContent>
       </Tabs>
+        </>
+      )}
     </div>
   ) : null;
 

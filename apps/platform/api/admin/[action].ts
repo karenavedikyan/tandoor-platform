@@ -24,6 +24,19 @@ import {
 } from "../../shared/admin/contacts-migration.js";
 import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
 import { buildTradePointsOverviewFromDb, type TradePointsOverviewViewerTeam } from "../../shared/trade-points-overview-db.js";
+import { computeDbScopeForUser, DEALER_OVERRIDE_JOIN, TRADE_POINT_OVERRIDE_JOIN } from "../../shared/db-scope-formula.js";
+import { dealerJoinStatusActive, tpJoinStatusActive } from "../../shared/record-status.js";
+import {
+  fetchScopedTradePointsRows,
+  mapScopedTradePointRow,
+} from "../../shared/trade-points-list-scoped-handlers.js";
+import {
+  effectiveClientListStatus,
+  mergeClientBaseClientsList,
+  resolveClientExternalKey,
+  type ClientBaseActualizationClient,
+  type ClientBaseCatalogDealerMeta,
+} from "../../shared/client-base-clients-list-merge.js";
 
 type UserRole =
   | "director"
@@ -2887,6 +2900,244 @@ async function handleClientBaseOverview(
   });
 }
 
+async function handleClientBaseClientsList(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<void> {
+  const me = await resolveCurrentUser(pool, headers);
+  if (!me) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+    return;
+  }
+  if (!["admin", "director", "rop", "manager", "category_manager"].includes(me.role) || me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const teamIdFilter = queryStringParam(req, "teamId");
+  const managerFilter = queryStringParam(req, "managerUserId");
+  const users = await pool.query<ActualizationStatsUserRow>(
+    `SELECT u.id, u.full_name, u.role, t.id AS team_id, t.name AS team_name, t.rop_user_id, ropu.full_name AS rop_full_name
+       FROM users u
+       LEFT JOIN user_team_memberships m ON m.user_id = u.id
+       LEFT JOIN teams t ON t.id = m.team_id
+       LEFT JOIN users ropu ON ropu.id = t.rop_user_id
+      WHERE u.status = 'active'`,
+  );
+  const usersById = new Map<string, ActualizationStatsUserRow>();
+  for (const u of users.rows) if (!usersById.has(u.id)) usersById.set(u.id, u);
+
+  let allowed = new Set(users.rows.map((u) => u.id));
+  if (me.role === "rop") {
+    allowed = new Set(users.rows.filter((u) => u.rop_user_id === me.id || u.id === me.id).map((u) => u.id));
+    allowed.add(me.id);
+  } else if (me.role === "manager") {
+    allowed = new Set([me.id]);
+  }
+  if (teamIdFilter) {
+    const teamMembers = new Set(users.rows.filter((u) => u.team_id === teamIdFilter).map((u) => u.id));
+    allowed = new Set(Array.from(allowed).filter((id) => teamMembers.has(id)));
+  }
+  if (managerFilter) {
+    if (!allowed.has(managerFilter)) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+      return;
+    }
+    allowed = new Set([managerFilter]);
+  }
+
+  const catalogKeys = new Set<string>();
+  for (const userId of Array.from(allowed)) {
+    const u = usersById.get(userId);
+    if (!u) continue;
+    const scope = await computeDbScopeForUser(pool, userId, u.role as import("../../shared/auth.js").UserRole);
+    for (const k of scope.active_dealer_external_keys) catalogKeys.add(k);
+  }
+
+  const catalogMeta = new Map<string, ClientBaseCatalogDealerMeta>();
+  if (catalogKeys.size > 0) {
+    const keysArr = Array.from(catalogKeys);
+    const dealersQ = await pool.query<{
+      external_key: string;
+      name: string | null;
+      city: string | null;
+      manager_user_id: string | null;
+      manager_full_name: string | null;
+    }>(
+      `SELECT d.external_key, d.name, d.city,
+              ca.responsible_user_id::text AS manager_user_id,
+              mu.full_name AS manager_full_name
+         FROM dealers d
+         LEFT JOIN client_assignments ca ON ca.client_code = d.release_code
+         LEFT JOIN users mu ON mu.id = ca.responsible_user_id
+         ${DEALER_OVERRIDE_JOIN}
+        WHERE d.external_key = ANY($1::text[])
+          AND ${dealerJoinStatusActive("d_ov")}`,
+      [keysArr],
+    );
+    const tpCountQ = await pool.query<{ dealer_external_key: string; tp_id: string }>(
+      `SELECT d.external_key AS dealer_external_key,
+              COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id
+         FROM trade_points tp
+         INNER JOIN dealers d ON d.id = tp.dealer_id
+         ${DEALER_OVERRIDE_JOIN}
+         ${TRADE_POINT_OVERRIDE_JOIN}
+        WHERE d.external_key = ANY($1::text[])
+          AND tp.is_active = TRUE
+          AND ${dealerJoinStatusActive("d_ov")}
+          AND ${tpJoinStatusActive("tpo")}`,
+      [keysArr],
+    );
+    const tpByDealer = new Map<string, string[]>();
+    for (const row of tpCountQ.rows) {
+      const arr = tpByDealer.get(row.dealer_external_key) ?? [];
+      arr.push(row.tp_id);
+      tpByDealer.set(row.dealer_external_key, arr);
+    }
+    for (const row of dealersQ.rows) {
+      const tpIds = tpByDealer.get(row.external_key) ?? [];
+      catalogMeta.set(row.external_key, {
+        externalKey: row.external_key,
+        fullName: row.name?.trim() || row.external_key,
+        city: row.city?.trim() || null,
+        managerUserId: row.manager_user_id,
+        managerFullName: row.manager_full_name,
+        inn: null,
+        phone: null,
+        legalEntity: false,
+        tradePointIds: tpIds,
+        tradePointsCount: tpIds.length,
+      });
+    }
+    for (const key of keysArr) {
+      if (!catalogMeta.has(key)) {
+        catalogMeta.set(key, {
+          externalKey: key,
+          fullName: key,
+          city: null,
+          managerUserId: null,
+          managerFullName: null,
+          inn: null,
+          phone: null,
+          legalEntity: false,
+          tradePointIds: tpByDealer.get(key) ?? [],
+          tradePointsCount: (tpByDealer.get(key) ?? []).length,
+        });
+      }
+    }
+  }
+
+  const rows = await pool.query<ActualizationDedupeStateRow>(
+    `SELECT scope_key, user_id, role, state, updated_at
+       FROM client_base_actualization_state
+      WHERE scope_key LIKE 'user:%'`,
+  );
+  const statesByUser = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows.rows) {
+    const scopeId = scopeUserId(String(row.scope_key));
+    const owner = row.user_id && UUID_RE.test(row.user_id) ? row.user_id : scopeId ? legacyScopeToUuid(scopeId) : null;
+    if (!owner || !allowed.has(owner)) continue;
+    const arr = statesByUser.get(owner) ?? [];
+    arr.push(coerceActualizationState(row.state));
+    statesByUser.set(owner, arr);
+  }
+
+  const actualizationClients: ClientBaseActualizationClient[] = [];
+  for (const userId of Array.from(allowed)) {
+    const merged = mergeActualizationStates(statesByUser.get(userId) ?? [actualizationEmptyState()]);
+    const meta = userMeta(userId, usersById);
+    const manualDealers = stateRecord(merged.manuallyCreatedDealersById);
+    const dealerOverrides = stateRecord(merged.dealerOverridesById);
+    const legalByDealer = stateRecord(merged.legalEntityOverridesByDealerId);
+    const manualTp = stateRecord(merged.manuallyCreatedTradePointsById);
+    const addClient = (id: string, fields: Record<string, unknown>, fallbackDate?: unknown) => {
+      const normalizedStatus = normalizeClientBaseStatus(stateString(fields.status));
+      if (normalizedStatus === "archived") return;
+      const tpIds = Object.entries(manualTp)
+        .filter(([, raw]) => {
+          const dealerId = stateString(stateRecord(raw).dealerId);
+          return dealerId === id || resolveClientExternalKey(dealerId, catalogKeys) === resolveClientExternalKey(id, catalogKeys);
+        })
+        .map(([tpId]) => tpId);
+      actualizationClients.push({
+        id,
+        fullName: stateString(fields.name) || stateString(fields.dealerName) || id,
+        city: stateString(fields.city) || null,
+        managerUserId: userId,
+        managerFullName: meta.fullName,
+        inn: stateString(fields.inn) || null,
+        phone: stateString(fields.phone) || null,
+        legalEntity: Boolean(legalByDealer[id]),
+        normalizedStatus,
+        updatedAt: stateDate(fields, fallbackDate),
+        tradePointIds: tpIds,
+      });
+    };
+    for (const [id, raw] of Object.entries(manualDealers)) {
+      const m = stateRecord(raw);
+      addClient(id, stateRecord(m.fields), m.updatedAt ?? m.createdAt);
+    }
+    for (const [id, raw] of Object.entries(dealerOverrides)) {
+      const ov = stateRecord(raw);
+      const fields = stateRecord(ov.fields);
+      if (!stateString(fields.phone) && !stateString(fields.email) && !stateString(fields.inn) && !stateString(fields.name) && !stateString(fields.dealerName)) {
+        continue;
+      }
+      addClient(id, fields, ov.updatedAt);
+    }
+  }
+
+  const staleCutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const clients = mergeClientBaseClientsList({
+    catalogKeys,
+    catalogMeta,
+    actualizationClients,
+    staleCutoffMs,
+  });
+
+  const viewerScope = await computeDbScopeForUser(pool, me.id, me.role as import("../../shared/auth.js").UserRole);
+  const scopedTpRows =
+    me.role === "regional_manager"
+      ? []
+      : await fetchScopedTradePointsRows(pool, viewerScope, { activeOnly: true });
+  const tradePoints = scopedTpRows.map((row) => {
+    const tp = mapScopedTradePointRow(row);
+    return {
+      id: tp.externalKey || tp.id,
+      name: tp.name,
+      address: tp.address ?? "",
+      city: tp.city ?? tp.dealerCity ?? "",
+      clientId: tp.dealerExternalKey,
+      hasPhoto: false,
+      hasStorefront: false,
+      updatedAt: null as string | null,
+    };
+  });
+
+  const activeCount = clients.filter((c) => c.status === "active").length;
+  const inCatalogCount = clients.filter((c) => c.inCatalog).length;
+  if (inCatalogCount !== catalogKeys.size) {
+    console.warn("[client-base-clients-list] catalog count mismatch", {
+      inCatalogCount,
+      catalogKeys: catalogKeys.size,
+    });
+  }
+
+  sendJson(res, 200, {
+    success: true,
+    generatedAt: new Date().toISOString(),
+    clients,
+    tradePoints,
+    meta: {
+      catalogTotal: catalogKeys.size,
+      activeCount,
+      tradePointsCount: tradePoints.length,
+    },
+  });
+}
+
 async function handleClientBaseManagerDetail(
   req: VercelRequest,
   res: VercelResponse,
@@ -5038,6 +5289,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "client-base-manager-detail" && req.method === "GET") {
       await handleClientBaseManagerDetail(req, res, pool, headers);
+      return;
+    }
+    if (action === "client-base-clients-list" && req.method === "GET") {
+      await handleClientBaseClientsList(req, res, pool, headers);
       return;
     }
     if (action === "manager-activity-detail" && req.method === "GET") {
