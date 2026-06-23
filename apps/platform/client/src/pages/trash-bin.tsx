@@ -49,7 +49,12 @@ import {
   patchTradePointTrashRuntime,
   patchTradePointPurgePendingRuntime,
 } from "@/lib/dealer-overrides-runtime";
-import { buildTrashScopeFilter, trashMetaFromDealerInfo, trashMetaFromTradePointInfo } from "@/lib/dealer-trash-scope";
+import {
+  buildTrashScopeFilter,
+  splitScopedTrashCounts,
+  trashMetaFromDealerInfo,
+  trashMetaFromTradePointInfo,
+} from "@/lib/dealer-trash-scope";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { TrashBinSkeleton } from "@/components/skeletons/trash-bin-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -130,6 +135,10 @@ export function TrashBinPage(): ReactElement {
       .sort((a, b) => compareByExpires(a.info, b.info));
   }, [trashFromDb.loading, trashFromDb.dealers, trashScopeFilter, releaseByDealerId, stateForRead]);
   const trashedDealers = useMemo(() => trashedDealerDisplays.map((d) => d.info), [trashedDealerDisplays]);
+  const trashCounts = useMemo(() => {
+    if (trashFromDb.loading) return { dealers: 0, tradePoints: 0 };
+    return splitScopedTrashCounts(trashFromDb.dealers, trashFromDb.tradePoints, trashScopeFilter);
+  }, [trashFromDb.loading, trashFromDb.dealers, trashFromDb.tradePoints, trashScopeFilter]);
   const trashedTps = useMemo(() => {
     if (trashFromDb.loading) return [];
     return trashFromDb.tradePoints
@@ -144,6 +153,20 @@ export function TrashBinPage(): ReactElement {
       )
       .sort(compareByExpires);
   }, [trashFromDb.loading, trashFromDb.tradePoints, trashScopeFilter]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || trashFromDb.loading) return;
+    if (
+      trashCounts.dealers !== trashedDealers.length ||
+      trashCounts.tradePoints !== trashedTps.length
+    ) {
+      console.warn("[trash-bin] trashCounts vs filtered list mismatch", {
+        trashCounts,
+        listDealers: trashedDealers.length,
+        listTradePoints: trashedTps.length,
+      });
+    }
+  }, [trashFromDb.loading, trashCounts, trashedDealers.length, trashedTps.length]);
 
   useEffect(() => {
     setSelectedTrashDealerIds(new Set());
@@ -836,8 +859,8 @@ export function TrashBinPage(): ReactElement {
       <Card className="rounded-xl border border-border bg-card text-card-foreground">
         <CardContent className="space-y-1 p-3 text-sm">
           <p className="text-foreground">
-            В корзине: <span className="font-semibold tabular-nums">{trashedDealers.length}</span> клиентов,{" "}
-            <span className="font-semibold tabular-nums">{trashedTps.length}</span> ТТ.
+            В корзине: <span className="font-semibold tabular-nums">{trashCounts.dealers}</span> клиентов,{" "}
+            <span className="font-semibold tabular-nums">{trashCounts.tradePoints}</span> ТТ.
           </p>
           {earliestExpires ? (
             <p className="text-[11px] text-muted-foreground">
@@ -861,13 +884,13 @@ export function TrashBinPage(): ReactElement {
               onClick={() =>
                 setConfirmFD({
                   kind: "request-purge-all-dealers",
-                  count: trashedDealers.length,
+                  count: trashCounts.dealers,
                   ids: trashedDealers.map((d) => d.dealerId),
                 })
               }
               data-testid="button-trash-clear-all-dealers"
             >
-              Очистить корзину ({trashedDealers.length})
+              Очистить корзину ({trashCounts.dealers})
             </Button>
           ) : null}
           {trashTab === "tps" && trashedTps.length > 0 ? (
@@ -879,23 +902,23 @@ export function TrashBinPage(): ReactElement {
               onClick={() =>
                 setConfirmFD({
                   kind: "request-purge-all-tps",
-                  count: trashedTps.length,
+                  count: trashCounts.tradePoints,
                   ids: trashedTps.map((t) => t.tradePointId),
                 })
               }
               data-testid="button-trash-clear-all-tps"
             >
-              Очистить корзину ({trashedTps.length})
+              Очистить корзину ({trashCounts.tradePoints})
             </Button>
           ) : null}
         </div>
         <Tabs value={trashTab} onValueChange={(v) => setTrashTab(v as "clients" | "tps")}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="clients" className="text-xs" data-testid="tab-trash-clients">
-              Клиенты ({trashedDealers.length})
+              Клиенты ({trashCounts.dealers})
             </TabsTrigger>
             <TabsTrigger value="tps" className="text-xs" data-testid="tab-trash-tps">
-              Торговые точки ({trashedTps.length})
+              Торговые точки ({trashCounts.tradePoints})
             </TabsTrigger>
           </TabsList>
           <TabsContent value="clients" className="mt-3 space-y-2">

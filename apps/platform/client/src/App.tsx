@@ -41,6 +41,7 @@ import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
 import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
+import { useScopedTrashCounts } from "@/hooks/use-scoped-trash-counts";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
@@ -330,8 +331,9 @@ function AuthenticatedShell({
       : sidebarCountsFromDbScope(dbScope);
   const dealerNavCount = dbSidebarCounts.dealers;
   const tradePointNavCount = showTradePointsNav ? dbSidebarCounts.tradePoints : undefined;
-  const trashDealersNavCount = dbSidebarCounts.trashDealers;
-  const trashTradePointsNavCount = dbSidebarCounts.trashTradePoints;
+  const scopedTrash = useScopedTrashCounts(Boolean(user?.id));
+  const trashDealersNavCount = scopedTrash.dealers;
+  const trashTradePointsNavCount = scopedTrash.tradePoints;
   const adminPurgeQueueNavCount =
     user.role === "admin" || user.role === "director" ? dbSidebarCounts.adminPurgeQueue : undefined;
   const navigation = useMemo(
