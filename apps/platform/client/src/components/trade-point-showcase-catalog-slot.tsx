@@ -121,7 +121,9 @@ export function TradePointShowcaseCatalogSlot({
       tradePointId={point.id}
       dealerId={dealer.id}
       tradePointName={point.name}
+      tradePointCode={point.releaseCode ?? point.id}
       dealerName={dealer.name}
+      dealerCode={dealer.releaseCode ?? dealer.id}
       counterpartyCity={point.city ?? dealer.city}
       matrixScopeRegion={dealer.region}
       matrixScopeCity={point.city}
