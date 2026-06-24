@@ -6,6 +6,8 @@ import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribut
 import { DistributionAnalyticsExportButton } from "./distribution-analytics-export-button";
 import { DistributionAnalyticsKpiTiles, DistributionPercentBadge } from "./distribution-analytics-kpi-tiles";
 import { DistributionEmptyDataNotice } from "./distribution-empty-data-notice";
+import { DistributionAnalyticsMobileSort } from "./distribution-analytics-mobile-sort";
+import { compareLocaleString, compareNullableNumber } from "@/lib/distribution-analytics/distribution-analytics-sort";
 import { cn } from "@/lib/utils";
 
 type SortKey = "average" | "entrance" | "interior" | "hardware" | "name";
@@ -28,7 +30,7 @@ export function DistributionAnalyticsTabTradePoints({
   hasAnyEligible,
 }: Props): ReactElement {
   const [sortKey, setSortKey] = useState<SortKey>("average");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortAsc, setSortAsc] = useState(false);
   const [mobilePage, setMobilePage] = useState(0);
 
   const sorted = useMemo(() => {
@@ -46,10 +48,14 @@ export function DistributionAnalyticsTabTradePoints({
           : sortKey === "average"
             ? b.metrics.averagePercent
             : b.metrics.byType[sortKey].percent;
-      if (typeof av === "string" && typeof bv === "string") return sortAsc ? av.localeCompare(bv, "ru") : bv.localeCompare(av, "ru");
-      const an = av == null || !Number.isFinite(Number(av)) ? -1 : Number(av);
-      const bn = bv == null || !Number.isFinite(Number(bv)) ? -1 : Number(bv);
-      return sortAsc ? an - bn : bn - an;
+      if (typeof av === "string" && typeof bv === "string") {
+        return compareLocaleString(av, bv, sortAsc ? "asc" : "desc");
+      }
+      return compareNullableNumber(
+        av as number | null,
+        bv as number | null,
+        sortAsc ? "asc" : "desc",
+      );
     });
     return list;
   }, [rows, sortAsc, sortKey]);
@@ -80,6 +86,26 @@ export function DistributionAnalyticsTabTradePoints({
       <DistributionEmptyDataNotice hasAnyEligible={hasAnyEligible} totalRowsInScope={totalRowsInScope} />
 
       <div className="md:hidden space-y-2" data-testid="distribution-analytics-tab-trade-points-mobile">
+        <DistributionAnalyticsMobileSort
+          className="md:hidden flex flex-wrap items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-2 py-1.5"
+          options={[
+            { value: "average", label: "Средняя %" },
+            { value: "entrance", label: "ВХ %" },
+            { value: "interior", label: "МК %" },
+            { value: "hardware", label: "Фурн %" },
+            { value: "name", label: "Название ТТ" },
+          ]}
+          value={sortKey}
+          dir={sortAsc ? "asc" : "desc"}
+          onChange={(next) => {
+            const key = next as SortKey;
+            if (key === sortKey) return;
+            setSortKey(key);
+            setSortAsc(key === "name");
+          }}
+          onToggleDir={() => setSortAsc((v) => !v)}
+          testIdPrefix="distribution-analytics-trade-points"
+        />
         {mobilePagedRows.map((item) => (
           <TradePointMobileCard key={item.row.tradePointId} item={item} />
         ))}
@@ -270,6 +296,6 @@ function toggleSort(
   if (current === next) setAsc(!asc);
   else {
     setKey(next);
-    setAsc(next === "name" ? true : true);
+    setAsc(next === "name");
   }
 }

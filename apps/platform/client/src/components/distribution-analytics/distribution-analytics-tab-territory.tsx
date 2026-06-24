@@ -2,8 +2,15 @@ import type { ReactElement } from "react";
 import { Fragment, useMemo, useState } from "react";
 import type { TerritoryRegionRow } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
+import {
+  defaultSortDirForKey,
+  sortTerritoryRows,
+  type SortDir,
+  type TerritorySortKey,
+} from "@/lib/distribution-analytics/distribution-analytics-sort";
 import { DistributionAnalyticsKpiTiles, DistributionPercentBadge } from "./distribution-analytics-kpi-tiles";
 import { DistributionEmptyDataNotice } from "./distribution-empty-data-notice";
+import { DistributionAnalyticsMobileSort } from "./distribution-analytics-mobile-sort";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -26,8 +33,18 @@ export function DistributionAnalyticsTabTerritory({
     if (territoryRows.length === 1) init[territoryRows[0]!.region] = true;
     return init;
   });
+  const [sortKey, setSortKey] = useState<TerritorySortKey>("average");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const cityCount = useMemo(() => territoryRows.reduce((n, r) => n + r.cities.length, 0), [territoryRows]);
+  const sortedTerritoryRows = useMemo(
+    () => sortTerritoryRows(territoryRows, sortKey, sortDir),
+    [territoryRows, sortKey, sortDir],
+  );
+
+  const cityCount = useMemo(
+    () => sortedTerritoryRows.reduce((n, r) => n + r.cities.length, 0),
+    [sortedTerritoryRows],
+  );
 
   return (
     <div className="space-y-3" data-testid="distribution-analytics-tab-territory">
@@ -38,6 +55,27 @@ export function DistributionAnalyticsTabTerritory({
       />
 
       <DistributionEmptyDataNotice hasAnyEligible={hasAnyEligible} totalRowsInScope={totalRowsInScope} />
+
+      <DistributionAnalyticsMobileSort
+        options={[
+          { value: "average", label: "Средняя %" },
+          { value: "entrance", label: "ВХ %" },
+          { value: "interior", label: "МК %" },
+          { value: "hardware", label: "Фурн %" },
+          { value: "count", label: "Кол-во ТТ" },
+          { value: "name", label: "Название региона/города" },
+        ]}
+        value={sortKey}
+        dir={sortDir}
+        onChange={(next) => {
+          const key = next as TerritorySortKey;
+          if (key === sortKey) return;
+          setSortKey(key);
+          setSortDir(defaultSortDirForKey(key));
+        }}
+        onToggleDir={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+        testIdPrefix="distribution-analytics-territory"
+      />
 
       <div className="overflow-x-auto rounded-xl border border-border/70">
         <table className="min-w-[880px] w-full text-left text-xs">
@@ -52,7 +90,7 @@ export function DistributionAnalyticsTabTerritory({
             </tr>
           </thead>
           <tbody>
-            {territoryRows.map((region) => (
+            {sortedTerritoryRows.map((region) => (
               <Fragment key={region.region}>
                 <tr key={region.region} className="border-t border-border/50 bg-muted/10">
                   <td className="px-2 py-2">
@@ -86,7 +124,7 @@ export function DistributionAnalyticsTabTerritory({
         <div className="space-y-2 rounded-xl border border-border/70 bg-card p-3" data-testid="distribution-analytics-territory-chart">
           <p className="text-xs font-semibold">Средняя дистрибуция по городам</p>
           <div className="flex items-end gap-2 overflow-x-auto pb-1">
-            {territoryRows.flatMap((r) =>
+            {sortedTerritoryRows.flatMap((r) =>
               r.cities.map((city) => {
                 const pct = city.metrics.averagePercent ?? 0;
                 return (

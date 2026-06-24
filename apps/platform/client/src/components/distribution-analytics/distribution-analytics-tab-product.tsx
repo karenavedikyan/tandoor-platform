@@ -1,10 +1,18 @@
 import type { ReactElement } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import type { ProductAnalyticsRow } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
+import {
+  defaultSortDirForKey,
+  sortProductRows,
+  type ProductSortKey,
+  type SortDir,
+} from "@/lib/distribution-analytics/distribution-analytics-sort";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { DistributionAnalyticsKpiTiles, DistributionPercentBadge } from "./distribution-analytics-kpi-tiles";
 import { DistributionEmptyDataNotice } from "./distribution-empty-data-notice";
+import { DistributionAnalyticsMobileSort } from "./distribution-analytics-mobile-sort";
 import { formatDistributionPercent } from "@/lib/distribution-analytics/distribution-analytics-math";
 
 type Props = {
@@ -26,6 +34,14 @@ export function DistributionAnalyticsTabProduct({
   totalRowsInScope,
   hasAnyEligible,
 }: Props): ReactElement {
+  const [sortKey, setSortKey] = useState<ProductSortKey>("coverage");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const sortedProductRows = useMemo(
+    () => sortProductRows(productRows, sortKey, sortDir),
+    [productRows, sortKey, sortDir],
+  );
+
   return (
     <div className="space-y-3" data-testid="distribution-analytics-tab-product">
       <DistributionAnalyticsKpiTiles
@@ -35,6 +51,27 @@ export function DistributionAnalyticsTabProduct({
       />
 
       <DistributionEmptyDataNotice hasAnyEligible={hasAnyEligible} totalRowsInScope={totalRowsInScope} />
+
+      <DistributionAnalyticsMobileSort
+        options={[
+          { value: "coverage", label: "Покрытие %" },
+          { value: "present", label: "Где стоит (ТТ)" },
+          { value: "top150", label: "TOP-150" },
+          { value: "top350", label: "TOP-350" },
+          { value: "name", label: "Модель" },
+          { value: "type", label: "Тип" },
+        ]}
+        value={sortKey}
+        dir={sortDir}
+        onChange={(next) => {
+          const key = next as ProductSortKey;
+          if (key === sortKey) return;
+          setSortKey(key);
+          setSortDir(defaultSortDirForKey(key));
+        }}
+        onToggleDir={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+        testIdPrefix="distribution-analytics-product"
+      />
 
       <div className="overflow-x-auto rounded-xl border border-border/70">
         <table className="min-w-[960px] w-full text-left text-xs">
@@ -51,7 +88,7 @@ export function DistributionAnalyticsTabProduct({
             </tr>
           </thead>
           <tbody>
-            {productRows.map((row) => (
+            {sortedProductRows.map((row) => (
               <tr key={row.product.id} className="border-t border-border/50 hover:bg-muted/20">
                 <td className="px-2 py-2">
                   {row.product.image ? (
