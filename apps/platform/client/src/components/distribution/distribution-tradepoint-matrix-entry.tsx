@@ -358,17 +358,7 @@ export function DistributionTradePointMatrixEntry({
         actorLabel={actorName}
         canEdit={canEdit}
       />
-      {templateModelsCount === 0 && !showcaseFullscreenOpen ? (
-        <Card className="rounded-xl border border-border bg-card shadow-xs">
-          <CardContent className="px-4 py-8 text-center">
-            <p className="text-sm font-medium text-foreground">Активная матрица не назначена</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Для этой торговой точки нет чек-листа моделей. Нажмите «Внести дистрибуцию», чтобы открыть
-              полноэкранный ввод, или назначьте матрицу в справочнике.
-            </p>
-          </CardContent>
-        </Card>
-      ) : canEdit && showcaseFullscreenOpen ? (
+      {canEdit && showcaseFullscreenOpen ? (
         <DistributionFullscreenEntry
           dealer={dealer}
           point={point}
@@ -387,15 +377,28 @@ export function DistributionTradePointMatrixEntry({
           }}
         />
       ) : (
-        <TradePointShowcaseMatrixSection
-          dealer={dealer}
-          point={point}
-          profile={profile}
-          actorUserId={actorUserId}
-          actorName={actorName}
-          page={showcasePage}
-          density="compact"
-        />
+        <>
+          {templateModelsCount === 0 ? (
+            <Card className="rounded-xl border border-border bg-muted/20 shadow-xs" data-testid="card-no-matrix-hint">
+              <CardContent className="px-4 py-3">
+                <p className="text-xs text-muted-foreground">
+                  Матрица моделей для этой ТТ не назначена. Матрица — это рекомендация, какие модели поставить.
+                  Дистрибуцию по витринам можно вносить ниже, в разделе «Типы размещения витрины» (всего витрин и
+                  сколько из них наши).
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+          <TradePointShowcaseMatrixSection
+            dealer={dealer}
+            point={point}
+            profile={profile}
+            actorUserId={actorUserId}
+            actorName={actorName}
+            page={showcasePage}
+            density="compact"
+          />
+        </>
       )}
     </div>
   );
