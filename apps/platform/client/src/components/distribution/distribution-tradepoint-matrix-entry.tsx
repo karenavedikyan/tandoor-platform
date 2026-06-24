@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Maximize2 } from "lucide-react";
+import { ChevronDown, ExternalLink, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DistributionFullscreenEntry } from "@/components/distribution/distribution-fullscreen-entry";
@@ -323,6 +323,18 @@ export function DistributionTradePointMatrixEntry({
           <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
         </CollapsibleContent>
       </Collapsible>
+      <Button
+        asChild
+        variant="outline"
+        size="sm"
+        className="h-9 w-full justify-center gap-1.5 text-sm font-medium"
+        data-testid="button-open-trade-point-card"
+      >
+        <a href={buildHashPath(`/dealers/${dealer.id}/trade-points/${point.id}`, { tradePointShowcase: "1" })}>
+          <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+          Открыть карточку ТТ
+        </a>
+      </Button>
       {showEnterDistributionButton ? (
         <Button
           type="button"
