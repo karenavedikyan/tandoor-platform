@@ -386,7 +386,7 @@ export function DistributionEntryTradePointPanel({
           className={cn(
             "max-h-[min(70vh,720px)] overflow-y-auto pr-0.5",
             tradePointView === "list" &&
-              "overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+              "rounded-xl border border-border/80 bg-card shadow-sm",
           )}
           data-testid="list-distribution-entry-tradepoints"
         >
