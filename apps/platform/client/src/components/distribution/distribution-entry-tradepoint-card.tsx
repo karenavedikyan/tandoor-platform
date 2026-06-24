@@ -23,8 +23,14 @@ type DistributionEntryTradePointCardProps = {
 };
 
 function CoverageBadge({ row }: { row: DistributionEntryTradePointRow }) {
-  const noMatrix = row.templateModelsCount === 0;
-  if (noMatrix) {
+  if (row.templateModelsCount === 0) {
+    if (row.installedOursTotal > 0) {
+      return (
+        <Badge variant="outline" className="text-[10px] font-medium tabular-nums">
+          На витрине: {row.installedOursTotal}
+        </Badge>
+      );
+    }
     return (
       <Badge variant="outline" className="text-[10px] font-medium">
         нет матрицы
@@ -42,7 +48,8 @@ function CoverageBadge({ row }: { row: DistributionEntryTradePointRow }) {
 }
 
 function FilledDateHint({ row }: { row: DistributionEntryTradePointRow }) {
-  if (row.filledCount <= 0 || !row.lastUpdatedAt) return null;
+  const hasFilledData = row.filledCount > 0 || row.installedOursTotal > 0;
+  if (!hasFilledData || !row.lastUpdatedAt) return null;
   return (
     <span className="whitespace-nowrap text-[10px] text-muted-foreground tabular-nums">
       · {formatDisplayDate(row.lastUpdatedAt)}
