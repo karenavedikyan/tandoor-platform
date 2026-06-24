@@ -1659,10 +1659,11 @@ export function TradePointShowcaseMatrixSection({
                 className="mt-2 space-y-2 rounded-lg border border-border/70 bg-card/80 p-3"
                 data-testid="section-trade-point-distribution"
               >
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
                   {[
                     { label: "МК", pct: distributionFromMatrix.mk },
                     { label: "ВХ", pct: distributionFromMatrix.vh },
+                    { label: "Фурнитура", pct: distributionFromMatrix.hardware },
                     { label: "Общее", pct: distributionFromMatrix.total },
                   ].map((item) => (
                     <div

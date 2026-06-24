@@ -135,7 +135,7 @@ function SegmentModelPhoto({
       <img
         src={model.imageUrl}
         alt=""
-        className={className}
+        className={cn("bg-muted", className)}
         loading="lazy"
       />
     );
@@ -163,7 +163,7 @@ function SegmentModelListRow({
       <SegmentModelPhoto
         model={model}
         cardSize="list"
-        className="aspect-[3/4] h-14 w-14 shrink-0 rounded-md object-cover"
+        className="aspect-[3/4] h-14 w-14 shrink-0 rounded-md object-contain bg-muted"
       />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{model.name}</p>
@@ -189,10 +189,10 @@ function SegmentModelGridCard({
 }) {
   const photoClass =
     cardSize === "xl"
-      ? "aspect-[3/4] w-full rounded-lg object-cover"
+      ? "aspect-[3/4] w-full rounded-lg object-contain bg-muted"
       : cardSize === "m"
-        ? "aspect-[3/4] h-32 w-full rounded-lg object-cover"
-        : "aspect-[3/4] h-20 w-full rounded-lg object-cover";
+        ? "aspect-[3/4] h-32 w-full rounded-lg object-contain bg-muted"
+        : "aspect-[3/4] h-20 w-full rounded-lg object-contain bg-muted";
 
   const nameClass =
     cardSize === "xl"
