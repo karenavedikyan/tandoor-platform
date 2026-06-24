@@ -39,8 +39,10 @@ export function filterRowsByStatusTab(
   tab: DistributionEntryStatusTab,
 ): DistributionEntryTradePointRow[] {
   if (tab === "all") return [...rows];
-  if (tab === "empty") return rows.filter((r) => r.filledCount === 0);
-  return rows.filter((r) => r.filledCount > 0);
+  // ТТ считается «заполненной», если на витрину внесена хотя бы одна installed-модель
+  // (по сегментам вх/мк/фурнитура), независимо от наличия матрицы — согласовано с владельцем продукта.
+  if (tab === "empty") return rows.filter((r) => r.installedOursTotal === 0);
+  return rows.filter((r) => r.installedOursTotal > 0);
 }
 
 export function filterRowsByPeriod(
@@ -106,7 +108,7 @@ export function countByStatusTab(rows: readonly DistributionEntryTradePointRow[]
   let empty = 0;
   let filled = 0;
   for (const r of rows) {
-    if (r.filledCount === 0) empty += 1;
+    if (r.installedOursTotal === 0) empty += 1;
     else filled += 1;
   }
   return { all: rows.length, empty, filled };

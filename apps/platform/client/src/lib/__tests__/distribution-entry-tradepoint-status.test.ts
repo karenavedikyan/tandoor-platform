@@ -32,13 +32,15 @@ function row(
 }
 
 const rows: DistributionEntryTradePointRow[] = [
-  row({ tradePointId: "tp-empty", tradePointName: "Пустая", filledCount: 0, coveragePct: 0 }),
+  row({ tradePointId: "tp-empty", tradePointName: "Пустая", filledCount: 0, coveragePct: 0, installedOursTotal: 0 }),
   row({
     tradePointId: "tp-partial",
     tradePointName: "Частичная",
     filledCount: 2,
     coveragePct: 50,
     lastUpdatedAt: "2026-06-10T12:00:00.000Z",
+    installedOursTotal: 2,
+    installedOursBySegment: { vh: 2, mk: 0, hardware: 0 },
   }),
   row({
     tradePointId: "tp-full",
@@ -46,6 +48,8 @@ const rows: DistributionEntryTradePointRow[] = [
     filledCount: 4,
     coveragePct: 100,
     lastUpdatedAt: "2026-06-16T08:00:00.000Z",
+    installedOursTotal: 4,
+    installedOursBySegment: { vh: 2, mk: 2, hardware: 0 },
   }),
   row({
     tradePointId: "tp-old",
@@ -53,6 +57,19 @@ const rows: DistributionEntryTradePointRow[] = [
     filledCount: 1,
     coveragePct: 25,
     lastUpdatedAt: "2026-05-01T08:00:00.000Z",
+    installedOursTotal: 1,
+    installedOursBySegment: { vh: 1, mk: 0, hardware: 0 },
+  }),
+  // ТТ без матрицы, но с внесёнными installed-моделями: filledCount=0, но installedOursTotal>0.
+  row({
+    tradePointId: "tp-no-matrix",
+    tradePointName: "Без матрицы с витриной",
+    templateModelsCount: 0,
+    filledCount: 0,
+    coveragePct: 0,
+    lastUpdatedAt: "2026-06-16T10:00:00.000Z",
+    installedOursTotal: 30,
+    installedOursBySegment: { vh: 9, mk: 11, hardware: 10 },
   }),
 ];
 
@@ -61,18 +78,36 @@ assert.deepEqual(filterRowsByStatusTab(rows, "all").map((r) => r.tradePointId), 
   "tp-partial",
   "tp-full",
   "tp-old",
+  "tp-no-matrix",
 ]);
+// «empty» = только ТТ без единой installed-модели; ТТ без матрицы, но с витриной — НЕ пустая.
 assert.deepEqual(filterRowsByStatusTab(rows, "empty").map((r) => r.tradePointId), ["tp-empty"]);
+// «filled» = есть хотя бы одна installed-модель (включая ТТ без матрицы).
 assert.deepEqual(filterRowsByStatusTab(rows, "filled").map((r) => r.tradePointId), [
   "tp-partial",
   "tp-full",
   "tp-old",
+  "tp-no-matrix",
 ]);
 
 const counts = countByStatusTab(rows);
-assert.equal(counts.all, 4);
+assert.equal(counts.all, 5);
 assert.equal(counts.empty, 1);
-assert.equal(counts.filled, 3);
+assert.equal(counts.filled, 4);
+
+// Регресс: ТТ с матрицей и filledCount>0 (и installedOursTotal>0) остаётся в «filled».
+assert.ok(
+  filterRowsByStatusTab(rows, "filled").some((r) => r.tradePointId === "tp-full"),
+  "ТТ с матрицей и заполнением остаётся заполненной",
+);
+// Граничный случай: installedOursTotal>0 при filledCount===0 считается заполненной.
+const noMatrixRow = rows.find((r) => r.tradePointId === "tp-no-matrix")!;
+assert.equal(noMatrixRow.filledCount, 0);
+assert.ok(noMatrixRow.installedOursTotal > 0);
+assert.deepEqual(
+  filterRowsByStatusTab([noMatrixRow], "filled").map((r) => r.tradePointId),
+  ["tp-no-matrix"],
+);
 
 assert.equal(defaultSortForTab("all"), "incomplete-first");
 assert.equal(defaultSortForTab("empty"), "incomplete-first");
