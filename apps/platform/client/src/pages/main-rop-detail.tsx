@@ -180,10 +180,16 @@ export default function MainRopDetailPage() {
     return list.filter((r) => dealerIds.has(r.dealerId));
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows]);
 
-  const teamTradePointIds = useMemo(
-    () => tradePointRows.map((r) => r.tradePointId),
-    [tradePointRows],
-  );
+  const teamTradePointIds = useMemo(() => {
+    if (!actx.enabled || !allowed) return [];
+    const ids: string[] = [];
+    for (const row of clientRows) {
+      for (const e of mergeTradePointsForActualization(row, managementPlane.mergedState)) {
+        if (!e.isArchived) ids.push(e.point.id);
+      }
+    }
+    return ids;
+  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
 
   const teamDistribution = useTradePointDistributionAggregate(
     actx.enabled && allowed ? teamTradePointIds : [],
@@ -192,28 +198,38 @@ export default function MainRopDetailPage() {
 
   const tradePointIdsByManagerName = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const r of tradePointRows) {
-      const key = (r.manager || "").trim();
+    if (!actx.enabled || !allowed) return map;
+    for (const row of clientRows) {
+      const key = (row.manager || "").trim();
       if (!key) continue;
+      const pointIds = mergeTradePointsForActualization(row, managementPlane.mergedState)
+        .filter((e) => !e.isArchived)
+        .map((e) => e.point.id);
+      if (pointIds.length === 0) continue;
       const arr = map.get(key);
-      if (arr) arr.push(r.tradePointId);
-      else map.set(key, [r.tradePointId]);
+      if (arr) arr.push(...pointIds);
+      else map.set(key, [...pointIds]);
     }
     return map;
-  }, [tradePointRows]);
+  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
 
   const tradePointIdsByCity = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const r of tradePointRows) {
-      const key = (r.city || "").trim() || "Без города";
+    if (!actx.enabled || !allowed) return map;
+    for (const row of clientRows) {
+      const key = (row.city || "").trim() || "Без города";
+      const pointIds = mergeTradePointsForActualization(row, managementPlane.mergedState)
+        .filter((e) => !e.isArchived)
+        .map((e) => e.point.id);
+      if (pointIds.length === 0) continue;
       const arr = map.get(key);
-      if (arr) arr.push(r.tradePointId);
-      else map.set(key, [r.tradePointId]);
+      if (arr) arr.push(...pointIds);
+      else map.set(key, [...pointIds]);
     }
     return new Map(
       Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "ru")),
     );
-  }, [tradePointRows]);
+  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
 
   const loading =
     authLoading ||

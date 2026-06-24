@@ -161,10 +161,16 @@ function MainManagerDetailContent() {
     return tradePointRows.filter((r) => dealerIds.has(r.dealerId));
   }, [tradePointRows, selectedCity, displayedClientRows]);
 
-  const managerTradePointIds = useMemo(
-    () => tradePointRows.map((r) => r.tradePointId),
-    [tradePointRows],
-  );
+  const managerTradePointIds = useMemo(() => {
+    if (!actx.enabled || !allowed) return [];
+    const ids: string[] = [];
+    for (const row of clientRows) {
+      for (const e of mergeTradePointsForActualization(row, managementPlane.mergedState)) {
+        if (!e.isArchived) ids.push(e.point.id);
+      }
+    }
+    return ids;
+  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
 
   const managerDistribution = useTradePointDistributionAggregate(
     actx.enabled && allowed ? managerTradePointIds : [],
