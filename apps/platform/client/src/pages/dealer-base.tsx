@@ -125,7 +125,7 @@ import {
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
-import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket, buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
+import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
 import { toast } from "@/hooks/use-toast";
 import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
@@ -1877,10 +1877,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const managerHomeTradePointIds = useMemo(() => {
     if (!isManagerHome || !actx.enabled) return [] as string[];
-    const dealerIds = new Set(scopedRows.map((r) => r.id));
-    const list = buildTradePointListForActualization(teamActualizationPlane, profile);
-    return list.filter((r) => dealerIds.has(r.dealerId)).map((r) => r.tradePointId);
-  }, [isManagerHome, actx.enabled, scopedRows, teamActualizationPlane, profile]);
+    const ids: string[] = [];
+    for (const row of scopedRows) {
+      for (const e of mergeTradePointsForActualization(row, teamActualizationPlane)) {
+        if (!e.isArchived) ids.push(e.point.id);
+      }
+    }
+    return ids;
+  }, [isManagerHome, actx.enabled, scopedRows, teamActualizationPlane]);
 
   const managerHomeDistribution = useTradePointDistributionAggregate(
     managerHomeTradePointIds,
