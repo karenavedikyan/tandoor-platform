@@ -15,6 +15,10 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { applyStaleStateMerge, isStaleActualizationSnapshot } from "../../shared/actualization-merge.js";
+import {
+  emptyActualizationState,
+  mergeActualizationStates,
+} from "../../shared/actualization-state-merge.js";
 import { applyTrashProtection, purgeExpiredTrash, type UnTrashDirective } from "../../shared/actualization-trash.js";
 import {
   sanitizeStateForNonManagerRole,
@@ -87,30 +91,7 @@ function isActualizationGloballyDisabled(): boolean {
 }
 
 function emptyState(): Record<string, unknown> {
-  return {
-    version: 1,
-    updatedAt: null,
-    updatedBy: null,
-    clientCategoryOverridesById: {},
-    dealerOverridesById: {},
-    manuallyCreatedDealersById: {},
-    tradePointOverridesById: {},
-    manuallyCreatedTradePointsById: {},
-    archivedLegalEntitiesById: {},
-    legalEntityOverridesByDealerId: {},
-    dealerCardViewSettingsByUserId: {},
-    dealerActualizationContactsById: {},
-    archivedDealerContactsById: {},
-    tradePointShowcaseActualizationById: {},
-    dealerActualizationAuditByDealerId: {},
-    unloadingOrderByDealerId: {},
-    routeOrderByRouteId: {},
-    dealerPhotosByDealerId: {},
-    tradePointPhotosByTradePointId: {},
-    // Корзина — отдельная сущность от архива. Хранится 14 дней, чистится cron'ом.
-    trashedDealersById: {},
-    trashedTradePointsById: {},
-  };
+  return emptyActualizationState();
 }
 
 function sanitizeUserId(raw: string | undefined): string | null {
@@ -196,40 +177,6 @@ function coerceState(input: unknown): Record<string, unknown> {
     merged[k] = base[k];
   }
   return merged;
-}
-
-function mergeActualizationStates(states: Record<string, unknown>[]): Record<string, unknown> {
-  const result = emptyState();
-  let maxUpdatedAt: string | null = null;
-
-  for (const state of states) {
-    const updatedAt = state.updatedAt;
-    if (typeof updatedAt === "string" && (!maxUpdatedAt || updatedAt > maxUpdatedAt)) {
-      maxUpdatedAt = updatedAt;
-    }
-  }
-
-  result.updatedAt = maxUpdatedAt;
-  result.updatedBy = typeof states[0]?.updatedBy === "string" ? states[0].updatedBy : null;
-
-  const base = emptyState();
-  for (const field of Object.keys(base)) {
-    if (field === "version" || field === "updatedAt" || field === "updatedBy") continue;
-    const target = result[field];
-    if (!isPlainObject(target)) continue;
-
-    for (const state of states) {
-      const value = state[field];
-      if (!isPlainObject(value)) continue;
-      for (const id of Object.keys(value)) {
-        if (!(id in target)) {
-          target[id] = value[id];
-        }
-      }
-    }
-  }
-
-  return result;
 }
 
 function buildResponse(
