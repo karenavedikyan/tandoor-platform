@@ -13,9 +13,10 @@ import { Label } from "@/components/ui/label";
 import type { CatalogProduct } from "@/lib/catalog-product-type";
 import type { TradePointShowcaseSelectedModel } from "@/lib/client-base-actualization-state";
 import {
-  buildEquipmentCapacityInputs,
   capacityByEquipmentType,
   equipmentCapacityKey,
+  legacyCategoryCapacityFromRec,
+  seedInputsWithLegacyFallback,
   type EquipmentCapacityInput,
 } from "@/lib/showcase-capacity-by-equipment";
 import type { ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
@@ -79,13 +80,15 @@ export function ShowcaseEquipmentCapacityDialog({
 
   useEffect(() => {
     if (!open) return;
-    const initial = buildEquipmentCapacityInputs(placements);
+    const candidateRec = getCandidateRec();
+    const legacy = legacyCategoryCapacityFromRec(candidateRec);
+    const initial = seedInputsWithLegacyFallback(placements, legacy);
     const next: Record<string, string> = {};
     for (const [key, value] of Object.entries(initial)) {
       next[key] = String(value);
     }
     setInputs(next);
-  }, [open, placements]);
+  }, [open, placements, getCandidateRec]);
 
   const candidateRec = getCandidateRec();
   const categoryGaps = useMemo(

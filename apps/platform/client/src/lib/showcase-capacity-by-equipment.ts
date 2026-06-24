@@ -112,6 +112,28 @@ export function newEquipmentBlockTargetId(): string {
 
 export type EquipmentCapacityInput = Record<string, number>;
 
+export const LEGACY_FALLBACK_TYPE_BY_SEGMENT: Record<ShowcasePlacementSegment, ShowcasePlacementType> = {
+  vh: "unmounted",
+  mk: "unmounted",
+  hardware: "branded_stand",
+};
+
+export function legacyCategoryCapacityFromRec(
+  rec:
+    | {
+        entrancePortals?: number | null;
+        interiorPortals?: number | null;
+        hardwareSections?: number | null;
+      }
+    | undefined,
+): CategoryCapacityFromPlacements {
+  return {
+    entrance: rec?.entrancePortals != null && rec.entrancePortals > 0 ? rec.entrancePortals : 0,
+    interior: rec?.interiorPortals != null && rec.interiorPortals > 0 ? rec.interiorPortals : 0,
+    hardware: rec?.hardwareSections != null && rec.hardwareSections > 0 ? rec.hardwareSections : 0,
+  };
+}
+
 export function buildEquipmentCapacityInputs(
   placements: ShowcaseMatrixEntryDto[],
 ): EquipmentCapacityInput {
@@ -123,6 +145,83 @@ export function buildEquipmentCapacityInputs(
     }
   }
   return inputs;
+}
+
+/** Сидирует inputs из placement-блоков; при отсутствии блоков — из legacy-категорийной ёмкости. */
+export function seedInputsWithLegacyFallback(
+  placements: ShowcaseMatrixEntryDto[],
+  legacy: CategoryCapacityFromPlacements,
+): EquipmentCapacityInput {
+  const inputs = buildEquipmentCapacityInputs(placements);
+  const placementCats = categoryCapacityFromPlacements(placements);
+
+  const seedSegment = (segment: ShowcasePlacementSegment, legacyValue: number) => {
+    const placementTotal =
+      segment === "vh"
+        ? placementCats.entrance
+        : segment === "mk"
+          ? placementCats.interior
+          : placementCats.hardware;
+    if (placementTotal > 0 || legacyValue <= 0) return;
+    const type = LEGACY_FALLBACK_TYPE_BY_SEGMENT[segment];
+    inputs[equipmentCapacityKey(segment, type)] = legacyValue;
+  };
+
+  seedSegment("vh", legacy.entrance);
+  seedSegment("mk", legacy.interior);
+  seedSegment("hardware", legacy.hardware);
+  return inputs;
+}
+
+export function resolveEffectiveCategoryTotals(
+  placements: ShowcaseMatrixEntryDto[],
+  legacy: CategoryCapacityFromPlacements,
+): CategoryCapacityFromPlacements {
+  const fromPlacements = categoryCapacityFromPlacements(placements);
+  return {
+    entrance: fromPlacements.entrance > 0 ? fromPlacements.entrance : legacy.entrance,
+    interior: fromPlacements.interior > 0 ? fromPlacements.interior : legacy.interior,
+    hardware: fromPlacements.hardware > 0 ? fromPlacements.hardware : legacy.hardware,
+  };
+}
+
+/** Нулевое значение из диалога не затирает существующую legacy-ёмкость. */
+export function mergeCategoryCapacityPreservingLegacy(
+  next: CategoryCapacityFromPlacements,
+  prev: CategoryCapacityFromPlacements,
+): CategoryCapacityFromPlacements {
+  const pick = (n: number, p: number) => (n > 0 ? n : p > 0 ? p : 0);
+  return {
+    entrance: pick(next.entrance, prev.entrance),
+    interior: pick(next.interior, prev.interior),
+    hardware: pick(next.hardware, prev.hardware),
+  };
+}
+
+export function categoryCapacityFieldsForPersist(params: {
+  next: CategoryCapacityFromPlacements;
+  prevRec: {
+    entrancePortals?: number | null;
+    interiorPortals?: number | null;
+    hardwareSections?: number | null;
+  };
+  hasShowcase: boolean;
+}): {
+  entrancePortals: number | null;
+  interiorPortals: number | null;
+  hardwareSections: number | null;
+} {
+  if (!params.hasShowcase) {
+    return { entrancePortals: null, interiorPortals: null, hardwareSections: null };
+  }
+  return {
+    entrancePortals:
+      params.next.entrance > 0 ? params.next.entrance : (params.prevRec.entrancePortals ?? null),
+    interiorPortals:
+      params.next.interior > 0 ? params.next.interior : (params.prevRec.interiorPortals ?? null),
+    hardwareSections:
+      params.next.hardware > 0 ? params.next.hardware : (params.prevRec.hardwareSections ?? null),
+  };
 }
 
 export function persistEquipmentCapacityInputs(params: {

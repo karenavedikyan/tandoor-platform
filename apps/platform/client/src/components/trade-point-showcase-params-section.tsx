@@ -30,7 +30,10 @@ import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment
 import {
   capacityByEquipmentType,
   categoryCapacityFromPlacements,
+  categoryCapacityFieldsForPersist,
+  legacyCategoryCapacityFromRec,
   persistEquipmentCapacityInputs,
+  resolveEffectiveCategoryTotals,
   type EquipmentCapacityInput,
 } from "@/lib/showcase-capacity-by-equipment";
 import {
@@ -133,17 +136,47 @@ export function TradePointShowcaseParamsSection({
 
   const equipmentBySegment = useMemo(() => capacityByEquipmentType(placements), [placements]);
   const categoryTotals = useMemo(() => categoryCapacityFromPlacements(placements), [placements]);
+  const legacyCategoryTotals = useMemo(() => legacyCategoryCapacityFromRec(rec), [rec]);
+  const effectiveCategoryTotals = useMemo(
+    () => resolveEffectiveCategoryTotals(placements, legacyCategoryTotals),
+    [placements, legacyCategoryTotals],
+  );
   const hasEquipmentCapacity =
-    categoryTotals.entrance > 0 || categoryTotals.interior > 0 || categoryTotals.hardware > 0;
+    effectiveCategoryTotals.entrance > 0 ||
+    effectiveCategoryTotals.interior > 0 ||
+    effectiveCategoryTotals.hardware > 0;
+  const hasLegacyOnlyCapacity =
+    hasEquipmentCapacity &&
+    categoryTotals.entrance === 0 &&
+    categoryTotals.interior === 0 &&
+    categoryTotals.hardware === 0 &&
+    (legacyCategoryTotals.entrance > 0 ||
+      legacyCategoryTotals.interior > 0 ||
+      legacyCategoryTotals.hardware > 0);
 
   const buildCandidateRec = useCallback((): TradePointShowcaseActualization => {
     const prevRec = rec ?? emptyShowcase(dealer.id, point.id);
     return {
       ...prevRec,
       hasShowcase,
-      entrancePortals: categoryTotals.entrance > 0 ? categoryTotals.entrance : numOrNull(entrancePortals),
-      interiorPortals: categoryTotals.interior > 0 ? categoryTotals.interior : numOrNull(interiorPortals),
-      hardwareSections: categoryTotals.hardware > 0 ? categoryTotals.hardware : numOrNull(hardwareSections),
+      entrancePortals:
+        categoryTotals.entrance > 0
+          ? categoryTotals.entrance
+          : effectiveCategoryTotals.entrance > 0
+            ? effectiveCategoryTotals.entrance
+            : numOrNull(entrancePortals),
+      interiorPortals:
+        categoryTotals.interior > 0
+          ? categoryTotals.interior
+          : effectiveCategoryTotals.interior > 0
+            ? effectiveCategoryTotals.interior
+            : numOrNull(interiorPortals),
+      hardwareSections:
+        categoryTotals.hardware > 0
+          ? categoryTotals.hardware
+          : effectiveCategoryTotals.hardware > 0
+            ? effectiveCategoryTotals.hardware
+            : numOrNull(hardwareSections),
       showcaseAreaSqm: numOrNull(area),
       showcaseComment: showcaseComment.trim(),
       hasExpansionPotential: expPot,
@@ -158,6 +191,10 @@ export function TradePointShowcaseParamsSection({
     point.id,
     hasShowcase,
     categoryTotals,
+    effectiveCategoryTotals,
+    entrancePortals,
+    interiorPortals,
+    hardwareSections,
     area,
     showcaseComment,
     expPot,
@@ -193,15 +230,22 @@ export function TradePointShowcaseParamsSection({
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
-    const cats = categoryOverride ?? categoryTotals;
+    const cats = categoryOverride ?? effectiveCategoryTotals;
+    const capacityFields = categoryCapacityFieldsForPersist({
+      next: cats,
+      prevRec: rec ?? emptyShowcase(dealer.id, point.id),
+      hasShowcase,
+    });
     const r = await actx.persist((prev) => {
       const prevRec = prev.tradePointShowcaseActualizationById[point.id] ?? emptyShowcase(dealer.id, point.id);
       const patch: TradePointShowcaseActualization = {
         ...prevRec,
         hasShowcase,
-        entrancePortals: cats.entrance > 0 ? cats.entrance : null,
-        interiorPortals: cats.interior > 0 ? cats.interior : null,
-        hardwareSections: cats.hardware > 0 ? cats.hardware : null,
+        ...categoryCapacityFieldsForPersist({
+          next: cats,
+          prevRec,
+          hasShowcase,
+        }),
         showcaseAreaSqm: numOrNull(area),
         showcaseComment: showcaseComment.trim(),
         hasExpansionPotential: expPot,
@@ -221,9 +265,15 @@ export function TradePointShowcaseParamsSection({
       toast({ title: "Ошибка сохранения", variant: "destructive" });
       return false;
     }
-    setEntrancePortals(cats.entrance > 0 ? String(cats.entrance) : "");
-    setInteriorPortals(cats.interior > 0 ? String(cats.interior) : "");
-    setHardwareSections(cats.hardware > 0 ? String(cats.hardware) : "");
+    setEntrancePortals(
+      capacityFields.entrancePortals != null ? String(capacityFields.entrancePortals) : "",
+    );
+    setInteriorPortals(
+      capacityFields.interiorPortals != null ? String(capacityFields.interiorPortals) : "",
+    );
+    setHardwareSections(
+      capacityFields.hardwareSections != null ? String(capacityFields.hardwareSections) : "",
+    );
     return true;
   },
   [
@@ -232,7 +282,7 @@ export function TradePointShowcaseParamsSection({
     dealer.id,
     point.id,
     hasShowcase,
-    categoryTotals,
+    effectiveCategoryTotals,
     area,
     showcaseComment,
     expPot,
@@ -240,7 +290,8 @@ export function TradePointShowcaseParamsSection({
     priority,
     firstNeed,
     rmComment,
-    profile.personaUserId,
+    rec,
+    profile,
   ]);
 
   const handleSaveWithGate = useCallback(() => {
@@ -378,16 +429,38 @@ export function TradePointShowcaseParamsSection({
                 </p>
               ) : (
                 <div className="space-y-2">
+                  {hasLegacyOnlyCapacity ? (
+                    <p
+                      className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+                      data-testid="text-legacy-capacity-hint-all"
+                    >
+                      Ёмкость задана по категориям. Детализация по типам оборудования не заведена — укажите
+                      распределение в диалоге.
+                    </p>
+                  ) : null}
                   {(["vh", "mk", "hardware"] as const).map((segment) => {
                     const typeKey: ShowcaseTypeKey =
                       segment === "vh" ? "entrance" : segment === "mk" ? "interior" : "hardware";
-                    const total =
+                    const placementTotal =
                       segment === "vh"
                         ? categoryTotals.entrance
                         : segment === "mk"
                           ? categoryTotals.interior
                           : categoryTotals.hardware;
+                    const legacyTotal =
+                      segment === "vh"
+                        ? legacyCategoryTotals.entrance
+                        : segment === "mk"
+                          ? legacyCategoryTotals.interior
+                          : legacyCategoryTotals.hardware;
+                    const total =
+                      segment === "vh"
+                        ? effectiveCategoryTotals.entrance
+                        : segment === "mk"
+                          ? effectiveCategoryTotals.interior
+                          : effectiveCategoryTotals.hardware;
                     const rows = equipmentBySegment[segment].filter((r) => r.capacity > 0);
+                    const legacyOnlySegment = placementTotal === 0 && legacyTotal > 0;
                     return (
                       <div key={segment} className="rounded-md border border-border/50 bg-muted/10 p-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -401,7 +474,14 @@ export function TradePointShowcaseParamsSection({
                             Всего: {total}
                           </p>
                         </div>
-                        {rows.length > 0 ? (
+                        {legacyOnlySegment ? (
+                          <p
+                            className="mt-1 text-xs text-muted-foreground"
+                            data-testid={`text-legacy-capacity-hint-${segment}`}
+                          >
+                            Детализация по типам не заведена. Категорийная ёмкость: {legacyTotal}.
+                          </p>
+                        ) : rows.length > 0 ? (
                           <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                             {rows.map((row) => (
                               <li key={row.placementType} className="flex justify-between gap-2 tabular-nums">
@@ -420,8 +500,8 @@ export function TradePointShowcaseParamsSection({
                     );
                   })}
                   <p className="text-[10px] tabular-nums text-muted-foreground">
-                    Входных: {categoryTotals.entrance} · Межкомнатных: {categoryTotals.interior} · Фурнитура:{" "}
-                    {categoryTotals.hardware}
+                    Входных: {effectiveCategoryTotals.entrance} · Межкомнатных:{" "}
+                    {effectiveCategoryTotals.interior} · Фурнитура: {effectiveCategoryTotals.hardware}
                   </p>
                 </div>
               )}

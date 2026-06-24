@@ -5,8 +5,11 @@ import assert from "node:assert/strict";
 import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import {
   capacityByEquipmentType,
+  categoryCapacityFieldsForPersist,
   categoryCapacityFromPlacements,
   equipmentCapacityKey,
+  mergeCategoryCapacityPreservingLegacy,
+  seedInputsWithLegacyFallback,
 } from "../showcase-capacity-by-equipment.js";
 
 function placement(
@@ -53,5 +56,35 @@ assert.equal(byType.mk.find((r) => r.placementType === "portal")?.capacity, 8);
 assert.equal(byType.mk.find((r) => r.placementType === "portal")?.blockTargetId, "mk-portal");
 
 assert.equal(equipmentCapacityKey("vh", "portal"), "vh:portal");
+
+const legacy = { entrance: 10, interior: 20, hardware: 20 };
+const seeded = seedInputsWithLegacyFallback([], legacy);
+assert.equal(seeded["vh:unmounted"], 10);
+assert.equal(seeded["mk:unmounted"], 20);
+assert.equal(seeded["hardware:branded_stand"], 20);
+
+const seededWithPlacement = seedInputsWithLegacyFallback(entries, legacy);
+assert.equal(seededWithPlacement["vh:portal"], 6);
+assert.equal(seededWithPlacement["vh:unmounted"] ?? 0, 0);
+
+assert.deepEqual(mergeCategoryCapacityPreservingLegacy({ entrance: 0, interior: 0, hardware: 0 }, legacy), legacy);
+
+const persisted = categoryCapacityFieldsForPersist({
+  next: { entrance: 0, interior: 0, hardware: 0 },
+  prevRec: { entrancePortals: 10, interiorPortals: 20, hardwareSections: 20 },
+  hasShowcase: true,
+});
+assert.equal(persisted.entrancePortals, 10);
+assert.equal(persisted.interiorPortals, 20);
+assert.equal(persisted.hardwareSections, 20);
+
+const migrated = categoryCapacityFieldsForPersist({
+  next: { entrance: 10, interior: 20, hardware: 20 },
+  prevRec: { entrancePortals: 10, interiorPortals: 20, hardwareSections: 20 },
+  hasShowcase: true,
+});
+assert.equal(migrated.entrancePortals, 10);
+assert.equal(migrated.interiorPortals, 20);
+assert.equal(migrated.hardwareSections, 20);
 
 console.log("showcase-capacity-by-equipment: ok");
