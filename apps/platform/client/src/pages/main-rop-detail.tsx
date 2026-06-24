@@ -54,6 +54,9 @@ import { MainDashboardFocusClientsPanel } from "@/components/main-dashboard-focu
 import { buildBrowserHashAppHref } from "@/lib/hash-route-utils";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { DistributionBreakdownRow } from "@/components/distribution-analytics/distribution-breakdown-row";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 
 function countTradePointsForDealer(row: DealerRow, act: ReturnType<typeof useClientBaseTeamActualization>["mergedState"]): number {
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived).length;
@@ -177,6 +180,41 @@ export default function MainRopDetailPage() {
     return list.filter((r) => dealerIds.has(r.dealerId));
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows]);
 
+  const teamTradePointIds = useMemo(
+    () => tradePointRows.map((r) => r.tradePointId),
+    [tradePointRows],
+  );
+
+  const teamDistribution = useTradePointDistributionAggregate(
+    actx.enabled && allowed ? teamTradePointIds : [],
+    managementPlane.mergedState,
+  );
+
+  const tradePointIdsByManagerName = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const r of tradePointRows) {
+      const key = (r.manager || "").trim();
+      if (!key) continue;
+      const arr = map.get(key);
+      if (arr) arr.push(r.tradePointId);
+      else map.set(key, [r.tradePointId]);
+    }
+    return map;
+  }, [tradePointRows]);
+
+  const tradePointIdsByCity = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const r of tradePointRows) {
+      const key = (r.city || "").trim() || "Без города";
+      const arr = map.get(key);
+      if (arr) arr.push(r.tradePointId);
+      else map.set(key, [r.tradePointId]);
+    }
+    return new Map(
+      Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "ru")),
+    );
+  }, [tradePointRows]);
+
   const loading =
     authLoading ||
     (isRealUser && orgSnapQ.isLoading) ||
@@ -236,6 +274,22 @@ export default function MainRopDetailPage() {
       ) : null}
 
       {scopeMetrics ? (
+        <section className="min-w-0" data-testid="section-main-rop-distribution">
+          <h2 className="mb-2 text-sm font-semibold text-foreground">Дистрибуция команды</h2>
+          <DistributionAnalyticsKpiTiles
+            aggregate={teamDistribution.aggregate}
+            tradePointsCount={teamDistribution.tradePointsCount}
+            showTradePointsCount={false}
+            tileTestIdByType={{
+              entrance: "tile-rop-distribution-entrance",
+              interior: "tile-rop-distribution-interior",
+              hardware: "tile-rop-distribution-hardware",
+            }}
+          />
+        </section>
+      ) : null}
+
+      {scopeMetrics ? (
         <MainFocusTilesSection
           title={`Фокус команды ${ropName}`}
           rows={clientRows}
@@ -287,6 +341,40 @@ export default function MainRopDetailPage() {
           ))}
         </DrilldownList>
       </section>
+
+      {scopeMetrics ? (
+        <section className="min-w-0 space-y-2" data-testid="section-main-rop-managers-distribution">
+          <h2 className="text-sm font-semibold text-foreground">Дистрибуция по сотрудникам</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {teamManagers.map((m) => (
+              <DistributionBreakdownRow
+                key={m.id}
+                label={m.fullName}
+                tradePointIds={tradePointIdsByManagerName.get(m.fullName.trim()) ?? []}
+                act={managementPlane.mergedState}
+                testId={`row-rop-manager-distribution-${m.id}`}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {scopeMetrics ? (
+        <section className="min-w-0 space-y-2" data-testid="section-main-rop-territory-distribution">
+          <h2 className="text-sm font-semibold text-foreground">Дистрибуция по территории</h2>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {Array.from(tradePointIdsByCity.entries()).map(([city, ids]) => (
+              <DistributionBreakdownRow
+                key={city}
+                label={city}
+                tradePointIds={ids}
+                act={managementPlane.mergedState}
+                testId={`row-rop-territory-distribution-${city}`}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "clients" | "trade_points")}>
         <TabsList>
