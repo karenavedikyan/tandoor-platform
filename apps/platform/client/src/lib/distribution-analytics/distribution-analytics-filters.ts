@@ -2,10 +2,11 @@ import type { ActualizationState } from "../client-base-actualization-state.js";
 import { normalizeHasShowcase } from "../client-base-actualization-state.js";
 import type { ClientCategoryId } from "../client-category.js";
 import type { TradePointListRow } from "../trade-point-list-for-actualization.js";
-import type { CatalogProduct } from "../catalog-product-type.js";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import type { ShowcaseTypeKey } from "../showcase-type-capacity.js";
 import { getShowcaseTypeCapacity } from "../showcase-type-capacity.js";
 import type { EquipmentTypeKey } from "./distribution-analytics-math";
+import { isModelInstalledInEntries } from "./distribution-analytics-math";
 
 export type DistributionAnalyticsFilters = {
   cities: string[];
@@ -158,7 +159,7 @@ export function applyDistributionAnalyticsFilters(
   filters: DistributionAnalyticsFilters,
   shByTradePointId: Record<string, ActualizationState["tradePointShowcaseActualizationById"][string] | undefined>,
   act: ActualizationState,
-  _catalogLookup: (id: string) => CatalogProduct | undefined,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): TradePointListRow[] {
   return rows.filter((row) => {
     if (filters.cities.length > 0 && !filters.cities.includes(row.city)) return false;
@@ -194,8 +195,8 @@ export function applyDistributionAnalyticsFilters(
     if (!rowHasEquipmentCapacity(sh, filters.equipmentTypes)) return false;
 
     if (filters.modelIds.length > 0) {
-      const selected = sh?.selectedShowcaseModels ?? [];
-      if (!filters.modelIds.some((id) => selected.some((m) => m.productId === id))) return false;
+      const entries = installedEntriesByTradePointId[row.tradePointId];
+      if (!filters.modelIds.some((id) => isModelInstalledInEntries(entries, id))) return false;
     }
 
     return true;

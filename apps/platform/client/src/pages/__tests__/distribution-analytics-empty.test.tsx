@@ -29,6 +29,7 @@ const emptyData: DistributionAnalyticsData = {
   modelCoverageByModelId: {},
   productRows: [],
   territoryRows: [],
+  installedEntriesByTradePointId: {},
 };
 
 vi.mock("@/hooks/use-distribution-analytics-data", () => ({
