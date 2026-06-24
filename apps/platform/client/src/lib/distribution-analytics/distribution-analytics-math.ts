@@ -199,13 +199,24 @@ export function formatDistributionPercent(value: number | null | undefined, digi
   return `${value.toFixed(digits)}%`;
 }
 
-export type DistributionPercentTone = "empty" | "red" | "yellow" | "blue" | "green";
+/**
+ * Пороги светофора дистрибуции (в процентах).
+ * Ниже redBelow — красный (тревога), [redBelow, greenAtOrAbove) — жёлтый (норма), >= greenAtOrAbove — зелёный (отлично, фирменный Tandoor).
+ * Единые для всех категорий на текущем этапе. Структура готова к раздельным порогам по типам (ВХ/МК/Фурнитура) в будущем.
+ */
+export const DISTRIBUTION_TRAFFIC_LIGHT_THRESHOLDS = {
+  /** ниже этого значения (%) — красный */
+  redBelow: 15,
+  /** на этом значении и выше — зелёный; ниже — жёлтый */
+  greenAtOrAbove: 40,
+} as const;
+
+export type DistributionPercentTone = "empty" | "red" | "yellow" | "green";
 
 export function distributionPercentTone(value: number | null | undefined): DistributionPercentTone {
   if (value == null || !Number.isFinite(value)) return "empty";
-  if (value < 30) return "red";
-  if (value < 60) return "yellow";
-  if (value < 85) return "blue";
+  if (value < DISTRIBUTION_TRAFFIC_LIGHT_THRESHOLDS.redBelow) return "red";
+  if (value < DISTRIBUTION_TRAFFIC_LIGHT_THRESHOLDS.greenAtOrAbove) return "yellow";
   return "green";
 }
 
@@ -213,6 +224,6 @@ export const DISTRIBUTION_PERCENT_TONE_CLASS: Record<DistributionPercentTone, st
   empty: "bg-muted text-muted-foreground",
   red: "bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-200",
   yellow: "bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-100",
-  blue: "bg-sky-100 text-sky-900 dark:bg-sky-950/50 dark:text-sky-100",
-  green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+  // Фирменный зелёный Tandoor (primary): мягкая заливка + насыщенный текст.
+  green: "bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary",
 };
