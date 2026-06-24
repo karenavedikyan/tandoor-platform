@@ -4,6 +4,7 @@ import type {
   ShowcasePlacementType,
 } from "./showcase-matrix-api.js";
 import { getProductById } from "./catalog-data.js";
+import { segmentForModelTargetId } from "./showcase-model-segment.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
   type ShowcaseMatrixModelDefinition,
@@ -78,18 +79,36 @@ function buildOurModelsFromInstalledEntries(
   entries: readonly ShowcaseMatrixEntryDto[],
   segment: ShowcasePlacementSegment,
 ): SegmentOurModelCard[] {
-  if (segment !== "vh" && segment !== "mk") return [];
-  const wantType = segment === "vh" ? "entrance" : "interior";
   const counts = new Map<string, number>();
   for (const e of entries) {
     if (e.targetKind !== "model" || e.status !== "installed") continue;
-    const def = modelDefinitionForTargetId(e.targetId);
-    if (!def || def.type !== wantType) continue;
+    if (segmentForModelTargetId(e.targetId) !== segment) continue;
     counts.set(e.targetId, (counts.get(e.targetId) ?? 0) + 1);
   }
   return Array.from(counts.entries())
     .map(([modelId, count]) => ourModelCardFromId(modelId, count))
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
+export function installedOurModelsBySegment(
+  entries: readonly ShowcaseMatrixEntryDto[],
+): Record<ShowcasePlacementSegment, SegmentOurModelCard[]> {
+  return {
+    vh: buildOurModelsFromInstalledEntries(entries, "vh"),
+    mk: buildOurModelsFromInstalledEntries(entries, "mk"),
+    hardware: buildOurModelsFromInstalledEntries(entries, "hardware"),
+  };
+}
+
+export function countInstalledOursBySegment(
+  entries: readonly ShowcaseMatrixEntryDto[],
+): Record<ShowcasePlacementSegment, number> {
+  const bySegment = installedOurModelsBySegment(entries);
+  return {
+    vh: bySegment.vh.reduce((sum, m) => sum + m.count, 0),
+    mk: bySegment.mk.reduce((sum, m) => sum + m.count, 0),
+    hardware: bySegment.hardware.reduce((sum, m) => sum + m.count, 0),
+  };
 }
 
 /** Полная детализация по сегменту: разбивка по типу размещения, модели, конкуренты. */
@@ -164,7 +183,7 @@ export function buildSegmentDetail(
   );
 
   // [prompt-353] всегда учитываем модели со статусом "installed" — даже при наличии placement-блоков
-  if (segment === "vh" || segment === "mk") {
+  if (segment === "vh" || segment === "mk" || segment === "hardware") {
     const installedCards = buildOurModelsFromInstalledEntries(entries, segment);
     if (installedCards.length > 0) {
       const merged = new Map<string, SegmentOurModelCard>();
@@ -196,8 +215,7 @@ export function buildSegmentDetail(
     }
   }
 
-  const installedOursFromModels =
-    segment === "vh" || segment === "mk" ? ourModels.reduce((sum, m) => sum + m.count, 0) : 0;
+  const installedOursFromModels = ourModels.reduce((sum, m) => sum + m.count, 0);
   const effectiveTotalOurs = Math.max(totalOurs, installedOursFromModels);
 
   const free = Math.max(0, totalCapacity - effectiveTotalOurs - totalCompetitors);
