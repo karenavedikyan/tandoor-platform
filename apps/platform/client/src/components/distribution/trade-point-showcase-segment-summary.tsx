@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 type TradePointShowcaseSegmentSummaryProps = {
   tradePointId: string;
   density?: "comfortable" | "compact";
+  installedModelsBySegment?: Partial<Record<ShowcasePlacementSegment, SegmentOurModelCard[]>>;
 };
 
 const SEGMENTS: ShowcasePlacementSegment[] = ["vh", "mk", "hardware"];
@@ -376,6 +377,7 @@ function SegmentRow({
 export function TradePointShowcaseSegmentSummary({
   tradePointId,
   density = "comfortable",
+  installedModelsBySegment,
 }: TradePointShowcaseSegmentSummaryProps) {
   const compact = density === "compact";
   const [cacheBump, setCacheBump] = useState(0);
@@ -401,8 +403,29 @@ export function TradePointShowcaseSegmentSummary({
   }, [tradePointId, cacheBump]);
 
   const segmentDetails = useMemo(
-    () => SEGMENTS.map((segment) => buildSegmentDetail(placements, segment)),
-    [placements],
+    () =>
+      SEGMENTS.map((segment) => {
+        const fromCache = buildSegmentDetail(placements, segment);
+        const fromParent = installedModelsBySegment?.[segment] ?? [];
+        if (fromCache.source === "empty" && fromParent.length > 0) {
+          const totalOurs = fromParent.reduce((sum, m) => sum + m.count, 0);
+          return {
+            segment,
+            source: "models" as const,
+            blockCount: 0,
+            totalCapacity: 0,
+            totalOurs,
+            totalCompetitors: 0,
+            free: 0,
+            distributionPercent: 0,
+            byPlacementType: [],
+            ourModels: fromParent,
+            competitorRows: [],
+          } satisfies SegmentDetail;
+        }
+        return fromCache;
+      }),
+    [placements, installedModelsBySegment],
   );
 
   const iconBtnSize = compact ? "h-8 w-8" : "h-9 w-9";

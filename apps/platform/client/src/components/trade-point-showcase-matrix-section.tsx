@@ -68,6 +68,7 @@ import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/tr
 import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 import { TradePointShowcaseHistorySection } from "@/components/distribution/trade-point-showcase-history-section";
 import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
+import { type SegmentOurModelCard } from "@/lib/trade-point-showcase-segment-models";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
@@ -497,6 +498,38 @@ export function TradePointShowcaseMatrixSection({
       total: totalPct,
       breakdown: acc,
     };
+  }, [allModels, effectiveStatus]);
+
+  // [prompt-showcase-segment-installed] installed-модели по сегментам — тот же источник, что и проценты
+  const installedModelsBySegment = useMemo(() => {
+    const acc: Record<"vh" | "mk" | "hardware", SegmentOurModelCard[]> = {
+      vh: [],
+      mk: [],
+      hardware: [],
+    };
+    for (const m of allModels) {
+      if (effectiveStatus(m.id) !== "installed") continue;
+      const seg =
+        m.type === "entrance"
+          ? "vh"
+          : m.type === "interior"
+            ? "mk"
+            : m.type === "hardware"
+              ? "hardware"
+              : null;
+      if (!seg) continue;
+      acc[seg].push({
+        modelId: m.id,
+        name: m.name,
+        series: null,
+        imageUrl: m.imageUrl?.trim() ? m.imageUrl.trim() : null,
+        count: 1,
+      });
+    }
+    (Object.keys(acc) as Array<keyof typeof acc>).forEach((k) => {
+      acc[k].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    });
+    return acc;
   }, [allModels, effectiveStatus]);
 
   const [userQuickFilter, setUserQuickFilter] = useState<ShowcaseMatrixQuickFilterId | null>(null);
@@ -1657,7 +1690,11 @@ export function TradePointShowcaseMatrixSection({
                         ? "Нужны действия по усилению дистрибуции и контролю на точке."
                         : "Данные витрины ещё не внесены — выберите модели и зафиксируйте статусы."}
                 </p>
-                <TradePointShowcaseSegmentSummary tradePointId={point.id} density={density} />
+                <TradePointShowcaseSegmentSummary
+                  tradePointId={point.id}
+                  density={density}
+                  installedModelsBySegment={installedModelsBySegment}
+                />
               </CollapsibleContent>
             </Collapsible>
           </div>
