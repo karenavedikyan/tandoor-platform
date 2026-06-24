@@ -8,6 +8,7 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { DistributionEntryTradePointRow } from "@/lib/distribution-entry-tradepoint-view-model";
 import type { DistributionEntryTradePointView } from "@/lib/distribution-entry-tradepoint-view";
+import { formatDisplayDate } from "@/lib/format-datetime";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,24 @@ function CoverageBadge({ row }: { row: DistributionEntryTradePointRow }) {
     >
       {row.filledCount}/{row.templateModelsCount} · {row.coveragePct}%
     </Badge>
+  );
+}
+
+function FilledDateHint({ row }: { row: DistributionEntryTradePointRow }) {
+  if (row.filledCount <= 0 || !row.lastUpdatedAt) return null;
+  return (
+    <span className="whitespace-nowrap text-[10px] text-muted-foreground tabular-nums">
+      · {formatDisplayDate(row.lastUpdatedAt)}
+    </span>
+  );
+}
+
+function CoverageWithDate({ row }: { row: DistributionEntryTradePointRow }) {
+  return (
+    <div className="flex max-w-full flex-wrap items-center justify-end gap-x-1">
+      <CoverageBadge row={row} />
+      <FilledDateHint row={row} />
+    </div>
   );
 }
 
@@ -78,7 +97,7 @@ export function DistributionEntryTradePointCard({
           {row.city ? <p className="truncate text-xs text-muted-foreground">{row.city}</p> : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1 self-center">
-          <CoverageBadge row={row} />
+          <CoverageWithDate row={row} />
           <span className="text-[10px] text-muted-foreground">{freshness}</span>
         </div>
       </button>
@@ -110,7 +129,7 @@ export function DistributionEntryTradePointCard({
           <p className="line-clamp-1 text-xs text-muted-foreground">{row.clientName}</p>
           {row.city ? <p className="line-clamp-1 text-xs text-muted-foreground">{row.city}</p> : null}
           <div className="mt-auto flex flex-wrap items-center gap-1 pt-1">
-            <CoverageBadge row={row} />
+            <CoverageWithDate row={row} />
             <span className="text-[10px] text-muted-foreground">{freshness}</span>
           </div>
         </CardContent>
@@ -148,7 +167,7 @@ export function DistributionEntryTradePointCard({
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <CoverageBadge row={row} />
+                <CoverageWithDate row={row} />
                 <span className="text-[10px] text-muted-foreground">{freshness}</span>
               </div>
             </div>

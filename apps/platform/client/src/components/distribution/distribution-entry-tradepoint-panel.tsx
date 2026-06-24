@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { buildHashWithQuery, navigateHashPathInHash, useHashQuery } from "@/lib/hash-location-router";
@@ -24,11 +26,22 @@ import { type DealerRow, type DealerTradePoint } from "@/lib/dealer-base-mock-da
 import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
-import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";import {
+import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
+import {
   buildDistributionEntryTradePointRows,
   findDealerTradePointForEntryRow,
   type DistributionEntryTradePointRow,
 } from "@/lib/distribution-entry-tradepoint-view-model";
+import {
+  countByStatusTab,
+  defaultSortForTab,
+  filterRowsByPeriod,
+  filterRowsByStatusTab,
+  sortEntryRows,
+  type DistributionEntryPeriod,
+  type DistributionEntrySortKey,
+  type DistributionEntryStatusTab,
+} from "@/lib/distribution-entry-tradepoint-status";
 import {
   defaultDistributionFilterState,
   listActiveDistributionFilterChips,
@@ -96,6 +109,9 @@ export function DistributionEntryTradePointPanel({
   const selectedTradePointId = routeQs.get("tp");
   const [query, setQuery] = useState("");
   const [cacheBump, setCacheBump] = useState(0);
+  const [statusTab, setStatusTab] = useState<DistributionEntryStatusTab>("all");
+  const [sortKey, setSortKey] = useState<DistributionEntrySortKey>(() => defaultSortForTab("all"));
+  const [period, setPeriod] = useState<DistributionEntryPeriod>("all");
   const isMobile = useIsMobile();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [tradePointView, setTradePointView] = useState<DistributionEntryTradePointView>(() =>
@@ -128,10 +144,34 @@ export function DistributionEntryTradePointPanel({
     return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
   }, []);
 
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     void cacheBump;
     return buildDistributionEntryTradePointRows({ dealers: scopedDealers, query });
   }, [scopedDealers, query, cacheBump]);
+
+  const tabCounts = useMemo(() => countByStatusTab(baseRows), [baseRows]);
+
+  const statusFilteredRows = useMemo(
+    () => filterRowsByStatusTab(baseRows, statusTab),
+    [baseRows, statusTab],
+  );
+
+  const periodFilteredRows = useMemo(
+    () => (statusTab === "filled" ? filterRowsByPeriod(statusFilteredRows, period) : statusFilteredRows),
+    [statusFilteredRows, statusTab, period],
+  );
+
+  const sortedRows = useMemo(
+    () => sortEntryRows(periodFilteredRows, sortKey),
+    [periodFilteredRows, sortKey],
+  );
+
+  const handleStatusTabChange = useCallback((next: string) => {
+    const tab = next as DistributionEntryStatusTab;
+    setStatusTab(tab);
+    setSortKey(defaultSortForTab(tab));
+    setPeriod("all");
+  }, []);
 
   const setSelectedTradePointId = useCallback((tpId: string | null) => {
     const target = buildHashWithQuery("/distribution", {
@@ -146,16 +186,16 @@ export function DistributionEntryTradePointPanel({
 
   const rowRefs = useMemo(() => {
     const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
-    for (const row of rows) {
+    for (const row of baseRows) {
       const ref = findDealerTradePointForEntryRow(scopedDealers, row);
       if (ref) map.set(row.tradePointId, ref);
     }
     return map;
-  }, [rows, scopedDealers]);
+  }, [baseRows, scopedDealers]);
 
   const selectedRow = useMemo(
-    () => rows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
-    [rows, selectedTradePointId],
+    () => baseRows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
+    [baseRows, selectedTradePointId],
   );
 
   const selectedRef = useMemo(
@@ -218,8 +258,8 @@ export function DistributionEntryTradePointPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridLanes = useDistributionEntryTradepointGridLanes();
   const displayRows = useMemo(
-    () => rows.filter((r) => rowRefs.has(r.tradePointId)),
-    [rows, rowRefs],
+    () => sortedRows.filter((r) => rowRefs.has(r.tradePointId)),
+    [sortedRows, rowRefs],
   );
 
   const virtualRowCount =
@@ -280,6 +320,81 @@ export function DistributionEntryTradePointPanel({
             data-testid="input-distribution-entry-tradepoint-search"
           />
         </div>
+        <Tabs value={statusTab} onValueChange={handleStatusTabChange} className="w-full min-w-0">
+          <TabsList
+            className="flex h-auto w-full flex-wrap justify-start gap-1 p-1"
+            data-testid="distribution-entry-tradepoint-status-tabs"
+          >
+            {(
+              [
+                { id: "all" as const, label: "Все", count: tabCounts.all },
+                { id: "empty" as const, label: "Не заполнены", count: tabCounts.empty },
+                { id: "filled" as const, label: "Заполнены", count: tabCounts.filled },
+              ] as const
+            ).map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="h-8 flex-1 gap-1 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm"
+                data-testid={`distribution-entry-tradepoint-tab-${tab.id}`}
+              >
+                <span className="truncate">{tab.label}</span>
+                <Badge variant="secondary" className="h-5 min-w-5 shrink-0 rounded-full px-1.5 text-[10px] tabular-nums">
+                  {tab.count}
+                </Badge>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <select
+            className="min-h-9 w-full min-w-0 truncate rounded-md border border-border bg-background px-2 py-1.5 text-xs sm:max-w-xs sm:text-sm"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as DistributionEntrySortKey)}
+            aria-label="Сортировка списка торговых точек"
+            data-testid="distribution-entry-tradepoint-sort-select"
+          >
+            <option value="incomplete-first">Сначала незаполненные</option>
+            <option value="recent-first">Сначала недавно заполненные</option>
+            <option value="coverage-desc">По покрытию (убывание)</option>
+            <option value="name-asc">По названию (А–Я)</option>
+          </select>
+          {statusTab === "filled" ? (
+            <ToggleGroup
+              type="single"
+              value={period}
+              onValueChange={(v) => {
+                if (v) setPeriod(v as DistributionEntryPeriod);
+              }}
+              className="flex w-full flex-wrap justify-start gap-1"
+              aria-label="Период последнего внесения"
+              data-testid="distribution-entry-tradepoint-period-toggle"
+            >
+              {(
+                [
+                  { id: "today" as const, label: "Сегодня" },
+                  { id: "week" as const, label: "Неделя" },
+                  { id: "month" as const, label: "Месяц" },
+                  { id: "all" as const, label: "Всё время" },
+                ] as const
+              ).map((opt) => (
+                <ToggleGroupItem
+                  key={opt.id}
+                  value={opt.id}
+                  className="h-8 flex-1 px-2 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground sm:flex-none sm:px-3"
+                  data-testid={`distribution-entry-tradepoint-period-${opt.id}`}
+                >
+                  {opt.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          ) : null}
+        </div>
+        {statusTab === "filled" ? (
+          <p className="text-xs text-muted-foreground" data-testid="distribution-entry-tradepoint-period-count">
+            {period === "all" ? `Заполнено всего: ${displayRows.length}` : `Занесено за период: ${displayRows.length}`}
+          </p>
+        ) : null}
         <div className="flex items-center gap-2 self-start">
           <div
             className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5"
@@ -378,8 +493,10 @@ export function DistributionEntryTradePointPanel({
         </SheetContent>
       </Sheet>
 
-      {rows.length === 0 ? (
+      {baseRows.length === 0 ? (
         <p className="text-sm text-muted-foreground">В вашей зоне видимости нет торговых точек для ввода.</p>
+      ) : displayRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Нет торговых точек по выбранным фильтрам.</p>
       ) : (
         <div
           ref={scrollRef}
