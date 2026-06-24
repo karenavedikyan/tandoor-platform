@@ -69,6 +69,7 @@ import { TradePointPlacementBlocksSection } from "@/components/distribution/trad
 import { TradePointShowcaseHistorySection } from "@/components/distribution/trade-point-showcase-history-section";
 import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
 import { type SegmentOurModelCard } from "@/lib/trade-point-showcase-segment-models";
+import { computePlacementDistribution } from "@/lib/showcase-placement-distribution";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
@@ -461,46 +462,29 @@ export function TradePointShowcaseMatrixSection({
     return acc;
   }, [allModels, effectiveStatus]);
 
-  // [prompt-353] процент дистрибуции по сегментам — из реальных статусов матрицы
-  const distributionFromMatrix = useMemo(() => {
-    const acc = {
-      mk: { total: 0, installed: 0 },
-      vh: { total: 0, installed: 0 },
-      hardware: { total: 0, installed: 0 },
-    };
-    for (const m of allModels) {
-      const st = effectiveStatus(m.id);
-      if (st === "not_relevant") continue;
-      const bucket =
-        m.type === "interior"
-          ? acc.mk
-          : m.type === "entrance"
-            ? acc.vh
-            : m.type === "hardware"
-              ? acc.hardware
-              : null;
-      if (!bucket) continue;
-      bucket.total += 1;
-      if (st === "installed") bucket.installed += 1;
-    }
-    const pct = (b: { total: number; installed: number }) =>
-      b.total <= 0 ? 0 : Math.min(100, Math.max(0, Math.floor((b.installed / b.total) * 100)));
-    const totalRelevant = acc.mk.total + acc.vh.total + acc.hardware.total;
-    const totalInstalled = acc.mk.installed + acc.vh.installed + acc.hardware.installed;
-    const totalPct =
-      totalRelevant <= 0
-        ? 0
-        : Math.min(100, Math.max(0, Math.floor((totalInstalled / totalRelevant) * 100)));
+  // процент дистрибуции по ВИТРИНАМ (placement-блоки): наши ÷ всего витрин
+  const distributionFromPlacements = useMemo(() => {
+    void bump;
+    const summary = computePlacementDistribution(loadCachedMatrix(point.id));
+    const bySeg = (seg: "vh" | "mk" | "hardware") =>
+      summary.bySegment.find((s) => s.segment === seg)?.stats ?? null;
+    const vh = bySeg("vh");
+    const mk = bySeg("mk");
+    const hw = bySeg("hardware");
     return {
-      mk: pct(acc.mk),
-      vh: pct(acc.vh),
-      hardware: pct(acc.hardware),
-      total: totalPct,
-      breakdown: acc,
+      hasData: summary.overall.totalCapacity > 0,
+      mk: { pct: mk?.distributionPercent ?? 0, ours: mk?.totalOurs ?? 0, total: mk?.totalCapacity ?? 0 },
+      vh: { pct: vh?.distributionPercent ?? 0, ours: vh?.totalOurs ?? 0, total: vh?.totalCapacity ?? 0 },
+      hardware: { pct: hw?.distributionPercent ?? 0, ours: hw?.totalOurs ?? 0, total: hw?.totalCapacity ?? 0 },
+      total: {
+        pct: summary.overall.distributionPercent,
+        ours: summary.overall.totalOurs,
+        total: summary.overall.totalCapacity,
+      },
     };
-  }, [allModels, effectiveStatus]);
+  }, [point.id, bump]);
 
-  // [prompt-showcase-segment-installed] installed-модели по сегментам — тот же источник, что и проценты
+  // installed-модели по сегментам — для блока «Витрина в ТТ»
   const installedModelsBySegment = useMemo(() => {
     const acc: Record<"vh" | "mk" | "hardware", SegmentOurModelCard[]> = {
       vh: [],
@@ -1661,10 +1645,10 @@ export function TradePointShowcaseMatrixSection({
               >
                 <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
                   {[
-                    { label: "МК", pct: distributionFromMatrix.mk },
-                    { label: "ВХ", pct: distributionFromMatrix.vh },
-                    { label: "Фурнитура", pct: distributionFromMatrix.hardware },
-                    { label: "Общее", pct: distributionFromMatrix.total },
+                    { label: "МК", data: distributionFromPlacements.mk },
+                    { label: "ВХ", data: distributionFromPlacements.vh },
+                    { label: "Фурнитура", data: distributionFromPlacements.hardware },
+                    { label: "Общее", data: distributionFromPlacements.total },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -1673,9 +1657,12 @@ export function TradePointShowcaseMatrixSection({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold">{item.label}</p>
-                        <span className="text-sm font-bold tabular-nums">{item.pct}%</span>
+                        <span className="text-sm font-bold tabular-nums">{item.data.pct}%</span>
                       </div>
-                      <Progress value={item.pct} className="mt-1.5 h-2 bg-muted" />
+                      <Progress value={item.data.pct} className="mt-1.5 h-2 bg-muted" />
+                      <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                        наши {item.data.ours} из {item.data.total}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -1683,13 +1670,13 @@ export function TradePointShowcaseMatrixSection({
                   className="text-xs leading-relaxed text-foreground"
                   data-testid="text-trade-point-distribution-conclusion"
                 >
-                  {distributionFromMatrix.total >= 70
-                    ? "Показатели в комфортной зоне, точечные доработки по сегментам."
-                    : distributionFromMatrix.total >= 50
-                      ? "Есть резерв по выкладке и полноте линейки."
-                      : distributionFromMatrix.total > 0
-                        ? "Нужны действия по усилению дистрибуции и контролю на точке."
-                        : "Данные витрины ещё не внесены — выберите модели и зафиксируйте статусы."}
+                  {!distributionFromPlacements.hasData
+                    ? "Данные по витринам ещё не внесены — добавьте блоки в разделе «Типы размещения витрины» (всего витрин и сколько из них наши)."
+                    : distributionFromPlacements.total.pct >= 70
+                      ? "Показатели в комфортной зоне, точечные доработки по сегментам."
+                      : distributionFromPlacements.total.pct >= 50
+                        ? "Есть резерв по выкладке и полноте линейки."
+                        : "Нужны действия по усилению дистрибуции и контролю на точке."}
                 </p>
                 <TradePointShowcaseSegmentSummary
                   tradePointId={point.id}
