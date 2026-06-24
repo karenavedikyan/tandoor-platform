@@ -26,12 +26,23 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { ShowcaseSaveCompletenessGate } from "@/components/showcase-save-completeness-gate";
-import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
+import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment-capacity-dialog";
+import {
+  capacityByEquipmentType,
+  categoryCapacityFromPlacements,
+  persistEquipmentCapacityInputs,
+  type EquipmentCapacityInput,
+} from "@/lib/showcase-capacity-by-equipment";
+import {
+  loadCachedPlacements,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
+import {
+  PLACEMENT_SEGMENT_LABEL_RU,
+  PLACEMENT_TYPE_LABEL_RU,
+} from "@/lib/showcase-placement-labels";
 import { getProductById } from "@/lib/catalog-data";
 import {
-  findShowcaseCapacityGaps,
-  getShowcaseTypeCapacity,
   SHOWCASE_TYPE_LABEL_RU,
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
@@ -95,7 +106,6 @@ export function TradePointShowcaseParamsSection({
   const [entrancePortals, setEntrancePortals] = useState(rec?.entrancePortals != null ? String(rec.entrancePortals) : "");
   const [interiorPortals, setInteriorPortals] = useState(rec?.interiorPortals != null ? String(rec.interiorPortals) : "");
   const [hardwareSections, setHardwareSections] = useState(rec?.hardwareSections != null ? String(rec.hardwareSections) : "");
-  const [inlineCapacityType, setInlineCapacityType] = useState<ShowcaseTypeKey | null>(null);
   const [area, setArea] = useState(rec?.showcaseAreaSqm != null ? String(rec.showcaseAreaSqm) : "");
   const [showcaseComment, setShowcaseComment] = useState(rec?.showcaseComment ?? "");
   const [expPot, setExpPot] = useState<boolean | null>(rec?.hasExpansionPotential ?? null);
@@ -105,18 +115,35 @@ export function TradePointShowcaseParamsSection({
   const [priority, setPriority] = useState(rec?.showcasePriority || "");
   const [firstNeed, setFirstNeed] = useState(rec?.firstPriorityNeed ?? "");
   const [rmComment, setRmComment] = useState(rec?.rmRopComment ?? "");
-  const [completenessGateOpen, setCompletenessGateOpen] = useState(false);
+  const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [matrixBump, setMatrixBump] = useState(0);
 
   const selectedModels = rec?.selectedShowcaseModels ?? [];
+
+  useEffect(() => {
+    const fn = () => setMatrixBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+    return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, fn);
+  }, []);
+
+  const placements = useMemo(() => {
+    void matrixBump;
+    return loadCachedPlacements(point.id);
+  }, [point.id, matrixBump]);
+
+  const equipmentBySegment = useMemo(() => capacityByEquipmentType(placements), [placements]);
+  const categoryTotals = useMemo(() => categoryCapacityFromPlacements(placements), [placements]);
+  const hasEquipmentCapacity =
+    categoryTotals.entrance > 0 || categoryTotals.interior > 0 || categoryTotals.hardware > 0;
 
   const buildCandidateRec = useCallback((): TradePointShowcaseActualization => {
     const prevRec = rec ?? emptyShowcase(dealer.id, point.id);
     return {
       ...prevRec,
       hasShowcase,
-      entrancePortals: numOrNull(entrancePortals),
-      interiorPortals: numOrNull(interiorPortals),
-      hardwareSections: numOrNull(hardwareSections),
+      entrancePortals: categoryTotals.entrance > 0 ? categoryTotals.entrance : numOrNull(entrancePortals),
+      interiorPortals: categoryTotals.interior > 0 ? categoryTotals.interior : numOrNull(interiorPortals),
+      hardwareSections: categoryTotals.hardware > 0 ? categoryTotals.hardware : numOrNull(hardwareSections),
       showcaseAreaSqm: numOrNull(area),
       showcaseComment: showcaseComment.trim(),
       hasExpansionPotential: expPot,
@@ -130,9 +157,7 @@ export function TradePointShowcaseParamsSection({
     dealer.id,
     point.id,
     hasShowcase,
-    entrancePortals,
-    interiorPortals,
-    hardwareSections,
+    categoryTotals,
     area,
     showcaseComment,
     expPot,
@@ -153,7 +178,6 @@ export function TradePointShowcaseParamsSection({
     setEntrancePortals(sh.entrancePortals != null ? String(sh.entrancePortals) : "");
     setInteriorPortals(sh.interiorPortals != null ? String(sh.interiorPortals) : "");
     setHardwareSections(sh.hardwareSections != null ? String(sh.hardwareSections) : "");
-    setInlineCapacityType(null);
     setArea(sh.showcaseAreaSqm != null ? String(sh.showcaseAreaSqm) : "");
     setShowcaseComment(sh.showcaseComment ?? "");
     setExpPot(sh.hasExpansionPotential);
@@ -163,19 +187,21 @@ export function TradePointShowcaseParamsSection({
     setRmComment(sh.rmRopComment ?? "");
   }, [rec, dealer.id, point.id, save.isDirty, save.phase]);
 
-  const persist = useCallback(async (): Promise<boolean> => {
+  const persist = useCallback(
+    async (categoryOverride?: { entrance: number; interior: number; hardware: number }): Promise<boolean> => {
     if (!canEdit) return false;
     const iso = new Date().toISOString();
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
+    const cats = categoryOverride ?? categoryTotals;
     const r = await actx.persist((prev) => {
       const prevRec = prev.tradePointShowcaseActualizationById[point.id] ?? emptyShowcase(dealer.id, point.id);
       const patch: TradePointShowcaseActualization = {
         ...prevRec,
         hasShowcase,
-        entrancePortals: numOrNull(entrancePortals),
-        interiorPortals: numOrNull(interiorPortals),
-        hardwareSections: numOrNull(hardwareSections),
+        entrancePortals: cats.entrance > 0 ? cats.entrance : null,
+        interiorPortals: cats.interior > 0 ? cats.interior : null,
+        hardwareSections: cats.hardware > 0 ? cats.hardware : null,
         showcaseAreaSqm: numOrNull(area),
         showcaseComment: showcaseComment.trim(),
         hasExpansionPotential: expPot,
@@ -195,16 +221,18 @@ export function TradePointShowcaseParamsSection({
       toast({ title: "Ошибка сохранения", variant: "destructive" });
       return false;
     }
+    setEntrancePortals(cats.entrance > 0 ? String(cats.entrance) : "");
+    setInteriorPortals(cats.interior > 0 ? String(cats.interior) : "");
+    setHardwareSections(cats.hardware > 0 ? String(cats.hardware) : "");
     return true;
-  }, [
+  },
+  [
     actx,
     canEdit,
     dealer.id,
     point.id,
     hasShowcase,
-    entrancePortals,
-    interiorPortals,
-    hardwareSections,
+    categoryTotals,
     area,
     showcaseComment,
     expPot,
@@ -218,55 +246,40 @@ export function TradePointShowcaseParamsSection({
   const handleSaveWithGate = useCallback(() => {
     if (!canEdit) return;
     if (hasShowcase === false) {
-      void save.runSave(persist);
+      void save.runSave(() => persist());
       return;
     }
-    const gaps = findShowcaseCapacityGaps(buildCandidateRec(), selectedModels, getProductById);
-    if (gaps.length === 0) {
-      void save.runSave(persist);
-      return;
-    }
-    setCompletenessGateOpen(true);
-  }, [canEdit, hasShowcase, save, persist, buildCandidateRec, selectedModels]);
+    setEquipmentDialogOpen(true);
+  }, [canEdit, hasShowcase, save, persist]);
 
-  const handleGateSaveCapacity = useCallback(
-    (type: ShowcaseTypeKey, value: number) => {
-      if (type === "entrance") setEntrancePortals(String(value));
-      else if (type === "interior") setInteriorPortals(String(value));
-      else setHardwareSections(String(value));
-      markDirty();
+  const handleEquipmentDialogConfirm = useCallback(
+    (inputs: EquipmentCapacityInput) => {
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
+      const cats = persistEquipmentCapacityInputs({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        placements,
+        inputs,
+        updatedBy: uid,
+        updatedByName: uname,
+      });
+      setMatrixBump((n) => n + 1);
+      setEquipmentDialogOpen(false);
+      void save.runSave(() => persist(cats));
     },
-    [markDirty],
+    [dealer.id, point.id, placements, persist, profile, save],
   );
 
-  const gateGaps = useMemo(
-    () => findShowcaseCapacityGaps(buildCandidateRec(), selectedModels, getProductById),
-    [buildCandidateRec, selectedModels],
-  );
+  const openEquipmentDialog = useCallback(() => {
+    setEquipmentDialogOpen(true);
+  }, []);
 
   const readOnlyLabel = (value: string | null | undefined, empty = "Не указано") =>
     value?.trim() ? value.trim() : empty;
 
   const saveFooter = canEdit ? (
     <div className="flex flex-col gap-1 pt-1">
-      {completenessGateOpen && gateGaps.length > 0 ? (
-        <ShowcaseSaveCompletenessGate
-          gaps={gateGaps}
-          getCandidateRec={buildCandidateRec}
-          selectedModels={selectedModels}
-          catalogLookup={getProductById}
-          onSaveCapacity={handleGateSaveCapacity}
-          onConfirm={() => {
-            setCompletenessGateOpen(false);
-            void save.runSave(persist);
-          }}
-          onSaveAnyway={() => {
-            setCompletenessGateOpen(false);
-            void save.runSave(persist);
-          }}
-          onCancel={() => setCompletenessGateOpen(false)}
-        />
-      ) : null}
       <SectionSaveButton
         testId="button-showcase-params-save"
         phase={save.phase}
@@ -341,93 +354,89 @@ export function TradePointShowcaseParamsSection({
           </div>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2" data-testid="section-showcase-portal-counts">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Порталы и секции</p>
-              {(
-                [
-                  {
-                    type: "entrance" as const,
-                    label: "Входных порталов",
-                    value: entrancePortals,
-                    setValue: setEntrancePortals,
-                    testId: "input-showcase-entrance-portals",
-                  },
-                  {
-                    type: "interior" as const,
-                    label: "Межкомнатных порталов",
-                    value: interiorPortals,
-                    setValue: setInteriorPortals,
-                    testId: "input-showcase-interior-portals",
-                  },
-                  {
-                    type: "hardware" as const,
-                    label: "Секций фурнитуры",
-                    value: hardwareSections,
-                    setValue: setHardwareSections,
-                    testId: "input-showcase-hardware-sections",
-                    hint: "Количество композиций / стендов фурнитуры в ТТ",
-                  },
-                ] as const
-              ).map((row) => {
-                const capacity = getShowcaseTypeCapacity(rec, row.type);
-                const unfilled = capacity == null;
-                return (
-                  <div key={row.type} className="space-y-1 rounded-md border border-border/50 bg-muted/10 p-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {SHOWCASE_TYPE_LABEL_RU[row.type]}
-                      </Label>
-                      {canEdit && unfilled ? (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-6 px-2 text-[10px] text-amber-900 dark:text-amber-100"
-                          onClick={() => setInlineCapacityType(row.type)}
-                        >
-                          Указать количество
-                        </Button>
-                      ) : null}
-                    </div>
-                    {inlineCapacityType === row.type && canEdit ? (
-                      <ShowcaseTypeCapacityInlineForm
-                        type={row.type}
-                        currentCapacity={capacity}
-                        onSave={(n) => {
-                          row.setValue(String(n));
-                          markDirty();
-                          setInlineCapacityType(null);
-                        }}
-                        onCancel={() => setInlineCapacityType(null)}
-                      />
-                    ) : (
-                      <div className="space-y-1">
-                        <Label className="text-xs font-normal text-foreground">{row.label}</Label>
-                        {canEdit ? (
-                          <Input
-                            className="min-h-9"
-                            inputMode="numeric"
-                            data-testid={row.testId}
-                            value={row.value}
-                            onChange={(e) => {
-                              row.setValue(e.target.value);
-                              markDirty();
-                            }}
-                          />
-                        ) : (
-                          <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                            {readOnlyLabel(row.value)}
+            <div className="space-y-2 sm:col-span-2" data-testid="section-showcase-equipment-capacity">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Витрины по типам оборудования
+                </p>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-[10px]"
+                    onClick={openEquipmentDialog}
+                  >
+                    {hasEquipmentCapacity ? "Изменить" : "Указать кол-во витрин по типам"}
+                  </Button>
+                ) : null}
+              </div>
+
+              {!hasEquipmentCapacity ? (
+                <p className="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
+                  Витрины не заведены. Укажите количество витрин по каждому типу оборудования.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {(["vh", "mk", "hardware"] as const).map((segment) => {
+                    const typeKey: ShowcaseTypeKey =
+                      segment === "vh" ? "entrance" : segment === "mk" ? "interior" : "hardware";
+                    const total =
+                      segment === "vh"
+                        ? categoryTotals.entrance
+                        : segment === "mk"
+                          ? categoryTotals.interior
+                          : categoryTotals.hardware;
+                    const rows = equipmentBySegment[segment].filter((r) => r.capacity > 0);
+                    return (
+                      <div key={segment} className="rounded-md border border-border/50 bg-muted/10 p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-foreground">
+                            {PLACEMENT_SEGMENT_LABEL_RU[segment]}
                           </p>
+                          <p
+                            className="text-[10px] tabular-nums text-muted-foreground"
+                            data-testid={`text-category-capacity-total-${segment}`}
+                          >
+                            Всего: {total}
+                          </p>
+                        </div>
+                        {rows.length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                            {rows.map((row) => (
+                              <li key={row.placementType} className="flex justify-between gap-2 tabular-nums">
+                                <span>{PLACEMENT_TYPE_LABEL_RU[row.placementType]}</span>
+                                <span className="font-medium text-foreground">{row.capacity}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1 text-xs text-muted-foreground">Типы не указаны</p>
                         )}
-                        {"hint" in row && row.hint ? (
-                          <p className="text-[10px] text-muted-foreground">{row.hint}</p>
-                        ) : null}
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          {SHOWCASE_TYPE_LABEL_RU[typeKey]}: {total}
+                        </p>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                  <p className="text-[10px] tabular-nums text-muted-foreground">
+                    Входных: {categoryTotals.entrance} · Межкомнатных: {categoryTotals.interior} · Фурнитура:{" "}
+                    {categoryTotals.hardware}
+                  </p>
+                </div>
+              )}
             </div>
+
+            <ShowcaseEquipmentCapacityDialog
+              open={equipmentDialogOpen}
+              onOpenChange={setEquipmentDialogOpen}
+              tradePointId={point.id}
+              getCandidateRec={buildCandidateRec}
+              selectedModels={selectedModels}
+              catalogLookup={getProductById}
+              onConfirm={handleEquipmentDialogConfirm}
+              onCancel={() => setEquipmentDialogOpen(false)}
+            />
 
             <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
