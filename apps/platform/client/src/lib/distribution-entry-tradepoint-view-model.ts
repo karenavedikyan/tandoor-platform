@@ -8,7 +8,14 @@ import { getDealerManagerDisplay } from "./dealer-base-mock-data.js";
 import { getMergedDealerTradePoints, type DealerTradePointsState } from "./dealer-trade-points-overrides.js";
 import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import { loadCachedMatrix } from "./showcase-matrix-store.js";
+import { countInstalledOursBySegment } from "./trade-point-showcase-segment-models.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+
+export type DistributionEntryInstalledOursBySegment = {
+  vh: number;
+  mk: number;
+  hardware: number;
+};
 
 export type DistributionEntryTradePointRow = {
   dealerId: string;
@@ -22,6 +29,8 @@ export type DistributionEntryTradePointRow = {
   filledCount: number;
   coveragePct: number;
   lastUpdatedAt: string | null;
+  installedOursTotal: number;
+  installedOursBySegment: DistributionEntryInstalledOursBySegment;
 };
 
 export type BuildDistributionEntryTradePointRowsParams = {
@@ -127,6 +136,9 @@ export function buildDistributionEntryTradePointRows(
       const templateModelsCount = templateIds.length;
       const coveragePct =
         templateModelsCount > 0 ? Math.round((filledCount / templateModelsCount) * 100) : 0;
+      const installedOursBySegment = countInstalledOursBySegment(entries);
+      const installedOursTotal =
+        installedOursBySegment.vh + installedOursBySegment.mk + installedOursBySegment.hardware;
 
       rows.push({
         dealerId: dealer.id,
@@ -140,6 +152,8 @@ export function buildDistributionEntryTradePointRows(
         filledCount,
         coveragePct,
         lastUpdatedAt: maxUpdatedAt(entries),
+        installedOursTotal,
+        installedOursBySegment,
       });
     }
   }

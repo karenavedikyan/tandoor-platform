@@ -148,6 +148,8 @@ export function DistributionEntryProductPanel({
             filledCount: 0,
             coveragePct: 0,
             lastUpdatedAt: null,
+            installedOursTotal: 0,
+            installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
           })
         : null,
     [dealers, selectedTpRow],

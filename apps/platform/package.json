@@ -164,6 +164,7 @@
     "test:trade-point-matrix-resolver": "tsx client/src/lib/__tests__/trade-point-matrix-resolver.test.ts",
     "test:distribution-matrix-catalog-view-model": "tsx client/src/lib/__tests__/distribution-matrix-catalog-view-model.test.ts",
     "test:distribution-entry-tradepoint": "tsx client/src/lib/__tests__/distribution-entry-tradepoint-view-model.test.ts",
+    "test:distribution-entry-tradepoint-card": "vitest run client/src/components/distribution/__tests__/distribution-entry-tradepoint-card.test.ts",
     "test:distribution-entry-collect-ids": "tsx client/src/lib/__tests__/distribution-entry-tradepoint-collect-ids.test.ts",
     "test:distribution-entry-status": "tsx client/src/lib/__tests__/distribution-entry-tradepoint-status.test.ts",
     "test:distribution-filters": "tsx client/src/lib/__tests__/distribution-filters.test.ts",
