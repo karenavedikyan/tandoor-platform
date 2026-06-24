@@ -70,6 +70,8 @@ import { TradePointShowcaseHistorySection } from "@/components/distribution/trad
 import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
 import { type SegmentOurModelCard } from "@/lib/trade-point-showcase-segment-models";
 import { computePlacementDistribution } from "@/lib/showcase-placement-distribution";
+import { getShowcaseTypeCapacity } from "@/lib/showcase-type-capacity";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
@@ -323,6 +325,8 @@ export function TradePointShowcaseMatrixSection({
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const isCompact = density === "compact";
+  const actx = useClientBaseActualization();
+  const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
 
   const [bump, setBump] = useState(0);
   const [catalogBump, setCatalogBump] = useState(0);
@@ -462,29 +466,7 @@ export function TradePointShowcaseMatrixSection({
     return acc;
   }, [allModels, effectiveStatus]);
 
-  // процент дистрибуции по ВИТРИНАМ (placement-блоки): наши ÷ всего витрин
-  const distributionFromPlacements = useMemo(() => {
-    void bump;
-    const summary = computePlacementDistribution(loadCachedMatrix(point.id));
-    const bySeg = (seg: "vh" | "mk" | "hardware") =>
-      summary.bySegment.find((s) => s.segment === seg)?.stats ?? null;
-    const vh = bySeg("vh");
-    const mk = bySeg("mk");
-    const hw = bySeg("hardware");
-    return {
-      hasData: summary.overall.totalCapacity > 0,
-      mk: { pct: mk?.distributionPercent ?? 0, ours: mk?.totalOurs ?? 0, total: mk?.totalCapacity ?? 0 },
-      vh: { pct: vh?.distributionPercent ?? 0, ours: vh?.totalOurs ?? 0, total: vh?.totalCapacity ?? 0 },
-      hardware: { pct: hw?.distributionPercent ?? 0, ours: hw?.totalOurs ?? 0, total: hw?.totalCapacity ?? 0 },
-      total: {
-        pct: summary.overall.distributionPercent,
-        ours: summary.overall.totalOurs,
-        total: summary.overall.totalCapacity,
-      },
-    };
-  }, [point.id, bump]);
-
-  // installed-модели по сегментам — для блока «Витрина в ТТ»
+  // installed-модели по сегментам — для блока «Витрина в ТТ» и fallback тайлов дистрибуции
   const installedModelsBySegment = useMemo(() => {
     const acc: Record<"vh" | "mk" | "hardware", SegmentOurModelCard[]> = {
       vh: [],
@@ -515,6 +497,48 @@ export function TradePointShowcaseMatrixSection({
     });
     return acc;
   }, [allModels, effectiveStatus]);
+
+  // процент дистрибуции по ВИТРИНАМ (placement-блоки); fallback — ёмкость порталов + installed-модели
+  const distributionFromPlacements = useMemo(() => {
+    void bump;
+    const summary = computePlacementDistribution(loadCachedMatrix(point.id));
+    if (summary.overall.totalCapacity > 0) {
+      const bySeg = (seg: "vh" | "mk" | "hardware") =>
+        summary.bySegment.find((s) => s.segment === seg)?.stats ?? null;
+      const vh = bySeg("vh");
+      const mk = bySeg("mk");
+      const hw = bySeg("hardware");
+      return {
+        hasData: true,
+        mk: { pct: mk?.distributionPercent ?? 0, ours: mk?.totalOurs ?? 0, total: mk?.totalCapacity ?? 0 },
+        vh: { pct: vh?.distributionPercent ?? 0, ours: vh?.totalOurs ?? 0, total: vh?.totalCapacity ?? 0 },
+        hardware: { pct: hw?.distributionPercent ?? 0, ours: hw?.totalOurs ?? 0, total: hw?.totalCapacity ?? 0 },
+        total: {
+          pct: summary.overall.distributionPercent,
+          ours: summary.overall.totalOurs,
+          total: summary.overall.totalCapacity,
+        },
+      };
+    }
+
+    const capEnt = getShowcaseTypeCapacity(showcaseRec, "entrance") ?? 0;
+    const capInt = getShowcaseTypeCapacity(showcaseRec, "interior") ?? 0;
+    const capHw = getShowcaseTypeCapacity(showcaseRec, "hardware") ?? 0;
+    const oursVh = installedModelsBySegment.vh.length;
+    const oursMk = installedModelsBySegment.mk.length;
+    const oursHw = installedModelsBySegment.hardware.length;
+    const pct = (o: number, t: number) => (t > 0 ? Math.round((o / t) * 100) : 0);
+    const totalCap = capEnt + capInt + capHw;
+    const totalOurs = oursVh + oursMk + oursHw;
+    const fallbackHasData = totalCap > 0 || totalOurs > 0;
+    return {
+      hasData: fallbackHasData,
+      mk: { pct: pct(oursMk, capInt), ours: oursMk, total: capInt },
+      vh: { pct: pct(oursVh, capEnt), ours: oursVh, total: capEnt },
+      hardware: { pct: pct(oursHw, capHw), ours: oursHw, total: capHw },
+      total: { pct: pct(totalOurs, totalCap), ours: totalOurs, total: totalCap },
+    };
+  }, [point.id, bump, showcaseRec, installedModelsBySegment]);
 
   const [userQuickFilter, setUserQuickFilter] = useState<ShowcaseMatrixQuickFilterId | null>(null);
   const autoQuickFilter: ShowcaseMatrixQuickFilterId = statusCounts.need_install > 0 ? "needed" : "all";
