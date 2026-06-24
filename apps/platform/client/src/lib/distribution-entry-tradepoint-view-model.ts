@@ -5,7 +5,7 @@
 import type { ClientCategoryId } from "./client-category.js";
 import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
 import { getDealerManagerDisplay } from "./dealer-base-mock-data.js";
-import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
+import { getMergedDealerTradePoints, type DealerTradePointsState } from "./dealer-trade-points-overrides.js";
 import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import { loadCachedMatrix } from "./showcase-matrix-store.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
@@ -82,6 +82,26 @@ function compareRows(a: DistributionEntryTradePointRow, b: DistributionEntryTrad
   const bTime = b.lastUpdatedAt ? Date.parse(b.lastUpdatedAt) : 0;
   if (aTime !== bTime) return aTime - bTime;
   return a.tradePointName.localeCompare(b.tradePointName, "ru");
+}
+
+/** Уникальные tradePointId скоупа — тот же набор, что в buildDistributionEntryTradePointRows. */
+export function collectScopedTradePointIds(
+  dealers: readonly DealerRow[],
+  tradePointsState?: DealerTradePointsState,
+): string[] {
+  const ids = new Set<string>();
+  for (const dealer of dealers) {
+    for (const { point } of getMergedDealerTradePoints(dealer, { includeArchived: false }, tradePointsState)) {
+      if (point.status?.trim() === "Архив") continue;
+      ids.add(point.id);
+    }
+  }
+  return Array.from(ids);
+}
+
+export function scopedTradePointIdsStableKey(ids: readonly string[]): string {
+  if (ids.length === 0) return "";
+  return [...ids].sort().join(",");
 }
 
 export function buildDistributionEntryTradePointRows(

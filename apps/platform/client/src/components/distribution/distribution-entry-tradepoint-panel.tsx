@@ -29,7 +29,9 @@ import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-managem
 import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows-auto";
 import {
   buildDistributionEntryTradePointRows,
+  collectScopedTradePointIds,
   findDealerTradePointForEntryRow,
+  scopedTradePointIdsStableKey,
   type DistributionEntryTradePointRow,
 } from "@/lib/distribution-entry-tradepoint-view-model";
 import {
@@ -49,7 +51,11 @@ import {
 } from "@/lib/distribution-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
-import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
+import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
+import {
+  applyScopeEntriesToMatrixCache,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import {
@@ -112,6 +118,8 @@ export function DistributionEntryTradePointPanel({
   const [statusTab, setStatusTab] = useState<DistributionEntryStatusTab>("all");
   const [sortKey, setSortKey] = useState<DistributionEntrySortKey>(() => defaultSortForTab("all"));
   const [period, setPeriod] = useState<DistributionEntryPeriod>("all");
+  const [countsPrefetching, setCountsPrefetching] = useState(false);
+  const lastPrefetchedScopeKeyRef = useRef("");
   const isMobile = useIsMobile();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
   const [tradePointView, setTradePointView] = useState<DistributionEntryTradePointView>(() =>
@@ -138,11 +146,49 @@ export function DistributionEntryTradePointPanel({
 
   const scopedDealers = dealersProp ?? scopedDealersInternal;
 
+  const scopedTradePointIds = useMemo(
+    () => collectScopedTradePointIds(scopedDealers),
+    [scopedDealers],
+  );
+
+  const scopedTradePointIdsKey = useMemo(
+    () => scopedTradePointIdsStableKey(scopedTradePointIds),
+    [scopedTradePointIds],
+  );
+
   useEffect(() => {
     const onCache = () => setCacheBump((n) => n + 1);
     window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
     return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
   }, []);
+
+  useEffect(() => {
+    if (scopedTradePointIds.length === 0) return;
+    if (lastPrefetchedScopeKeyRef.current === scopedTradePointIdsKey) return;
+
+    let cancelled = false;
+    const keyForRun = scopedTradePointIdsKey;
+    setCountsPrefetching(true);
+
+    void (async () => {
+      try {
+        const entries = await fetchShowcaseMatrixScope({ tradePointIds: scopedTradePointIds });
+        if (cancelled) return;
+        if (entries != null && entries.length > 0) {
+          applyScopeEntriesToMatrixCache(entries);
+        }
+      } finally {
+        if (!cancelled) {
+          lastPrefetchedScopeKeyRef.current = keyForRun;
+          setCountsPrefetching(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scopedTradePointIdsKey, scopedTradePointIds]);
 
   const baseRows = useMemo(() => {
     void cacheBump;
@@ -320,32 +366,43 @@ export function DistributionEntryTradePointPanel({
             data-testid="input-distribution-entry-tradepoint-search"
           />
         </div>
-        <Tabs value={statusTab} onValueChange={handleStatusTabChange} className="w-full min-w-0">
-          <TabsList
-            className="flex h-auto w-full flex-wrap justify-start gap-1 p-1"
-            data-testid="distribution-entry-tradepoint-status-tabs"
-          >
-            {(
-              [
-                { id: "all" as const, label: "Все", count: tabCounts.all },
-                { id: "empty" as const, label: "Не заполнены", count: tabCounts.empty },
-                { id: "filled" as const, label: "Заполнены", count: tabCounts.filled },
-              ] as const
-            ).map((tab) => (
-              <TabsTrigger
-                key={tab.id}
-                value={tab.id}
-                className="h-8 flex-1 gap-1 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm"
-                data-testid={`distribution-entry-tradepoint-tab-${tab.id}`}
-              >
-                <span className="truncate">{tab.label}</span>
-                <Badge variant="secondary" className="h-5 min-w-5 shrink-0 rounded-full px-1.5 text-[10px] tabular-nums">
-                  {tab.count}
-                </Badge>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex items-start gap-2">
+          <Tabs value={statusTab} onValueChange={handleStatusTabChange} className="min-w-0 flex-1">
+            <TabsList
+              className="flex h-auto w-full flex-wrap justify-start gap-1 p-1"
+              data-testid="distribution-entry-tradepoint-status-tabs"
+            >
+              {(
+                [
+                  { id: "all" as const, label: "Все", count: tabCounts.all },
+                  { id: "empty" as const, label: "Не заполнены", count: tabCounts.empty },
+                  { id: "filled" as const, label: "Заполнены", count: tabCounts.filled },
+                ] as const
+              ).map((tab) => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  className="h-8 flex-1 gap-1 px-2 text-xs sm:flex-none sm:px-3 sm:text-sm"
+                  data-testid={`distribution-entry-tradepoint-tab-${tab.id}`}
+                >
+                  <span className="truncate">{tab.label}</span>
+                  <Badge variant="secondary" className="h-5 min-w-5 shrink-0 rounded-full px-1.5 text-[10px] tabular-nums">
+                    {tab.count}
+                  </Badge>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {countsPrefetching ? (
+            <span
+              className="flex shrink-0 items-center gap-1 pt-1 text-[10px] text-muted-foreground"
+              data-testid="distribution-entry-tradepoint-counts-prefetching"
+            >
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+              обновляем…
+            </span>
+          ) : null}
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <select
             className="min-h-9 w-full min-w-0 truncate rounded-md border border-border bg-background px-2 py-1.5 text-xs sm:max-w-xs sm:text-sm"
