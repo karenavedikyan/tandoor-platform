@@ -266,8 +266,8 @@ export function DistributionEntryTradePointPanel({
 
   const listColumn = (
     <div className="flex min-h-0 min-w-0 flex-col gap-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative min-w-0 flex-1">
+      <div className="flex flex-col gap-2">
+        <div className="relative w-full min-w-0">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
@@ -280,7 +280,7 @@ export function DistributionEntryTradePointPanel({
             data-testid="input-distribution-entry-tradepoint-search"
           />
         </div>
-        <div className="flex shrink-0 items-center gap-2 self-start">
+        <div className="flex items-center gap-2 self-start">
           <div
             className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5"
             role="radiogroup"
