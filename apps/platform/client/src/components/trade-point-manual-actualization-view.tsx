@@ -63,9 +63,7 @@ import {
 import { listActiveTradePointPhotos } from "@/lib/client-base-actualization-photos";
 import { getProductById } from "@/lib/catalog-data";
 import {
-  countSelectedByType,
-  getShowcaseTypeCapacity,
-  type ShowcaseTypeKey,
+  findShowcaseCapacityGaps,
 } from "@/lib/showcase-type-capacity";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { hydrateTradePointOverridesForEntity } from "@/lib/dealer-overrides-sync";
@@ -572,11 +570,8 @@ export function TradePointManualActualizationView(props: {
 
     let showcaseStatusMeta: TpSectionStatusKind = "partial";
     const selectedModels = showcaseRec?.selectedShowcaseModels ?? [];
-    const needsCapacityAttention = (["entrance", "interior", "hardware"] as ShowcaseTypeKey[]).some(
-      (type) =>
-        countSelectedByType(selectedModels, type, getProductById) > 0 &&
-        getShowcaseTypeCapacity(showcaseRec, type) == null,
-    );
+    const needsCapacityAttention =
+      findShowcaseCapacityGaps(showcaseRec, selectedModels, getProductById).length > 0;
     if (hasShowcase === false) showcaseStatusMeta = "no_showcase";
     else if (
       summary.needsPrimaryInstall ||
