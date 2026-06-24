@@ -72,6 +72,7 @@ import {
   type CatalogCardSize,
 } from "@/lib/catalog-card-grid";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { fullscreenCounterpartyLine } from "@/lib/trade-point-display-labels";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   allowedTypesForSegment,
@@ -410,6 +411,10 @@ export function DistributionFullscreenEntry({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const counterpartyLine = useMemo(
+    () => fullscreenCounterpartyLine(dealer, point),
+    [dealer, point],
+  );
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(() => pendingSyncCount());
@@ -1466,13 +1471,22 @@ export function DistributionFullscreenEntry({
             Назад
           </Button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
-            {!headerCollapsed ? (
-              <p className="truncate text-sm text-muted-foreground">
-                {dealer.name}
-                {point.city?.trim() && point.city !== "—" ? ` · ${point.city.trim()}` : ""}
+            {headerCollapsed ? (
+              <p
+                className="truncate text-sm font-medium text-foreground"
+                data-testid="text-fullscreen-entry-counterparty"
+              >
+                {counterpartyLine}
               </p>
-            ) : null}
+            ) : (
+              <>
+                <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
+                <p className="truncate text-sm text-muted-foreground">
+                  {dealer.name}
+                  {point.city?.trim() && point.city !== "—" ? ` · ${point.city.trim()}` : ""}
+                </p>
+              </>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {!online ? (
@@ -1536,6 +1550,14 @@ export function DistributionFullscreenEntry({
         aria-hidden={headerCollapsed && !compactMode}
       >
         <div className="flex flex-col gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2">
+          {compactMode ? (
+            <div
+              className="min-w-0 border-b border-border/50 pb-1.5"
+              data-testid="text-fullscreen-entry-counterparty"
+            >
+              <p className="truncate text-xs font-medium text-foreground">{counterpartyLine}</p>
+            </div>
+          ) : null}
           <div className="flex min-w-0 items-center gap-1.5">
             <Button
               type="button"
