@@ -111,6 +111,13 @@ function catalogLookup(id: string): CatalogProduct | undefined {
   return getProductById(id);
 }
 
+/** Осмысленное имя ТТ или null (отсекает пустые и заглушки вроде "."). */
+function meaningfulTradePointName(name?: string): string | null {
+  const t = (name ?? "").trim();
+  if (!t || t === ".") return null;
+  return t;
+}
+
 export type TradePointShowcaseCatalogPanelProps = {
   tradePointId: string;
   dealerId: string;
@@ -131,8 +138,12 @@ export type TradePointShowcaseCatalogPanelProps = {
   onOpenEntry?: (productId?: string) => void;
   /** Название торговой точки — для шапки «по какому контрагенту работа». */
   tradePointName?: string;
+  /** Код/идентификатор ТТ — показывается рядом с названием ТТ. */
+  tradePointCode?: string;
   /** Название клиента (дилера) — для шапки контрагента. */
   dealerName?: string;
+  /** Код/идентификатор клиента — показывается рядом с названием клиента. */
+  dealerCode?: string;
   /** Город ТТ/клиента — для шапки контрагента. */
   counterpartyCity?: string;
 };
@@ -178,7 +189,9 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     portalCaps: portalCapsProp,
     onOpenEntry,
     tradePointName,
+    tradePointCode,
     dealerName,
+    dealerCode,
     counterpartyCity,
   } = props;
 
@@ -889,26 +902,44 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4" data-testid="section-trade-point-showcase-catalog">
-      {(tradePointName || dealerName) && (
-        <div
-          className="sticky top-0 z-30 -mx-3 -mt-3 mb-1 rounded-t-xl border-b border-border/60 bg-primary/5 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-primary/10 sm:-mx-4 sm:-mt-4 sm:px-4"
-          data-testid="header-showcase-catalog-counterparty"
-        >
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Работа по контрагенту
-          </p>
-          <p className="truncate text-sm font-semibold text-foreground" data-testid="text-showcase-catalog-counterparty-name">
-            {tradePointName || dealerName}
-          </p>
-          {(dealerName && tradePointName) || counterpartyCity ? (
-            <p className="truncate text-xs text-muted-foreground" data-testid="text-showcase-catalog-counterparty-sub">
-              {[dealerName && tradePointName ? dealerName : null, counterpartyCity ?? null]
-                .filter(Boolean)
-                .join(" · ")}
+      {(() => {
+        const tpName = meaningfulTradePointName(tradePointName);
+        const tpCode = (tradePointCode ?? "").trim() || null;
+        const dName = (dealerName ?? "").trim() || null;
+        const dCode = (dealerCode ?? "").trim() || null;
+        const city = (counterpartyCity ?? "").trim() || null;
+
+        const dealerLine = [dName, dCode].filter(Boolean).join(" · ") || null;
+        const tpLine = [tpName, tpCode].filter(Boolean).join(" · ") || null;
+
+        if (!dealerLine && !tpLine) return null;
+
+        return (
+          <div
+            className="sticky top-0 z-30 -mx-3 -mt-3 mb-1 rounded-t-xl border-b border-border/60 bg-primary/5 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-primary/10 sm:-mx-4 sm:-mt-4 sm:px-4"
+            data-testid="header-showcase-catalog-counterparty"
+          >
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Работа по контрагенту
             </p>
-          ) : null}
-        </div>
-      )}
+            {dealerLine ? (
+              <p className="truncate text-sm font-semibold text-foreground" data-testid="text-showcase-catalog-counterparty-name">
+                {dealerLine}
+              </p>
+            ) : null}
+            {tpLine ? (
+              <p className="truncate text-xs font-medium text-foreground/80" data-testid="text-showcase-catalog-counterparty-tp">
+                ТТ: {tpLine}
+              </p>
+            ) : null}
+            {city ? (
+              <p className="truncate text-xs text-muted-foreground" data-testid="text-showcase-catalog-counterparty-sub">
+                {city}
+              </p>
+            ) : null}
+          </div>
+        );
+      })()}
       <div className="space-y-0.5">
         <p className="text-sm font-semibold">Модели на витрине</p>
         <p className="text-xs text-muted-foreground">Отметьте модели на витрине. Сохранение — в блоке «Витрина и порталы» выше.</p>
