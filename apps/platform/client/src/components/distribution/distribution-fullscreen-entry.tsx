@@ -39,6 +39,18 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ShowcaseSaveCompletenessGate } from "@/components/showcase-save-completeness-gate";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import {
+  mergeActualizationState,
+  normalizeHasShowcase,
+  type TradePointShowcaseActualization,
+} from "@/lib/client-base-actualization-state";
+import {
+  findShowcaseCapacityGaps,
+  patchShowcaseTypeCapacity,
+  type ShowcaseTypeKey,
+} from "@/lib/showcase-type-capacity";
 import { cn } from "@/lib/utils";
 import {
   buildCatalogProductSearchHaystack,
@@ -310,6 +322,35 @@ type Props = {
   initialProductId?: string;
 };
 
+function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowcaseActualization {
+  const iso = new Date().toISOString();
+  return {
+    tradePointId,
+    dealerId,
+    hasShowcase: true,
+    totalPortals: null,
+    entrancePortals: null,
+    interiorPortals: null,
+    hardwareSections: null,
+    showcaseAreaSqm: null,
+    showcaseComment: "",
+    tandoorTotalPortals: null,
+    tandoorEntrancePortals: null,
+    tandoorInteriorPortals: null,
+    competitorPortals: null,
+    competitorsListed: "",
+    fillingComment: "",
+    hasExpansionPotential: null,
+    additionalPortalsPotential: null,
+    showcasePriority: "",
+    firstPriorityNeed: "",
+    rmRopComment: "",
+    updatedAt: iso,
+    updatedBy: "",
+    updatedByName: "",
+  };
+}
+
 export function DistributionFullscreenEntry({
   dealer,
   point,
@@ -321,6 +362,12 @@ export function DistributionFullscreenEntry({
 }: Props) {
   const { toast } = useToast();
   const { user } = useCurrentUser();
+  const actx = useClientBaseActualization();
+  const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
+  const selectedShowcaseModels = showcaseRec?.selectedShowcaseModels ?? [];
+  const [completenessGateOpen, setCompletenessGateOpen] = useState(false);
+  const [exitGateGaps, setExitGateGaps] = useState<ShowcaseTypeKey[]>([]);
+  const pendingCloseRef = useRef<(() => void) | null>(null);
   const [bump, setBump] = useState(0);
   const {
     filters: catalogFilters,
@@ -670,9 +717,66 @@ export function DistributionFullscreenEntry({
     setExplicitQuickMarks(new Set());
   }, [workStatus]);
 
+  const getCandidateShowcaseRec = useCallback(
+    () => actx.state.tradePointShowcaseActualizationById[point.id],
+    [actx.state.tradePointShowcaseActualizationById, point.id],
+  );
+
+  const persistShowcaseCapacity = useCallback(
+    async (type: ShowcaseTypeKey, value: number) => {
+      const iso = new Date().toISOString();
+      await actx.persist((prev) => {
+        const prevRec = prev.tradePointShowcaseActualizationById[point.id] ?? emptyShowcase(dealer.id, point.id);
+        const nextRec: TradePointShowcaseActualization = {
+          ...prevRec,
+          ...patchShowcaseTypeCapacity(type, value),
+          updatedAt: iso,
+          updatedBy: actorUserId,
+          updatedByName: actorName,
+        };
+        return mergeActualizationState(prev, {
+          tradePointShowcaseActualizationById: {
+            ...prev.tradePointShowcaseActualizationById,
+            [point.id]: nextRec,
+          },
+        });
+      });
+    },
+    [actx, actorName, actorUserId, dealer.id, point.id],
+  );
+
+  const runPendingClose = useCallback(() => {
+    const close = pendingCloseRef.current;
+    pendingCloseRef.current = null;
+    setCompletenessGateOpen(false);
+    close?.();
+  }, []);
+
+  const requestClose = useCallback(() => {
+    const rec = actx.state.tradePointShowcaseActualizationById[point.id];
+    if (normalizeHasShowcase(rec?.hasShowcase) === false) {
+      (onBackToList ?? onClose)();
+      return;
+    }
+    const gaps = findShowcaseCapacityGaps(rec, selectedShowcaseModels, getProductById);
+    if (gaps.length === 0) {
+      (onBackToList ?? onClose)();
+      return;
+    }
+    pendingCloseRef.current = onBackToList ?? onClose;
+    setExitGateGaps(gaps);
+    setCompletenessGateOpen(true);
+  }, [
+    actx.state.tradePointShowcaseActualizationById,
+    onBackToList,
+    onClose,
+    point.id,
+    selectedShowcaseModels,
+  ]);
+
   const handleBack = useCallback(() => {
-    (onBackToList ?? onClose)();
-  }, [onBackToList, onClose]);
+    requestClose();
+  }, [requestClose]);
 
   const handleWorkStatusChange = useCallback(
     (value: StatusFilter) => {
@@ -1368,7 +1472,7 @@ export function DistributionFullscreenEntry({
               variant="ghost"
               size="icon"
               className="h-9 w-9 shrink-0"
-              onClick={onClose}
+              onClick={requestClose}
               data-testid="button-fullscreen-entry-close"
               aria-label="Закрыть"
             >
@@ -2040,6 +2144,29 @@ export function DistributionFullscreenEntry({
           )}
         </SheetContent>
       </Sheet>
+
+      {completenessGateOpen && exitGateGaps.length > 0 ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[min(90vh,640px)] w-full max-w-lg overflow-y-auto rounded-xl bg-background p-1 shadow-lg">
+            <ShowcaseSaveCompletenessGate
+              gaps={exitGateGaps}
+              getCandidateRec={getCandidateShowcaseRec}
+              selectedModels={selectedShowcaseModels}
+              catalogLookup={getProductById}
+              onSaveCapacity={(type, value) => {
+                void persistShowcaseCapacity(type, value);
+              }}
+              onConfirm={runPendingClose}
+              onSaveAnyway={runPendingClose}
+              onCancel={() => {
+                pendingCloseRef.current = null;
+                setCompletenessGateOpen(false);
+              }}
+              confirmLabel="Выйти"
+            />
+          </div>
+        </div>
+      ) : null}
     </div>,
     document.body,
   );

@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -26,10 +26,12 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { ShowcaseSaveCompletenessGate } from "@/components/showcase-save-completeness-gate";
 import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
+import { getProductById } from "@/lib/catalog-data";
 import {
+  findShowcaseCapacityGaps,
   getShowcaseTypeCapacity,
-  patchShowcaseTypeCapacity,
   SHOWCASE_TYPE_LABEL_RU,
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
@@ -103,6 +105,42 @@ export function TradePointShowcaseParamsSection({
   const [priority, setPriority] = useState(rec?.showcasePriority || "");
   const [firstNeed, setFirstNeed] = useState(rec?.firstPriorityNeed ?? "");
   const [rmComment, setRmComment] = useState(rec?.rmRopComment ?? "");
+  const [completenessGateOpen, setCompletenessGateOpen] = useState(false);
+
+  const selectedModels = rec?.selectedShowcaseModels ?? [];
+
+  const buildCandidateRec = useCallback((): TradePointShowcaseActualization => {
+    const prevRec = rec ?? emptyShowcase(dealer.id, point.id);
+    return {
+      ...prevRec,
+      hasShowcase,
+      entrancePortals: numOrNull(entrancePortals),
+      interiorPortals: numOrNull(interiorPortals),
+      hardwareSections: numOrNull(hardwareSections),
+      showcaseAreaSqm: numOrNull(area),
+      showcaseComment: showcaseComment.trim(),
+      hasExpansionPotential: expPot,
+      additionalPortalsPotential: numOrNull(addPortals),
+      showcasePriority: priority,
+      firstPriorityNeed: firstNeed.trim(),
+      rmRopComment: rmComment.trim(),
+    };
+  }, [
+    rec,
+    dealer.id,
+    point.id,
+    hasShowcase,
+    entrancePortals,
+    interiorPortals,
+    hardwareSections,
+    area,
+    showcaseComment,
+    expPot,
+    addPortals,
+    priority,
+    firstNeed,
+    rmComment,
+  ]);
 
   const markDirty = useCallback(() => {
     save.markDirty();
@@ -177,15 +215,62 @@ export function TradePointShowcaseParamsSection({
     profile.personaUserId,
   ]);
 
+  const handleSaveWithGate = useCallback(() => {
+    if (!canEdit) return;
+    if (hasShowcase === false) {
+      void save.runSave(persist);
+      return;
+    }
+    const gaps = findShowcaseCapacityGaps(buildCandidateRec(), selectedModels, getProductById);
+    if (gaps.length === 0) {
+      void save.runSave(persist);
+      return;
+    }
+    setCompletenessGateOpen(true);
+  }, [canEdit, hasShowcase, save, persist, buildCandidateRec, selectedModels]);
+
+  const handleGateSaveCapacity = useCallback(
+    (type: ShowcaseTypeKey, value: number) => {
+      if (type === "entrance") setEntrancePortals(String(value));
+      else if (type === "interior") setInteriorPortals(String(value));
+      else setHardwareSections(String(value));
+      markDirty();
+    },
+    [markDirty],
+  );
+
+  const gateGaps = useMemo(
+    () => findShowcaseCapacityGaps(buildCandidateRec(), selectedModels, getProductById),
+    [buildCandidateRec, selectedModels],
+  );
+
   const readOnlyLabel = (value: string | null | undefined, empty = "Не указано") =>
     value?.trim() ? value.trim() : empty;
 
   const saveFooter = canEdit ? (
     <div className="flex flex-col gap-1 pt-1">
+      {completenessGateOpen && gateGaps.length > 0 ? (
+        <ShowcaseSaveCompletenessGate
+          gaps={gateGaps}
+          getCandidateRec={buildCandidateRec}
+          selectedModels={selectedModels}
+          catalogLookup={getProductById}
+          onSaveCapacity={handleGateSaveCapacity}
+          onConfirm={() => {
+            setCompletenessGateOpen(false);
+            void save.runSave(persist);
+          }}
+          onSaveAnyway={() => {
+            setCompletenessGateOpen(false);
+            void save.runSave(persist);
+          }}
+          onCancel={() => setCompletenessGateOpen(false)}
+        />
+      ) : null}
       <SectionSaveButton
         testId="button-showcase-params-save"
         phase={save.phase}
-        onSave={() => void save.runSave(persist)}
+        onSave={handleSaveWithGate}
       />
       <p
         className="text-[10px] leading-snug text-muted-foreground"

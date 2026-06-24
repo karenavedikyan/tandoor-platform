@@ -51,6 +51,29 @@ export function countSelectedByType(
   return n;
 }
 
+/**
+ * Возвращает типы витрины, по которым выбраны модели (countSelectedByType > 0),
+ * но ёмкость не заполнена (getShowcaseTypeCapacity == null).
+ * Именно эти типы «теряются» в аналитике дистрибуции (знаменатель null).
+ * Пустой массив = запись полна по ёмкости, гейт не нужен.
+ */
+export function findShowcaseCapacityGaps(
+  sh: TradePointShowcaseActualization | undefined,
+  selected: readonly TradePointShowcaseSelectedModel[],
+  catalogLookup: (id: string) => CatalogProduct | undefined,
+): ShowcaseTypeKey[] {
+  const out: ShowcaseTypeKey[] = [];
+  for (const type of ["entrance", "interior", "hardware"] as ShowcaseTypeKey[]) {
+    if (
+      countSelectedByType(selected, type, catalogLookup) > 0 &&
+      getShowcaseTypeCapacity(sh, type) == null
+    ) {
+      out.push(type);
+    }
+  }
+  return out;
+}
+
 /** Хелпер обновления capacity для типа (возвращает patch для TradePointShowcaseActualization). */
 export function patchShowcaseTypeCapacity(
   type: ShowcaseTypeKey,
