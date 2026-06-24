@@ -1,3 +1,4 @@
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import type { ActualizationState } from "../client-base-actualization-state.js";
 import type { CatalogProduct } from "../catalog-product-type.js";
 import type { ClientCategoryId } from "../client-category.js";
@@ -13,6 +14,7 @@ import {
   aggregateDistribution,
   computeDistributionForTradePoint,
   computeModelCoverage,
+  isModelInstalledInEntries,
   type DistributionGroupMetrics,
   type DistributionTradePointMetrics,
   type EquipmentTypeKey,
@@ -72,11 +74,14 @@ export function buildScopedAnalyticsTradePointRows(
 export function buildAnalyticsTradePointRows(
   rows: TradePointListRow[],
   shByTradePointId: Record<string, ActualizationState["tradePointShowcaseActualizationById"][string] | undefined>,
-  catalogLookup: (id: string) => CatalogProduct | undefined,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): AnalyticsTradePointRow[] {
   return rows.map((row) => ({
     row,
-    metrics: computeDistributionForTradePoint(shByTradePointId[row.tradePointId], catalogLookup),
+    metrics: computeDistributionForTradePoint(
+      shByTradePointId[row.tradePointId],
+      installedEntriesByTradePointId[row.tradePointId] ?? [],
+    ),
   }));
 }
 
@@ -127,7 +132,7 @@ export function collectAnalyticsCatalogProducts(): CatalogProduct[] {
 export function buildProductAnalyticsRows(
   products: CatalogProduct[],
   tpRows: AnalyticsTradePointRow[],
-  shByTradePointId: Record<string, ActualizationState["tradePointShowcaseActualizationById"][string] | undefined>,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
   allRowsByCategory: (category: ClientCategoryId) => AnalyticsTradePointRow[],
 ): ProductAnalyticsRow[] {
   const metrics = tpRows.map((x) => x.metrics);
@@ -138,18 +143,18 @@ export function buildProductAnalyticsRows(
     if (portalType !== "entrance" && portalType !== "interior" && portalType !== "hardware") continue;
     const modelType = portalType;
 
-    const coverage = computeModelCoverage(product.id, modelType, metrics, shByTradePointId);
+    const coverage = computeModelCoverage(product.id, modelType, metrics, installedEntriesByTradePointId);
     const coverageTop150 = computeModelCoverage(
       product.id,
       modelType,
       allRowsByCategory("top150").map((x) => x.metrics),
-      shByTradePointId,
+      installedEntriesByTradePointId,
     );
     const coverageTop350 = computeModelCoverage(
       product.id,
       modelType,
       allRowsByCategory("top350").map((x) => x.metrics),
-      shByTradePointId,
+      installedEntriesByTradePointId,
     );
 
     const byCity = new Map<string, AnalyticsTradePointRow[]>();
@@ -161,7 +166,7 @@ export function buildProductAnalyticsRows(
     const topCities = Array.from(byCity.entries())
       .map(([city, items]) => {
         const cityMetrics = items.map((x) => x.metrics);
-        const cov = computeModelCoverage(product.id, modelType, cityMetrics, shByTradePointId);
+        const cov = computeModelCoverage(product.id, modelType, cityMetrics, installedEntriesByTradePointId);
         return {
           city,
           coveragePercent: cov.coveragePercent,
@@ -191,14 +196,13 @@ export function buildModelGapTradePoints(
   modelId: string,
   modelType: EquipmentTypeKey,
   tpRows: AnalyticsTradePointRow[],
-  shByTradePointId: Record<string, ActualizationState["tradePointShowcaseActualizationById"][string] | undefined>,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): {
   row: TradePointListRow;
   freeSlots: number;
 }[] {
   const gaps: { row: TradePointListRow; freeSlots: number }[] = [];
   for (const item of tpRows) {
-    const sh = shByTradePointId[item.row.tradePointId];
     const cap = item.metrics.byType[modelType].capacity;
     if (cap == null || cap <= 0) continue;
     const required = resolveTradePointMatrixModels({
@@ -209,8 +213,8 @@ export function buildModelGapTradePoints(
       city: item.row.city,
     }).some((m) => m.id === modelId);
     if (!required) continue;
-    const present = sh?.selectedShowcaseModels?.some((m) => m.productId === modelId) ?? false;
-    if (present) continue;
+    const entries = installedEntriesByTradePointId[item.row.tradePointId];
+    if (isModelInstalledInEntries(entries, modelId)) continue;
     const onShelf = item.metrics.byType[modelType].tandoorOnShelf;
     gaps.push({ row: item.row, freeSlots: Math.max(0, cap - onShelf) });
   }
@@ -223,9 +227,9 @@ export function filterAnalyticsRows(
   filters: DistributionAnalyticsFilters,
   act: ActualizationState,
   shByTradePointId: Record<string, ActualizationState["tradePointShowcaseActualizationById"][string] | undefined>,
-  catalogLookup: (id: string) => CatalogProduct | undefined,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): TradePointListRow[] {
-  return applyDistributionAnalyticsFilters(rows, filters, shByTradePointId, act, catalogLookup);
+  return applyDistributionAnalyticsFilters(rows, filters, shByTradePointId, act, installedEntriesByTradePointId);
 }
 
 export type DistributionAnalyticsData = {
@@ -236,13 +240,14 @@ export type DistributionAnalyticsData = {
   modelCoverageByModelId: Record<string, ModelCoverageMetrics>;
   productRows: ProductAnalyticsRow[];
   territoryRows: TerritoryRegionRow[];
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[]>;
 };
 
 export function buildDistributionAnalyticsData(params: {
   scopedRows: TradePointListRow[];
   filters: DistributionAnalyticsFilters;
   act: ActualizationState;
-  catalogLookup: (id: string) => CatalogProduct | undefined;
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>;
 }): DistributionAnalyticsData {
   const shByTradePointId = params.act.tradePointShowcaseActualizationById;
   const filteredRows = filterAnalyticsRows(
@@ -250,9 +255,13 @@ export function buildDistributionAnalyticsData(params: {
     params.filters,
     params.act,
     shByTradePointId,
-    params.catalogLookup,
+    params.installedEntriesByTradePointId,
   );
-  const tradePointRows = buildAnalyticsTradePointRows(filteredRows, shByTradePointId, params.catalogLookup);
+  const tradePointRows = buildAnalyticsTradePointRows(
+    filteredRows,
+    shByTradePointId,
+    params.installedEntriesByTradePointId,
+  );
   const metricsByTradePointId: Record<string, DistributionTradePointMetrics> = {};
   for (const item of tradePointRows) {
     metricsByTradePointId[item.row.tradePointId] = item.metrics;
@@ -262,17 +271,22 @@ export function buildDistributionAnalyticsData(params: {
   const productRows = buildProductAnalyticsRows(
     products,
     tradePointRows,
-    shByTradePointId,
+    params.installedEntriesByTradePointId,
     (category) =>
       buildAnalyticsTradePointRows(
         params.scopedRows.filter((r) => r.clientCategory === category),
         shByTradePointId,
-        params.catalogLookup,
+        params.installedEntriesByTradePointId,
       ),
   );
   const modelCoverageByModelId: Record<string, ModelCoverageMetrics> = {};
   for (const pr of productRows) {
     modelCoverageByModelId[pr.product.id] = pr.coverage;
+  }
+  const installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[]> = {};
+  for (const row of filteredRows) {
+    installedEntriesByTradePointId[row.tradePointId] =
+      params.installedEntriesByTradePointId[row.tradePointId] ?? [];
   }
   return {
     filteredRows,
@@ -282,5 +296,6 @@ export function buildDistributionAnalyticsData(params: {
     modelCoverageByModelId,
     productRows,
     territoryRows: buildTerritoryRows(tradePointRows),
+    installedEntriesByTradePointId,
   };
 }

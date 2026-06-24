@@ -16,7 +16,7 @@ import {
   buildModelGapTradePoints,
   type AnalyticsTradePointRow,
 } from "@/lib/distribution-analytics/distribution-analytics-view-models";
-import { computeModelCoverage, type EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
+import { computeModelCoverage, isModelInstalledInEntries, type EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { inferShowcasePortalTypeFromCatalogProduct } from "@/lib/trade-point-showcase-matrix-required";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
@@ -44,28 +44,38 @@ export default function ModelCardPage() {
   const modelType = portalType as EquipmentTypeKey;
 
   const metrics = data.tradePointRows.map((x) => x.metrics);
-  const coverage = computeModelCoverage(modelId, modelType, metrics, shMap);
+  const installedMap = data.installedEntriesByTradePointId;
+  const coverage = computeModelCoverage(modelId, modelType, metrics, installedMap);
   const coverageTop150 = computeModelCoverage(
     modelId,
     modelType,
     data.tradePointRows.filter((x) => x.row.clientCategory === "top150").map((x) => x.metrics),
-    shMap,
+    installedMap,
   );
   const coverageTop350 = computeModelCoverage(
     modelId,
     modelType,
     data.tradePointRows.filter((x) => x.row.clientCategory === "top350").map((x) => x.metrics),
-    shMap,
+    installedMap,
   );
 
   const presentRows = data.tradePointRows
-    .filter((item) => shMap[item.row.tradePointId]?.selectedShowcaseModels?.some((m) => m.productId === modelId))
-    .map((item) => ({
-      row: item.row,
-      selectedAt: shMap[item.row.tradePointId]?.selectedShowcaseModels?.find((m) => m.productId === modelId)?.selectedAt,
-    }));
+    .filter((item) => isModelInstalledInEntries(installedMap[item.row.tradePointId], modelId))
+    .map((item) => {
+      const entries = installedMap[item.row.tradePointId] ?? [];
+      const installedEntry = entries.find(
+        (e) =>
+          (e.targetKind === "model" || e.targetKind === "variant") &&
+          e.status === "installed" &&
+          e.targetId === modelId,
+      );
+      return {
+        row: item.row,
+        selectedAt: installedEntry?.updatedAt,
+      };
+    });
 
-  const gapRows = buildModelGapTradePoints(modelId, modelType, data.tradePointRows, shMap);
+  const gapRows = buildModelGapTradePoints(modelId, modelType, data.tradePointRows, installedMap);
 
   const cityMap = new Map<string, AnalyticsTradePointRow[]>();
   for (const item of data.tradePointRows) {
@@ -75,7 +85,7 @@ export default function ModelCardPage() {
   }
   const cityRows = Array.from(cityMap.entries()).map(([city, items]) => {
     const cityMetrics = items.map((x) => x.metrics);
-    const cov = computeModelCoverage(modelId, modelType, cityMetrics, shMap);
+    const cov = computeModelCoverage(modelId, modelType, cityMetrics, installedMap);
     return {
       city,
       eligible: cov.eligibleTradePoints,

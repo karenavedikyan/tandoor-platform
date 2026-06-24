@@ -1,9 +1,9 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import { useSidebarNavRealScope } from "@/hooks/use-sidebar-nav-real-scope";
-import { getProductById } from "@/lib/catalog-data";
+import { scopedTradePointIdsStableKey } from "@/lib/distribution-entry-tradepoint-view-model";
 import {
   buildDistributionAnalyticsData,
   buildScopedAnalyticsTradePointRows,
@@ -15,6 +15,12 @@ import {
   hasAnyDistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
+import {
+  applyScopeEntriesToMatrixCache,
+  loadCachedMatrix,
+  SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
+} from "@/lib/showcase-matrix-store";
 
 const EMPTY_GROUP_AGGREGATE: DistributionAnalyticsData["groupAggregate"] = {
   byType: {
@@ -34,6 +40,7 @@ const EMPTY_DISTRIBUTION_ANALYTICS_DATA: DistributionAnalyticsData = {
   modelCoverageByModelId: {},
   productRows: [],
   territoryRows: [],
+  installedEntriesByTradePointId: {},
 };
 
 export function useDistributionAnalyticsData(
@@ -44,10 +51,11 @@ export function useDistributionAnalyticsData(
   const managementPlane = useClientBaseTeamActualization();
   const realScope = useSidebarNavRealScope();
   const scopedDealers = useDistributionScopedDealers(profile);
+  const [matrixCacheBump, setMatrixCacheBump] = useState(0);
+  const lastPrefetchedScopeKeyRef = useRef("");
 
   const mergedState = managementPlane.mergedState;
   const act = actx.enabled ? mergedState : actx.state;
-  const tradePointShowcaseActualizationById = act.tradePointShowcaseActualizationById;
 
   const actContentKey = useMemo(() => {
     const tp = act.tradePointShowcaseActualizationById;
@@ -79,6 +87,51 @@ export function useDistributionAnalyticsData(
     [scopeTooLarge, actStable, profile, scopedDealers, realScope],
   );
 
+  const tradePointIds = useMemo(() => scopedRows.map((r) => r.tradePointId), [scopedRows]);
+  const tradePointIdsKey = useMemo(() => scopedTradePointIdsStableKey(tradePointIds), [tradePointIds]);
+
+  useEffect(() => {
+    const onCache = () => setMatrixCacheBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
+    return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
+  }, []);
+
+  useEffect(() => {
+    if (scopeTooLarge || tradePointIds.length === 0) return;
+    if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey) return;
+
+    let cancelled = false;
+    const keyForRun = tradePointIdsKey;
+
+    void (async () => {
+      try {
+        const entries = await fetchShowcaseMatrixScope({ tradePointIds, statuses: ["installed"] });
+        if (cancelled) return;
+        if (entries != null && entries.length > 0) {
+          applyScopeEntriesToMatrixCache(entries);
+        }
+      } finally {
+        if (!cancelled) {
+          lastPrefetchedScopeKeyRef.current = keyForRun;
+          setMatrixCacheBump((n) => n + 1);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [scopeTooLarge, tradePointIdsKey, tradePointIds]);
+
+  const installedEntriesByTradePointId = useMemo(() => {
+    void matrixCacheBump;
+    const map: Record<string, ReturnType<typeof loadCachedMatrix>> = {};
+    for (const id of tradePointIds) {
+      map[id] = loadCachedMatrix(id);
+    }
+    return map;
+  }, [tradePointIds, matrixCacheBump]);
+
   return useMemo(
     () =>
       scopeTooLarge
@@ -87,8 +140,8 @@ export function useDistributionAnalyticsData(
             scopedRows,
             filters,
             act: actStable,
-            catalogLookup: getProductById,
+            installedEntriesByTradePointId,
           }),
-    [scopeTooLarge, scopedRows, filters, actStable],
+    [scopeTooLarge, scopedRows, filters, actStable, installedEntriesByTradePointId],
   );
 }

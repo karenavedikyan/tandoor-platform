@@ -1,16 +1,21 @@
 import { normalizeHasShowcase } from "../client-base-actualization-state.js";
-import type {
-  TradePointShowcaseActualization,
-  TradePointShowcaseSelectedModel,
-} from "../client-base-actualization-state.js";
-import type { CatalogProduct } from "../catalog-product-type.js";
+import type { TradePointShowcaseActualization } from "../client-base-actualization-state.js";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
+import type { ShowcasePlacementSegment } from "../showcase-matrix-api.js";
 import type { ShowcaseTypeKey } from "../showcase-type-capacity.js";
 import { getShowcaseTypeCapacity } from "../showcase-type-capacity.js";
-import { effectivePortalTypeForSelectedModel } from "../trade-point-showcase-matrix-required.js";
+import { normalizeShowcaseMatrixModelId } from "../showcase-matrix-store.js";
+import { countInstalledOursBySegment } from "../trade-point-showcase-segment-models.js";
 
 export type EquipmentTypeKey = ShowcaseTypeKey;
 
 export const ALL_EQUIPMENT_TYPES: EquipmentTypeKey[] = ["entrance", "interior", "hardware"];
+
+const SEGMENT_BY_TYPE: Record<EquipmentTypeKey, ShowcasePlacementSegment> = {
+  entrance: "vh",
+  interior: "mk",
+  hardware: "hardware",
+};
 
 export type DistributionByType = {
   capacity: number | null;
@@ -43,25 +48,33 @@ function emptyByType(): DistributionByType {
   return { capacity: null, tandoorOnShelf: 0, percent: null };
 }
 
-/** Сколько моделей конкретного типа фактически выбрано в showcase ТТ. */
-export function countTandoorModelsOfType(
-  selected: TradePointShowcaseSelectedModel[] | undefined,
-  type: EquipmentTypeKey,
-  catalogLookup: (id: string) => CatalogProduct | undefined,
-): number {
-  if (!selected) return 0;
-  let n = 0;
-  for (const m of selected) {
-    const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
-    if (t === type) n += 1;
+/** Есть ли installed-модель с данным id в entries матрицы ТТ. */
+export function isModelInstalledInEntries(
+  entries: readonly ShowcaseMatrixEntryDto[] | undefined,
+  modelId: string,
+): boolean {
+  const normalized = normalizeShowcaseMatrixModelId(modelId);
+  if (!entries?.length) return false;
+  for (const e of entries) {
+    if (e.targetKind !== "model" && e.targetKind !== "variant") continue;
+    if (e.status !== "installed") continue;
+    if (normalizeShowcaseMatrixModelId(e.targetId) === normalized) return true;
   }
-  return n;
+  return false;
 }
 
-/** Дистрибуция одной ТТ по всем типам + средняя. */
+/** Сколько installed-моделей конкретного типа на витрине ТТ (из showcase_matrix_entries). */
+export function countInstalledModelsOfType(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  type: EquipmentTypeKey,
+): number {
+  return countInstalledOursBySegment(entries)[SEGMENT_BY_TYPE[type]];
+}
+
+/** Дистрибуция одной ТТ по всем типам + средняя. Числитель — installed-модели матрицы. */
 export function computeDistributionForTradePoint(
   sh: TradePointShowcaseActualization | undefined,
-  catalogLookup: (id: string) => CatalogProduct | undefined,
+  installedEntries: readonly ShowcaseMatrixEntryDto[] = [],
 ): DistributionTradePointMetrics {
   const tradePointId = sh?.tradePointId ?? "";
   const hasShowcase = sh ? normalizeHasShowcase(sh.hasShowcase) : true;
@@ -79,12 +92,13 @@ export function computeDistributionForTradePoint(
     };
   }
 
+  const installedBySegment = countInstalledOursBySegment(installedEntries);
   const byType = {} as Record<EquipmentTypeKey, DistributionByType>;
   let sum = 0;
   let n = 0;
   for (const type of ALL_EQUIPMENT_TYPES) {
     const capacity = sh ? getShowcaseTypeCapacity(sh, type) : null;
-    const onShelf = countTandoorModelsOfType(sh?.selectedShowcaseModels, type, catalogLookup);
+    const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
     let percent: number | null = null;
     if (capacity != null && capacity > 0) {
       percent = (onShelf / capacity) * 100;
@@ -154,12 +168,12 @@ export function aggregateDistribution(metrics: DistributionTradePointMetrics[]):
   };
 }
 
-/** Покрытие конкретной модели по группе ТТ. */
+/** Покрытие конкретной модели по группе ТТ (present — installed в матрице). */
 export function computeModelCoverage(
   modelId: string,
   modelType: EquipmentTypeKey,
   metrics: DistributionTradePointMetrics[],
-  shByTradePointId: Record<string, TradePointShowcaseActualization | undefined>,
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): ModelCoverageMetrics {
   let present = 0;
   let eligible = 0;
@@ -168,8 +182,7 @@ export function computeModelCoverage(
     const cap = m.byType[modelType].capacity;
     if (cap != null && cap > 0) {
       eligible += 1;
-      const sh = shByTradePointId[m.tradePointId];
-      if (sh?.selectedShowcaseModels?.some((x) => x.productId === modelId)) present += 1;
+      if (isModelInstalledInEntries(installedEntriesByTradePointId[m.tradePointId], modelId)) present += 1;
     }
   }
   return {

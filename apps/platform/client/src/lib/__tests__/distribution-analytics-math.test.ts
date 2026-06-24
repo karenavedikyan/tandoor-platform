@@ -3,13 +3,34 @@
  */
 import assert from "node:assert/strict";
 import type { TradePointShowcaseActualization } from "../client-base-actualization-state";
+import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api";
 import {
   aggregateDistribution,
   computeDistributionForTradePoint,
   computeModelCoverage,
 } from "../distribution-analytics/distribution-analytics-math";
 
-const catalogLookup = () => undefined;
+function makeInstalledModel(targetId: string, tradePointId = "tp-1"): ShowcaseMatrixEntryDto {
+  return {
+    id: `m-${targetId}`,
+    dealerId: "d-1",
+    tradePointId,
+    targetKind: "model",
+    targetId,
+    status: "installed",
+    comment: null,
+    updatedAt: new Date().toISOString(),
+    updatedBy: null,
+    updatedByName: null,
+    placementType: null,
+    placementSegment: null,
+    placementCapacity: null,
+    placementActual: null,
+    placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
+  };
+}
 
 function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradePointShowcaseActualization {
   return {
@@ -45,28 +66,15 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
   const sh = baseShowcase({
     entrancePortals: 50,
     interiorPortals: 100,
-    selectedShowcaseModels: [
-      ...Array.from({ length: 50 }, (_, i) => ({
-        productId: `e-${i}`,
-        productName: `E${i}`,
-        productType: "Модель",
-        selectedAt: new Date().toISOString(),
-        selectedBy: "u",
-        selectedByName: "U",
-        portalType: "entrance" as const,
-      })),
-      ...Array.from({ length: 70 }, (_, i) => ({
-        productId: `i-${i}`,
-        productName: `I${i}`,
-        productType: "Модель",
-        selectedAt: new Date().toISOString(),
-        selectedBy: "u",
-        selectedByName: "U",
-        portalType: "interior" as const,
-      })),
-    ],
+    selectedShowcaseModels: [],
   });
-  const m = computeDistributionForTradePoint(sh, catalogLookup);
+  const entries = [
+    ...Array.from({ length: 50 }, (_, i) => makeInstalledModel(`tc-vh-e-${i}`)),
+    ...Array.from({ length: 70 }, (_, i) => makeInstalledModel(`tc-mk-i-${i}`)),
+  ];
+  const m = computeDistributionForTradePoint(sh, entries);
+  assert.equal(m.byType.entrance.tandoorOnShelf, 50);
+  assert.equal(m.byType.interior.tandoorOnShelf, 70);
   assert.equal(m.byType.entrance.percent, 100);
   assert.equal(m.byType.interior.percent, 70);
   assert.equal(m.byType.hardware.percent, null);
@@ -78,46 +86,34 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
     entrancePortals: 10,
     interiorPortals: null,
     hardwareSections: null,
-    selectedShowcaseModels: Array.from({ length: 5 }, (_, i) => ({
-      productId: `e-${i}`,
-      productName: `E${i}`,
-      productType: "Модель",
-      selectedAt: new Date().toISOString(),
-      selectedBy: "u",
-      selectedByName: "U",
-      portalType: "entrance" as const,
-    })),
+    selectedShowcaseModels: [],
   });
-  const m = computeDistributionForTradePoint(sh, catalogLookup);
+  const entries = Array.from({ length: 5 }, (_, i) => makeInstalledModel(`tc-vh-e-${i}`));
+  const m = computeDistributionForTradePoint(sh, entries);
+  assert.equal(m.byType.entrance.tandoorOnShelf, 5);
   assert.equal(m.byType.entrance.percent, 50);
   assert.equal(m.averagePercent, 50);
 }
 
 {
+  const tp1Entries: ShowcaseMatrixEntryDto[] = [];
+  const tp2Entries = Array.from({ length: 10 }, (_, i) => makeInstalledModel(`tc-vh-e2-${i}`, "tp-2"));
   const tp1 = computeDistributionForTradePoint(
     baseShowcase({ tradePointId: "tp-1", entrancePortals: 10, interiorPortals: null, selectedShowcaseModels: [] }),
-    catalogLookup,
+    tp1Entries,
   );
   const tp2 = computeDistributionForTradePoint(
     baseShowcase({
       tradePointId: "tp-2",
       entrancePortals: 20,
       interiorPortals: null,
-      selectedShowcaseModels: Array.from({ length: 10 }, (_, i) => ({
-        productId: `e2-${i}`,
-        productName: `E${i}`,
-        productType: "Модель",
-        selectedAt: new Date().toISOString(),
-        selectedBy: "u",
-        selectedByName: "U",
-        portalType: "entrance" as const,
-      })),
+      selectedShowcaseModels: [],
     }),
-    catalogLookup,
+    tp2Entries,
   );
   const tp3 = computeDistributionForTradePoint(
     baseShowcase({ tradePointId: "tp-3", entrancePortals: 0, interiorPortals: 5, selectedShowcaseModels: [] }),
-    catalogLookup,
+    [],
   );
   const agg = aggregateDistribution([tp1, tp2, tp3]);
   assert.equal(agg.byType.entrance.capacity, 30);
@@ -127,7 +123,7 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
 
 {
   const sh = baseShowcase({ hasShowcase: false, entrancePortals: 10 });
-  const m = computeDistributionForTradePoint(sh, catalogLookup);
+  const m = computeDistributionForTradePoint(sh, [makeInstalledModel("tc-vh-x")]);
   assert.equal(m.hasShowcase, false);
   assert.equal(m.averagePercent, null);
   const agg = aggregateDistribution([m]);
@@ -136,28 +132,57 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
 
 {
   const metrics = [
-    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-1", entrancePortals: 1 }), catalogLookup),
-    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-2", entrancePortals: 1 }), catalogLookup),
-    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-3", entrancePortals: 1 }), catalogLookup),
-    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-4", entrancePortals: 1 }), catalogLookup),
-    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-5", entrancePortals: 1 }), catalogLookup),
+    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-1", entrancePortals: 1 }), []),
+    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-2", entrancePortals: 1 }), []),
+    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-3", entrancePortals: 1 }), []),
+    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-4", entrancePortals: 1 }), []),
+    computeDistributionForTradePoint(baseShowcase({ tradePointId: "tp-5", entrancePortals: 1 }), []),
   ];
-  const shMap: Record<string, TradePointShowcaseActualization> = {
-    "tp-1": baseShowcase({ tradePointId: "tp-1", entrancePortals: 1, selectedShowcaseModels: [{ productId: "m1", productName: "M", productType: "Модель", selectedAt: "", selectedBy: "", selectedByName: "", portalType: "entrance" }] }),
-    "tp-2": baseShowcase({ tradePointId: "tp-2", entrancePortals: 1, selectedShowcaseModels: [{ productId: "m1", productName: "M", productType: "Модель", selectedAt: "", selectedBy: "", selectedByName: "", portalType: "entrance" }] }),
-    "tp-3": baseShowcase({ tradePointId: "tp-3", entrancePortals: 1 }),
-    "tp-4": baseShowcase({ tradePointId: "tp-4", entrancePortals: 1 }),
-    "tp-5": baseShowcase({ tradePointId: "tp-5", entrancePortals: 1 }),
+  const installedMap: Record<string, ShowcaseMatrixEntryDto[]> = {
+    "tp-1": [makeInstalledModel("tc-vh-m1", "tp-1")],
+    "tp-2": [makeInstalledModel("tc-vh-m1", "tp-2")],
+    "tp-3": [],
+    "tp-4": [],
+    "tp-5": [],
   };
-  const cov = computeModelCoverage("m1", "entrance", metrics, shMap);
+  const cov = computeModelCoverage("tc-vh-m1", "entrance", metrics, installedMap);
   assert.equal(cov.presentTradePoints, 2);
   assert.equal(cov.eligibleTradePoints, 5);
   assert.equal(cov.coveragePercent, 40);
 }
 
 {
-  const cov = computeModelCoverage("m1", "entrance", [], {});
+  const cov = computeModelCoverage("tc-vh-m1", "entrance", [], {});
   assert.equal(cov.coveragePercent, null);
+}
+
+{
+  const sh = baseShowcase({
+    entrancePortals: 8,
+    interiorPortals: 12,
+    hardwareSections: 10,
+    selectedShowcaseModels: Array.from({ length: 99 }, (_, i) => ({
+      productId: `legacy-${i}`,
+      productName: `L${i}`,
+      productType: "Модель",
+      selectedAt: new Date().toISOString(),
+      selectedBy: "u",
+      selectedByName: "U",
+      portalType: "entrance" as const,
+    })),
+  });
+  const entries = [
+    ...Array.from({ length: 8 }, (_, i) => makeInstalledModel(`tc-vh-installed-${i}`)),
+    ...Array.from({ length: 12 }, (_, i) => makeInstalledModel(`tc-mk-installed-${i}`)),
+    ...Array.from({ length: 10 }, (_, i) => makeInstalledModel(`tc-hw-installed-${i}`)),
+  ];
+  const m = computeDistributionForTradePoint(sh, entries);
+  assert.equal(m.byType.entrance.tandoorOnShelf, 8);
+  assert.equal(m.byType.interior.tandoorOnShelf, 12);
+  assert.equal(m.byType.hardware.tandoorOnShelf, 10);
+  assert.equal(m.byType.entrance.percent, 100);
+  assert.equal(m.byType.interior.percent, 100);
+  assert.equal(m.byType.hardware.percent, 100);
 }
 
 console.log("distribution-analytics-math: ok");

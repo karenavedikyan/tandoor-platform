@@ -31,6 +31,7 @@ const emptyData: DistributionAnalyticsData = {
   modelCoverageByModelId: {},
   productRows: [],
   territoryRows: [],
+  installedEntriesByTradePointId: {},
 };
 
 function makeDealers(count: number): DealerRow[] {
