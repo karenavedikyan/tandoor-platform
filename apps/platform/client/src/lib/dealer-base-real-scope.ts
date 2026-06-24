@@ -271,18 +271,16 @@ export function roleScopedDealerRowsForReal(
   }
   if (snap.me.role === "regional_manager") {
     // [prompt-354] личный scope по dealer_overrides.regional_manager_id (выдаётся сервером в assignmentsScope.ownCodes)
+    // [rm-scope-fix] ownCodes приходят как external_key (client-ma-...) ИЛИ как release_code (MA-...).
+    // Сравниваем через normalizeAssignmentLookupCode (снимает префикс client- и приводит к upper),
+    // иначе external_key никогда не сматчится с r.releaseCode и список будет пустым.
     if (assignmentsScopeIsActive(assignmentsScope)) {
-      const ownCodesUpper = new Set(
-        Array.from(assignmentsScope!.ownCodes).map((c) => c.toUpperCase().trim()),
-      );
-      if (ownCodesUpper.size === 0) {
+      const ownCodesNorm = normalizedAssignmentCodeSet(assignmentsScope!.ownCodes);
+      if (ownCodesNorm.size === 0) {
         console.warn("[rm-scope] regional_manager: ownCodes пуст — возвращаем []", { meId: snap.me.id });
         return [];
       }
-      return rows.filter((r) => {
-        const code = (r.releaseCode ?? "").toUpperCase().trim();
-        return code.length > 0 && ownCodesUpper.has(code);
-      });
+      return rows.filter((r) => rowMatchesNormalizedCodes(r, ownCodesNorm));
     }
     console.warn("[rm-scope] regional_manager: assignmentsScope не готов — []", { meId: snap.me.id });
     return [];

@@ -80,4 +80,30 @@ function regionalSnap(rmId: string, teamUuid: string, ropId: string): OrgSnapsho
   assert.equal(scoped.length, 1);
 }
 
+// [rm-scope-fix] РЕГРЕССИЯ: в проде сервер отдаёт ownCodes как external_key (client-<release_code>),
+// а не как голый release_code. Раньше сырое сравнение upper(client-ma-...) vs upper(MA-...) не матчилось
+// → список ТТ для регионала был пустым в Дистрибуции. Теперь сравнение нормализуется.
+{
+  const snap = regionalSnap(DROGOBITSKY, TEAM_SAPOZHKOV, ROP_SAPOZHKOV);
+  const sampleRows = allRows
+    .filter((r) => r.releaseTeamId === "team-sapozhkov" && r.releaseCode?.trim())
+    .slice(0, 3);
+  assert.ok(sampleRows.length >= 2, "fixture: sample own rows");
+  // external_key хранится в r.id (формат client-<release_code в нижнем регистре>)
+  const externalKeys = sampleRows.map((r) => `client-${r.releaseCode!.trim().toLowerCase()}`);
+
+  const scoped = roleScopedDealerRowsForReal(allRows, snap, "sales_manager", undefined, {
+    ownCodes: new Set(externalKeys),
+    teamCodes: new Set(),
+    grantedCodes: new Set(),
+  });
+  assert.equal(
+    scoped.length,
+    sampleRows.length,
+    "RM scope должен матчить external_key (client-...) против release_code",
+  );
+  const scopedCodes = scoped.map((r) => r.releaseCode!.trim());
+  assert.ok(sampleRows.every((r) => scopedCodes.includes(r.releaseCode!.trim())));
+}
+
 console.log("real-scope-regional-manager: ok");
