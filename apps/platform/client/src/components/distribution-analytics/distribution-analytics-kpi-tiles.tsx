@@ -19,22 +19,28 @@ type Props = {
   aggregate: DistributionGroupMetrics;
   tradePointsCount: number;
   activeEquipmentTypes?: EquipmentTypeKey[];
+  showTradePointsCount?: boolean;
+  tileTestIdByType?: Partial<Record<EquipmentTypeKey, string>>;
 };
 
 export function DistributionAnalyticsKpiTiles({
   aggregate,
   tradePointsCount,
   activeEquipmentTypes = [],
+  showTradePointsCount = true,
+  tileTestIdByType,
 }: Props): ReactElement {
   const onlyTypes = ALL_EQUIPMENT_TYPES;
 
   return (
     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="distribution-analytics-kpi-tiles">
-      <KpiTile
-        title="ТТ в выборке"
-        value={String(tradePointsCount)}
-        hint="С учётом scope и фильтров"
-      />
+      {showTradePointsCount ? (
+        <KpiTile
+          title="ТТ в выборке"
+          value={String(tradePointsCount)}
+          hint="С учётом scope и фильтров"
+        />
+      ) : null}
       {onlyTypes.map((type) => {
         const row = aggregate.byType[type];
         const disabled = activeEquipmentTypes.length > 0 && !activeEquipmentTypes.includes(type);
@@ -50,6 +56,7 @@ export function DistributionAnalyticsKpiTiles({
                 : `Σ ${row.tandoorOnShelf} / Σ ${row.capacity} слотов`
             }
             valueClassName={disabled ? undefined : DISTRIBUTION_PERCENT_TONE_CLASS[tone]}
+            testId={tileTestIdByType?.[type]}
           />
         );
       })}
@@ -62,14 +69,16 @@ function KpiTile({
   value,
   hint,
   valueClassName,
+  testId,
 }: {
   title: string;
   value: string;
   hint: string;
   valueClassName?: string;
+  testId?: string;
 }): ReactElement {
   return (
-    <div className="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+    <div className="rounded-xl border border-border/70 bg-card p-3 shadow-xs" data-testid={testId}>
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
       <p className={cn("mt-1 text-2xl font-semibold tabular-nums", valueClassName)}>{value}</p>
       <p className="mt-1 text-[10px] text-muted-foreground">{hint}</p>

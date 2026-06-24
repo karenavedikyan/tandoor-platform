@@ -8,6 +8,7 @@ import {
   aggregateDistribution,
   computeDistributionForTradePoint,
   computeModelCoverage,
+  distributionPercentTone,
 } from "../distribution-analytics/distribution-analytics-math";
 
 function makeInstalledModel(targetId: string, tradePointId = "tp-1"): ShowcaseMatrixEntryDto {
@@ -183,6 +184,17 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
   assert.equal(m.byType.entrance.percent, 100);
   assert.equal(m.byType.interior.percent, 100);
   assert.equal(m.byType.hardware.percent, 100);
+}
+
+{
+  assert.equal(distributionPercentTone(10), "red");
+  assert.equal(distributionPercentTone(14.99), "red");
+  assert.equal(distributionPercentTone(15), "yellow");
+  assert.equal(distributionPercentTone(39.99), "yellow");
+  assert.equal(distributionPercentTone(40), "green");
+  assert.equal(distributionPercentTone(100), "green");
+  assert.equal(distributionPercentTone(null), "empty");
+  assert.equal(distributionPercentTone(Number.NaN), "empty");
 }
 
 console.log("distribution-analytics-math: ok");

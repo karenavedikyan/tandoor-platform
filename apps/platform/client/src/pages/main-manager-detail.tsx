@@ -44,6 +44,8 @@ import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 
 function countTradePointsForDealer(row: DealerRow, act: ReturnType<typeof useClientBaseTeamActualization>["mergedState"]): number {
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived).length;
@@ -159,6 +161,16 @@ function MainManagerDetailContent() {
     return tradePointRows.filter((r) => dealerIds.has(r.dealerId));
   }, [tradePointRows, selectedCity, displayedClientRows]);
 
+  const managerTradePointIds = useMemo(
+    () => tradePointRows.map((r) => r.tradePointId),
+    [tradePointRows],
+  );
+
+  const managerDistribution = useTradePointDistributionAggregate(
+    actx.enabled && allowed ? managerTradePointIds : [],
+    managementPlane.mergedState,
+  );
+
   const showCityCoverage = actx.enabled && allowed && clientRows.length > 0;
 
   const loading =
@@ -229,6 +241,19 @@ function MainManagerDetailContent() {
             </p>
           </CardContent>
         </Card>
+      </section>
+
+      <section className="min-w-0" data-testid="section-main-manager-distribution">
+        <DistributionAnalyticsKpiTiles
+          aggregate={managerDistribution.aggregate}
+          tradePointsCount={managerDistribution.tradePointsCount}
+          showTradePointsCount={false}
+          tileTestIdByType={{
+            entrance: "tile-manager-distribution-entrance",
+            interior: "tile-manager-distribution-interior",
+            hardware: "tile-manager-distribution-hardware",
+          }}
+        />
       </section>
 
       {showCityCoverage ? (
