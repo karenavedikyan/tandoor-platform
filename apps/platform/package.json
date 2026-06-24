@@ -63,6 +63,7 @@
     "test:showcase-matrix-list-scope": "tsx shared/__tests__/showcase-matrix-list-scope.test.ts",
     "test:showcase-assignments-scope": "tsx shared/__tests__/showcase-assignments-scope.test.ts",
     "test:trade-point-showcase-segment-models": "tsx client/src/lib/__tests__/trade-point-showcase-segment-models.test.ts",
+    "test:showcase-installed-models-distribution": "tsx client/src/lib/__tests__/showcase-installed-models-distribution.test.ts",
     "test:trade-point-showcase-matrix-filters": "tsx client/src/lib/__tests__/trade-point-showcase-matrix-filters.test.ts",
     "test:trade-point-showcase-distribution-from-matrix": "vitest run client/src/lib/__tests__/trade-point-showcase-distribution-from-matrix.test.ts",
     "test:showcase-default-true": "tsx client/src/lib/__tests__/showcase-default-true.test.ts",

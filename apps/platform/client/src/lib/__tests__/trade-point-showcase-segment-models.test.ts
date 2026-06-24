@@ -196,7 +196,14 @@ test("placement + installed: totalOurs учитывает max(блоки, instal
   assert.equal(vh.ourModels.length, 2);
 });
 
-test("hardware без fallback: model-entries не попадают в сегмент", () => {
+test("hardware: installed catalog-модели учитываются", () => {
+  const entries = [makeModelEntry("tc-hw-ruchka-dvernaya-tandoor-tdal-701-02-black-chernyy-td185225")];
+  const hw = buildSegmentDetail(entries, "hardware");
+  assert.equal(hw.source, "models");
+  assert.equal(hw.totalOurs, 1);
+});
+
+test("hardware без fallback: model-entries других сегментов не попадают", () => {
   const entries = [makeModelEntry(VH_MODEL), makeModelEntry(MK_MODEL)];
   const hw = buildSegmentDetail(entries, "hardware");
   assert.equal(hw.source, "empty");
