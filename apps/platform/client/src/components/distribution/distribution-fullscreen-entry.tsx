@@ -54,6 +54,7 @@ import {
 } from "@/lib/showcase-type-capacity";
 import {
   persistEquipmentCapacityInputs,
+  categoryCapacityFieldsForPersist,
   type EquipmentCapacityInput,
 } from "@/lib/showcase-capacity-by-equipment";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -1207,7 +1208,7 @@ export function DistributionFullscreenEntry({
     (inputs: EquipmentCapacityInput) => {
       const uid = profile.personaUserId;
       const uname = userLabelFromProfile(profile);
-      persistEquipmentCapacityInputs({
+      const cats = persistEquipmentCapacityInputs({
         dealerId: dealer.id,
         tradePointId: point.id,
         placements,
@@ -1215,10 +1216,36 @@ export function DistributionFullscreenEntry({
         updatedBy: uid,
         updatedByName: uname,
       });
+      // Синхронизируем категорийную ёмкость в поля entrancePortals/interiorPortals/
+      // hardwareSections, из которых считаются проценты и сводка «Входных/Межкомнатных/Фурн».
+      const iso = new Date().toISOString();
+      void actx.persist((prev) => {
+        const prevRec =
+          prev.tradePointShowcaseActualizationById[point.id] ??
+          emptyShowcase(dealer.id, point.id);
+        const capacityFields = categoryCapacityFieldsForPersist({
+          next: cats,
+          prevRec,
+          hasShowcase: normalizeHasShowcase(prevRec.hasShowcase) !== false,
+        });
+        const nextRec: TradePointShowcaseActualization = {
+          ...prevRec,
+          ...capacityFields,
+          updatedAt: iso,
+          updatedBy: uid,
+          updatedByName: uname,
+        };
+        return mergeActualizationState(prev, {
+          tradePointShowcaseActualizationById: {
+            ...prev.tradePointShowcaseActualizationById,
+            [point.id]: nextRec,
+          },
+        });
+      });
       setBump((n) => n + 1);
       setEquipmentDialogOpen(false);
     },
-    [dealer.id, point.id, placements, profile],
+    [actx, dealer.id, point.id, placements, profile],
   );
 
   const assignmentSelectedModels = useMemo(
