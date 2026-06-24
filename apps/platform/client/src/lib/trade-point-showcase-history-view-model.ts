@@ -25,6 +25,8 @@ export type HistoryEventViewModel = {
   targetLabel: string;
   oldStatusLabel: string | null;
   newStatusLabel: string | null;
+  placementCapacity: number | null;
+  capacityChangeLabel: string | null;
   comment: string | null;
   action: HistoryEventAction;
 };
@@ -62,7 +64,25 @@ export function detectAction(e: ShowcaseMatrixEventDto): HistoryEventAction {
   return "comment_only";
 }
 
+function capacityChangeLabelFor(e: ShowcaseMatrixEventDto): string | null {
+  if (e.targetKind !== "placement") return null;
+  const comment = e.comment?.trim() ?? "";
+  const capacityMatch = /^ёмкость\s+(\d+)\s*→\s*(\d+)$/.exec(comment);
+  if (capacityMatch) {
+    const seg = e.placementSegment ? PLACEMENT_SEGMENT_LABEL_RU[e.placementSegment] : "Сегмент —";
+    const type = e.placementType ? PLACEMENT_TYPE_LABEL_RU[e.placementType] : "тип —";
+    return `${type} · ${seg} · вместимость ${capacityMatch[1]} → ${capacityMatch[2]}`;
+  }
+  if (e.placementCapacity != null) {
+    const seg = e.placementSegment ? PLACEMENT_SEGMENT_LABEL_RU[e.placementSegment] : "Сегмент —";
+    const type = e.placementType ? PLACEMENT_TYPE_LABEL_RU[e.placementType] : "тип —";
+    return `${type} · ${seg} · вместимость ${e.placementCapacity} витрин`;
+  }
+  return null;
+}
+
 export function toHistoryViewModel(e: ShowcaseMatrixEventDto): HistoryEventViewModel {
+  const capacityChangeLabel = capacityChangeLabelFor(e);
   return {
     id: e.id,
     changedAt: e.changedAt,
@@ -75,7 +95,12 @@ export function toHistoryViewModel(e: ShowcaseMatrixEventDto): HistoryEventViewM
     targetLabel: targetLabelFor(e),
     oldStatusLabel: e.oldStatus ? statusLabelRu(e.oldStatus as ShowcaseMatrixStatus) : null,
     newStatusLabel: e.newStatus ? statusLabelRu(e.newStatus as ShowcaseMatrixStatus) : null,
-    comment: e.comment?.trim() || null,
+    placementCapacity: e.placementCapacity,
+    capacityChangeLabel,
+    comment:
+      capacityChangeLabel && /^ёмкость\s+\d+\s*→\s*\d+$/.test(e.comment?.trim() ?? "")
+        ? null
+        : e.comment?.trim() || null,
     action: detectAction(e),
   };
 }

@@ -299,7 +299,10 @@ export function TradePointShowcaseHistorySection({
                                   <span className="font-medium">{item.newStatusLabel ?? "—"}</span>
                                 </div>
                               ) : null}
-                              {item.action === "placement_update" && item.newStatusLabel ? (
+                              {item.action === "placement_update" && item.capacityChangeLabel ? (
+                                <div className="mt-0.5 text-xs text-muted-foreground">{item.capacityChangeLabel}</div>
+                              ) : null}
+                              {item.action === "placement_update" && !item.capacityChangeLabel && item.newStatusLabel ? (
                                 <div className="mt-0.5 text-xs text-muted-foreground">
                                   Статус: {item.newStatusLabel}
                                 </div>

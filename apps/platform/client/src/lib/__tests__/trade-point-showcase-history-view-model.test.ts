@@ -45,6 +45,22 @@ test("toHistoryViewModel: status_change для модели", () => {
   assert.equal(vm.oldStatusLabel, "Нужно поставить");
 });
 
+test("toHistoryViewModel: placement_update — ёмкость в capacityChangeLabel", () => {
+  const vm = toHistoryViewModel(
+    ev({
+      targetKind: "placement",
+      placementSegment: "vh",
+      placementType: "portal",
+      placementCapacity: 10,
+      comment: "ёмкость 4 → 10",
+    }),
+  );
+  assert.equal(vm.action, "placement_update");
+  assert.ok(vm.capacityChangeLabel?.includes("Портал"));
+  assert.ok(vm.capacityChangeLabel?.includes("4 → 10"));
+  assert.equal(vm.comment, null);
+});
+
 test("toHistoryViewModel: placement_update — собирает segment+type в targetLabel", () => {
   const vm = toHistoryViewModel(
     ev({ targetKind: "placement", placementSegment: "vh", placementType: "portal" }),
