@@ -125,13 +125,15 @@ import {
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
-import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
+import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket, buildTradePointListForActualization } from "@/lib/trade-point-list-for-actualization";
 import { toast } from "@/hooks/use-toast";
 import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { useHashQuery } from "@/lib/hash-location-router";
 import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
+import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import {
   clientNextStepActionLabel,
   getClientNextStepForDealer,
@@ -1870,6 +1872,20 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     profile,
     assignmentsScope,
   ]);
+
+  const isManagerHome = useReal && access === "sales_manager";
+
+  const managerHomeTradePointIds = useMemo(() => {
+    if (!isManagerHome || !actx.enabled) return [] as string[];
+    const dealerIds = new Set(scopedRows.map((r) => r.id));
+    const list = buildTradePointListForActualization(teamActualizationPlane, profile);
+    return list.filter((r) => dealerIds.has(r.dealerId)).map((r) => r.tradePointId);
+  }, [isManagerHome, actx.enabled, scopedRows, teamActualizationPlane, profile]);
+
+  const managerHomeDistribution = useTradePointDistributionAggregate(
+    managerHomeTradePointIds,
+    teamActualizationPlane,
+  );
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
@@ -3915,6 +3931,22 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           <span data-testid="text-dealer-stock-hardware-count">Склад фурнитуры: {stockFilterSummary.hardware}</span>
         </div>
       </section>
+      ) : null}
+
+      {!embedListOnly && isManagerHome ? (
+        <section className="space-y-2" data-testid="section-manager-home-distribution">
+          <h2 className="text-sm font-semibold text-foreground">Моя дистрибуция</h2>
+          <DistributionAnalyticsKpiTiles
+            aggregate={managerHomeDistribution.aggregate}
+            tradePointsCount={managerHomeDistribution.tradePointsCount}
+            showTradePointsCount={false}
+            tileTestIdByType={{
+              entrance: "tile-manager-home-distribution-entrance",
+              interior: "tile-manager-home-distribution-interior",
+              hardware: "tile-manager-home-distribution-hardware",
+            }}
+          />
+        </section>
       ) : null}
 
       <div ref={listSectionRef}>
