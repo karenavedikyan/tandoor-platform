@@ -40,6 +40,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShowcaseSaveCompletenessGate } from "@/components/showcase-save-completeness-gate";
+import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment-capacity-dialog";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import {
   mergeActualizationState,
@@ -51,6 +52,11 @@ import {
   patchShowcaseTypeCapacity,
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
+import {
+  persistEquipmentCapacityInputs,
+  type EquipmentCapacityInput,
+} from "@/lib/showcase-capacity-by-equipment";
+import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { cn } from "@/lib/utils";
 import {
   buildCatalogProductSearchHaystack,
@@ -354,6 +360,7 @@ function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowca
 export function DistributionFullscreenEntry({
   dealer,
   point,
+  profile,
   actorUserId,
   actorName,
   onClose,
@@ -366,6 +373,7 @@ export function DistributionFullscreenEntry({
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
   const selectedShowcaseModels = showcaseRec?.selectedShowcaseModels ?? [];
   const [completenessGateOpen, setCompletenessGateOpen] = useState(false);
+  const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [exitGateGaps, setExitGateGaps] = useState<ShowcaseTypeKey[]>([]);
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const [bump, setBump] = useState(0);
@@ -1163,6 +1171,11 @@ export function DistributionFullscreenEntry({
       }
       if (shouldOpenAssignmentDialog) {
         setPendingAssignmentOpenIds([...needInstallSaveIds]);
+      } else if (
+        !needInstallMode &&
+        normalizeHasShowcase(showcaseRec?.hasShowcase) !== false
+      ) {
+        setEquipmentDialogOpen(true);
       }
     } finally {
       setSaving(false);
@@ -1182,7 +1195,26 @@ export function DistributionFullscreenEntry({
     point.id,
     saving,
     showSaveSyncToast,
+    showcaseRec?.hasShowcase,
   ]);
+
+  const handleEquipmentDialogConfirm = useCallback(
+    (inputs: EquipmentCapacityInput) => {
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
+      persistEquipmentCapacityInputs({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        placements,
+        inputs,
+        updatedBy: uid,
+        updatedByName: uname,
+      });
+      setBump((n) => n + 1);
+      setEquipmentDialogOpen(false);
+    },
+    [dealer.id, point.id, placements, profile],
+  );
 
   const assignmentSelectedModels = useMemo(
     () =>
@@ -2167,6 +2199,17 @@ export function DistributionFullscreenEntry({
           </div>
         </div>
       ) : null}
+
+      <ShowcaseEquipmentCapacityDialog
+        open={equipmentDialogOpen}
+        onOpenChange={setEquipmentDialogOpen}
+        tradePointId={point.id}
+        getCandidateRec={getCandidateShowcaseRec}
+        selectedModels={selectedShowcaseModels}
+        catalogLookup={getProductById}
+        onConfirm={handleEquipmentDialogConfirm}
+        onCancel={() => setEquipmentDialogOpen(false)}
+      />
     </div>,
     document.body,
   );
