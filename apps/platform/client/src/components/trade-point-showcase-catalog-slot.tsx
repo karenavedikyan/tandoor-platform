@@ -120,6 +120,9 @@ export function TradePointShowcaseCatalogSlot({
     <TradePointShowcaseCatalogPanel
       tradePointId={point.id}
       dealerId={dealer.id}
+      tradePointName={point.name}
+      dealerName={dealer.name}
+      counterpartyCity={point.city ?? dealer.city}
       matrixScopeRegion={dealer.region}
       matrixScopeCity={point.city}
       matrixClientCategory={matrixClientCategory}
