@@ -48,6 +48,12 @@ import {
 import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
 import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
 import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
+import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
+import {
+  refreshMatrixDefFromServer,
+  SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT,
+  SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT,
+} from "@/lib/showcase-matrix-catalog-store";
 import {
   loadCachedMatrix,
   refreshMatrixFromServer,
@@ -191,11 +197,38 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [pendingSelectionProductId, setPendingSelectionProductId] = useState<string | null>(null);
   const [headerCapacityFormType, setHeaderCapacityFormType] = useState<ShowcaseTypeKey | null>(null);
   const [bump, setBump] = useState(0);
+  const [catalogBump, setCatalogBump] = useState(0);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
 
   useEffect(() => {
     void refreshMatrixFromServer(tradePointId, dealerId);
   }, [tradePointId, dealerId]);
+
+  useEffect(() => {
+    const fn = () => setCatalogBump((n) => n + 1);
+    window.addEventListener(SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT, fn);
+    window.addEventListener(SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT, fn);
+    return () => {
+      window.removeEventListener(SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT, fn);
+      window.removeEventListener(SHOWCASE_MATRIX_CATALOG_REMOTE_UPDATE_EVENT, fn);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!matrixClientCategory) return;
+    let cancelled = false;
+    void fetchActiveMatrixDef({
+      clientCategory: matrixClientCategory,
+      region: matrixScopeRegion ?? null,
+      city: matrixScopeCity ?? null,
+    }).then((def) => {
+      if (cancelled || !def?.id) return;
+      void refreshMatrixDefFromServer(def.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [matrixClientCategory, matrixScopeRegion, matrixScopeCity, tradePointId, dealerId]);
 
   useEffect(() => {
     const fn = () => setBump((n) => n + 1);
@@ -261,6 +294,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   );
 
   const resolvedMatrix = useMemo<ResolvedTradePointMatrix>(() => {
+    void catalogBump;
     if (!matrixClientCategory) {
       return { source: "empty", defId: null, models: [] };
     }
@@ -271,7 +305,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       region: matrixScopeRegion ?? null,
       city: matrixScopeCity ?? null,
     });
-  }, [matrixClientCategory, dealerId, tradePointId, matrixScopeRegion, matrixScopeCity]);
+  }, [catalogBump, matrixClientCategory, dealerId, tradePointId, matrixScopeRegion, matrixScopeCity]);
 
   const hasManagedMatrix = resolvedMatrix.source === "managed";
 
