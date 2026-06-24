@@ -315,6 +315,34 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     [backendModelStatus, selectedShowcaseModels],
   );
 
+  const effectiveSelectedModels = useMemo((): TradePointShowcaseSelectedModel[] => {
+    void bump;
+    const fromState = selectedShowcaseModels;
+    const selectedIds = new Set(fromState.map((m) => m.productId));
+    const synthesized: TradePointShowcaseSelectedModel[] = [];
+    const addedFromBackend = new Set<string>();
+
+    for (const entry of loadCachedMatrix(tradePointId)) {
+      if (entry.targetKind !== "model") continue;
+      if (entry.status !== "installed") continue;
+      const productId = entry.targetId;
+      if (selectedIds.has(productId) || addedFromBackend.has(productId)) continue;
+
+      addedFromBackend.add(productId);
+      const product = catalogLookup(productId);
+      synthesized.push({
+        productId,
+        productName: product?.name ?? productId,
+        productType: product?.type ?? "",
+        selectedAt: entry.updatedAt ?? new Date(0).toISOString(),
+        selectedBy: entry.updatedBy ?? "",
+        selectedByName: entry.updatedByName ?? "",
+      });
+    }
+
+    return [...fromState, ...synthesized];
+  }, [selectedShowcaseModels, bump, tradePointId]);
+
   const resolvedMatrix = useMemo<ResolvedTradePointMatrix>(() => {
     void catalogBump;
     if (!matrixClientCategory) {
@@ -363,8 +391,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   }, [doorCatalog]);
 
   const portalWarn = useMemo(
-    () => computeShowcasePortalOverfill(selectedShowcaseModels, portalCaps, catalogLookup),
-    [selectedShowcaseModels, portalCaps],
+    () => computeShowcasePortalOverfill(effectiveSelectedModels, portalCaps, catalogLookup),
+    [effectiveSelectedModels, portalCaps],
   );
 
   const filteredCatalog = useMemo(() => {
@@ -398,7 +426,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     const types: ShowcaseTypeKey[] = ["entrance", "interior", "hardware"];
     return types.map((type) => {
       const cap = getShowcaseTypeCapacity(showcaseRec, type);
-      const cnt = countSelectedByType(selectedShowcaseModels, type, catalogLookup);
+      const cnt = countSelectedByType(effectiveSelectedModels, type, catalogLookup);
       const short = SHOWCASE_TYPE_SHORT_RU[type];
       if (cap == null) {
         return { type, label: `${short}: ${cnt} из — не заполнено`, unfilled: true, overfill: false };
@@ -411,14 +439,14 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         overfill: over,
       };
     });
-  }, [selectedShowcaseModels, showcaseRec]);
+  }, [effectiveSelectedModels, showcaseRec]);
 
   const countsLine = useMemo(() => {
     let ent = 0;
     let int = 0;
     let oth = 0;
     let hw = 0;
-    for (const m of selectedShowcaseModels) {
+    for (const m of effectiveSelectedModels) {
       const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
       if (t === "entrance") ent += 1;
       else if (t === "interior") int += 1;
@@ -429,10 +457,10 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     if (portalCaps.entrance != null) parts.push(`входных моделей: ${ent} из ${portalCaps.entrance}`);
     if (portalCaps.interior != null) parts.push(`межкомнатных: ${int} из ${portalCaps.interior}`);
     if (portalCaps.hardware != null) parts.push(`фурнитуры: ${hw} из ${portalCaps.hardware}`);
-    if (portalCaps.total != null) parts.push(`всего на витрине: ${selectedShowcaseModels.length} из ${portalCaps.total}`);
+    if (portalCaps.total != null) parts.push(`всего на витрине: ${effectiveSelectedModels.length} из ${portalCaps.total}`);
     if (oth > 0) parts.push(`тип не определён: ${oth}`);
     return parts.length ? parts.join(" · ") : "";
-  }, [selectedShowcaseModels, portalCaps]);
+  }, [effectiveSelectedModels, portalCaps]);
 
   const applyShowcasePatch = useCallback(
     (patch: Partial<TradePointShowcaseActualization>) => {
@@ -974,7 +1002,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">Выбрано: {selectedShowcaseModels.length}</span>
+              <span className="font-medium text-foreground">Выбрано: {effectiveSelectedModels.length}</span>
               <span className="text-border">·</span>
               <span className={missingRequiredCount > 0 ? "font-medium text-amber-900 dark:text-amber-100" : ""}>Нужно поставить: {missingRequiredCount}</span>
             </div>
