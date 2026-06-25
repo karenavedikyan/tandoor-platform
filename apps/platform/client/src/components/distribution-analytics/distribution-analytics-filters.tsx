@@ -12,6 +12,7 @@ import {
   type DistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import { buildDistributionAnalyticsFilterOptionsFromDealers } from "@/lib/distribution-analytics/distribution-analytics-filter-options";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import type { EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { collectAnalyticsCatalogProducts } from "@/lib/distribution-analytics/distribution-analytics-view-models";
 import { AnalyticsModelPicker } from "./analytics-model-picker";
@@ -53,9 +54,10 @@ export function DistributionAnalyticsFiltersPanel({
   const open = filtersOpen ?? internalOpen;
   const setOpen = onFiltersOpenChange ?? setInternalOpen;
 
+  const { data: snap } = useOrgSnapshot();
   const filterOptions = useMemo(
-    () => buildDistributionAnalyticsFilterOptionsFromDealers(scopedDealers),
-    [scopedDealers],
+    () => buildDistributionAnalyticsFilterOptionsFromDealers(scopedDealers, snap),
+    [scopedDealers, snap],
   );
   const {
     cityOptions,
