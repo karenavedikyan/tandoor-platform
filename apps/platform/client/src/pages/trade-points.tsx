@@ -114,7 +114,8 @@ import {
   shouldVirtualizeLargeList,
   VirtualizedStackList,
 } from "@/lib/window-list-virtualizer";
-import { TradePointsWorkspaceSummary } from "@/components/trade-points/trade-points-workspace-summary";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
 /** Плотность отображения списка торговых точек (как «Витрина дилеров»). */
@@ -821,6 +822,12 @@ export default function TradePointsPage({
     return filteredSorted.filter((r) => canArchiveRow(r));
   }, [bulkDeleteMode, canShowBulkTradePointControls, showIneligibleInBulkMode, filteredSorted, canArchiveRow]);
 
+  const tradePointScopeIds = useMemo(
+    () => tradePointsRowsForList.map((r) => r.tradePointId).filter(Boolean),
+    [tradePointsRowsForList],
+  );
+  const tradePointsDistribution = useTradePointDistributionAggregate(tradePointScopeIds, actState);
+
   const tradePointsGridCols = isMobile ? 2 : 5;
   const tradePointsGridRows = useMemo(() => {
     const cols = Math.max(1, tradePointsGridCols);
@@ -1504,6 +1511,16 @@ export default function TradePointsPage({
           </div>
           <p className="text-sm text-muted-foreground">Все точки клиентов, доступные по вашей зоне ответственности</p>
         </div>
+        ) : null}
+
+        {!embedListOnly && useReal ? (
+          <RoleDistributionSummaryBar
+            access={access}
+            aggregate={tradePointsDistribution.aggregate}
+            tradePointsCount={tradePointsDistribution.tradePointsCount}
+            testIdPrefix="trade-points"
+            showTradePointsCount
+          />
         ) : null}
 
         <Card className="sticky top-0 z-20 rounded-2xl border border-border/80 bg-card shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/95">
