@@ -2,6 +2,8 @@
  * HTTP API витринной матрицы (Postgres) — Промт 151.
  */
 
+import { triggerDistributionSnapshotAfterMatrixSave, triggerDistributionSnapshotsAfterBatchSave } from "./distribution-snapshot-client.js";
+
 export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
 
@@ -282,6 +284,13 @@ export async function fetchShowcaseMatrixHistory(opts: {
   }
 }
 
+async function afterMatrixUpsertSnapshot(body: ShowcaseMatrixUpsertBody): Promise<void> {
+  void triggerDistributionSnapshotAfterMatrixSave({
+    tradePointId: body.tradePointId,
+    dealerId: body.dealerId,
+  });
+}
+
 export async function apiUpsertShowcaseMatrixEntry(
   body: ShowcaseMatrixUpsertBody,
 ): Promise<{
@@ -306,6 +315,7 @@ export async function apiUpsertShowcaseMatrixEntry(
         status: res.status,
       };
     }
+    void afterMatrixUpsertSnapshot(body);
     return {
       ok: true,
       entry: mapShowcaseMatrixEntryDto(data.entry as unknown as Record<string, unknown>),
@@ -343,6 +353,7 @@ export async function apiBatchSyncShowcaseMatrix(
         status: res.status,
       };
     }
+    void triggerDistributionSnapshotsAfterBatchSave(operations);
     return {
       ok: true,
       applied: data.applied,
@@ -379,6 +390,7 @@ export async function apiUpsertShowcaseMatrixEntryStrict(
         message: "message" in data ? data.message : `HTTP ${res.status}`,
       };
     }
+    void afterMatrixUpsertSnapshot(body);
     return { ok: true };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -880,6 +880,7 @@ export function DealerBaseManagementCockpit({
               access={access}
               aggregate={cockpitDistribution.aggregate}
               tradePointsCount={cockpitDistribution.tradePointsCount}
+              tradePointIds={cockpitScopeTradePointIds}
               testIdPrefix="cockpit-clients"
               showTradePointsCount={false}
             />
@@ -1442,6 +1443,7 @@ export function DealerBaseManagementCockpit({
             access={access}
             aggregate={cockpitDistribution.aggregate}
             tradePointsCount={cockpitDistribution.tradePointsCount}
+            tradePointIds={cockpitScopeTradePointIds}
             testIdPrefix="cockpit-clients"
             showTradePointsCount={false}
           />

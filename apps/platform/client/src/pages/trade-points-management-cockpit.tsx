@@ -193,6 +193,7 @@ export function TradePointsManagementCockpit({
         access={access}
         aggregate={cockpitTpDistribution.aggregate}
         tradePointsCount={cockpitTpDistribution.tradePointsCount}
+        tradePointIds={cockpitTpScopeIds}
         testIdPrefix="cockpit-trade-points"
         showTradePointsCount
       />

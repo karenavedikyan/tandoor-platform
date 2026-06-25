@@ -1518,6 +1518,7 @@ export default function TradePointsPage({
             access={access}
             aggregate={tradePointsDistribution.aggregate}
             tradePointsCount={tradePointsDistribution.tradePointsCount}
+            tradePointIds={tradePointScopeIds}
             testIdPrefix="trade-points"
             showTradePointsCount
           />
