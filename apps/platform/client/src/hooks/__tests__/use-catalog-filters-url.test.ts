@@ -159,4 +159,31 @@ describe("useCatalogFiltersUrl", () => {
 
     expect(mockNavigateHashPathInHash).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps local query during rapid typing until debounced URL write completes", () => {
+    const { result, rerender } = renderHook(() => useCatalogFiltersUrl({ prefix: "dx" }));
+
+    act(() => {
+      result.current.setQuery("a");
+      result.current.setQuery("ab");
+      result.current.setQuery("abc");
+    });
+
+    expect(result.current.query).toBe("abc");
+    expect(mockNavigateHashPathInHash).not.toHaveBeenCalled();
+
+    mockRouteQs = new URLSearchParams("dx_source=matrix");
+    act(() => {
+      rerender();
+    });
+
+    expect(result.current.query).toBe("abc");
+
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(result.current.query).toBe("abc");
+    expect(mockRouteQs.get("dx_q")).toBe("abc");
+  });
 });
