@@ -186,8 +186,7 @@ export function applyDistributionAnalyticsFilters(
     if (filters.ropIds.length > 0) {
       const ropMatch =
         (ids.ropId && filters.ropIds.includes(ids.ropId)) ||
-        filters.ropIds.includes(row.rop) ||
-        filters.ropIds.includes(`rop:${row.rop}`);
+        filters.ropIds.includes(row.rop);
       if (!ropMatch) return false;
     }
 

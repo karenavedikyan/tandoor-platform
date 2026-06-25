@@ -1,4 +1,5 @@
 import type { DealerRow } from "../dealer-base-mock-data.js";
+import type { OrgSnapshot } from "../use-org-snapshot.js";
 
 export const DISTRIBUTION_ANALYTICS_FILTER_OPTIONS_MAX_DEALERS = 5000;
 
@@ -54,9 +55,21 @@ function isFilledPersonName(value: string | undefined): boolean {
   return t !== "" && t !== "—" && t !== "-";
 }
 
+function buildRopOptionsFromSnapshot(snap?: OrgSnapshot | null): DistributionAnalyticsFilterSelectOption[] {
+  if (!snap) return [];
+  return snap.users
+    .filter((u) => u.role === "rop")
+    .map((u) => ({
+      value: u.id,
+      label: u.fullName.trim() || u.id,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+}
+
 /** Lightweight filter dropdown options from dealer scope (bypasses analytics scopedRows). */
 export function buildDistributionAnalyticsFilterOptionsFromDealers(
   scopedDealers: readonly DealerRow[],
+  snap?: OrgSnapshot | null,
 ): DistributionAnalyticsFilterOptions {
   if (scopedDealers.length > DISTRIBUTION_ANALYTICS_FILTER_OPTIONS_MAX_DEALERS) {
     return EMPTY_FILTER_OPTIONS;
@@ -72,8 +85,6 @@ export function buildDistributionAnalyticsFilterOptionsFromDealers(
   const managerValues: string[] = [];
   const rmLabels: string[] = [];
   const rmValues: string[] = [];
-  const ropLabels: string[] = [];
-  const ropValues: string[] = [];
 
   for (const dealer of scopedDealers) {
     if (dealer.city?.trim()) cityLabels.push(dealer.city.trim());
@@ -96,10 +107,6 @@ export function buildDistributionAnalyticsFilterOptionsFromDealers(
       rmLabels.push(dealer.regionalManager);
       rmValues.push(`rm:${dealer.regionalManager}`);
     }
-    if (isFilledPersonName(dealer.ropName)) {
-      ropLabels.push(dealer.ropName);
-      ropValues.push(`rop:${dealer.ropName}`);
-    }
   }
 
   return {
@@ -109,6 +116,6 @@ export function buildDistributionAnalyticsFilterOptionsFromDealers(
     tradePointOptions: uniqueSelectOptions(tpLabels, tpValues),
     managerOptions: uniqueSelectOptions(managerLabels, managerValues),
     regionalManagerOptions: uniqueSelectOptions(rmLabels, rmValues),
-    ropOptions: uniqueSelectOptions(ropLabels, ropValues),
+    ropOptions: buildRopOptionsFromSnapshot(snap),
   };
 }
