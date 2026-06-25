@@ -61,7 +61,9 @@ import { ClientAvatar } from "@/components/ui/client-avatar";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
-import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import {
@@ -328,6 +330,22 @@ export function DealerBaseManagementCockpit({
     if (orgTeamCtx) return orgTeamCtx.access;
     return mapSalesRoleToDealerBaseAccess(profile.role);
   }, [orgTeamCtx, profile.role]);
+
+  const cockpitScopeTradePointIds = useMemo(() => {
+    if (!actx.enabled) return [] as string[];
+    const ids: string[] = [];
+    for (const row of rows) {
+      for (const e of mergeTradePointsForActualization(row, teamCtx.mergedState)) {
+        if (!e.isArchived) ids.push(e.point.id);
+      }
+    }
+    return ids;
+  }, [actx.enabled, rows, teamCtx.mergedState]);
+
+  const cockpitDistribution = useTradePointDistributionAggregate(
+    cockpitScopeTradePointIds,
+    teamCtx.mergedState,
+  );
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
@@ -858,6 +876,13 @@ export function DealerBaseManagementCockpit({
                 обновления), не отдельная категория.
               </p>
             </section>
+            <RoleDistributionSummaryBar
+              access={access}
+              aggregate={cockpitDistribution.aggregate}
+              tradePointsCount={cockpitDistribution.tradePointsCount}
+              testIdPrefix="cockpit-clients"
+              showTradePointsCount={false}
+            />
             <section data-testid="section-client-base-cities">
               <Card className="rounded-xl border border-border bg-card text-card-foreground">
                 <CardContent className="space-y-3 p-3 sm:p-4">
@@ -1412,6 +1437,14 @@ export function DealerBaseManagementCockpit({
       <div className="lg:flex lg:items-start lg:gap-6">
         <div className="min-w-0 flex-1 space-y-6" data-testid="section-client-base-director-overview">
           {overviewInfographic}
+
+          <RoleDistributionSummaryBar
+            access={access}
+            aggregate={cockpitDistribution.aggregate}
+            tradePointsCount={cockpitDistribution.tradePointsCount}
+            testIdPrefix="cockpit-clients"
+            showTradePointsCount={false}
+          />
 
           <div
             className="sticky top-0 z-20 space-y-2 bg-background/95 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90"
