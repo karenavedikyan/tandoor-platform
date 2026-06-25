@@ -23,7 +23,7 @@ import {
 import { getProductById } from "./catalog-data.js";
 import type { MergedTradePointEntry } from "./dealer-trade-points-overrides.js";
 import { isVirtualDefaultTradePointId } from "./dealer-trade-points-overrides.js";
-import { isDealerTrashedInRuntime, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
+import { isDealerTrashedInRuntime, isDealerOverridesHydrated, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
 import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "./dealer-base-mock-data.js";
 
 export type TradePointShowcaseBucket =
@@ -263,17 +263,25 @@ export function buildTradePointListForActualization(
   };
 
   const collectForDealers = (dealers: DealerRow[], keepEntry: (e: MergedTradePointEntry) => boolean): void => {
-    const scoped = options?.orgScope
-      ? roleScopedDealerRowsForReal(
-          dealers,
-          options.orgScope.snap,
-          options.orgScope.access,
-          undefined,
-          assignmentsScopeIsActive(options.assignmentsScope) ? options.assignmentsScope : undefined,
-        )
-      : roleScopedDealerRows(dealers, profile);
+    let scoped: DealerRow[];
+    if (options?.orgScope) {
+      const { snap, access } = options.orgScope;
+      const assignmentsScope = assignmentsScopeIsActive(options.assignmentsScope)
+        ? options.assignmentsScope
+        : undefined;
+      if (access === "sales_director") {
+        scoped = dealers;
+      } else if (access === "team_lead") {
+        scoped = roleScopedDealerRowsForReal(dealers, snap, access, { ropUserId: snap.me.id }, assignmentsScope);
+      } else {
+        scoped = roleScopedDealerRowsForReal(dealers, snap, access, undefined, assignmentsScope);
+      }
+    } else {
+      scoped = roleScopedDealerRows(dealers, profile);
+    }
     for (const dealer of scoped) {
       if (isDealerTrashedInRuntime(dealer.id, act)) continue;
+      if (!isDealerOverridesHydrated() && act.trashedDealersById[dealer.id]) continue;
       const merged = mergeTradePointsForActualization(dealer, act);
       for (const entry of merged) {
         if (!keepEntry(entry)) continue;
