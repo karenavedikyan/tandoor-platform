@@ -110,6 +110,7 @@ export function useCatalogFiltersUrl(opts?: {
   const [loc] = useHashLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingUrlWriteRef = useRef(false);
+  const pendingQueryWriteRef = useRef<string | null>(null);
   const pendingSourceRef = useRef<CatalogSourceFilter | null>(null);
 
   const parsed = useMemo(
@@ -130,7 +131,12 @@ export function useCatalogFiltersUrl(opts?: {
     if (pendingSourceRef.current !== null && parsed.source !== pendingSourceRef.current) {
       setFilters(parsed.filters);
       setCategoriesState(parsed.categories);
-      setQueryState(parsed.query);
+      if (pendingQueryWriteRef.current === null) {
+        setQueryState(parsed.query);
+      } else if (parsed.query === pendingQueryWriteRef.current) {
+        pendingQueryWriteRef.current = null;
+        setQueryState(parsed.query);
+      }
       return;
     }
     if (pendingSourceRef.current !== null && parsed.source === pendingSourceRef.current) {
@@ -139,7 +145,14 @@ export function useCatalogFiltersUrl(opts?: {
 
     setFilters(parsed.filters);
     setCategoriesState(parsed.categories);
-    setQueryState(parsed.query);
+    if (pendingQueryWriteRef.current !== null) {
+      if (parsed.query === pendingQueryWriteRef.current) {
+        pendingQueryWriteRef.current = null;
+        setQueryState(parsed.query);
+      }
+    } else {
+      setQueryState(parsed.query);
+    }
     setSourceState(parsed.source);
   }, [parsed.filters, parsed.categories, parsed.query, parsed.source]);
 
@@ -242,6 +255,7 @@ export function useCatalogFiltersUrl(opts?: {
   const setQuery = useCallback(
     (q: string) => {
       setQueryState(q);
+      pendingQueryWriteRef.current = q;
       pushUrl({ filters, query: q, source, categories });
     },
     [categories, filters, pushUrl, source],
@@ -259,6 +273,7 @@ export function useCatalogFiltersUrl(opts?: {
   const resetAll = useCallback(() => {
     const empty = { filters: {}, query: "", source: "all" as const, categories: [] as string[] };
     pendingSourceRef.current = "all";
+    pendingQueryWriteRef.current = "";
     setFilters({});
     setCategoriesState([]);
     setQueryState("");

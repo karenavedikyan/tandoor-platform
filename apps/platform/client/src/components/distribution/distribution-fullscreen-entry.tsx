@@ -1666,28 +1666,59 @@ export function DistributionFullscreenEntry({
             </Button>
           </div>
 
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Статус:</span>
-            <Select value={workStatus} onValueChange={(v) => handleWorkStatusChange(v as StatusFilter)}>
-              <SelectTrigger
-                className="h-9 min-w-0 flex-1 text-xs sm:max-w-xs sm:text-sm"
-                data-testid="select-fullscreen-entry-quick-status"
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Tabs
+                value={sourceTab}
+                onValueChange={(v) => setSourceTab(v as SourceTab)}
+                className="w-auto max-w-[260px] shrink-0"
               >
-                <SelectValue>
-                  {workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" className="text-xs">
-                  Все статусы
-                </SelectItem>
-                {STATUS_OPTIONS.map((o) => (
-                  <SelectItem key={o.id} value={o.id} className="text-xs">
-                    {o.label}
+                <TabsList className="grid h-auto min-h-9 w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
+                  <TabsTrigger
+                    value="matrix"
+                    className={cn(
+                      "min-h-9 text-xs",
+                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                    )}
+                    data-testid="tab-fullscreen-entry-matrix"
+                  >
+                    Из матрицы
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="catalog"
+                    className={cn(
+                      "min-h-9 text-xs",
+                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
+                    )}
+                    data-testid="tab-fullscreen-entry-catalog"
+                  >
+                    Весь каталог
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Статус:</span>
+              <Select value={workStatus} onValueChange={(v) => handleWorkStatusChange(v as StatusFilter)}>
+                <SelectTrigger
+                  className="h-9 min-w-0 flex-1 text-xs sm:max-w-xs sm:text-sm"
+                  data-testid="select-fullscreen-entry-quick-status"
+                >
+                  <SelectValue>
+                    {workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs">
+                    Все статусы
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {STATUS_OPTIONS.map((o) => (
+                    <SelectItem key={o.id} value={o.id} className="text-xs">
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-[10px] leading-snug text-muted-foreground">{workStatusHint}</p>
           </div>
 
           {placementTypeMode ? (
@@ -1771,37 +1802,6 @@ export function DistributionFullscreenEntry({
                 open
                 data-testid="fullscreen-entry-catalog-filters"
               />
-
-              <Tabs
-                value={sourceTab}
-                onValueChange={(v) => setSourceTab(v as SourceTab)}
-                className="min-w-0"
-              >
-                <TabsList className="grid h-auto min-h-9 w-full grid-cols-2 gap-1 rounded-lg border border-border bg-muted/60 p-0.5">
-                  <TabsTrigger
-                    value="matrix"
-                    className={cn(
-                      "min-h-9 text-xs",
-                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
-                    )}
-                    data-testid="tab-fullscreen-entry-matrix"
-                  >
-                    Из матрицы
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="catalog"
-                    className={cn(
-                      "min-h-9 text-xs",
-                      "data-[state=active]:bg-primary data-[state=active]:font-semibold data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm",
-                    )}
-                    data-testid="tab-fullscreen-entry-catalog"
-                  >
-                    Весь каталог
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-
-              <p className="text-[10px] leading-snug text-muted-foreground">{workStatusHint}</p>
             </div>
           ) : null}
         </div>
