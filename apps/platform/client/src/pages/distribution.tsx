@@ -27,7 +27,7 @@ function parseMode(qs: URLSearchParams): PageMode {
 
 function parseAnalyticsTab(qs: URLSearchParams): DistributionAnalyticsTab {
   const tab = qs.get("tab");
-  if (tab === "territory" || tab === "product") return tab;
+  if (tab === "territory" || tab === "product" || tab === "by-rop") return tab;
   return "trade-points";
 }
 

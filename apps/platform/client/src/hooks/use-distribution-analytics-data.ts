@@ -15,6 +15,7 @@ import {
   hasAnyDistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
 import {
   applyScopeEntriesToMatrixCache,
@@ -43,10 +44,14 @@ const EMPTY_DISTRIBUTION_ANALYTICS_DATA: DistributionAnalyticsData = {
   installedEntriesByTradePointId: {},
 };
 
+export type DistributionAnalyticsHookResult = DistributionAnalyticsData & {
+  act: ActualizationState;
+};
+
 export function useDistributionAnalyticsData(
   profile: ReleaseDemoProfile,
   filters: DistributionAnalyticsFilters,
-): DistributionAnalyticsData {
+): DistributionAnalyticsHookResult {
   const actx = useClientBaseActualization();
   const managementPlane = useClientBaseTeamActualization();
   const realScope = useSidebarNavRealScope();
@@ -135,13 +140,16 @@ export function useDistributionAnalyticsData(
   return useMemo(
     () =>
       scopeTooLarge
-        ? EMPTY_DISTRIBUTION_ANALYTICS_DATA
-        : buildDistributionAnalyticsData({
-            scopedRows,
-            filters,
+        ? { ...EMPTY_DISTRIBUTION_ANALYTICS_DATA, act: actStable }
+        : {
+            ...buildDistributionAnalyticsData({
+              scopedRows,
+              filters,
+              act: actStable,
+              installedEntriesByTradePointId,
+            }),
             act: actStable,
-            installedEntriesByTradePointId,
-          }),
+          },
     [scopeTooLarge, scopedRows, filters, actStable, installedEntriesByTradePointId],
   );
 }
