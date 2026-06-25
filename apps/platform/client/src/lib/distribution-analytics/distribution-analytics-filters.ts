@@ -1,6 +1,7 @@
 import type { ActualizationState } from "../client-base-actualization-state.js";
 import { normalizeHasShowcase } from "../client-base-actualization-state.js";
 import type { ClientCategoryId } from "../client-category.js";
+import { getRopOverrideUserId, loadDealerRopOverridesState } from "../dealer-rop-overrides.js";
 import type { TradePointListRow } from "../trade-point-list-for-actualization.js";
 import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import type { ShowcaseTypeKey } from "../showcase-type-capacity.js";
@@ -161,6 +162,7 @@ export function applyDistributionAnalyticsFilters(
   act: ActualizationState,
   installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>,
 ): TradePointListRow[] {
+  const ropOverridesState = loadDealerRopOverridesState();
   return rows.filter((row) => {
     if (filters.cities.length > 0 && !filters.cities.includes(row.city)) return false;
     if (filters.regions.length > 0 && !filters.regions.includes(resolveRegionForRow(row))) return false;
@@ -184,8 +186,10 @@ export function applyDistributionAnalyticsFilters(
       if (!rmMatch) return false;
     }
     if (filters.ropIds.length > 0) {
+      const dealerRopId = getRopOverrideUserId(row.dealerId, ropOverridesState);
       const ropMatch =
-        (ids.ropId && filters.ropIds.includes(ids.ropId)) ||
+        (dealerRopId != null && filters.ropIds.includes(dealerRopId)) ||
+        (ids.ropId != null && filters.ropIds.includes(ids.ropId)) ||
         filters.ropIds.includes(row.rop);
       if (!ropMatch) return false;
     }
