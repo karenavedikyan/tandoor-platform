@@ -5,8 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { AnalyticsSkeleton } from "@/components/skeletons/analytics-skeleton";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -16,6 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
+import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
+import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
+import { useDealerBaseRows } from "@/lib/dealer-base-source";
+import { buildTradePointListFromDb } from "@/lib/trade-point-list-from-db";
 import {
   ANALYTICS_CITY_OPTIONS,
   ANALYTICS_PARTNER_CATEGORY_OPTIONS,
@@ -51,34 +61,42 @@ function toneForChange(p: number) {
 export default function AnalyticsPage() {
   const { profile } = useReleaseDemoProfile();
   const actx = useClientBaseActualization();
+  const catalogQ = useDealerBaseRows();
+  const catalogRows = catalogQ.data ?? [];
+  const { user: me, isLoading: authLoading } = useAuthUser();
+  const isRealUser = Boolean(me?.id);
+  const teamCtx = useClientBaseTeamActualization();
+  const scopedTpQ = useTradePointsScoped({ enabled: isRealUser && !authLoading });
+  const useReal = Boolean(
+    isRealUser &&
+      !authLoading &&
+      scopedTpQ.isSuccess &&
+      scopedTpQ.data?.success === true &&
+      scopedTpQ.data.source === "db",
+  );
+  const access = useMemo(
+    () =>
+      isRealUser && me?.role
+        ? mapUserRoleToDealerBaseAccess(me.role)
+        : mapSalesRoleToDealerBaseAccess(profile.role),
+    [isRealUser, me?.role, profile.role],
+  );
+  const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
+  const tpRows = useMemo(
+    () =>
+      useReal && scopedTpQ.data?.success
+        ? buildTradePointListFromDb(scopedTpQ.data.tradePoints, actState, catalogRows)
+        : [],
+    [actState, catalogRows, scopedTpQ.data, useReal],
+  );
+  const tradePointScopeIds = useMemo(
+    () => tpRows.map((r) => r.tradePointId).filter(Boolean),
+    [tpRows],
+  );
+  const distribution = useTradePointDistributionAggregate(tradePointScopeIds, actState);
+
   const suppressDemoAnalytics =
     actx.enabled && (profile.role === "team_lead" || profile.role === "sales_director");
-
-  if (suppressDemoAnalytics) {
-    return (
-      <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-analytics-management-empty">
-        <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
-          <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
-          <div className="relative space-y-4 pl-3 sm:pl-4">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Аналитика</h1>
-            <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-              Классическая сводка продаж здесь строилась на демонстрационных данных. Для руководителя при включённой актуализации
-              она скрыта до подключения реальной выгрузки.
-            </p>
-            <p className="text-xs font-medium text-primary">Используйте «Клиентскую базу» и операционные блоки — они опираются на активную базу.</p>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild className="min-h-10 font-semibold">
-                <Link href="/main">К главному</Link>
-              </Button>
-              <Button asChild variant="secondary" className="min-h-10 font-semibold">
-                <Link href="/dealer-base">Клиентская база</Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-      </div>
-    );
-  }
 
   const [pageReady, setPageReady] = useState(false);
   useLayoutEffect(() => {
@@ -106,6 +124,43 @@ export default function AnalyticsPage() {
   const topPartners = useMemo(() => getTopPartners(), []);
   const planSummary = useMemo(() => getAnalyticsPlanSummary(), []);
   const periodNote = analyticsPeriodSuffix(filters.periodKey);
+
+  const distributionPanel = useReal ? (
+    <RoleDistributionSummaryBar
+      access={access}
+      aggregate={distribution.aggregate}
+      tradePointsCount={distribution.tradePointsCount}
+      testIdPrefix="analytics"
+      showTradePointsCount
+    />
+  ) : null;
+
+  if (suppressDemoAnalytics) {
+    return (
+      <div className="space-y-8 pb-28 sm:space-y-10" data-testid="page-analytics-management-empty">
+        <section className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-lg sm:p-8">
+          <div className="pointer-events-none absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-primary" aria-hidden />
+          <div className="relative space-y-4 pl-3 sm:pl-4">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Аналитика</h1>
+            <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+              Классическая сводка продаж здесь строилась на демонстрационных данных. Для руководителя при включённой актуализации
+              она скрыта до подключения реальной выгрузки.
+            </p>
+            <p className="text-xs font-medium text-primary">Используйте «Клиентскую базу» и операционные блоки — они опираются на активную базу.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild className="min-h-10 font-semibold">
+                <Link href="/main">К главному</Link>
+              </Button>
+              <Button asChild variant="secondary" className="min-h-10 font-semibold">
+                <Link href="/dealer-base">Клиентская база</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+        {distributionPanel}
+      </div>
+    );
+  }
 
   if (!pageReady) {
     return <AnalyticsSkeleton />;
@@ -138,6 +193,8 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </section>
+
+      {distributionPanel}
 
       <Tabs
         value={view}
