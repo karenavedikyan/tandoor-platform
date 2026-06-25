@@ -71,7 +71,7 @@ class InMemoryDistributionSnapshotDb implements PoolLike {
           latestByTp.set(tpId, row);
         }
       }
-      return Promise.resolve({ rows: [...latestByTp.values()] as T[] });
+      return Promise.resolve({ rows: Array.from(latestByTp.values()) as T[] });
     }
 
     if (sql.includes("FROM showcase_distribution_snapshots") && sql.includes("trade_point_id, dealer_id")) {
@@ -85,7 +85,7 @@ class InMemoryDistributionSnapshotDb implements PoolLike {
         }
       }
       return Promise.resolve({
-        rows: [...latestByTp.values()].map((r) => ({
+        rows: Array.from(latestByTp.values()).map((r) => ({
           trade_point_id: r.trade_point_id,
           dealer_id: r.dealer_id,
         })) as T[],
@@ -100,7 +100,7 @@ class InMemoryDistributionSnapshotDb implements PoolLike {
         latestByTp.set(tpId, row);
       }
       return Promise.resolve({
-        rows: [...latestByTp.values()].map((r) => ({
+        rows: Array.from(latestByTp.values()).map((r) => ({
           trade_point_id: r.trade_point_id,
           dealer_id: r.dealer_id,
         })) as T[],
