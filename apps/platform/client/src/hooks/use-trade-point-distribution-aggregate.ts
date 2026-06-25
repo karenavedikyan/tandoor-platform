@@ -5,8 +5,13 @@ import {
   computeDistributionForTradePoint,
   type DistributionGroupMetrics,
 } from "@/lib/distribution-analytics/distribution-analytics-math";
+import { DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import { scopedTradePointIdsStableKey } from "@/lib/distribution-entry-tradepoint-view-model";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
+import {
+  hasScopePrefetchCompleted,
+  markScopePrefetchCompleted,
+} from "@/lib/distribution-scope-prefetch-guard";
 import {
   applyScopeEntriesToMatrixCache,
   loadCachedMatrix,
@@ -30,8 +35,16 @@ export function useTradePointDistributionAggregate(
 ): { aggregate: DistributionGroupMetrics; tradePointsCount: number } {
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const lastPrefetchedScopeKeyRef = useRef("");
+  const tradePointIdsRef = useRef(tradePointIds);
+  const prevTradePointIdsKeyRef = useRef("");
 
   const tradePointIdsKey = useMemo(() => scopedTradePointIdsStableKey(tradePointIds), [tradePointIds]);
+  const scopeTooLarge = tradePointIds.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD;
+
+  if (prevTradePointIdsKeyRef.current !== tradePointIdsKey) {
+    prevTradePointIdsKeyRef.current = tradePointIdsKey;
+    tradePointIdsRef.current = tradePointIds;
+  }
 
   useEffect(() => {
     const onCache = () => setMatrixCacheBump((n) => n + 1);
@@ -40,31 +53,22 @@ export function useTradePointDistributionAggregate(
   }, []);
 
   useEffect(() => {
-    if (tradePointIds.length === 0) return;
+    if (scopeTooLarge || tradePointIdsKey === "") return;
+    if (hasScopePrefetchCompleted(tradePointIdsKey)) return;
     if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey) return;
 
-    let cancelled = false;
-    const keyForRun = tradePointIdsKey;
+    lastPrefetchedScopeKeyRef.current = tradePointIdsKey;
+    markScopePrefetchCompleted(tradePointIdsKey);
+    const ids = tradePointIdsRef.current;
+    if (ids.length === 0) return;
 
     void (async () => {
-      try {
-        const entries = await fetchShowcaseMatrixScope({ tradePointIds, statuses: ["installed"] });
-        if (cancelled) return;
-        if (entries != null && entries.length > 0) {
-          applyScopeEntriesToMatrixCache(entries);
-        }
-      } finally {
-        if (!cancelled) {
-          lastPrefetchedScopeKeyRef.current = keyForRun;
-          setMatrixCacheBump((n) => n + 1);
-        }
+      const entries = await fetchShowcaseMatrixScope({ tradePointIds: ids, statuses: ["installed"] });
+      if (entries != null && entries.length > 0) {
+        applyScopeEntriesToMatrixCache(entries);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tradePointIdsKey, tradePointIds]);
+  }, [scopeTooLarge, tradePointIdsKey]);
 
   const installedEntriesByTradePointId = useMemo(() => {
     void matrixCacheBump;
