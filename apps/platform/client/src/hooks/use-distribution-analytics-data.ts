@@ -18,6 +18,10 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
 import {
+  hasScopePrefetchCompleted,
+  markScopePrefetchCompleted,
+} from "@/lib/distribution-scope-prefetch-guard";
+import {
   applyScopeEntriesToMatrixCache,
   loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
@@ -58,6 +62,8 @@ export function useDistributionAnalyticsData(
   const scopedDealers = useDistributionScopedDealers(profile);
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const lastPrefetchedScopeKeyRef = useRef("");
+  const prefetchTradePointIdsRef = useRef<string[]>([]);
+  const prevSourceScopeKeyRef = useRef("");
 
   const mergedState = managementPlane.mergedState;
   const act = actx.enabled ? mergedState : actx.state;
@@ -92,8 +98,22 @@ export function useDistributionAnalyticsData(
     [scopeTooLarge, actStable, profile, scopedDealers, realScope],
   );
 
+  const sourceScopeKey = useMemo(
+    () =>
+      scopedTradePointIdsStableKey(
+        buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope).map(
+          (r) => r.tradePointId,
+        ),
+      ),
+    [actStable, profile, scopedDealers, realScope],
+  );
+
+  if (prevSourceScopeKeyRef.current !== sourceScopeKey) {
+    prevSourceScopeKeyRef.current = sourceScopeKey;
+    prefetchTradePointIdsRef.current = scopeTooLarge ? [] : scopedRows.map((r) => r.tradePointId);
+  }
+
   const tradePointIds = useMemo(() => scopedRows.map((r) => r.tradePointId), [scopedRows]);
-  const tradePointIdsKey = useMemo(() => scopedTradePointIdsStableKey(tradePointIds), [tradePointIds]);
 
   useEffect(() => {
     const onCache = () => setMatrixCacheBump((n) => n + 1);
@@ -102,31 +122,22 @@ export function useDistributionAnalyticsData(
   }, []);
 
   useEffect(() => {
-    if (scopeTooLarge || tradePointIds.length === 0) return;
-    if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey) return;
+    if (scopeTooLarge || sourceScopeKey === "") return;
+    if (hasScopePrefetchCompleted(sourceScopeKey)) return;
+    if (lastPrefetchedScopeKeyRef.current === sourceScopeKey) return;
 
-    let cancelled = false;
-    const keyForRun = tradePointIdsKey;
+    lastPrefetchedScopeKeyRef.current = sourceScopeKey;
+    markScopePrefetchCompleted(sourceScopeKey);
+    const ids = prefetchTradePointIdsRef.current;
+    if (ids.length === 0) return;
 
     void (async () => {
-      try {
-        const entries = await fetchShowcaseMatrixScope({ tradePointIds, statuses: ["installed"] });
-        if (cancelled) return;
-        if (entries != null && entries.length > 0) {
-          applyScopeEntriesToMatrixCache(entries);
-        }
-      } finally {
-        if (!cancelled) {
-          lastPrefetchedScopeKeyRef.current = keyForRun;
-          setMatrixCacheBump((n) => n + 1);
-        }
+      const entries = await fetchShowcaseMatrixScope({ tradePointIds: ids, statuses: ["installed"] });
+      if (entries != null && entries.length > 0) {
+        applyScopeEntriesToMatrixCache(entries);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [scopeTooLarge, tradePointIdsKey, tradePointIds]);
+  }, [scopeTooLarge, sourceScopeKey]);
 
   const installedEntriesByTradePointId = useMemo(() => {
     void matrixCacheBump;

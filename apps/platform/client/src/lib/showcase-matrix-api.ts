@@ -154,6 +154,63 @@ export async function fetchShowcaseMatrixList(opts: {
 }
 
 const SCOPE_CHUNK_SIZE = 500;
+export const SCOPE_RESULT_TTL_MS = 15_000;
+
+const scopeInFlight = new Map<string, Promise<ShowcaseMatrixEntryDto[] | null>>();
+const scopeResultCache = new Map<string, { at: number; data: ShowcaseMatrixEntryDto[] }>();
+
+function buildScopeChunkKey(chunkIds: readonly string[], statuses?: ShowcaseMatrixStatus[]): string {
+  const ids = [...chunkIds].sort();
+  const statusList = statuses?.length ? [...statuses].sort() : [];
+  return JSON.stringify({ ids, statuses: statusList });
+}
+
+/** Сброс in-flight и TTL-кеша scope (тесты, смена пользователя). */
+export function __clearShowcaseScopeCache(): void {
+  scopeInFlight.clear();
+  scopeResultCache.clear();
+}
+
+async function fetchShowcaseMatrixScopeChunk(
+  chunk: string[],
+  statuses?: ShowcaseMatrixStatus[],
+): Promise<ShowcaseMatrixEntryDto[] | null> {
+  const key = buildScopeChunkKey(chunk, statuses);
+  const now = Date.now();
+  const cached = scopeResultCache.get(key);
+  if (cached && now - cached.at < SCOPE_RESULT_TTL_MS) {
+    return cached.data;
+  }
+
+  const inflight = scopeInFlight.get(key);
+  if (inflight) return inflight;
+
+  const promise = (async (): Promise<ShowcaseMatrixEntryDto[] | null> => {
+    try {
+      const res = await fetch("/api/showcase-matrix/scope", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tradePointIds: chunk, statuses }),
+        cache: "no-store",
+      });
+      const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
+      if (!res.ok || !data.success) return null;
+      const entries = data.entries.map((e) =>
+        mapShowcaseMatrixEntryDto(e as unknown as Record<string, unknown>),
+      );
+      scopeResultCache.set(key, { at: Date.now(), data: entries });
+      return entries;
+    } catch {
+      return null;
+    } finally {
+      scopeInFlight.delete(key);
+    }
+  })();
+
+  scopeInFlight.set(key, promise);
+  return promise;
+}
 
 export async function fetchShowcaseMatrixScopeAll(
   params?: { statuses?: ShowcaseMatrixStatus[] },
@@ -192,20 +249,9 @@ export async function fetchShowcaseMatrixScope(opts: {
   try {
     for (let i = 0; i < ids.length; i += SCOPE_CHUNK_SIZE) {
       const chunk = ids.slice(i, i + SCOPE_CHUNK_SIZE);
-      const res = await fetch("/api/showcase-matrix/scope", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tradePointIds: chunk, statuses: opts.statuses }),
-        cache: "no-store",
-      });
-      const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
-      if (!res.ok || !data.success) return null;
-      all.push(
-        ...data.entries.map((e) =>
-          mapShowcaseMatrixEntryDto(e as unknown as Record<string, unknown>),
-        ),
-      );
+      const chunkEntries = await fetchShowcaseMatrixScopeChunk(chunk, opts.statuses);
+      if (chunkEntries == null) return null;
+      all.push(...chunkEntries);
     }
     return all;
   } catch {
