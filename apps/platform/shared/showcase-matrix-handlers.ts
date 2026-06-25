@@ -838,3 +838,253 @@ export async function handleShowcaseMatrixHistory(
   }
   return { success: true, events };
 }
+
+export type DistributionSnapshotByTypeInput = {
+  entrance: { capacity: number; onShelf: number };
+  interior: { capacity: number; onShelf: number };
+  hardware: { capacity: number; onShelf: number };
+};
+
+export type DistributionSnapshotInput = {
+  tradePointId: string;
+  dealerId?: string | null;
+  byType: DistributionSnapshotByTypeInput;
+};
+
+export type DistributionSnapshotByTypeNumbers = DistributionSnapshotByTypeInput;
+
+export type DistributionSnapshotRangeResult = {
+  baselineByTradePointId: Record<string, DistributionSnapshotByTypeNumbers>;
+  currentByTradePointId: Record<string, DistributionSnapshotByTypeNumbers>;
+};
+
+function sanitizeNonNegativeInt(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+function parseDistributionSnapshotByType(raw: unknown, field: string): DistributionSnapshotByTypeInput {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  const entrance = (obj.entrance ?? {}) as Record<string, unknown>;
+  const interior = (obj.interior ?? {}) as Record<string, unknown>;
+  const hardware = (obj.hardware ?? {}) as Record<string, unknown>;
+  if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
+    throw new ShowcaseMatrixValidationError(`Укажите ${field}.`);
+  }
+  return {
+    entrance: {
+      capacity: sanitizeNonNegativeInt(entrance.capacity),
+      onShelf: sanitizeNonNegativeInt(entrance.onShelf),
+    },
+    interior: {
+      capacity: sanitizeNonNegativeInt(interior.capacity),
+      onShelf: sanitizeNonNegativeInt(interior.onShelf),
+    },
+    hardware: {
+      capacity: sanitizeNonNegativeInt(hardware.capacity),
+      onShelf: sanitizeNonNegativeInt(hardware.onShelf),
+    },
+  };
+}
+
+function parseDistributionSnapshotInput(body: Record<string, unknown>): DistributionSnapshotInput {
+  const tradePointId = typeof body.tradePointId === "string" ? body.tradePointId.trim() : "";
+  if (!tradePointId) {
+    throw new ShowcaseMatrixValidationError("Укажите tradePointId.");
+  }
+  const dealerId =
+    typeof body.dealerId === "string" && body.dealerId.trim() ? body.dealerId.trim() : null;
+  return {
+    tradePointId,
+    dealerId,
+    byType: parseDistributionSnapshotByType(body.byType, "byType"),
+  };
+}
+
+function parseSinceDate(raw: unknown): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    throw new ShowcaseMatrixValidationError("Укажите sinceDate в формате YYYY-MM-DD.");
+  }
+  return s;
+}
+
+function mapSnapshotRowToByType(row: Record<string, unknown>): DistributionSnapshotByTypeNumbers {
+  return {
+    entrance: {
+      capacity: sanitizeNonNegativeInt(row.entrance_capacity),
+      onShelf: sanitizeNonNegativeInt(row.entrance_on_shelf),
+    },
+    interior: {
+      capacity: sanitizeNonNegativeInt(row.interior_capacity),
+      onShelf: sanitizeNonNegativeInt(row.interior_on_shelf),
+    },
+    hardware: {
+      capacity: sanitizeNonNegativeInt(row.hardware_capacity),
+      onShelf: sanitizeNonNegativeInt(row.hardware_on_shelf),
+    },
+  };
+}
+
+function rowsToByTradePointMap(rows: Record<string, unknown>[]): Record<string, DistributionSnapshotByTypeNumbers> {
+  const out: Record<string, DistributionSnapshotByTypeNumbers> = {};
+  for (const row of rows) {
+    const tpId = String(row.trade_point_id ?? "").trim();
+    if (!tpId) continue;
+    out[tpId] = mapSnapshotRowToByType(row);
+  }
+  return out;
+}
+
+export async function upsertDistributionSnapshot(
+  pool: PoolLike,
+  sessionUser: ShowcaseMatrixSessionUser,
+  input: DistributionSnapshotInput,
+): Promise<{ ok: true } | { ok: false }> {
+  if (sessionUser.status !== "active") {
+    throw new ShowcaseMatrixValidationError("Недостаточно прав.");
+  }
+
+  const byType = parseDistributionSnapshotByType(input.byType, "byType");
+  const { tradePointId, dealerId } = input;
+  try {
+    await pool.query(
+      `INSERT INTO showcase_distribution_snapshots
+         (trade_point_id, dealer_id, snapshot_date,
+          entrance_capacity, entrance_on_shelf,
+          interior_capacity, interior_on_shelf,
+          hardware_capacity, hardware_on_shelf,
+          updated_at, updated_by, updated_by_name)
+       VALUES ($1,$2, CURRENT_DATE, $3,$4,$5,$6,$7,$8, now(), $9::uuid, $10)
+       ON CONFLICT (trade_point_id, snapshot_date) DO UPDATE SET
+         dealer_id = COALESCE(EXCLUDED.dealer_id, showcase_distribution_snapshots.dealer_id),
+         entrance_capacity = EXCLUDED.entrance_capacity,
+         entrance_on_shelf = EXCLUDED.entrance_on_shelf,
+         interior_capacity = EXCLUDED.interior_capacity,
+         interior_on_shelf = EXCLUDED.interior_on_shelf,
+         hardware_capacity = EXCLUDED.hardware_capacity,
+         hardware_on_shelf = EXCLUDED.hardware_on_shelf,
+         updated_at = now(),
+         updated_by = EXCLUDED.updated_by,
+         updated_by_name = EXCLUDED.updated_by_name`,
+      [
+        tradePointId,
+        dealerId,
+        byType.entrance.capacity,
+        byType.entrance.onShelf,
+        byType.interior.capacity,
+        byType.interior.onShelf,
+        byType.hardware.capacity,
+        byType.hardware.onShelf,
+        sessionUser.id,
+        sessionUser.fullName,
+      ],
+    );
+    return { ok: true };
+  } catch (e) {
+    const m = e instanceof Error ? e.message : String(e);
+    console.error("[distribution-snapshot] upsert failed", m);
+    return { ok: false };
+  }
+}
+
+export async function fetchDistributionSnapshotRange(
+  pool: PoolLike,
+  params: { tradePointIds: string[]; sinceDate: string },
+): Promise<DistributionSnapshotRangeResult> {
+  const tradePointIds = parseScopeTradePointIds(params.tradePointIds);
+  if (tradePointIds.length === 0) {
+    return { baselineByTradePointId: {}, currentByTradePointId: {} };
+  }
+
+  const sinceDate = parseSinceDate(params.sinceDate);
+
+  const [currentR, baselineR] = await Promise.all([
+    pool.query<Record<string, unknown>>(
+      `SELECT DISTINCT ON (trade_point_id) *
+       FROM showcase_distribution_snapshots
+       WHERE trade_point_id = ANY($1::text[])
+       ORDER BY trade_point_id, snapshot_date DESC`,
+      [tradePointIds],
+    ),
+    pool.query<Record<string, unknown>>(
+      `SELECT DISTINCT ON (trade_point_id) *
+       FROM showcase_distribution_snapshots
+       WHERE trade_point_id = ANY($1::text[]) AND snapshot_date <= $2::date
+       ORDER BY trade_point_id, snapshot_date DESC`,
+      [tradePointIds, sinceDate],
+    ),
+  ]);
+
+  return {
+    currentByTradePointId: rowsToByTradePointMap(currentR.rows),
+    baselineByTradePointId: rowsToByTradePointMap(baselineR.rows),
+  };
+}
+
+async function filterTradePointIdsByVisibility(
+  pool: PoolLike,
+  tradePointIds: string[],
+  vis: ShowcaseVisibility,
+): Promise<string[]> {
+  if (vis.unrestricted || tradePointIds.length === 0) return tradePointIds;
+
+  const dealerByTp = new Map<string, string>();
+
+  const snapR = await pool.query<Record<string, unknown>>(
+    `SELECT DISTINCT ON (trade_point_id) trade_point_id, dealer_id
+     FROM showcase_distribution_snapshots
+     WHERE trade_point_id = ANY($1::text[])
+     ORDER BY trade_point_id, snapshot_date DESC`,
+    [tradePointIds],
+  );
+  for (const row of snapR.rows) {
+    const tpId = String(row.trade_point_id ?? "").trim();
+    const dealerId = String(row.dealer_id ?? "").trim();
+    if (tpId && dealerId) dealerByTp.set(tpId, dealerId);
+  }
+
+  const missing = tradePointIds.filter((id) => !dealerByTp.has(id));
+  if (missing.length > 0) {
+    const matrixR = await pool.query<Record<string, unknown>>(
+      `SELECT DISTINCT ON (trade_point_id) trade_point_id, dealer_id
+       FROM showcase_matrix_entries
+       WHERE trade_point_id = ANY($1::text[])
+       ORDER BY trade_point_id, updated_at DESC`,
+      [missing],
+    );
+    for (const row of matrixR.rows) {
+      const tpId = String(row.trade_point_id ?? "").trim();
+      const dealerId = String(row.dealer_id ?? "").trim();
+      if (tpId && dealerId) dealerByTp.set(tpId, dealerId);
+    }
+  }
+
+  return tradePointIds.filter((tpId) => {
+    const dealerId = dealerByTp.get(tpId);
+    if (!dealerId) return true;
+    return isDealerVisible(vis, dealerId);
+  });
+}
+
+export async function handleDistributionSnapshotUpsert(
+  pool: PoolLike,
+  sessionUser: ShowcaseMatrixSessionUser,
+  body: Record<string, unknown>,
+): Promise<{ ok: true } | { ok: false }> {
+  const input = parseDistributionSnapshotInput(body);
+  return upsertDistributionSnapshot(pool, sessionUser, input);
+}
+
+export async function handleDistributionSnapshotRange(
+  pool: PoolLike,
+  vis: ShowcaseVisibility,
+  body: Record<string, unknown>,
+): Promise<{ success: true } & DistributionSnapshotRangeResult> {
+  const tradePointIds = parseScopeTradePointIds(body.tradePointIds);
+  const sinceDate = parseSinceDate(body.sinceDate);
+  const visibleIds = await filterTradePointIdsByVisibility(pool, tradePointIds, vis);
+  const range = await fetchDistributionSnapshotRange(pool, { tradePointIds: visibleIds, sinceDate });
+  return { success: true, ...range };
+}

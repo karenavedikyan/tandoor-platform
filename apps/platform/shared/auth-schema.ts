@@ -294,6 +294,32 @@ export const showcaseMatrixEntries = pgTable(
   ],
 );
 
+/** Ежедневные снимки агрегата дистрибуции по ТТ (UPSERT за день, last-write-wins). */
+export const showcaseDistributionSnapshots = pgTable(
+  "showcase_distribution_snapshots",
+  {
+    tradePointId: text("trade_point_id").notNull(),
+    dealerId: text("dealer_id"),
+    snapshotDate: date("snapshot_date").notNull(),
+    entranceCapacity: integer("entrance_capacity").notNull().default(0),
+    entranceOnShelf: integer("entrance_on_shelf").notNull().default(0),
+    interiorCapacity: integer("interior_capacity").notNull().default(0),
+    interiorOnShelf: integer("interior_on_shelf").notNull().default(0),
+    hardwareCapacity: integer("hardware_capacity").notNull().default(0),
+    hardwareOnShelf: integer("hardware_on_shelf").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .notNull()
+      .default(sql`now()`),
+    updatedBy: uuid("updated_by").references(() => authUsers.id),
+    updatedByName: text("updated_by_name"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tradePointId, t.snapshotDate] }),
+    index("idx_distribution_snapshots_tp_date").on(t.tradePointId, t.snapshotDate),
+    index("idx_distribution_snapshots_date").on(t.snapshotDate),
+  ],
+);
+
 export const showcaseMatrixEvents = pgTable(
   "showcase_matrix_events",
   {

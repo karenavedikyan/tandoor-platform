@@ -5,6 +5,8 @@
  *   POST /api/showcase-matrix/upsert
  *   POST /api/showcase-matrix/batch-sync
  *   POST /api/showcase-matrix/scope
+ *   POST /api/showcase-matrix/snapshot-upsert
+ *   POST /api/showcase-matrix/snapshot-range
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -16,6 +18,8 @@ import {
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
 import {
+  handleDistributionSnapshotRange,
+  handleDistributionSnapshotUpsert,
   handleShowcaseMatrixBatchSync,
   handleShowcaseMatrixHistory,
   handleShowcaseMatrixList,
@@ -155,6 +159,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         },
         vis,
       );
+      sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "snapshot-upsert" && req.method === "POST") {
+      const payload = await handleDistributionSnapshotUpsert(pool, sessionUser, body);
+      sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "snapshot-range" && req.method === "POST") {
+      const payload = await handleDistributionSnapshotRange(pool, vis, body);
       sendJson(res, 200, payload);
       return;
     }

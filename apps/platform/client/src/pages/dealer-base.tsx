@@ -3937,6 +3937,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           access={access}
           aggregate={scopeDistribution.aggregate}
           tradePointsCount={scopeDistribution.tradePointsCount}
+          tradePointIds={scopeTradePointIds}
           testIdPrefix="manager-home"
           showTradePointsCount={false}
         />

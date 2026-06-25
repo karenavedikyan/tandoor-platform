@@ -130,6 +130,7 @@ export default function AnalyticsPage() {
       access={access}
       aggregate={distribution.aggregate}
       tradePointsCount={distribution.tradePointsCount}
+      tradePointIds={tradePointScopeIds}
       testIdPrefix="analytics"
       showTradePointsCount
     />
