@@ -132,7 +132,7 @@ import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
 import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { useHashQuery } from "@/lib/hash-location-router";
 import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
-import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import {
   clientNextStepActionLabel,
@@ -1873,10 +1873,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     assignmentsScope,
   ]);
 
-  const isManagerHome = useReal && access === "sales_manager";
-
-  const managerHomeTradePointIds = useMemo(() => {
-    if (!isManagerHome || !actx.enabled) return [] as string[];
+  const scopeTradePointIds = useMemo(() => {
+    if (!useReal || !actx.enabled) return [] as string[];
     const ids: string[] = [];
     for (const row of scopedRows) {
       for (const e of mergeTradePointsForActualization(row, teamActualizationPlane)) {
@@ -1884,12 +1882,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       }
     }
     return ids;
-  }, [isManagerHome, actx.enabled, scopedRows, teamActualizationPlane]);
+  }, [useReal, actx.enabled, scopedRows, teamActualizationPlane]);
 
-  const managerHomeDistribution = useTradePointDistributionAggregate(
-    managerHomeTradePointIds,
-    teamActualizationPlane,
-  );
+  const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, teamActualizationPlane);
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
@@ -3937,20 +3932,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       </section>
       ) : null}
 
-      {!embedListOnly && isManagerHome ? (
-        <section className="space-y-2" data-testid="section-manager-home-distribution">
-          <h2 className="text-sm font-semibold text-foreground">Моя дистрибуция</h2>
-          <DistributionAnalyticsKpiTiles
-            aggregate={managerHomeDistribution.aggregate}
-            tradePointsCount={managerHomeDistribution.tradePointsCount}
-            showTradePointsCount={false}
-            tileTestIdByType={{
-              entrance: "tile-manager-home-distribution-entrance",
-              interior: "tile-manager-home-distribution-interior",
-              hardware: "tile-manager-home-distribution-hardware",
-            }}
-          />
-        </section>
+      {!embedListOnly && useReal ? (
+        <RoleDistributionSummaryBar
+          access={access}
+          aggregate={scopeDistribution.aggregate}
+          tradePointsCount={scopeDistribution.tradePointsCount}
+          testIdPrefix="manager-home"
+          showTradePointsCount={false}
+        />
       ) : null}
 
       <div ref={listSectionRef}>
