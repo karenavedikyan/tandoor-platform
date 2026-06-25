@@ -109,7 +109,7 @@ function sidebarCount(input: {
 
 // 1. Менеджер: релиз-ТТ + manual − trashed ТТ − trashed клиент.
 {
-  const scopedRows = roleScopedDealerRowsForReal(allReleaseRows, directorSnap(), "sales_director").slice(0, 3);
+  const scopedRows = allReleaseRows.slice(0, 3);
   assert.ok(scopedRows.length >= 1, "fixture: есть клиенты");
   const dealer = scopedRows[0]!;
   const manualTpId = "manual-tp-test-001";
