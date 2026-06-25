@@ -2,8 +2,9 @@
  * Промт 441-fix5: actStable prevents redundant analytics rebuilds.
  * @vitest-environment jsdom
  */
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { __clearDistributionScopePrefetchKeys } from "@/lib/distribution-scope-prefetch-guard";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
 import { emptyDistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import type { DistributionAnalyticsData } from "@/lib/distribution-analytics/distribution-analytics-view-models";
@@ -115,6 +116,7 @@ describe("useDistributionAnalyticsData actStable (441-fix5)", () => {
   const filters = { ...emptyDistributionAnalyticsFilters(), cities: ["Краснодар"] };
 
   beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
     buildAnalyticsDataMock.mockClear();
     buildScopedRowsMock.mockClear();
     fetchShowcaseMatrixScopeMock.mockClear();
@@ -162,12 +164,64 @@ describe("useDistributionAnalyticsData matrix prefetch", () => {
   const filters = emptyDistributionAnalyticsFilters();
 
   beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
     buildAnalyticsDataMock.mockClear();
+    buildScopedRowsMock.mockReset();
+    buildScopedRowsMock.mockReturnValue(scopedRowsResult);
     fetchShowcaseMatrixScopeMock.mockClear();
     loadCachedMatrixMock.mockClear();
     applyScopeEntriesToMatrixCacheMock.mockClear();
     scopedRowsResult.length = 0;
     scopedRowsResult.push(makeScopedRow("tp-1"));
+    fetchShowcaseMatrixScopeMock.mockResolvedValue([]);
+    loadCachedMatrixMock.mockReturnValue([]);
+    mockAct = createEmptyActualizationState();
+    mockActx = {
+      enabled: false,
+      loading: false,
+      state: mockAct,
+      persist: vi.fn(),
+      refresh: vi.fn(),
+    };
+    mockTeam = { mergedState: mockAct };
+  });
+
+  it("does not refetch scope after matrix store changed event", async () => {
+    const { rerender } = renderHook(() => useDistributionAnalyticsData(profile, filters));
+
+    await waitFor(() => {
+      expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      window.dispatchEvent(new Event("showcase-matrix-store-changed"));
+    });
+    rerender();
+
+    expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("refetches once when scoped dealers change", async () => {
+    buildScopedRowsMock.mockReturnValue([makeScopedRow("tp-1")]);
+    const { rerender } = renderHook(() => useDistributionAnalyticsData(profile, filters));
+
+    await waitFor(() => {
+      expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalledTimes(1);
+    });
+
+    buildScopedRowsMock.mockReturnValue([makeScopedRow("tp-2")]);
+    const nextAct = cloneAct(mockAct);
+    nextAct.updatedAt = "2026-01-02T00:00:00.000Z";
+    mockActx = { ...mockActx, state: nextAct };
+    mockTeam = { mergedState: nextAct };
+    rerender();
+
+    await waitFor(() => {
+      expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("prefetches installed matrix and rebuilds analytics with cached entries", async () => {
     const installedEntry: ShowcaseMatrixEntryDto = {
       id: "e1",
       dealerId: "d1",
@@ -189,18 +243,7 @@ describe("useDistributionAnalyticsData matrix prefetch", () => {
     };
     fetchShowcaseMatrixScopeMock.mockResolvedValue([installedEntry]);
     loadCachedMatrixMock.mockImplementation((tpId: string) => (tpId === "tp-1" ? [installedEntry] : []));
-    mockAct = createEmptyActualizationState();
-    mockActx = {
-      enabled: false,
-      loading: false,
-      state: mockAct,
-      persist: vi.fn(),
-      refresh: vi.fn(),
-    };
-    mockTeam = { mergedState: mockAct };
-  });
 
-  it("prefetches installed matrix and rebuilds analytics with cached entries", async () => {
     renderHook(() => useDistributionAnalyticsData(profile, filters));
 
     await waitFor(() => {
