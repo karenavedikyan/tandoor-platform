@@ -13,7 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ManagementCockpitSkeleton } from "@/components/skeletons/management-cockpit-skeleton";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { getEffectiveTeamLeadTeamId } from "@/lib/release-demo-profile";
 import { mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
@@ -53,7 +55,7 @@ function teamSectionKey(teamId: string | null, index: number): string {
 
 export function TradePointsManagementCockpit({
   profile,
-  workingRows: _workingRows,
+  workingRows,
   dealerRows: _dealerRows,
   orgTeamCtx,
 }: {
@@ -62,7 +64,6 @@ export function TradePointsManagementCockpit({
   dealerRows: DealerRow[];
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
 }) {
-  void _workingRows;
   void _dealerRows;
   const teamCtx = useClientBaseTeamActualization();
   const isMobile = useIsMobile();
@@ -70,6 +71,15 @@ export function TradePointsManagementCockpit({
     if (orgTeamCtx) return orgTeamCtx.access;
     return mapSalesRoleToDealerBaseAccess(profile.role);
   }, [orgTeamCtx, profile.role]);
+
+  const cockpitTpScopeIds = useMemo(
+    () => workingRows.filter((r) => !r.isArchived).map((r) => r.tradePointId),
+    [workingRows],
+  );
+  const cockpitTpDistribution = useTradePointDistributionAggregate(
+    cockpitTpScopeIds,
+    teamCtx.mergedState,
+  );
 
   const [citiesExpanded, setCitiesExpanded] = useState(false);
 
@@ -178,6 +188,14 @@ export function TradePointsManagementCockpit({
           </div>
         </section>
       ) : null}
+
+      <RoleDistributionSummaryBar
+        access={access}
+        aggregate={cockpitTpDistribution.aggregate}
+        tradePointsCount={cockpitTpDistribution.tradePointsCount}
+        testIdPrefix="cockpit-trade-points"
+        showTradePointsCount
+      />
 
       <section data-testid="section-trade-points-cities">
         <Card className="rounded-xl border border-border bg-card text-card-foreground">
