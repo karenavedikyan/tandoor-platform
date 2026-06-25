@@ -3,7 +3,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui-platform";
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import { cn } from "@/lib/utils";
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import type { DistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import {
@@ -14,8 +16,14 @@ import { DistributionAnalyticsFiltersPanel } from "@/components/distribution-ana
 import { DistributionAnalyticsTabTradePoints } from "@/components/distribution-analytics/distribution-analytics-tab-trade-points";
 import { DistributionAnalyticsTabTerritory } from "@/components/distribution-analytics/distribution-analytics-tab-territory";
 import { DistributionAnalyticsTabProduct } from "@/components/distribution-analytics/distribution-analytics-tab-product";
+import { DistributionAnalyticsTabByRop } from "@/components/distribution-analytics/distribution-analytics-tab-by-rop";
 
-export type DistributionAnalyticsTab = "trade-points" | "territory" | "product";
+export type DistributionAnalyticsTab = "trade-points" | "territory" | "product" | "by-rop";
+
+function canViewByRopTab(profile: ReleaseDemoProfile, authRole?: string): boolean {
+  if (profile.role === "sales_director") return true;
+  return authRole === "admin" || authRole === "director";
+}
 
 type Props = {
   profile: ReleaseDemoProfile;
@@ -35,8 +43,11 @@ export function DistributionAnalyticsPage({
   onFiltersChange,
 }: Props): ReactElement {
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { user } = useAuthUser();
   const scopedDealers = useDistributionScopedDealers(profile);
   const data = useDistributionAnalyticsData(profile, filters);
+  const canViewByRop = canViewByRopTab(profile, user?.role);
+  const effectiveTab = !canViewByRop && tab === "by-rop" ? "trade-points" : tab;
 
   const scopeTooLargeWithoutFilters =
     scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
@@ -76,11 +87,25 @@ export function DistributionAnalyticsPage({
           Нет ТТ в вашей зоне ответственности.
         </div>
       ) : (
-        <Tabs value={tab} onValueChange={(v) => onTabChange(v as DistributionAnalyticsTab)}>
-          <TabsList className="grid w-full grid-cols-3" data-testid="distribution-analytics-tabs">
+        <Tabs
+          value={effectiveTab}
+          onValueChange={(v) => {
+            const next = v as DistributionAnalyticsTab;
+            if (next === "by-rop" && !canViewByRop) {
+              onTabChange("trade-points");
+              return;
+            }
+            onTabChange(next);
+          }}
+        >
+          <TabsList
+            className={cn("grid w-full", canViewByRop ? "grid-cols-4" : "grid-cols-3")}
+            data-testid="distribution-analytics-tabs"
+          >
             <TabsTrigger value="trade-points">По ТТ</TabsTrigger>
             <TabsTrigger value="territory">По территории</TabsTrigger>
             <TabsTrigger value="product">По продукту</TabsTrigger>
+            {canViewByRop ? <TabsTrigger value="by-rop">По РОПам</TabsTrigger> : null}
           </TabsList>
           <TabsContent value="trade-points" className="mt-3">
             <DistributionAnalyticsTabTradePoints
@@ -110,6 +135,11 @@ export function DistributionAnalyticsPage({
               hasAnyEligible={hasAnyEligible}
             />
           </TabsContent>
+          {canViewByRop ? (
+            <TabsContent value="by-rop" className="mt-3">
+              <DistributionAnalyticsTabByRop scopedDealers={scopedDealers} act={data.act} />
+            </TabsContent>
+          ) : null}
         </Tabs>
       )}
     </div>

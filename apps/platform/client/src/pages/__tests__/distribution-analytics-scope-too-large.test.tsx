@@ -64,7 +64,11 @@ function makeDealers(count: number): DealerRow[] {
 }
 
 vi.mock("@/hooks/use-distribution-analytics-data", () => ({
-  useDistributionAnalyticsData: () => emptyData,
+  useDistributionAnalyticsData: () => ({ ...emptyData, act: createEmptyActualizationState() }),
+}));
+
+vi.mock("@/hooks/use-auth-user", () => ({
+  useAuthUser: () => ({ user: { role: "director" }, isLoading: false, isError: false }),
 }));
 
 const mockScopedDealers = vi.fn(() => [] as DealerRow[]);
