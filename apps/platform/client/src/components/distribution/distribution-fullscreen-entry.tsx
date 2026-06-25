@@ -397,6 +397,7 @@ export function DistributionFullscreenEntry({
   );
   /** Единый селектор: фильтр списка + кисть в compact-режиме (кроме «Все статусы»). */
   const [workStatus, setWorkStatus] = useState<StatusFilter>("all");
+  const [pendingStatusSwitch, setPendingStatusSwitch] = useState<StatusFilter | null>(null);
   const [cardSize, setCardSize] = useState<FullscreenViewMode>(() => readFullscreenViewMode());
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(true);
   const [compactMode, setCompactMode] = useState<boolean>(() => {
@@ -791,18 +792,6 @@ export function DistributionFullscreenEntry({
   const handleBack = useCallback(() => {
     requestClose();
   }, [requestClose]);
-
-  const handleWorkStatusChange = useCallback(
-    (value: StatusFilter) => {
-      setWorkStatus(value);
-      if (value === "need_install") {
-        setSourceTab("matrix");
-      } else if (value !== "all") {
-        setSourceTab("catalog");
-      }
-    },
-    [setSourceTab],
-  );
 
   const workStatusHint = useMemo(() => {
     if (workStatus === "all") {
@@ -1418,6 +1407,45 @@ export function DistributionFullscreenEntry({
   const compactHasChanges = needInstallMode ? needInstallCount > 0 : changedIds.length > 0;
   const compactSaveCount = needInstallMode ? needInstallCount : changedIds.length;
 
+  const applyStatusSwitch = useCallback(
+    (value: StatusFilter) => {
+      setWorkStatus(value);
+      if (value === "need_install") {
+        setSourceTab("matrix");
+      } else if (value !== "all") {
+        setSourceTab("catalog");
+      }
+    },
+    [setSourceTab],
+  );
+
+  const handleWorkStatusChange = useCallback(
+    (value: StatusFilter) => {
+      if (value === workStatus) return;
+      if (compactHasChanges) {
+        setPendingStatusSwitch(value);
+        return;
+      }
+      applyStatusSwitch(value);
+    },
+    [applyStatusSwitch, compactHasChanges, workStatus],
+  );
+
+  const handleStatusSwitchSave = useCallback(async () => {
+    await handleSave();
+    const next = pendingStatusSwitch;
+    setPendingStatusSwitch(null);
+    if (next) applyStatusSwitch(next);
+  }, [applyStatusSwitch, handleSave, pendingStatusSwitch]);
+
+  const handleStatusSwitchDiscard = useCallback(() => {
+    setDraft({});
+    setExplicitQuickMarks(new Set());
+    const next = pendingStatusSwitch;
+    setPendingStatusSwitch(null);
+    if (next) applyStatusSwitch(next);
+  }, [applyStatusSwitch, pendingStatusSwitch]);
+
   const gridClass = fullscreenEntryProductGridClass(cardSize, compactMode);
   const productScrollRef = useRef<HTMLDivElement>(null);
   const catalogGridColumns = useDistributionEntryCatalogGridColumns(gridClass);
@@ -1886,25 +1914,28 @@ export function DistributionFullscreenEntry({
             aria-live="polite"
           >
             <p className="mb-2 text-center text-sm text-muted-foreground md:text-right">
-              Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+              Отмечено:{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {needInstallMode ? needInstallCount : installedCount}
+              </span>
             </p>
             <div className="flex flex-wrap gap-2 md:justify-end">
               <Button
                 type="button"
                 className="min-h-10 flex-1 sm:flex-none"
-                disabled={changedIds.length === 0 || saving}
+                disabled={!compactHasChanges || saving}
                 onClick={() => void handleSave()}
                 data-testid="button-fullscreen-entry-save"
               >
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-                Сохранить ({changedIds.length})
+                Сохранить ({compactSaveCount})
               </Button>
-              {changedIds.length > 0 ? (
+              {compactHasChanges ? (
                 <Button
                   type="button"
                   variant="outline"
                   className="min-h-10"
-                  onClick={handleResetDraft}
+                  onClick={handleCompactReset}
                   data-testid="button-fullscreen-entry-reset"
                 >
                   Сбросить
@@ -1949,6 +1980,49 @@ export function DistributionFullscreenEntry({
           Сохранить ({compactSaveCount})
         </Button>
       ) : null}
+
+      <Dialog
+        open={pendingStatusSwitch !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingStatusSwitch(null);
+        }}
+      >
+        <DialogContent className="max-w-md" data-testid="dialog-fullscreen-entry-status-switch">
+          <DialogHeader>
+            <DialogTitle>Несохранённый выбор</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            В статусе «{workStatus === "all" ? "Все статусы" : STATUS_LABEL_RU[workStatus]}» есть отмеченные
+            модели, которые не сохранены. Сохранить их перед переключением?
+          </p>
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingStatusSwitch(null)}
+              data-testid="button-fullscreen-entry-status-switch-cancel"
+            >
+              Отмена
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleStatusSwitchDiscard}
+              data-testid="button-fullscreen-entry-status-switch-discard"
+            >
+              Сбросить
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleStatusSwitchSave()}
+              disabled={saving}
+              data-testid="button-fullscreen-entry-status-switch-save"
+            >
+              Сохранить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={assignmentDialogOpen} onOpenChange={handleAssignmentDialogOpenChange}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden sm:max-w-md">
