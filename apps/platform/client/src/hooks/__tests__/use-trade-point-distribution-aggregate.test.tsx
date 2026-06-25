@@ -124,7 +124,7 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
       placementOurModels: [],
       placementCompetitors: [],
     };
-    loadCachedMatrixMock.mockImplementation((tpId: string) => (tpId === "tp-0" ? [installedEntry] : []));
+    loadCachedMatrixMock.mockImplementation((tpId?: string) => (tpId === "tp-0" ? [installedEntry] : []));
 
     const ids = Array.from({ length: 801 }, (_, i) => `tp-${i}`);
     const { result } = renderHook(() => useTradePointDistributionAggregate(ids, makeAct("tp-0")));
