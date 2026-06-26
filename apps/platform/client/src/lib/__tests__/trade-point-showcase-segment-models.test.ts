@@ -39,7 +39,11 @@ function makeBlock(opts: {
 const VH_MODEL = "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya";
 const MK_MODEL = "tc-mk-baget-12-mokko-pet-dg-2000-800-94";
 
-function makeModelEntry(targetId: string, status: ShowcaseMatrixEntryDto["status"] = "installed"): ShowcaseMatrixEntryDto {
+function makeModelEntry(
+  targetId: string,
+  status: ShowcaseMatrixEntryDto["status"] = "installed",
+  placementType: ShowcaseMatrixEntryDto["placementType"] = null,
+): ShowcaseMatrixEntryDto {
   return {
     id: `m-${Math.random()}`,
     dealerId: "d",
@@ -51,7 +55,7 @@ function makeModelEntry(targetId: string, status: ShowcaseMatrixEntryDto["status
     updatedAt: new Date().toISOString(),
     updatedBy: null,
     updatedByName: null,
-    placementType: null,
+    placementType,
     placementSegment: null,
     placementCapacity: null,
     placementActual: null,
@@ -194,6 +198,60 @@ test("placement + installed: totalOurs учитывает max(блоки, instal
   assert.equal(vh.totalCapacity, 4);
   assert.equal(vh.totalOurs, 2);
   assert.equal(vh.ourModels.length, 2);
+});
+
+test("разбивка по типу: «Наши» из installed моделей, если placementActual пустой", () => {
+  const entries = [
+    makeBlock({ segment: "vh", placementType: "portal", capacity: 10, actual: 0 }),
+    makeBlock({ segment: "vh", placementType: "cube", capacity: 5, actual: 0 }),
+    makeBlock({ segment: "vh", placementType: "unmounted", capacity: 3, actual: 0 }),
+    makeModelEntry(VH_MODEL, "installed", "portal"),
+    makeModelEntry("tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya", "installed", "portal"),
+    makeModelEntry("tc-vh-midas-orekh-pekan-shokolad-emalit-belyy-860kh2050-levaya", "installed", "cube"),
+    makeModelEntry("tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya", "installed", "unmounted"),
+    makeModelEntry("tc-vh-grand-13-medzhik-pet-dg-2000-800", "installed", "unmounted"),
+    makeModelEntry("tc-vh-baget-12-mokko-pet-dg-2000-800-94", "installed", "unmounted"),
+  ];
+  const vh = buildSegmentDetail(entries, "vh");
+  const portal = vh.byPlacementType.find((r) => r.placementType === "portal");
+  const cube = vh.byPlacementType.find((r) => r.placementType === "cube");
+  const unmounted = vh.byPlacementType.find((r) => r.placementType === "unmounted");
+
+  assert.equal(portal?.ours, 2);
+  assert.equal(cube?.ours, 1);
+  assert.equal(unmounted?.ours, 3);
+  assert.equal(portal?.free, 8);
+  assert.equal(cube?.free, 4);
+  assert.equal(unmounted?.free, 0);
+
+  const sumOurs = vh.byPlacementType.reduce((sum, row) => sum + row.ours, 0);
+  assert.equal(sumOurs, vh.totalOurs);
+  assert.equal(vh.totalOurs, 6);
+});
+
+test("разбивка по типу: модели без placementType попадают в фоллбэк сегмента", () => {
+  const entries = [
+    makeBlock({ segment: "vh", placementType: "portal", capacity: 4, actual: 0 }),
+    makeModelEntry(VH_MODEL),
+    makeModelEntry("tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya"),
+  ];
+  const vh = buildSegmentDetail(entries, "vh");
+  const unmounted = vh.byPlacementType.find((r) => r.placementType === "unmounted");
+  assert.equal(unmounted?.ours, 2);
+  assert.equal(unmounted?.blockCount, 0);
+  assert.equal(unmounted?.capacity, 0);
+  assert.equal(unmounted?.free, 0);
+});
+
+test("разбивка по типу: blockOurs сохраняется, если он больше числа installed моделей", () => {
+  const entries = [
+    makeBlock({ segment: "vh", placementType: "portal", capacity: 10, actual: 5 }),
+    makeModelEntry(VH_MODEL, "installed", "portal"),
+  ];
+  const vh = buildSegmentDetail(entries, "vh");
+  const portal = vh.byPlacementType.find((r) => r.placementType === "portal");
+  assert.equal(portal?.ours, 5);
+  assert.equal(portal?.free, 5);
 });
 
 test("hardware: installed catalog-модели учитываются", () => {

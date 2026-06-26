@@ -4,6 +4,7 @@ import type {
   ShowcasePlacementType,
 } from "./showcase-matrix-api.js";
 import { getProductById } from "./catalog-data.js";
+import { LEGACY_FALLBACK_TYPE_BY_SEGMENT } from "./showcase-capacity-by-equipment.js";
 import { segmentForModelTargetId } from "./showcase-model-segment.js";
 import {
   SHOWCASE_MATRIX_MODEL_DEFINITIONS,
@@ -90,6 +91,54 @@ function buildOurModelsFromInstalledEntries(
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
+function countInstalledOursByPlacementType(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  segment: ShowcasePlacementSegment,
+): Map<ShowcasePlacementType, number> {
+  const counts = new Map<ShowcasePlacementType, number>();
+  const fallbackType = LEGACY_FALLBACK_TYPE_BY_SEGMENT[segment];
+
+  for (const e of entries) {
+    if (e.targetKind !== "model" || e.status !== "installed") continue;
+    if (segmentForModelTargetId(e.targetId) !== segment) continue;
+    const placementType = e.placementType ?? fallbackType;
+    counts.set(placementType, (counts.get(placementType) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+function applyInstalledOursToPlacementTypeBreakdown(
+  byType: Map<ShowcasePlacementType, SegmentPlacementTypeBreakdownRow>,
+  installedByType: Map<ShowcasePlacementType, number>,
+): void {
+  for (const [placementType, installedCount] of Array.from(installedByType.entries())) {
+    if (installedCount <= 0) continue;
+    const row = byType.get(placementType) ?? {
+      placementType,
+      blockCount: 0,
+      capacity: 0,
+      ours: 0,
+      competitors: 0,
+      free: 0,
+    };
+    row.ours = Math.max(row.ours, installedCount);
+    byType.set(placementType, row);
+  }
+
+  for (const row of Array.from(byType.values())) {
+    row.free = Math.max(0, row.capacity - row.ours - row.competitors);
+  }
+}
+
+function sortedPlacementTypeBreakdown(
+  byType: Map<ShowcasePlacementType, SegmentPlacementTypeBreakdownRow>,
+): SegmentPlacementTypeBreakdownRow[] {
+  return Array.from(byType.values()).sort((a, b) =>
+    a.placementType.localeCompare(b.placementType),
+  );
+}
+
 export function installedOurModelsBySegment(
   entries: readonly ShowcaseMatrixEntryDto[],
 ): Record<ShowcasePlacementSegment, SegmentOurModelCard[]> {
@@ -151,6 +200,9 @@ export function buildSegmentDetail(
     byType.set(t, row);
   }
 
+  const installedByType = countInstalledOursByPlacementType(entries, segment);
+  applyInstalledOursToPlacementTypeBreakdown(byType, installedByType);
+
   const ourModelsAcc = new Map<string, SegmentOurModelCard>();
   for (const b of blocks) {
     for (const m of b.placementOurModels ?? []) {
@@ -207,7 +259,7 @@ export function buildSegmentDetail(
           totalCompetitors: 0,
           free: 0,
           distributionPercent: 0,
-          byPlacementType: [],
+          byPlacementType: sortedPlacementTypeBreakdown(byType),
           ourModels,
           competitorRows: [],
         };
@@ -236,9 +288,7 @@ export function buildSegmentDetail(
     totalCompetitors,
     free,
     distributionPercent,
-    byPlacementType: Array.from(byType.values()).sort((a, b) =>
-      a.placementType.localeCompare(b.placementType),
-    ),
+    byPlacementType: sortedPlacementTypeBreakdown(byType),
     ourModels,
     competitorRows: Array.from(compAcc.values()).sort((a, b) => b.count - a.count),
   };
