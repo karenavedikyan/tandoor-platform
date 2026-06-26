@@ -109,7 +109,18 @@ export function ShowcaseEquipmentCapacityDialog({
 
   const grandTotal = segmentTotals.vh + segmentTotals.mk + segmentTotals.hardware;
 
+  const hasMinError = useMemo(
+    () =>
+      SEGMENTS.some((segment) => {
+        const typeKey = SEGMENT_TO_TYPE_KEY[segment];
+        const selectedCount = countSelectedByType(selectedModels, typeKey, catalogLookup);
+        return selectedCount > 0 && segmentTotals[segment] < selectedCount;
+      }),
+    [catalogLookup, segmentTotals, selectedModels],
+  );
+
   const handleConfirm = useCallback(() => {
+    if (hasMinError) return;
     const parsed: EquipmentCapacityInput = {};
     for (const segment of SEGMENTS) {
       for (const row of byEquipment[segment]) {
@@ -118,7 +129,7 @@ export function ShowcaseEquipmentCapacityDialog({
       }
     }
     onConfirm(parsed);
-  }, [byEquipment, inputs, onConfirm]);
+  }, [byEquipment, hasMinError, inputs, onConfirm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -139,6 +150,7 @@ export function ShowcaseEquipmentCapacityDialog({
             const typeKey = SEGMENT_TO_TYPE_KEY[segment];
             const selectedCount = countSelectedByType(selectedModels, typeKey, catalogLookup);
             const categoryGap = categoryGaps.includes(typeKey);
+            const minCapacityError = selectedCount > 0 && segmentTotals[segment] < selectedCount;
             return (
               <div key={segment} className="space-y-2 rounded-lg border border-border/70 bg-muted/10 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -156,6 +168,16 @@ export function ShowcaseEquipmentCapacityDialog({
                     суммарная ёмкость равна 0. Укажите количество витрин.
                   </p>
                 ) : null}
+                {minCapacityError ? (
+                  <p
+                    className="text-xs text-destructive"
+                    data-testid={`text-equipment-capacity-min-error-${segment}`}
+                  >
+                    Общее количество витрин по типу «{SHOWCASE_TYPE_LABEL_RU[typeKey]}» (введено{" "}
+                    {segmentTotals[segment]}) не может быть меньше количества выбранных моделей этого типа (
+                    {selectedCount}).
+                  </p>
+                ) : null}
                 <div className="space-y-2">
                   {allowedTypesForSegment(segment).map((placementType) => {
                     const key = equipmentCapacityKey(segment, placementType);
@@ -167,7 +189,11 @@ export function ShowcaseEquipmentCapacityDialog({
                         </Label>
                         <Input
                           id={key}
-                          className={cn("h-9 tabular-nums", categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60")}
+                          className={cn(
+                            "h-9 tabular-nums",
+                            categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60",
+                            minCapacityError && "border-destructive/60",
+                          )}
                           inputMode="numeric"
                           data-testid={`input-equipment-capacity-${segment}-${placementType}`}
                           value={inputs[key] ?? "0"}
@@ -192,6 +218,7 @@ export function ShowcaseEquipmentCapacityDialog({
           <Button
             type="button"
             onClick={handleConfirm}
+            disabled={hasMinError}
             data-testid="button-equipment-capacity-confirm"
           >
             Сохранить
