@@ -55,8 +55,12 @@ import {
 import {
   persistEquipmentCapacityInputs,
   categoryCapacityFieldsForPersist,
+  categoryCapacityFromPlacements,
+  growPlacementBlockToFitOurMarks,
+  ourMarkLimitFromPlacementBlock,
   type EquipmentCapacityInput,
 } from "@/lib/showcase-capacity-by-equipment";
+import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { cn } from "@/lib/utils";
 import {
@@ -250,9 +254,15 @@ function formatSavedAt(): string {
   return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
 }
 
-function sumPlacementCompetitors(block: ShowcaseMatrixEntryDto): number {
-  return (block.placementCompetitors ?? []).reduce((acc, c) => acc + (c?.count ?? 0), 0);
+function ourMarkLimitFromBlock(block: ShowcaseMatrixEntryDto | null): number | null {
+  return ourMarkLimitFromPlacementBlock(block);
 }
+
+const PLACEMENT_SEGMENT_TO_TYPE_KEY: Record<ShowcasePlacementSegment, ShowcaseTypeKey> = {
+  vh: "entrance",
+  mk: "interior",
+  hardware: "hardware",
+};
 
 function findPlacementBlock(
   placements: ShowcaseMatrixEntryDto[],
@@ -264,11 +274,6 @@ function findPlacementBlock(
       (p) => p.placementSegment === segment && p.placementType === placementType,
     ) ?? null
   );
-}
-
-function ourMarkLimitFromBlock(block: ShowcaseMatrixEntryDto | null): number | null {
-  if (!block || block.placementCapacity == null || block.placementCapacity <= 0) return null;
-  return Math.max(0, block.placementCapacity - sumPlacementCompetitors(block));
 }
 
 function effectiveDraftRow(
@@ -874,38 +879,83 @@ export function DistributionFullscreenEntry({
     [activePlacementBlock],
   );
 
-  const activeCompetitorCount = useMemo(
-    () => (activePlacementBlock ? sumPlacementCompetitors(activePlacementBlock) : 0),
-    [activePlacementBlock],
-  );
-
   const markedInActivePlacement = useMemo(
     () =>
       countMarkedOursInPlacement(draft, baselines, placementSegmentContext, activePlacementType),
     [draft, baselines, placementSegmentContext, activePlacementType],
   );
 
-  const slotLimitReached =
-    activeSlotLimit !== null && markedInActivePlacement >= activeSlotLimit;
+  const syncCategoryCapacityAfterPlacementChange = useCallback(() => {
+    const freshPlacements = loadCachedPlacements(point.id);
+    const cats = categoryCapacityFromPlacements(freshPlacements);
+    const uid = profile.personaUserId;
+    const uname = userLabelFromProfile(profile);
+    const iso = new Date().toISOString();
+    void actx.persist((prev) => {
+      const prevRec =
+        prev.tradePointShowcaseActualizationById[point.id] ??
+        emptyShowcase(dealer.id, point.id);
+      const capacityFields = categoryCapacityFieldsForPersist({
+        next: cats,
+        prevRec,
+        hasShowcase: normalizeHasShowcase(prevRec.hasShowcase) !== false,
+      });
+      const nextRec: TradePointShowcaseActualization = {
+        ...prevRec,
+        ...capacityFields,
+        updatedAt: iso,
+        updatedBy: uid,
+        updatedByName: uname,
+      };
+      return mergeActualizationState(prev, {
+        tradePointShowcaseActualizationById: {
+          ...prev.tradePointShowcaseActualizationById,
+          [point.id]: nextRec,
+        },
+      });
+    });
+  }, [actx, dealer.id, point.id, profile]);
 
-  const slotLimitMessage = useMemo(() => {
-    if (!slotLimitReached || activeSlotLimit == null) return null;
-    const typeLabel = PLACEMENT_TYPE_LABEL_RU[activePlacementType];
-    return `Достигнут лимит мест для типа «${typeLabel}»: ${activeSlotLimit} мест (из них ${activeCompetitorCount} у конкурентов)`;
-  }, [slotLimitReached, activeSlotLimit, activePlacementType, activeCompetitorCount]);
-
-  const canMarkInstalledInActiveType = useCallback(
-    (productId: string, segment: ShowcasePlacementSegment) => {
-      if (isInstalledInPlacementType(productId, draft, baselines, segment, activePlacementType)) {
-        return true;
-      }
-      const block = findPlacementBlock(placements, segment, activePlacementType);
-      const limit = ourMarkLimitFromBlock(block);
-      if (limit === null) return true;
-      const count = countMarkedOursInPlacement(draft, baselines, segment, activePlacementType);
-      return count < limit;
+  const growActivePlacementIfNeeded = useCallback(
+    (nextDraft: FullscreenEntryDraftMap) => {
+      const marked = countMarkedOursInPlacement(
+        nextDraft,
+        baselines,
+        placementSegmentContext,
+        activePlacementType,
+      );
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
+      const grown = growPlacementBlockToFitOurMarks({
+        dealerId: dealer.id,
+        tradePointId: point.id,
+        placements,
+        segment: placementSegmentContext,
+        placementType: activePlacementType,
+        ourMarkCount: marked,
+        updatedBy: uid,
+        updatedByName: uname,
+      });
+      if (!grown) return;
+      syncCategoryCapacityAfterPlacementChange();
+      setBump((n) => n + 1);
+      notifyShowcaseCapacityAutoGrow({
+        tradePointId: point.id,
+        type: PLACEMENT_SEGMENT_TO_TYPE_KEY[placementSegmentContext],
+        oldCapacity: grown.oldCapacity,
+        nextCapacity: grown.nextCapacity,
+      });
     },
-    [draft, baselines, activePlacementType, placements],
+    [
+      activePlacementType,
+      baselines,
+      dealer.id,
+      placementSegmentContext,
+      placements,
+      point.id,
+      profile,
+      syncCategoryCapacityAfterPlacementChange,
+    ],
   );
 
   const productsForList = useMemo(() => {
@@ -940,12 +990,36 @@ export function DistributionFullscreenEntry({
     [historyEvents, selectedHistoryId],
   );
 
-  const updateDraft = useCallback((productId: string, patch: Partial<FullscreenEntryDraftMap[string]>) => {
-    setDraft((prev) => ({
-      ...prev,
-      [productId]: { ...prev[productId]!, ...patch },
-    }));
-  }, []);
+  const updateDraft = useCallback(
+    (productId: string, patch: Partial<FullscreenEntryDraftMap[string]>) => {
+      let growNext: FullscreenEntryDraftMap | null = null;
+      setDraft((prev) => {
+        const next = { ...prev, [productId]: { ...prev[productId]!, ...patch } };
+        if (
+          placementTypeMode &&
+          patch.status === "installed" &&
+          !isInstalledInPlacementType(
+            productId,
+            prev,
+            baselines,
+            placementSegmentContext,
+            activePlacementType,
+          )
+        ) {
+          growNext = next;
+        }
+        return next;
+      });
+      if (growNext) growActivePlacementIfNeeded(growNext);
+    },
+    [
+      activePlacementType,
+      baselines,
+      growActivePlacementIfNeeded,
+      placementSegmentContext,
+      placementTypeMode,
+    ],
+  );
 
   const handleResetDraft = useCallback(() => {
     setDraft({});
@@ -1197,7 +1271,7 @@ export function DistributionFullscreenEntry({
     (inputs: EquipmentCapacityInput) => {
       const uid = profile.personaUserId;
       const uname = userLabelFromProfile(profile);
-      const cats = persistEquipmentCapacityInputs({
+      persistEquipmentCapacityInputs({
         dealerId: dealer.id,
         tradePointId: point.id,
         placements,
@@ -1205,36 +1279,11 @@ export function DistributionFullscreenEntry({
         updatedBy: uid,
         updatedByName: uname,
       });
-      // Синхронизируем категорийную ёмкость в поля entrancePortals/interiorPortals/
-      // hardwareSections, из которых считаются проценты и сводка «Входных/Межкомнатных/Фурн».
-      const iso = new Date().toISOString();
-      void actx.persist((prev) => {
-        const prevRec =
-          prev.tradePointShowcaseActualizationById[point.id] ??
-          emptyShowcase(dealer.id, point.id);
-        const capacityFields = categoryCapacityFieldsForPersist({
-          next: cats,
-          prevRec,
-          hasShowcase: normalizeHasShowcase(prevRec.hasShowcase) !== false,
-        });
-        const nextRec: TradePointShowcaseActualization = {
-          ...prevRec,
-          ...capacityFields,
-          updatedAt: iso,
-          updatedBy: uid,
-          updatedByName: uname,
-        };
-        return mergeActualizationState(prev, {
-          tradePointShowcaseActualizationById: {
-            ...prev.tradePointShowcaseActualizationById,
-            [point.id]: nextRec,
-          },
-        });
-      });
+      syncCategoryCapacityAfterPlacementChange();
       setBump((n) => n + 1);
       setEquipmentDialogOpen(false);
     },
-    [actx, dealer.id, point.id, placements, profile],
+    [dealer.id, placements, point.id, profile, syncCategoryCapacityAfterPlacementChange],
   );
 
   const assignmentSelectedModels = useMemo(
@@ -1463,9 +1512,6 @@ export function DistributionFullscreenEntry({
   });
 
   const renderProductItem = (p: CatalogProduct) => {
-    const seg = matrixModelById.get(p.id)
-      ? segmentFromMatrixModel(matrixModelById.get(p.id)!)
-      : segmentFromProduct(p);
     if (cardSize === "list") {
       return (
         <FullscreenProductRow
@@ -1476,8 +1522,6 @@ export function DistributionFullscreenEntry({
           onDraftChange={updateDraft}
           placementTypeMode={placementTypeMode}
           activePlacementType={activePlacementType}
-          canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
-          slotLimitHint={slotLimitMessage}
         />
       );
     }
@@ -1498,8 +1542,6 @@ export function DistributionFullscreenEntry({
         onSetExplicitMark={setExplicitQuickMark}
         placementTypeMode={placementTypeMode}
         activePlacementType={activePlacementType}
-        canMarkInstalled={canMarkInstalledInActiveType(p.id, seg)}
-        slotLimitHint={slotLimitMessage}
       />
     );
   };
@@ -1771,6 +1813,18 @@ export function DistributionFullscreenEntry({
                     </Button>
                   ))}
                 </div>
+                {normalizeHasShowcase(showcaseRec?.hasShowcase) !== false ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0 px-1 text-[11px] text-primary underline-offset-2 hover:underline"
+                    data-testid="button-fullscreen-entry-edit-capacity"
+                    onClick={() => setEquipmentDialogOpen(true)}
+                  >
+                    Изменить количество витрин
+                  </Button>
+                ) : null}
               </div>
               <p className="text-[11px] text-muted-foreground" data-testid="text-fullscreen-entry-placement-counter">
                 Отмечено{" "}
@@ -1787,9 +1841,6 @@ export function DistributionFullscreenEntry({
                   Ёмкость для типа «{PLACEMENT_TYPE_LABEL_RU[activePlacementType]}» не задана — лимит не
                   контролируется
                 </p>
-              ) : null}
-              {slotLimitMessage ? (
-                <p className="text-[11px] text-amber-800 dark:text-amber-200">{slotLimitMessage}</p>
               ) : null}
             </div>
           ) : null}
@@ -2425,8 +2476,6 @@ function FullscreenProductCard({
   onSetExplicitMark,
   placementTypeMode,
   activePlacementType,
-  canMarkInstalled,
-  slotLimitHint,
 }: ProductDraftProps & {
   cardSize: CatalogCardSize;
   quickMode: boolean;
@@ -2438,8 +2487,6 @@ function FullscreenProductCard({
   onSetExplicitMark: (productId: string, marked: boolean) => void;
   placementTypeMode: boolean;
   activePlacementType: ShowcasePlacementType;
-  canMarkInstalled: boolean;
-  slotLimitHint: string | null;
 }) {
   const row = draft;
   const segment = row ? row.placementSegment : segmentForProduct(product, matrixModel);
@@ -2454,12 +2501,6 @@ function FullscreenProductCard({
     (quickStatus === "need_install"
       ? isExplicitMark || (isChanged && effectiveStatus === "need_install")
       : effectiveStatus === quickStatus);
-
-  const installBlocked =
-    placementTypeMode &&
-    quickStatus === "installed" &&
-    !canMarkInstalled &&
-    effectiveStatus !== "installed";
 
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
@@ -2481,9 +2522,6 @@ function FullscreenProductCard({
       onSetExplicitMark(product.id, true);
       return;
     }
-    if (quickStatus === "installed" && placementTypeMode && !canMarkInstalled) {
-      return;
-    }
     onDraftChange(product.id, {
       status: quickStatus,
       placementSegment: row?.placementSegment ?? seg,
@@ -2498,16 +2536,14 @@ function FullscreenProductCard({
         "relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs",
         isMarked
           ? STATUS_ACCENT[quickStatus]
-          : quickMode && isMatrixRecommended
+          :         quickMode && isMatrixRecommended
             ? "border-primary/40"
             : "border-border/80",
-        quickMode && !installBlocked && "cursor-pointer select-none",
-        installBlocked && "opacity-60",
+        quickMode && "cursor-pointer select-none",
         cardSize === "s" ? "p-1.5" : "p-2",
       )}
-      onClick={quickMode && !installBlocked ? handleQuickTap : undefined}
-      role={quickMode && !installBlocked ? "button" : undefined}
-      title={installBlocked && slotLimitHint ? slotLimitHint : undefined}
+      onClick={quickMode ? handleQuickTap : undefined}
+      role={quickMode ? "button" : undefined}
       data-testid={quickMode ? `card-fullscreen-entry-quick-${product.id}` : undefined}
     >
       <div
@@ -2551,14 +2587,6 @@ function FullscreenProductCard({
             value={effectiveStatus}
             onChange={(newStatus) => {
               const seg = segmentForProduct(product, matrixModel);
-              if (
-                newStatus === "installed" &&
-                placementTypeMode &&
-                effectiveStatus !== "installed" &&
-                !canMarkInstalled
-              ) {
-                return;
-              }
               onDraftChange(product.id, {
                 status: newStatus,
                 placementSegment: row?.placementSegment ?? seg,
@@ -2592,26 +2620,17 @@ function FullscreenProductRow({
   onDraftChange,
   placementTypeMode,
   activePlacementType,
-  canMarkInstalled,
-  slotLimitHint,
 }: ProductDraftProps & {
   placementTypeMode: boolean;
   activePlacementType: ShowcasePlacementType;
-  canMarkInstalled: boolean;
-  slotLimitHint: string | null;
 }) {
   const row = draft;
   const defaultPlacementType = placementTypeMode ? activePlacementType : (row?.placementType ?? "portal");
   const img = product.image?.trim() ?? "";
   const currentStatus = row?.status ?? "need_install";
-  const installBlocked =
-    placementTypeMode && currentStatus !== "installed" && !canMarkInstalled;
 
   return (
-    <li
-      className={cn("flex gap-3 rounded-xl border border-border/80 bg-card p-2", installBlocked && "opacity-60")}
-      title={installBlocked && slotLimitHint ? slotLimitHint : undefined}
-    >
+    <li className="flex gap-3 rounded-xl border border-border/80 bg-card p-2">
       <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted/40">
         {img ? <img src={img} alt="" className="h-full w-full object-contain" loading="lazy" /> : null}
       </div>
@@ -2627,14 +2646,6 @@ function FullscreenProductRow({
           value={currentStatus}
           onChange={(newStatus) => {
             const seg = segmentForProduct(product, matrixModel);
-            if (
-              newStatus === "installed" &&
-              placementTypeMode &&
-              currentStatus !== "installed" &&
-              !canMarkInstalled
-            ) {
-              return;
-            }
             onDraftChange(product.id, {
               status: newStatus,
               placementSegment: row?.placementSegment ?? seg,

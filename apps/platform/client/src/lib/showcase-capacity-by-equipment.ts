@@ -110,6 +110,70 @@ export function newEquipmentBlockTargetId(): string {
   return `placement-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
+export function sumPlacementCompetitors(block: ShowcaseMatrixEntryDto): number {
+  return (block.placementCompetitors ?? []).reduce((acc, c) => acc + (c?.count ?? 0), 0);
+}
+
+export function ourMarkLimitFromPlacementBlock(block: ShowcaseMatrixEntryDto | null): number | null {
+  if (!block || block.placementCapacity == null || block.placementCapacity <= 0) return null;
+  return Math.max(0, block.placementCapacity - sumPlacementCompetitors(block));
+}
+
+/** Поднимает ёмкость placement-блока, если отмеченных «наших» больше текущего лимита. */
+export function growPlacementBlockToFitOurMarks(params: {
+  dealerId: string;
+  tradePointId: string;
+  placements: ShowcaseMatrixEntryDto[];
+  segment: ShowcasePlacementSegment;
+  placementType: ShowcasePlacementType;
+  ourMarkCount: number;
+  updatedBy: string;
+  updatedByName: string;
+}): { oldCapacity: number; nextCapacity: number } | null {
+  const block =
+    placementBlocks(params.placements).find(
+      (p) => p.placementSegment === params.segment && p.placementType === params.placementType,
+    ) ?? null;
+
+  const competitors = block ? sumPlacementCompetitors(block) : 0;
+  const limit = ourMarkLimitFromPlacementBlock(block);
+  if (limit === null || params.ourMarkCount <= limit) return null;
+
+  const oldCapacity = block?.placementCapacity ?? 0;
+  const nextCapacity = params.ourMarkCount + competitors;
+
+  if (block) {
+    setMatrixPlacement({
+      dealerId: params.dealerId,
+      tradePointId: params.tradePointId,
+      targetId: block.targetId,
+      placementType: params.placementType,
+      placementSegment: params.segment,
+      placementCapacity: nextCapacity,
+      placementActual: block.placementActual ?? 0,
+      placementCompetitors: block.placementCompetitors,
+      updatedBy: params.updatedBy,
+      updatedByName: params.updatedByName,
+      comment: oldCapacity !== nextCapacity ? `ёмкость ${oldCapacity} → ${nextCapacity}` : block.comment,
+    });
+  } else {
+    setMatrixPlacement({
+      dealerId: params.dealerId,
+      tradePointId: params.tradePointId,
+      targetId: newEquipmentBlockTargetId(),
+      placementType: params.placementType,
+      placementSegment: params.segment,
+      placementCapacity: nextCapacity,
+      placementActual: 0,
+      updatedBy: params.updatedBy,
+      updatedByName: params.updatedByName,
+      comment: null,
+    });
+  }
+
+  return { oldCapacity: oldCapacity > 0 ? oldCapacity : nextCapacity, nextCapacity };
+}
+
 export type EquipmentCapacityInput = Record<string, number>;
 
 export const LEGACY_FALLBACK_TYPE_BY_SEGMENT: Record<ShowcasePlacementSegment, ShowcasePlacementType> = {

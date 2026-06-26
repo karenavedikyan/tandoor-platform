@@ -8,8 +8,11 @@ import {
   categoryCapacityFieldsForPersist,
   categoryCapacityFromPlacements,
   equipmentCapacityKey,
+  growPlacementBlockToFitOurMarks,
   mergeCategoryCapacityPreservingLegacy,
+  ourMarkLimitFromPlacementBlock,
   seedInputsWithLegacyFallback,
+  sumPlacementCompetitors,
 } from "../showcase-capacity-by-equipment.js";
 
 function placement(
@@ -86,5 +89,43 @@ const migrated = categoryCapacityFieldsForPersist({
 assert.equal(migrated.entrancePortals, 10);
 assert.equal(migrated.interiorPortals, 20);
 assert.equal(migrated.hardwareSections, 20);
+
+const blockWithCompetitors = placement({
+  targetId: "vh-portal-comp",
+  placementSegment: "vh",
+  placementType: "portal",
+  placementCapacity: 10,
+  placementCompetitors: [{ name: "Конкурент", count: 3 }],
+});
+assert.equal(sumPlacementCompetitors(blockWithCompetitors), 3);
+assert.equal(ourMarkLimitFromPlacementBlock(blockWithCompetitors), 7);
+
+assert.equal(
+  growPlacementBlockToFitOurMarks({
+    dealerId: "d1",
+    tradePointId: "tp-grow-test",
+    placements: [blockWithCompetitors],
+    segment: "vh",
+    placementType: "portal",
+    ourMarkCount: 7,
+    updatedBy: "u1",
+    updatedByName: "User",
+  }),
+  null,
+);
+
+const grown = growPlacementBlockToFitOurMarks({
+  dealerId: "d1",
+  tradePointId: "tp-grow-test",
+  placements: [blockWithCompetitors],
+  segment: "vh",
+  placementType: "portal",
+  ourMarkCount: 8,
+  updatedBy: "u1",
+  updatedByName: "User",
+});
+assert.ok(grown);
+assert.equal(grown!.oldCapacity, 10);
+assert.equal(grown!.nextCapacity, 11);
 
 console.log("showcase-capacity-by-equipment: ok");
