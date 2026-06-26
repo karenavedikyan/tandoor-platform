@@ -65,7 +65,7 @@ import {
 import { getRopOverrideUserId, setDealerRopOverride } from "@/lib/dealer-rop-overrides";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
-import { getAllSalesManagers, getSalesUserById, getTeamManagers, type SalesUser } from "@/lib/sales-control-data";
+import { getAllSalesManagers, getSalesUserById, getTeamManagers, type SalesRole, type SalesUser } from "@/lib/sales-control-data";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { toast } from "@/hooks/use-toast";
 import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
@@ -421,6 +421,13 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
+/** Роли без права назначения РОП/РМ (зеркало api/users/picker.ts). */
+const RESPONSIBLES_READONLY_ROLES: ReadonlySet<SalesRole> = new Set<SalesRole>([
+  "sales_manager",
+  "marketer",
+  "analyst",
+]);
+
 export type DealerActualizationEditDialogProps = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -430,6 +437,7 @@ export type DealerActualizationEditDialogProps = {
 
 export function DealerActualizationEditDialog(props: DealerActualizationEditDialogProps): ReactElement {
   const { open, onOpenChange, baseRow, profile } = props;
+  const responsiblesReadOnly = RESPONSIBLES_READONLY_ROLES.has(profile.role);
   const { persist, state } = useClientBaseActualization();
   const queryClient = useQueryClient();
   const formSave = useSectionSaveFeedback();
@@ -845,6 +853,9 @@ export function DealerActualizationEditDialog(props: DealerActualizationEditDial
               <DealerRopRmSelectors
                 ropUserId={ropUserId}
                 regionalManagerUserId={regionalManagerUserId}
+                readOnly={responsiblesReadOnly}
+                ropDisplayName={ropDisplayName}
+                regionalManagerDisplayName={regionalManagerDisplayName}
                 onRopChange={(id, name) => {
                   setRopUserId(id);
                   setRopDisplayName(name);
@@ -1084,6 +1095,7 @@ function dealerStatusFromPassportLifecycle(lifecycle: string): DealerStatus {
 
 export function DealerActualizationCreateDialog(props: DealerActualizationCreateDialogProps): ReactElement {
   const { open, onOpenChange, profile, mergedDealerRows, onCreated } = props;
+  const responsiblesReadOnly = RESPONSIBLES_READONLY_ROLES.has(profile.role);
   const { persist, state } = useClientBaseActualization();
   const [saving, setSaving] = useState(false);
   const saveLockRef = useRef(false);
@@ -1810,6 +1822,9 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
               <DealerRopRmSelectors
                 ropUserId={ropUserId}
                 regionalManagerUserId={regionalManagerUserId}
+                readOnly={responsiblesReadOnly}
+                ropDisplayName={ropDisplayName}
+                regionalManagerDisplayName={regionalManagerDisplayName}
                 onRopChange={(id, name) => {
                   setRopUserId(id);
                   setRopDisplayName(name);
