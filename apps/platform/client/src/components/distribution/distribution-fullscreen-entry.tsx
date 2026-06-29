@@ -122,6 +122,13 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { useCatalogFiltersUrl } from "@/hooks/use-catalog-filters-url";
 import { computeCatalogFacets, countActiveCatalogFilters, filterCatalogProductsByFilters } from "@/lib/catalog-facets";
 import {
+  activeFullscreenSegmentCategory,
+  FULLSCREEN_SEGMENT_CATEGORY_IDS,
+  isFullscreenSegmentTabsVisible,
+  segmentContextFromCategories,
+  type FullscreenSegmentCategoryId,
+} from "@/lib/distribution-fullscreen-entry-segments";
+import {
   DISTRIBUTION_CATALOG_CATEGORIES,
   productDistributionCategory,
   type DistributionCatalogCategoryId,
@@ -302,14 +309,6 @@ function countMarkedOursInPlacement(
     count++;
   }
   return count;
-}
-
-function segmentContextFromCategories(
-  categories: readonly DistributionCatalogCategoryId[],
-): ShowcasePlacementSegment {
-  if (categories.includes("mk")) return "mk";
-  if (categories.includes("hardware")) return "hardware";
-  return "vh";
 }
 
 function isInstalledInPlacementType(
@@ -662,6 +661,22 @@ export function DistributionFullscreenEntry({
     })).filter((c) => c.count > 0);
   }, [matrixCatalogProducts, sourceTab]);
 
+  const segmentCategoryChips = useMemo(
+    () =>
+      categoryChips.filter((c): c is typeof c & { id: FullscreenSegmentCategoryId } =>
+        (FULLSCREEN_SEGMENT_CATEGORY_IDS as readonly string[]).includes(c.id),
+      ),
+    [categoryChips],
+  );
+
+  const filterPanelCategoryChips = useMemo(
+    () =>
+      categoryChips.filter(
+        (c) => !(FULLSCREEN_SEGMENT_CATEGORY_IDS as readonly string[]).includes(c.id),
+      ),
+    [categoryChips],
+  );
+
   const activeFilterCount = useMemo(
     () =>
       countActiveCatalogFilters(catalogFilters, selectedCategories, searchQuery) +
@@ -853,6 +868,30 @@ export function DistributionFullscreenEntry({
   }, [matrixModelById, workStatus, visibleProducts]);
 
   const placementTypeMode = workStatus === "installed";
+  const activeSegmentCategory = useMemo(
+    () => activeFullscreenSegmentCategory(selectedCategoryIds, placementTypeMode),
+    [selectedCategoryIds, placementTypeMode],
+  );
+  const handleSegmentCategorySelect = useCallback(
+    (id: FullscreenSegmentCategoryId | "all") => {
+      const segmentIds = new Set<string>(FULLSCREEN_SEGMENT_CATEGORY_IDS);
+      const nonSegment = selectedCategoryIds.filter((x) => !segmentIds.has(x));
+      if (id === "all") {
+        setSelectedCategoryIds(nonSegment);
+        return;
+      }
+      if (placementTypeMode) {
+        setSelectedCategoryIds([...nonSegment, id]);
+        return;
+      }
+      if (selectedCategoryIds.includes(id)) {
+        setSelectedCategoryIds(selectedCategoryIds.filter((x) => x !== id));
+        return;
+      }
+      setSelectedCategoryIds([...nonSegment, id]);
+    },
+    [placementTypeMode, selectedCategoryIds, setSelectedCategoryIds],
+  );
   const placementSegmentContext = useMemo(
     () => segmentContextFromCategories(selectedCategories),
     [selectedCategories],
@@ -1795,6 +1834,56 @@ export function DistributionFullscreenEntry({
             <p className="text-[10px] leading-snug text-muted-foreground">{workStatusHint}</p>
           </div>
 
+          {isFullscreenSegmentTabsVisible(workStatus) && segmentCategoryChips.length > 0 ? (
+            <div
+              className="space-y-1"
+              data-testid="section-fullscreen-entry-segment-tabs"
+            >
+              <div
+                className="-mx-0.5 flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="tablist"
+                aria-label="Сегмент витрины"
+              >
+                {!placementTypeMode ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSegmentCategory === "all"}
+                    data-testid="button-fullscreen-entry-segment-all"
+                    onClick={() => handleSegmentCategorySelect("all")}
+                    className={cn(
+                      "h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition",
+                      activeSegmentCategory === "all"
+                        ? "border-[#9aca3c] bg-[#9aca3c] text-white shadow-[0_4px_12px_rgba(154,202,60,0.35)]"
+                        : "border-border bg-card text-foreground hover:border-[#9aca3c] hover:text-[#86b832]",
+                    )}
+                  >
+                    Все
+                  </button>
+                ) : null}
+                {segmentCategoryChips.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeSegmentCategory === c.id}
+                    data-testid={`button-fullscreen-entry-segment-${c.id}`}
+                    onClick={() => handleSegmentCategorySelect(c.id)}
+                    className={cn(
+                      "h-8 shrink-0 whitespace-nowrap rounded-full border px-3 text-xs font-semibold transition",
+                      activeSegmentCategory === c.id
+                        ? "border-[#9aca3c] bg-[#9aca3c] text-white shadow-[0_4px_12px_rgba(154,202,60,0.35)]"
+                        : "border-border bg-card text-foreground hover:border-[#9aca3c] hover:text-[#86b832]",
+                    )}
+                  >
+                    {c.label}
+                    {c.count != null ? ` (${c.count.toLocaleString("ru-RU")})` : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {placementTypeMode ? (
             <div
               className="space-y-1 rounded-lg border border-border/80 bg-muted/20 px-2 py-1.5"
@@ -1874,7 +1963,7 @@ export function DistributionFullscreenEntry({
           {filtersPanelOpen ? (
             <div className="space-y-2" data-testid="panel-fullscreen-entry-filters">
               <CatalogFiltersPanel
-                categories={categoryChips}
+                categories={filterPanelCategoryChips}
                 selectedCategories={selectedCategoryIds}
                 onCategoriesChange={setSelectedCategoryIds}
                 facets={catalogFacets}

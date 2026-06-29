@@ -40,6 +40,6 @@ export const HARDWARE_PLACEMENT_TYPES: ShowcasePlacementType[] = ["branded_stand
 
 export function allowedTypesForSegment(segment: ShowcasePlacementSegment): ShowcasePlacementType[] {
   if (segment === "hardware") return HARDWARE_PLACEMENT_TYPES;
-  if (segment === "mk") return ["portal", "cube", "book", "hoof", "unmounted", "portal_second"];
+  if (segment === "mk") return ["portal", "portal_second", "cube", "book", "hoof", "unmounted"];
   return ["portal", "cube", "book", "hoof", "unmounted"];
 }

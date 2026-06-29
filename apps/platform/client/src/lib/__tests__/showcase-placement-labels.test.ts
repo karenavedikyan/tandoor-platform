@@ -19,8 +19,8 @@ assert.deepEqual(vhTypes, ["portal", "cube", "book", "hoof", "unmounted"]);
 
 const mkTypes = allowedTypesForSegment("mk");
 assert.ok(mkTypes.includes("portal_second"));
-assert.equal(mkTypes[mkTypes.length - 1], "portal_second");
-assert.deepEqual(mkTypes, ["portal", "cube", "book", "hoof", "unmounted", "portal_second"]);
+assert.equal(mkTypes.indexOf("portal_second"), mkTypes.indexOf("portal") + 1);
+assert.deepEqual(mkTypes, ["portal", "portal_second", "cube", "book", "hoof", "unmounted"]);
 
 const hwTypes = allowedTypesForSegment("hardware");
 assert.ok(!hwTypes.includes("portal_second"));
