@@ -1637,6 +1637,15 @@ export function TradePointShowcaseMatrixSection({
                       <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
                         наши {item.data.ours} из {item.data.total}
                       </p>
+                      {item.label === "МК" && item.data.portalSecond ? (
+                        <p
+                          className="mt-1 text-[10px] text-muted-foreground tabular-nums"
+                          data-testid="text-trade-point-mk-portal-second"
+                        >
+                          вкл. 2-й план: {item.data.portalSecond.ours} из {item.data.portalSecond.total} (
+                          {item.data.portalSecond.pct}%)
+                        </p>
+                      ) : null}
                       {item.data.legacyOurs > 0 ? (
                         <>
                           <Progress
