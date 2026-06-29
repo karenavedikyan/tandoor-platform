@@ -115,4 +115,20 @@ assert.equal(persistResult.skipped, true);
 assert.equal(persistResult.created, false);
 assert.equal(persistCalls, 1);
 
+// При активных ТТ в DB-источнике материализация не запускается
+assert.equal(shouldMaterializePrimaryTradePoint(dealer, act, { dbActiveCount: 1 }), false);
+let persistOnDbSkip = 0;
+const dbSkipResult = await materializePrimaryTradePointIfNeeded({
+  row: dealer,
+  profile,
+  dbActiveTradePointIds: [tpId],
+  persist: async () => {
+    persistOnDbSkip += 1;
+    return { success: true };
+  },
+});
+assert.equal(dbSkipResult.skipped, true);
+assert.equal(dbSkipResult.created, false);
+assert.equal(persistOnDbSkip, 0);
+
 console.log("primary-trade-point-materialization-client: ok");

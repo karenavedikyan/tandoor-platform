@@ -776,6 +776,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const tpDbHydration = useTradePointsActualizationHydration(baseRow.id, profile);
   const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(baseRow, profile, {
     enabled: tpDbHydration.ready,
+    dbActiveTradePointIds: tpDbHydration.dbActiveTradePointIds,
   });
   useClientContactsHydration(baseRow.id);
   useDealerLegalEntitiesHydration(baseRow.id);

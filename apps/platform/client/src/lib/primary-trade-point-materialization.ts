@@ -18,6 +18,7 @@ import {
 } from "@shared/primary-trade-point-materialization";
 import type { ManualTradePoint } from "./client-base-actualization-state.js";
 import { tpDiag } from "./tp-diag-trace.js";
+import { fetchUnifiedActiveTradePointsForDealer, unifiedDbTradePointIds } from "./trade-points-actualization-hydration.js";
 
 export const PRIMARY_TRADE_POINT_MATERIALIZED_EVENT = "primary-trade-point-materialized";
 
@@ -27,11 +28,26 @@ export function countRealActiveTradePoints(row: DealerRow, act: ActualizationSta
   ).length;
 }
 
-export function shouldMaterializePrimaryTradePoint(row: DealerRow, act: ActualizationState): boolean {
+export function shouldMaterializePrimaryTradePoint(
+  row: DealerRow,
+  act: ActualizationState,
+  opts?: { dbActiveCount?: number },
+): boolean {
+  if (opts?.dbActiveCount != null && opts.dbActiveCount > 0) return false;
   if (isManualActualizationDealerId(row.id)) return false;
   const tpId = primaryTradePointMaterializationId(row.id);
   if (act.manuallyCreatedTradePointsById[tpId]) return false;
   return countRealActiveTradePoints(row, act) === 0;
+}
+
+/** Есть ли активные ТТ у дилера в едином DB-источнике. */
+export async function resolveDbActiveTradePointIdsForDealer(
+  dealerId: string,
+  prefetchedIds?: string[],
+): Promise<string[]> {
+  if (prefetchedIds !== undefined) return prefetchedIds;
+  const rows = await fetchUnifiedActiveTradePointsForDealer(dealerId);
+  return unifiedDbTradePointIds(rows);
 }
 
 export function buildManualTradePointRecordForMaterialization(args: {
@@ -72,10 +88,16 @@ export async function materializePrimaryTradePointIfNeeded(args: {
   row: DealerRow;
   profile: ReleaseDemoProfile;
   persist: (mutate: (prev: ActualizationState) => ActualizationState) => Promise<{ success: boolean }>;
+  dbActiveTradePointIds?: string[];
 }): Promise<{ created: boolean; tradePointId: string; skipped: boolean }> {
-  const { row, profile, persist } = args;
+  const { row, profile, persist, dbActiveTradePointIds } = args;
   const tpId = primaryTradePointMaterializationId(row.id);
   tpDiag("mat:fn:enter", { dealerId: row.id, tpId });
+
+  const dbIds = await resolveDbActiveTradePointIdsForDealer(row.id, dbActiveTradePointIds);
+  if (dbIds.length > 0 || dbIds.includes(tpId)) {
+    return { created: false, tradePointId: tpId, skipped: true };
+  }
 
   let outcome: "created" | "skipped" | "failed" = "failed";
   let materializedFields: PrimaryTradePointMaterializationFields | null = null;

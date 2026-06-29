@@ -13,20 +13,31 @@ import { tpDiag } from "@/lib/tp-diag-trace";
 export function usePrimaryTradePointMaterialization(
   row: DealerRow,
   profile: ReleaseDemoProfile,
-  opts?: { enabled?: boolean },
+  opts?: { enabled?: boolean; dbActiveTradePointIds?: string[] },
 ): { materializing: boolean; materialized: boolean } {
   const actx = useClientBaseActualization();
   const [materializing, setMaterializing] = useState(false);
   const [materialized, setMaterialized] = useState(false);
   const attemptedDealerRef = useRef<string | null>(null);
   const hydrationEnabled = opts?.enabled !== false;
+  const dbActiveTradePointIds = opts?.dbActiveTradePointIds ?? [];
+  const dbActiveCount = dbActiveTradePointIds.length;
 
   useEffect(() => {
-    tpDiag("mat:effect", { dealerId: row.id, enabled: hydrationEnabled, actxEnabled: actx.enabled });
+    tpDiag("mat:effect", {
+      dealerId: row.id,
+      enabled: hydrationEnabled,
+      actxEnabled: actx.enabled,
+      dbActiveCount,
+    });
     if (!hydrationEnabled) return;
     if (!actx.enabled || !canActualizeClientBase(profile)) return;
-    const should = shouldMaterializePrimaryTradePoint(row, actx.state);
-    tpDiag("mat:should", { dealerId: row.id, should });
+    if (dbActiveCount > 0) {
+      setMaterialized(true);
+      return;
+    }
+    const should = shouldMaterializePrimaryTradePoint(row, actx.state, { dbActiveCount });
+    tpDiag("mat:should", { dealerId: row.id, should, dbActiveCount });
     if (!should) {
       setMaterialized(true);
       return;
@@ -41,6 +52,7 @@ export function usePrimaryTradePointMaterialization(
       row,
       profile,
       persist: actx.persist,
+      dbActiveTradePointIds,
     })
       .then((result) => {
         if (cancelled) return;
@@ -59,7 +71,7 @@ export function usePrimaryTradePointMaterialization(
     return () => {
       cancelled = true;
     };
-  }, [hydrationEnabled, actx, actx.enabled, actx.state, profile, row]);
+  }, [hydrationEnabled, dbActiveCount, dbActiveTradePointIds, actx, actx.enabled, actx.state, profile, row]);
 
   return { materializing, materialized };
 }

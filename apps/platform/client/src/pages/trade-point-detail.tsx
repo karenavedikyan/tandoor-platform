@@ -32,6 +32,10 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { canActualizeClientBase, canArchiveTradePointDuringActualization } from "@/lib/client-base-actualization-permissions";
 import { CLIENT_BASE_ACTUALIZATION_CLEAN_MODE } from "@/lib/client-base-actualization-config";
 import { resolveActualizationTradePointDetail } from "@/lib/client-base-actualization-data-merge";
+import {
+  findUnifiedTradePointInDbRows,
+  hydrateDealerTradePointsFromDb,
+} from "@/lib/trade-points-actualization-hydration";
 import { TradePointManualActualizationView } from "@/components/trade-point-manual-actualization-view";
 import { displayUserName, useCurrentUser } from "@/hooks/use-current-user";
 import { Textarea } from "@/components/ui/textarea";
@@ -1383,6 +1387,8 @@ export function TradePointDetailPage() {
     tpId: rawPoint || undefined,
   });
   const [pageReady, setPageReady] = useState(false);
+  const [dbFallbackState, setDbFallbackState] = useState<"idle" | "loading" | "done">("idle");
+  const dbFallbackAttemptedRef = useRef(false);
 
   useLayoutEffect(() => {
     const id = requestAnimationFrame(() => setPageReady(true));
@@ -1420,7 +1426,35 @@ export function TradePointDetailPage() {
     };
   }, [rawDealer, rawPoint, dataBump, actx.enabled, actx.state, profile, overridesVersion]);
 
+  const actxResolveMissing = actx.enabled && !result;
+
+  useEffect(() => {
+    if (!pageReady || !overridesReady || !actxResolveMissing) return;
+    if (dbFallbackAttemptedRef.current) return;
+    dbFallbackAttemptedRef.current = true;
+    setDbFallbackState("loading");
+
+    void hydrateDealerTradePointsFromDb({
+      dealerId: rawDealer,
+      profile,
+      persist: actx.persist,
+    })
+      .then(({ rows }) => {
+        if (rows?.length) {
+          const found = findUnifiedTradePointInDbRows(rows, rawDealer, rawPoint);
+          if (found) setDataBump((n) => n + 1);
+        }
+      })
+      .finally(() => {
+        setDbFallbackState("done");
+      });
+  }, [pageReady, overridesReady, actxResolveMissing, rawDealer, rawPoint, profile, actx.persist]);
+
   if (!pageReady || !overridesReady) {
+    return <TradePointDetailSkeleton />;
+  }
+
+  if (actx.enabled && !result && dbFallbackState !== "done") {
     return <TradePointDetailSkeleton />;
   }
 

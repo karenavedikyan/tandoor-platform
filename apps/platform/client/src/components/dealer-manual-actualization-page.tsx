@@ -252,6 +252,7 @@ export function DealerManualActualizationPage(props: {
   const tpDbHydration = useTradePointsActualizationHydration(baseRow.id, profile);
   const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(baseRow, profile, {
     enabled: tpDbHydration.ready,
+    dbActiveTradePointIds: tpDbHydration.dbActiveTradePointIds,
   });
   const overridesVersion = useOverridesRuntimeVersion();
   const actx = useClientBaseActualization();
