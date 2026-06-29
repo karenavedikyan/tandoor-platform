@@ -7,6 +7,7 @@ import {
   fetchUnifiedActiveTradePointsForDealer,
   reconcileUnifiedTradePointsIntoActualizationState,
 } from "@/lib/trade-points-actualization-hydration";
+import { tpDiag } from "@/lib/tp-diag-trace";
 
 /**
  * При открытии карточки клиента подтягивает активные ТТ из единого DB-источника
@@ -24,8 +25,10 @@ export function useTradePointsActualizationHydration(
 
   useEffect(() => {
     const id = dealerId?.trim();
+    tpDiag("hydration:effect", { dealerId: id ?? "", enabled, actxEnabled: actx.enabled });
     if (!enabled || !id || !actx.enabled || !canActualizeClientBase(profile)) {
       setReady(true);
+      tpDiag("hydration:ready", { dealerId: id ?? "", hydrationVersion: 0, skipped: true });
       return;
     }
 
@@ -35,20 +38,38 @@ export function useTradePointsActualizationHydration(
       if (!force && attemptedRef.current === id) return;
       attemptedRef.current = id;
 
+      tpDiag("hydration:fetch:start", { dealerId: id });
       const rows = await fetchUnifiedActiveTradePointsForDealer(id);
+      tpDiag("hydration:fetch:done", { dealerId: id, rows: rows?.length ?? 0 });
       if (cancelled) return;
 
       if (rows && rows.length > 0) {
+        const { changed } = reconcileUnifiedTradePointsIntoActualizationState(
+          actx.state,
+          rows,
+          id,
+          profile,
+        );
+        tpDiag("hydration:reconcile:persist", { dealerId: id, changed });
         const r = await actx.persist((prev) => {
-          const { next, changed } = reconcileUnifiedTradePointsIntoActualizationState(prev, rows, id, profile);
-          return changed ? next : prev;
+          const { next, changed: changedInPersist } = reconcileUnifiedTradePointsIntoActualizationState(
+            prev,
+            rows,
+            id,
+            profile,
+          );
+          return changedInPersist ? next : prev;
         });
         void r;
       }
 
       if (!cancelled) {
         setReady(true);
-        setHydrationVersion((n) => n + 1);
+        setHydrationVersion((n) => {
+          const next = n + 1;
+          tpDiag("hydration:ready", { dealerId: id, hydrationVersion: next });
+          return next;
+        });
       }
     };
 
@@ -57,6 +78,7 @@ export function useTradePointsActualizationHydration(
     const onMaterialized = (e: Event) => {
       const detail = (e as CustomEvent<{ dealerId?: string }>).detail;
       if (detail?.dealerId === id) {
+        tpDiag("hydration:onMaterialized:refetch", { dealerId: id });
         attemptedRef.current = null;
         void run(true);
       }

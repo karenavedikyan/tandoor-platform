@@ -7,6 +7,7 @@ import {
   materializePrimaryTradePointIfNeeded,
   shouldMaterializePrimaryTradePoint,
 } from "@/lib/primary-trade-point-materialization";
+import { tpDiag } from "@/lib/tp-diag-trace";
 
 /** Идемпотентно создаёт основную ТТ в БД, если у клиента нет реальных точек. */
 export function usePrimaryTradePointMaterialization(
@@ -21,9 +22,12 @@ export function usePrimaryTradePointMaterialization(
   const hydrationEnabled = opts?.enabled !== false;
 
   useEffect(() => {
+    tpDiag("mat:effect", { dealerId: row.id, enabled: hydrationEnabled, actxEnabled: actx.enabled });
     if (!hydrationEnabled) return;
     if (!actx.enabled || !canActualizeClientBase(profile)) return;
-    if (!shouldMaterializePrimaryTradePoint(row, actx.state)) {
+    const should = shouldMaterializePrimaryTradePoint(row, actx.state);
+    tpDiag("mat:should", { dealerId: row.id, should });
+    if (!should) {
       setMaterialized(true);
       return;
     }
@@ -32,6 +36,7 @@ export function usePrimaryTradePointMaterialization(
 
     let cancelled = false;
     setMaterializing(true);
+    tpDiag("mat:run:start", { dealerId: row.id });
     void materializePrimaryTradePointIfNeeded({
       row,
       profile,
@@ -39,6 +44,11 @@ export function usePrimaryTradePointMaterialization(
     })
       .then((result) => {
         if (cancelled) return;
+        tpDiag("mat:run:done", {
+          dealerId: row.id,
+          created: result.created,
+          skipped: result.skipped,
+        });
         if (result.created || result.skipped) setMaterialized(true);
         if (!result.created && !result.skipped) attemptedDealerRef.current = null;
       })
