@@ -4,6 +4,7 @@ export type PlacementDistributionStats = {
   totalCapacity: number;
   totalOurs: number;
   totalCompetitors: number;
+  totalLegacyOurs: number;
   remaining: number;
   distributionPercent: number;
   blockCount: number;
@@ -37,10 +38,12 @@ function computeStats(blocks: ShowcaseMatrixEntryDto[]): PlacementDistributionSt
   let totalCapacity = 0;
   let totalOurs = 0;
   let totalCompetitors = 0;
+  let totalLegacyOurs = 0;
   for (const b of blocks) {
     totalCapacity += Math.max(0, b.placementCapacity ?? 0);
     totalOurs += sumOurs(b);
     totalCompetitors += sumCompetitors(b);
+    totalLegacyOurs += Math.max(0, b.placementLegacyOurs ?? 0);
   }
   const remaining = Math.max(0, totalCapacity - totalOurs - totalCompetitors);
   const distributionPercent =
@@ -49,6 +52,7 @@ function computeStats(blocks: ShowcaseMatrixEntryDto[]): PlacementDistributionSt
     totalCapacity,
     totalOurs,
     totalCompetitors,
+    totalLegacyOurs,
     remaining,
     distributionPercent,
     blockCount: blocks.length,

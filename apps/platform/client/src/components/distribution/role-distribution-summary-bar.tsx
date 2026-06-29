@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from "react";
 import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { DistributionRotationTile } from "@/components/distribution-analytics/distribution-rotation-tile";
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import {
@@ -88,6 +89,12 @@ export function RoleDistributionSummaryBar({
         deltaByType={deltaByType}
         deltaTestIdByType={deltaTestIdByType}
       />
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <DistributionRotationTile
+          aggregate={aggregate}
+          testId={`tile-${testIdPrefix}-rotation`}
+        />
+      </div>
     </section>
   );
 }

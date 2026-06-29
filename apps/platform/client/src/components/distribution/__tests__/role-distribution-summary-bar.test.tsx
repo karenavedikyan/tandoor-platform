@@ -100,4 +100,34 @@ describe("RoleDistributionSummaryBar", () => {
     expect(getByTestId("button-trade-points-distribution-period-30").getAttribute("aria-pressed")).toBe("false");
     expect(getByTestId("tile-trade-points-distribution-entrance-delta")).toBeTruthy();
   });
+
+  it("renders rotation tile with count and percent when legacy present", () => {
+    mockSnapshotRange(null);
+    const rotationAggregate: DistributionGroupMetrics = {
+      ...aggregate,
+      totalLegacyOurs: 7,
+      rotationPotentialPercent: 35,
+      byType: {
+        ...aggregate.byType,
+        interior: {
+          ...aggregate.byType.interior,
+          legacyOurs: 7,
+          rotationPotentialPercent: 35,
+        },
+      },
+    };
+    const { getByTestId } = render(
+      <RoleDistributionSummaryBar
+        access="team_lead"
+        aggregate={rotationAggregate}
+        tradePointsCount={4}
+        tradePointIds={["tp-1"]}
+        testIdPrefix="trade-points"
+        showTradePointsCount={false}
+      />,
+    );
+    const tile = getByTestId("tile-trade-points-rotation");
+    expect(tile.textContent).toContain("35%");
+    expect(tile.textContent).toContain("Неактуальные: 7 шт");
+  });
 });
