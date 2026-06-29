@@ -20,17 +20,27 @@ const ROP_OTHER_ID = "33333333-3333-3333-3333-333333333333";
 const MGR_ID = "44444444-4444-4444-4444-444444444444";
 const TEAM_A = "team-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
+const KPI0 = {
+  tp_status_active: 0,
+  tp_status_potential: 0,
+  tp_status_attention: 0,
+  dealer_no_status: 0,
+  avg_distribution: 0,
+} as const;
+
 const MEMBERS: TeamScopeMember[] = [
   {
     user: { id: MGR_ID, name: "Mgr", email: "m@test.ru", role: "manager" },
-    totals: { active_dealers: 54, active_trade_points: 33, trashed_dealers: 0, trashed_trade_points: 0 },
+    totals: { active_dealers: 54, active_trade_points: 33, trashed_dealers: 0, trashed_trade_points: 0, ...KPI0 },
+    active_dealer_ids: ["d1"],
     active_dealer_external_keys: ["client-a"],
     trashed_dealer_external_keys: [],
     active_trade_points: [{ tp_id: "tp-1", dealer_id: "client-a", is_primary: true }],
   },
   {
     user: { id: "55555555-5555-5555-5555-555555555555", name: "Mgr2", email: "m2@test.ru", role: "manager" },
-    totals: { active_dealers: 10, active_trade_points: 5, trashed_dealers: 2, trashed_trade_points: 1 },
+    totals: { active_dealers: 10, active_trade_points: 5, trashed_dealers: 2, trashed_trade_points: 1, ...KPI0 },
+    active_dealer_ids: [],
     active_dealer_external_keys: ["client-b"],
     trashed_dealer_external_keys: ["client-t1"],
     active_trade_points: [],
@@ -74,6 +84,9 @@ function mockPool(): PoolLike {
       }
       if (s.includes("client_assignments WHERE responsible_user_id")) {
         return { rows: [{ client_code: "C001" }] };
+      }
+      if (s.includes("FROM dealers d") && s.includes("has_problem")) {
+        return { rows: [{ status: "активный", has_problem: false, distribution: 0 }] };
       }
       if (s.includes("FROM dealers d") && s.includes("dealer_overrides")) {
         return { rows: [{ id: "d1", external_key: "client-a", status: "active", trashed_by: null }] };

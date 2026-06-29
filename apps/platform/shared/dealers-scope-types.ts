@@ -7,6 +7,20 @@ import type { DbScopeTotals } from "./db-scope-formula.js";
 
 export type ScopeTotals = DbScopeTotals;
 
+export type ScopeKpiTotals = Pick<
+  ScopeTotals,
+  | "tp_status_active"
+  | "tp_status_potential"
+  | "tp_status_attention"
+  | "dealer_no_status"
+  | "avg_distribution"
+>;
+
+export type ScopeCountTotals = Pick<
+  ScopeTotals,
+  "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points"
+>;
+
 export type ScopeTradePoint = {
   tp_id: string;
   dealer_id: string;
@@ -22,7 +36,8 @@ export type TeamScopeMemberUser = {
 
 export type TeamScopeMember = {
   user: TeamScopeMemberUser;
-  totals: Pick<ScopeTotals, "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points">;
+  totals: ScopeCountTotals & ScopeKpiTotals;
+  active_dealer_ids: string[];
   active_dealer_external_keys: string[];
   trashed_dealer_external_keys: string[];
   active_trade_points: ScopeTradePoint[];
@@ -38,13 +53,13 @@ export type TeamScopePayload = {
   success: true;
   team: TeamScopeTeamInfo;
   members: TeamScopeMember[];
-  team_totals: Pick<ScopeTotals, "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points">;
+  team_totals: ScopeCountTotals & ScopeKpiTotals;
 };
 
 export type OrgScopeTeamBlock = {
   team: { id: string; name: string; rop: { id: string; name: string; email: string } | null };
   members: TeamScopeMember[];
-  team_totals: Pick<ScopeTotals, "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points">;
+  team_totals: ScopeCountTotals & ScopeKpiTotals;
 };
 
 export type OrgScopePayload = {
@@ -54,9 +69,9 @@ export type OrgScopePayload = {
   orphan: {
     label: string;
     members: TeamScopeMember[];
-    totals: Pick<ScopeTotals, "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points">;
+    totals: ScopeCountTotals & ScopeKpiTotals;
   };
-  org_totals: Pick<ScopeTotals, "active_dealers" | "active_trade_points" | "trashed_dealers" | "trashed_trade_points">;
+  org_totals: ScopeCountTotals & ScopeKpiTotals;
 };
 
 export type MemberTotals = TeamScopeMember["totals"];

@@ -13,6 +13,11 @@ export type MyDealerScopeTotals = {
   trashed_trade_points: number;
   admin_purge_queue_dealers?: number;
   admin_purge_queue_trade_points?: number;
+  tp_status_active: number;
+  tp_status_potential: number;
+  tp_status_attention: number;
+  dealer_no_status: number;
+  avg_distribution: number;
 };
 
 export type MyDealerScopeExplanation = {

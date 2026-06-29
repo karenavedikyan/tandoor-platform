@@ -42,11 +42,17 @@ const EMPTY_SCOPE: Omit<MyScopeFromDB, "loading" | "ready" | "error" | "forbidde
     active_trade_points: 0,
     trashed_dealers: 0,
     trashed_trade_points: 0,
+    tp_status_active: 0,
+    tp_status_potential: 0,
+    tp_status_attention: 0,
+    dealer_no_status: 0,
+    avg_distribution: 0,
   },
   active_dealer_ids: [],
   active_dealer_external_keys: [],
   trashed_dealer_ids: [],
   trashed_dealer_external_keys: [],
+  active_trade_points: [],
   scope_explanation: {
     role: "",
     team_ids: [],
@@ -146,3 +152,28 @@ export function sidebarCountsFromDbScope(scope: MyScopeFromDB): {
 }
 
 export { myDealerScopeQueryKey as MY_DEALER_SCOPE_QUERY_KEY } from "@/lib/dealers-my-scope-api";
+
+export type KpiCountsFromScope = {
+  total: number;
+  active: number;
+  potential: number;
+  attention: number;
+  avgDist: number;
+};
+
+function kpiFromScopeTotals(totals: MyScopeFromDB["totals"]): KpiCountsFromScope {
+  return {
+    // KPI «Всего клиентов» = active_dealers scope (как бейдж сайдбара).
+    total: totals.active_dealers,
+    active: totals.tp_status_active,
+    potential: totals.tp_status_potential,
+    attention: totals.tp_status_attention,
+    avgDist: totals.avg_distribution,
+  };
+}
+
+/** KPI-карточки из серверного scope (null пока грузится). */
+export function kpiCountsFromDbScope(scope: MyScopeFromDB): KpiCountsFromScope | null {
+  if (!scope.ready) return null;
+  return kpiFromScopeTotals(scope.totals);
+}

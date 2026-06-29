@@ -4,6 +4,13 @@
  */
 
 import type { UserRole } from "./auth.js";
+import {
+  computeDealerKpiTotalsFromRows,
+  EMPTY_KPI_SCOPE_TOTALS,
+  finalizeKpiScopeTotals,
+  type KpiScopeTotalsFields,
+  type KpiScopeTotalsInternal,
+} from "./kpi-scope-totals.js";
 import type { PoolLike } from "./responsibility-resolver.js";
 import { scheduleScopeCodesMetaShadowDiff } from "./effective-scope-shadow.js";
 import {
@@ -30,7 +37,7 @@ export type DbScopeTotals = {
   trashed_trade_points: number;
   admin_purge_queue_dealers?: number;
   admin_purge_queue_trade_points?: number;
-};
+} & KpiScopeTotalsFields;
 
 export type DbScopeResult = {
   totals: DbScopeTotals;
@@ -120,6 +127,50 @@ function buildTradePointTrashByFilter(
     return { sql: "AND tpo.trashed_by = ANY($2::uuid[])", params: [Array.from(teamMemberIds)] };
   }
   return { sql: "", params: [] };
+}
+
+function baseScopeTotals(
+  activeDealers: number,
+  activeTp: number,
+  trashedDealers: number,
+  trashedTp: number,
+  kpi: KpiScopeTotalsInternal = EMPTY_KPI_SCOPE_TOTALS,
+): DbScopeTotals {
+  return {
+    active_dealers: activeDealers,
+    active_trade_points: activeTp,
+    trashed_dealers: trashedDealers,
+    trashed_trade_points: trashedTp,
+    ...finalizeKpiScopeTotals(kpi),
+  };
+}
+
+/**
+ * KPI breakdown по активным дилерам scope.
+ * Статус — `dealers.status`; has_problem — nonTarget | is_closed.
+ * distribution в БД пока не хранится → 0 (расхождение с blob ожидаемо).
+ */
+export async function computeDealerKpiTotalsForActiveDealers(
+  pool: PoolLike,
+  activeDealerIds: readonly string[],
+): Promise<KpiScopeTotalsInternal> {
+  if (activeDealerIds.length === 0) return { ...EMPTY_KPI_SCOPE_TOTALS };
+
+  const q = await pool.query<{
+    status: string | null;
+    has_problem: boolean;
+    distribution: number | null;
+  }>(
+    `SELECT
+       COALESCE(NULLIF(TRIM(d.status), ''), 'активный') AS status,
+       (d.client_type = 'nonTarget' OR d.is_closed = TRUE) AS has_problem,
+       0::int AS distribution
+     FROM dealers d
+     WHERE d.id = ANY($1::uuid[])`,
+    [activeDealerIds],
+  );
+
+  return computeDealerKpiTotalsFromRows(q.rows);
 }
 
 export async function computeAdminPurgeQueueCounts(
@@ -348,14 +399,10 @@ export async function computeDbScopeForUser(
     );
     const activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
     const trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
+    const kpiTotals = await computeDealerKpiTotalsForActiveDealers(pool, activeIds);
 
     return {
-      totals: attachAdminTotals({
-        active_dealers: activeIds.length,
-        active_trade_points: activeTp,
-        trashed_dealers: trashedIds.length,
-        trashed_trade_points: trashedTp,
-      }),
+      totals: attachAdminTotals(baseScopeTotals(activeIds.length, activeTp, trashedIds.length, trashedTp, kpiTotals)),
       active_dealer_ids: activeIds,
       active_dealer_external_keys: activeKeys,
       trashed_dealer_ids: trashedIds,
@@ -374,12 +421,7 @@ export async function computeDbScopeForUser(
 
   if (meta.allCodes.length === 0) {
     return {
-      totals: attachAdminTotals({
-        active_dealers: 0,
-        active_trade_points: 0,
-        trashed_dealers: 0,
-        trashed_trade_points: 0,
-      }),
+      totals: attachAdminTotals(baseScopeTotals(0, 0, 0, 0)),
       active_dealer_ids: [],
       active_dealer_external_keys: [],
       trashed_dealer_ids: [],
@@ -456,13 +498,10 @@ export async function computeDbScopeForUser(
     trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
   }
 
+  const kpiTotals = await computeDealerKpiTotalsForActiveDealers(pool, activeIds);
+
   return {
-    totals: attachAdminTotals({
-      active_dealers: activeIds.length,
-      active_trade_points: activeTp,
-      trashed_dealers: trashedIds.length,
-      trashed_trade_points: trashedTp,
-    }),
+    totals: attachAdminTotals(baseScopeTotals(activeIds.length, activeTp, trashedIds.length, trashedTp, kpiTotals)),
     active_dealer_ids: activeIds,
     active_dealer_external_keys: activeKeys,
     trashed_dealer_ids: trashedIds,

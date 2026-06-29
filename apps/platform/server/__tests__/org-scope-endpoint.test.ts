@@ -16,23 +16,33 @@ const TEAM_A = "team-a";
 const TEAM_B = "team-b";
 const TEAM_C = "team-c";
 
+const KPI0 = {
+  tp_status_active: 0,
+  tp_status_potential: 0,
+  tp_status_attention: 0,
+  dealer_no_status: 0,
+  avg_distribution: 0,
+} as const;
+
 // org_totals invariant
 {
   const teamTotals: TeamTotals[] = [
-    { active_dealers: 100, active_trade_points: 269, trashed_dealers: 4, trashed_trade_points: 0 },
-    { active_dealers: 80, active_trade_points: 500, trashed_dealers: 3, trashed_trade_points: 0 },
-    { active_dealers: 60, active_trade_points: 627, trashed_dealers: 5, trashed_trade_points: 0 },
+    { active_dealers: 100, active_trade_points: 269, trashed_dealers: 4, trashed_trade_points: 0, ...KPI0 },
+    { active_dealers: 80, active_trade_points: 500, trashed_dealers: 3, trashed_trade_points: 0, ...KPI0 },
+    { active_dealers: 60, active_trade_points: 627, trashed_dealers: 5, trashed_trade_points: 0, ...KPI0 },
   ];
   const orphanTotals: TeamTotals = {
     active_dealers: 2,
     active_trade_points: 0,
     trashed_dealers: 0,
     trashed_trade_points: 0,
+    ...KPI0,
   };
   const members: TeamScopeMember[] = [
     {
       user: { id: "m1", name: "M1", email: "", role: "manager" },
       totals: teamTotals[0]!,
+      active_dealer_ids: [],
       active_dealer_external_keys: Array.from({ length: 100 }, (_, i) => `a-${i}`),
       trashed_dealer_external_keys: [],
       active_trade_points: Array.from({ length: 269 }, (_, i) => ({
@@ -44,6 +54,7 @@ const TEAM_C = "team-c";
     {
       user: { id: "m2", name: "M2", email: "", role: "manager" },
       totals: teamTotals[1]!,
+      active_dealer_ids: [],
       active_dealer_external_keys: Array.from({ length: 80 }, (_, i) => `b-${i}`),
       trashed_dealer_external_keys: [],
       active_trade_points: Array.from({ length: 500 }, (_, i) => ({
@@ -55,6 +66,7 @@ const TEAM_C = "team-c";
     {
       user: { id: "orph", name: "O", email: "", role: "manager" },
       totals: orphanTotals,
+      active_dealer_ids: [],
       active_dealer_external_keys: ["orph-1", "orph-2"],
       trashed_dealer_external_keys: [],
       active_trade_points: [],
@@ -84,6 +96,9 @@ function mockPool(): PoolLike {
         return { rows: [] };
       }
       if (s.includes("dealer_overrides d_ov") && s.includes("NOT EXISTS")) {
+        return { rows: [] };
+      }
+      if (s.includes("FROM dealers d") && s.includes("has_problem")) {
         return { rows: [] };
       }
       if (s.includes("COALESCE((SELECT name FROM teams")) {

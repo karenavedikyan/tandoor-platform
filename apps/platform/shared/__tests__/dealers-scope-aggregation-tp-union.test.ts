@@ -10,13 +10,22 @@ import {
 } from "../dealers-scope-aggregation.js";
 import type { TeamScopeMember } from "../dealers-scope-types.js";
 
+const KPI0 = {
+  tp_status_active: 0,
+  tp_status_potential: 0,
+  tp_status_attention: 0,
+  dealer_no_status: 0,
+  avg_distribution: 0,
+} as const;
+
 function tp(id: string) {
   return { tp_id: id, dealer_id: "client-x", is_primary: false };
 }
 
 const m1: TeamScopeMember = {
   user: { id: "m1", name: "M1", email: "", role: "manager" },
-  totals: { active_dealers: 3, active_trade_points: 3, trashed_dealers: 0, trashed_trade_points: 0 },
+  totals: { active_dealers: 3, active_trade_points: 3, trashed_dealers: 0, trashed_trade_points: 0, ...KPI0 },
+  active_dealer_ids: [],
   active_dealer_external_keys: ["c1", "c2", "c3"],
   trashed_dealer_external_keys: [],
   active_trade_points: [tp("tp1"), tp("tp2"), tp("tp3")],
@@ -24,7 +33,8 @@ const m1: TeamScopeMember = {
 
 const m2: TeamScopeMember = {
   user: { id: "m2", name: "M2", email: "", role: "manager" },
-  totals: { active_dealers: 2, active_trade_points: 2, trashed_dealers: 0, trashed_trade_points: 0 },
+  totals: { active_dealers: 2, active_trade_points: 2, trashed_dealers: 0, trashed_trade_points: 0, ...KPI0 },
+  active_dealer_ids: [],
   active_dealer_external_keys: ["c4", "c5"],
   trashed_dealer_external_keys: [],
   active_trade_points: [tp("tp4"), tp("tp5")],
@@ -32,7 +42,8 @@ const m2: TeamScopeMember = {
 
 const rm: TeamScopeMember = {
   user: { id: "rm1", name: "RM", email: "", role: "regional_manager" },
-  totals: { active_dealers: 5, active_trade_points: 5, trashed_dealers: 0, trashed_trade_points: 0 },
+  totals: { active_dealers: 5, active_trade_points: 5, trashed_dealers: 0, trashed_trade_points: 0, ...KPI0 },
+  active_dealer_ids: [],
   active_dealer_external_keys: ["c1", "c2", "c3", "c4", "c5"],
   trashed_dealer_external_keys: [],
   active_trade_points: [tp("tp1"), tp("tp2"), tp("tp3"), tp("tp4"), tp("tp5")],
@@ -51,6 +62,7 @@ const orphanEmpty: TeamScopeMember["totals"] = {
   active_trade_points: 0,
   trashed_dealers: 0,
   trashed_trade_points: 0,
+  ...KPI0,
 };
 
 const orgTotals = aggregateOrgTotals([teamTotals], orphanEmpty, members);

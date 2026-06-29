@@ -76,9 +76,13 @@ import type { OrgSnapshot } from "@/lib/use-org-snapshot";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
-import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
-import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
-import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
+import { useMyScopeFromDB, sidebarCountsFromDbScope, kpiCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
+import { useMyTeamScope, sidebarCountsFromTeamScope, kpiCountsFromTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope, sidebarCountsFromOrgScope, kpiCountsFromOrgScope } from "@/hooks/use-org-scope";
+import {
+  getServerKpiAggregatesFlagSync,
+  shouldUseServerKpiAggregates,
+} from "@/lib/server-kpi-aggregates-flag";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
@@ -1490,6 +1494,10 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
+  const [useServerKpiAggregates, setUseServerKpiAggregates] = useState(() => getServerKpiAggregatesFlagSync());
+  useEffect(() => {
+    void shouldUseServerKpiAggregates().then(setUseServerKpiAggregates);
+  }, []);
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
@@ -2212,7 +2220,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     [taskSelectFlatTradePointsAll],
   );
 
-  const kpis = useMemo(() => {
+  const clientKpis = useMemo(() => {
     const total = pickerFiltered.length;
     const active = pickerFiltered.filter((r) => r.status === "активный").length;
     const potential = pickerFiltered.filter((r) => r.status === "потенциальный").length;
@@ -2221,6 +2229,29 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       total > 0 ? Math.round(pickerFiltered.reduce((a, r) => a + r.distribution, 0) / total) : 0;
     return { total, active, potential, attention, avgDist };
   }, [pickerFiltered]);
+
+  const serverKpiFromScope = useMemo(() => {
+    if (!useReal || !useServerKpiAggregates) return null;
+    if (viewingOtherUserScope) return kpiCountsFromDbScope(targetScopeQ);
+    if (me?.role === "director") return kpiCountsFromOrgScope(orgScopeQ);
+    if (me?.role === "rop") return kpiCountsFromTeamScope(teamScopeQ);
+    if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
+      return kpiCountsFromDbScope(selfDbScopeQ);
+    }
+    return null;
+  }, [
+    useReal,
+    useServerKpiAggregates,
+    viewingOtherUserScope,
+    targetScopeQ,
+    me?.role,
+    orgScopeQ,
+    teamScopeQ,
+    selfDbScopeQ,
+  ]);
+
+  /** KPI-карточки: при флаге — серверные totals scope (как сайдбар); иначе клиентский pickerFiltered. */
+  const kpis = serverKpiFromScope ?? clientKpis;
 
   const selectQuickAndScrollToList = useCallback((q: QuickFilter) => {
     setQuick(q);

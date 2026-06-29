@@ -3,6 +3,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import type { KpiCountsFromScope } from "@/hooks/use-my-scope-from-db";
 import {
   fetchOrgScope,
   orgScopeQueryKey,
@@ -42,6 +43,18 @@ export function useOrgScope(options?: UseOrgScopeOptions): OrgScopeFromDB {
     isLoading: q.isLoading,
     isError: q.isError,
     forbidden,
+  };
+}
+
+export function kpiCountsFromOrgScope(scope: OrgScopeFromDB): KpiCountsFromScope | null {
+  if (!scope.ready || !scope.data) return null;
+  const t = scope.data.org_totals;
+  return {
+    total: t.active_dealers,
+    active: t.tp_status_active,
+    potential: t.tp_status_potential,
+    attention: t.tp_status_attention,
+    avgDist: t.avg_distribution,
   };
 }
 
