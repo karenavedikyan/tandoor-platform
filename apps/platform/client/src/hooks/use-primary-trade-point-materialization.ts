@@ -34,7 +34,6 @@ export function usePrimaryTradePointMaterialization(
     setMaterializing(true);
     void materializePrimaryTradePointIfNeeded({
       row,
-      act: actx.state,
       profile,
       persist: actx.persist,
     })

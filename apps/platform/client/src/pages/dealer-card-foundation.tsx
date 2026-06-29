@@ -36,6 +36,7 @@ import { ClientCategoryBadge } from "@/components/client-category-badge";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useTradePointsActualizationHydration } from "@/hooks/use-trade-points-actualization-hydration";
+import { usePrimaryTradePointMaterialization } from "@/hooks/use-primary-trade-point-materialization";
 import { useDealerUnloadingOrder, useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
   getDealerManagerDisplay,
@@ -771,7 +772,10 @@ function DealerSectionNav({ active }: { active: SectionId }) {
 function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
   useDealerTpOverridesHydration({ dealerId: baseRow.id });
-  useTradePointsActualizationHydration(baseRow.id, profile);
+  const tpDbHydration = useTradePointsActualizationHydration(baseRow.id, profile);
+  const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(baseRow, profile, {
+    enabled: tpDbHydration.ready,
+  });
   useClientContactsHydration(baseRow.id);
   useDealerLegalEntitiesHydration(baseRow.id);
   useClientCommentsHydration(baseRow.id);
@@ -1868,6 +1872,7 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               sectionDomId={SECTION_DOM_IDS.points}
               profile={profile}
               showcaseState={showcaseStorage}
+              primaryTpMaterializing={primaryTpMaterializing}
             />
 
             {competitorActivityRows.length > 0 || canEditCardComments || isManualDealerRow ? (

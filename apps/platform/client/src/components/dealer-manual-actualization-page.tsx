@@ -250,7 +250,9 @@ export function DealerManualActualizationPage(props: {
   const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet } = props;
   useDealerTpOverridesHydration({ dealerId: baseRow.id });
   const tpDbHydration = useTradePointsActualizationHydration(baseRow.id, profile);
-  usePrimaryTradePointMaterialization(baseRow, profile, { enabled: tpDbHydration.ready });
+  const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(baseRow, profile, {
+    enabled: tpDbHydration.ready,
+  });
   const overridesVersion = useOverridesRuntimeVersion();
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
@@ -825,7 +827,12 @@ export function DealerManualActualizationPage(props: {
               Требуют заполнения витрины: <span className="font-semibold text-foreground">{needShowcase}</span>
             </p>
             {tps.length === 0 ? <p className="text-muted-foreground">Торговые точки не добавлены</p> : null}
-            <DealerTradePointsSection row={row} profile={profile} sectionDomId="dealer-section-points" />
+            <DealerTradePointsSection
+              row={row}
+              profile={profile}
+              sectionDomId="dealer-section-points"
+              primaryTpMaterializing={primaryTpMaterializing}
+            />
           </AccordionContent>
         </AccordionItem>
 

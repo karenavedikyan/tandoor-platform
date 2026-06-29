@@ -3,10 +3,11 @@
  */
 import assert from "node:assert/strict";
 import type { DealerRow } from "../dealer-base-mock-data.js";
-import { createEmptyActualizationState } from "../client-base-actualization-state.js";
+import { createEmptyActualizationState, mergeActualizationState } from "../client-base-actualization-state.js";
 import {
   buildManualTradePointRecordForMaterialization,
   countRealActiveTradePoints,
+  materializePrimaryTradePointIfNeeded,
   shouldMaterializePrimaryTradePoint,
 } from "../primary-trade-point-materialization.js";
 import {
@@ -90,5 +91,28 @@ const rec2 = buildManualTradePointRecordForMaterialization({
 assert.equal(rec2.id, tpId);
 assert.equal(rec2.internalCode, rec.internalCode);
 assert.equal(rec2.createdAt, rec.createdAt);
+
+// После гидрации (запись в manuallyCreatedTradePointsById) повторная материализация не нужна
+assert.equal(shouldMaterializePrimaryTradePoint(dealer, actWithTp), false);
+
+// merge не теряет гидрированную точку при последующей мутации материализации
+const hydratedOnly = mergeActualizationState(createEmptyActualizationState(), {
+  manuallyCreatedTradePointsById: { [tpId]: rec },
+});
+let persistCalls = 0;
+const persistResult = await materializePrimaryTradePointIfNeeded({
+  row: dealer,
+  profile,
+  persist: async (updater) => {
+    persistCalls += 1;
+    const next = updater(hydratedOnly);
+    const stillHasTp = Boolean(next.manuallyCreatedTradePointsById[tpId]);
+    assert.equal(stillHasTp, true, "гидрированная точка не теряется при persist материализации");
+    return { success: true };
+  },
+});
+assert.equal(persistResult.skipped, true);
+assert.equal(persistResult.created, false);
+assert.equal(persistCalls, 1);
 
 console.log("primary-trade-point-materialization-client: ok");

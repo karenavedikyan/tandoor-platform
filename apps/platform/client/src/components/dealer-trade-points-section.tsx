@@ -38,7 +38,6 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { usePrimaryTradePointMaterialization } from "@/hooks/use-primary-trade-point-materialization";
 import { materializePrimaryTradePointIfNeeded } from "@/lib/primary-trade-point-materialization";
 import {
   generateStableManualTradePointId,
@@ -85,6 +84,8 @@ type Props = {
   profile: ReleaseDemoProfile;
   readOnly?: boolean;
   showcaseState?: ShowcaseStorageV1Dto;
+  /** Флаг материализации основной ТТ с уровня страницы (после гидрации). */
+  primaryTpMaterializing?: boolean;
 };
 
 function isFilled(v: string | undefined): boolean {
@@ -192,7 +193,13 @@ function LocalSuggestInput(props: {
   );
 }
 
-export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseState }: Props) {
+export function DealerTradePointsSection({
+  row,
+  sectionDomId,
+  profile,
+  showcaseState,
+  primaryTpMaterializing = false,
+}: Props) {
   const [, setLocation] = useLocation();
   const emptyShowcase: ShowcaseStorageV1Dto = useMemo(
     () => ({ overrides: {}, taskUpdates: {}, historyByDealer: {}, recommendationTaskEntries: {} }),
@@ -201,7 +208,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
   const resolvedShowcase = showcaseState ?? emptyShowcase;
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
-  const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(row, profile);
   const hideSyntheticTpChrome = actx.enabled && CLIENT_BASE_ACTUALIZATION_CLEAN_MODE;
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
@@ -513,7 +519,6 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
       if (!useAct) return null;
       const result = await materializePrimaryTradePointIfNeeded({
         row,
-        act: actx.state,
         profile,
         persist: actx.persist,
       });

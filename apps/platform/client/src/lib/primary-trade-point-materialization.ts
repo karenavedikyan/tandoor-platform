@@ -28,6 +28,8 @@ export function countRealActiveTradePoints(row: DealerRow, act: ActualizationSta
 
 export function shouldMaterializePrimaryTradePoint(row: DealerRow, act: ActualizationState): boolean {
   if (isManualActualizationDealerId(row.id)) return false;
+  const tpId = primaryTradePointMaterializationId(row.id);
+  if (act.manuallyCreatedTradePointsById[tpId]) return false;
   return countRealActiveTradePoints(row, act) === 0;
 }
 
@@ -67,42 +69,50 @@ export function buildManualTradePointRecordForMaterialization(args: {
 
 export async function materializePrimaryTradePointIfNeeded(args: {
   row: DealerRow;
-  act: ActualizationState;
   profile: ReleaseDemoProfile;
   persist: (mutate: (prev: ActualizationState) => ActualizationState) => Promise<{ success: boolean }>;
 }): Promise<{ created: boolean; tradePointId: string; skipped: boolean }> {
-  const { row, act, profile, persist } = args;
+  const { row, profile, persist } = args;
   const tpId = primaryTradePointMaterializationId(row.id);
 
-  if (!shouldMaterializePrimaryTradePoint(row, act)) {
-    return { created: false, tradePointId: tpId, skipped: true };
-  }
+  let outcome: "created" | "skipped" | "failed" = "failed";
+  let materializedFields: PrimaryTradePointMaterializationFields | null = null;
 
-  if (act.manuallyCreatedTradePointsById[tpId]) {
-    return { created: false, tradePointId: tpId, skipped: true };
-  }
+  const r = await persist((prev) => {
+    if (!shouldMaterializePrimaryTradePoint(row, prev)) {
+      outcome = "skipped";
+      return prev;
+    }
+    if (prev.manuallyCreatedTradePointsById[tpId]) {
+      outcome = "skipped";
+      return prev;
+    }
 
-  const fields = buildPrimaryTradePointMaterializationFields(row);
-  const rec = buildManualTradePointRecordForMaterialization({
-    dealerId: row.id,
-    fields,
-    act,
-    profile,
-  });
-
-  const r = await persist((prev) =>
-    mergeActualizationState(prev, {
+    const fields = buildPrimaryTradePointMaterializationFields(row);
+    const rec = buildManualTradePointRecordForMaterialization({
+      dealerId: row.id,
+      fields,
+      act: prev,
+      profile,
+    });
+    materializedFields = fields;
+    outcome = "created";
+    return mergeActualizationState(prev, {
       manuallyCreatedTradePointsById: {
         ...prev.manuallyCreatedTradePointsById,
         [tpId]: rec,
       },
-    }),
-  );
+    });
+  });
 
-  if (!r.success) {
+  if (!r.success || outcome === "failed") {
     return { created: false, tradePointId: tpId, skipped: false };
   }
+  if (outcome === "skipped") {
+    return { created: false, tradePointId: tpId, skipped: true };
+  }
 
+  const fields = materializedFields!;
   try {
     const tpFields = mapActualizationTpFieldsToOverrides({
       name: fields.name,
