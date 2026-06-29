@@ -1,6 +1,6 @@
 /**
  * Временная трассировка блока «Торговые точки» (диагностика на мобильном).
- * Включение: ?tpdiag=1 в URL или localStorage tp-diag=1.
+ * Включение: tpdiag=1 в любом месте URL или localStorage tp-diag=1.
  */
 
 export const TP_DIAG_EVENT = "tp-diag";
@@ -23,21 +23,70 @@ function ensureOrigin(): number {
   return originMs;
 }
 
-/** Включена ли диагностика (URL ?tpdiag=1 или localStorage). */
+function readLocationHref(w: Window): string {
+  try {
+    return w.location?.href ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readQueryParamFromSearch(w: Window, key: string): string | null {
+  try {
+    return new URLSearchParams(w.location?.search ?? "").get(key);
+  } catch {
+    return null;
+  }
+}
+
+function readQueryParamFromHash(w: Window, key: string): string | null {
+  try {
+    const h = w.location?.hash ?? "";
+    const qi = h.indexOf("?");
+    if (qi < 0) return null;
+    return new URLSearchParams(h.slice(qi + 1)).get(key);
+  } catch {
+    return null;
+  }
+}
+
+function urlHasTpDiagFlag(w: Window, value: "0" | "1"): boolean {
+  const href = readLocationHref(w);
+  if (href.includes(`tpdiag=${value}`)) return true;
+  if (readQueryParamFromSearch(w, "tpdiag") === value) return true;
+  if (readQueryParamFromHash(w, "tpdiag") === value) return true;
+  return false;
+}
+
+/** Включена ли диагностика (URL tpdiag=1 в любом месте или localStorage). */
 export function isTpDiagEnabled(): boolean {
   const w = typeof globalThis !== "undefined" ? globalThis.window : undefined;
   if (!w) return false;
+
+  if (urlHasTpDiagFlag(w, "0")) {
+    try {
+      w.localStorage.removeItem(TP_DIAG_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
   try {
     if (w.localStorage.getItem(TP_DIAG_STORAGE_KEY) === "1") return true;
   } catch {
     /* ignore */
   }
-  try {
-    const q = new URLSearchParams(w.location?.search ?? "");
-    if (q.get("tpdiag") === "1") return true;
-  } catch {
-    /* ignore */
+
+  if (urlHasTpDiagFlag(w, "1")) {
+    try {
+      w.localStorage.setItem(TP_DIAG_STORAGE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    return true;
   }
+
   return false;
 }
 
