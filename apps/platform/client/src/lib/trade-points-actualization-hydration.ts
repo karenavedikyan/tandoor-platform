@@ -9,6 +9,7 @@ import {
   type ActualizationState,
 } from "./client-base-actualization-state.js";
 import { nextManualTradePointInternalCode } from "./client-base-actualization-stable-ids.js";
+import { normalizeTradePointId } from "./dealer-base-mock-data.js";
 import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import { userLabelFromProfile } from "./showcase-distribution-data.js";
 
@@ -93,4 +94,41 @@ export function reconcileUnifiedTradePointsIntoActualizationState(
     }),
     changed: true,
   };
+}
+
+export function unifiedDbTradePointIds(rows: UnifiedActiveTradePointDetail[] | null | undefined): string[] {
+  if (!rows?.length) return [];
+  return rows.map((r) => r.tpId);
+}
+
+/** Найти точку в ответе единого DB-источника по id маршрута. */
+export function findUnifiedTradePointInDbRows(
+  dbRows: UnifiedActiveTradePointDetail[],
+  dealerId: string,
+  rawPointId: string,
+): UnifiedActiveTradePointDetail | undefined {
+  const pid = rawPointId.trim();
+  if (!pid) return undefined;
+  const normalized = normalizeTradePointId(dealerId, pid);
+  return dbRows.find((r) => r.tpId === pid || r.tpId === normalized);
+}
+
+/** Реконсиляция активных ТТ дилера из БД в actualization-store (как в хуке гидрации). */
+export async function hydrateDealerTradePointsFromDb(args: {
+  dealerId: string;
+  profile: ReleaseDemoProfile;
+  persist: (mutate: (prev: ActualizationState) => ActualizationState) => Promise<{ success: boolean }>;
+}): Promise<{ rows: UnifiedActiveTradePointDetail[] | null; changed: boolean }> {
+  const id = args.dealerId.trim();
+  if (!id) return { rows: null, changed: false };
+  const rows = await fetchUnifiedActiveTradePointsForDealer(id);
+  if (!rows || rows.length === 0) return { rows, changed: false };
+
+  let changed = false;
+  await args.persist((prev) => {
+    const r = reconcileUnifiedTradePointsIntoActualizationState(prev, rows, id, args.profile);
+    changed = r.changed;
+    return r.changed ? r.next : prev;
+  });
+  return { rows, changed };
 }

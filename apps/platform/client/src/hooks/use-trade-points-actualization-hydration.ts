@@ -6,6 +6,7 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   fetchUnifiedActiveTradePointsForDealer,
   reconcileUnifiedTradePointsIntoActualizationState,
+  unifiedDbTradePointIds,
 } from "@/lib/trade-points-actualization-hydration";
 import { tpDiag } from "@/lib/tp-diag-trace";
 
@@ -17,10 +18,11 @@ export function useTradePointsActualizationHydration(
   dealerId: string | undefined,
   profile: ReleaseDemoProfile,
   enabled = true,
-): { ready: boolean; hydrationVersion: number } {
+): { ready: boolean; hydrationVersion: number; dbActiveTradePointIds: string[] } {
   const actx = useClientBaseActualization();
   const [hydrationVersion, setHydrationVersion] = useState(0);
   const [ready, setReady] = useState(false);
+  const [dbActiveTradePointIds, setDbActiveTradePointIds] = useState<string[]>([]);
   const attemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function useTradePointsActualizationHydration(
     tpDiag("hydration:effect", { dealerId: id ?? "", enabled, actxEnabled: actx.enabled });
     if (!enabled || !id || !actx.enabled || !canActualizeClientBase(profile)) {
       setReady(true);
+      setDbActiveTradePointIds([]);
       tpDiag("hydration:ready", { dealerId: id ?? "", hydrationVersion: 0, skipped: true });
       return;
     }
@@ -42,6 +45,9 @@ export function useTradePointsActualizationHydration(
       const rows = await fetchUnifiedActiveTradePointsForDealer(id);
       tpDiag("hydration:fetch:done", { dealerId: id, rows: rows?.length ?? 0 });
       if (cancelled) return;
+
+      const ids = unifiedDbTradePointIds(rows);
+      setDbActiveTradePointIds(ids);
 
       if (rows && rows.length > 0) {
         const { changed } = reconcileUnifiedTradePointsIntoActualizationState(
@@ -91,5 +97,5 @@ export function useTradePointsActualizationHydration(
     };
   }, [enabled, dealerId, profile, actx.enabled, actx.persist]);
 
-  return { ready, hydrationVersion };
+  return { ready, hydrationVersion, dbActiveTradePointIds };
 }
