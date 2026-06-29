@@ -21,11 +21,31 @@ function metrics(partial: {
 }): DistributionGroupMetrics {
   return {
     averagePercent: partial.average ?? null,
+    rotationPotentialPercent: null,
+    totalLegacyOurs: 0,
     tradePointsCount: partial.count ?? 0,
     byType: {
-      entrance: { capacity: 10, tandoorOnShelf: 5, percent: partial.entrance ?? null },
-      interior: { capacity: 10, tandoorOnShelf: 5, percent: partial.interior ?? null },
-      hardware: { capacity: 10, tandoorOnShelf: 5, percent: partial.hardware ?? null },
+      entrance: {
+        capacity: 10,
+        tandoorOnShelf: 5,
+        legacyOurs: 0,
+        percent: partial.entrance ?? null,
+        rotationPotentialPercent: null,
+      },
+      interior: {
+        capacity: 10,
+        tandoorOnShelf: 5,
+        legacyOurs: 0,
+        percent: partial.interior ?? null,
+        rotationPotentialPercent: null,
+      },
+      hardware: {
+        capacity: 10,
+        tandoorOnShelf: 5,
+        legacyOurs: 0,
+        percent: partial.hardware ?? null,
+        rotationPotentialPercent: null,
+      },
     },
   };
 }

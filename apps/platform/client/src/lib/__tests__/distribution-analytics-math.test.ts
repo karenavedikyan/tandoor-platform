@@ -30,6 +30,33 @@ function makeInstalledModel(targetId: string, tradePointId = "tp-1"): ShowcaseMa
     placementRef: null,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
+  };
+}
+
+function makePlacementBlock(
+  segment: "vh" | "mk" | "hardware",
+  opts: { placementLegacyOurs?: number; placementCapacity?: number },
+): ShowcaseMatrixEntryDto {
+  return {
+    id: `p-${segment}`,
+    dealerId: "d-1",
+    tradePointId: "tp-1",
+    targetKind: "placement",
+    targetId: `placement-${segment}`,
+    status: "installed",
+    comment: null,
+    updatedAt: new Date().toISOString(),
+    updatedBy: null,
+    updatedByName: null,
+    placementType: "book",
+    placementSegment: segment,
+    placementCapacity: opts.placementCapacity ?? 10,
+    placementActual: null,
+    placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
+    placementLegacyOurs: opts.placementLegacyOurs ?? null,
   };
 }
 
@@ -195,6 +222,39 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
   assert.equal(distributionPercentTone(100), "green");
   assert.equal(distributionPercentTone(null), "empty");
   assert.equal(distributionPercentTone(Number.NaN), "empty");
+}
+
+{
+  const sh = baseShowcase({
+    entrancePortals: null,
+    interiorPortals: 10,
+    hardwareSections: null,
+    selectedShowcaseModels: [],
+  });
+  const entries = [makePlacementBlock("mk", { placementLegacyOurs: 3, placementCapacity: 10 })];
+  const m = computeDistributionForTradePoint(sh, entries);
+  assert.equal(m.byType.interior.legacyOurs, 3);
+  assert.ok(Math.abs((m.rotationPotentialPercent ?? 0) - 30) < 0.001);
+}
+
+{
+  const mkBlock = (legacy: number, tradePointId: string) =>
+    ({
+      ...makePlacementBlock("mk", { placementLegacyOurs: legacy, placementCapacity: 10 }),
+      tradePointId,
+    }) as ShowcaseMatrixEntryDto;
+
+  const tp1 = computeDistributionForTradePoint(
+    baseShowcase({ tradePointId: "tp-1", entrancePortals: null, interiorPortals: 10, selectedShowcaseModels: [] }),
+    [mkBlock(3, "tp-1")],
+  );
+  const tp2 = computeDistributionForTradePoint(
+    baseShowcase({ tradePointId: "tp-2", entrancePortals: null, interiorPortals: 10, selectedShowcaseModels: [] }),
+    [mkBlock(2, "tp-2")],
+  );
+  const agg = aggregateDistribution([tp1, tp2]);
+  assert.equal(agg.totalLegacyOurs, 5);
+  assert.equal(agg.rotationPotentialPercent, 25);
 }
 
 console.log("distribution-analytics-math: ok");
