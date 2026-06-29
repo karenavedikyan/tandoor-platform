@@ -17,7 +17,7 @@ import {
   equipmentCapacityKey,
   legacyCategoryCapacityFromRec,
   seedInputsWithLegacyFallback,
-  type EquipmentCapacityInput,
+  type EquipmentCapacityInputV2,
 } from "@/lib/showcase-capacity-by-equipment";
 import type { ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
 import {
@@ -51,7 +51,7 @@ export type ShowcaseEquipmentCapacityDialogProps = {
   getCandidateRec: () => TradePointShowcaseActualization | undefined;
   selectedModels: readonly TradePointShowcaseSelectedModel[];
   catalogLookup: (id: string) => CatalogProduct | undefined;
-  onConfirm: (inputs: EquipmentCapacityInput) => void;
+  onConfirm: (inputs: EquipmentCapacityInputV2) => void;
   onCancel: () => void;
 };
 
@@ -77,17 +77,23 @@ export function ShowcaseEquipmentCapacityDialog({
   const byEquipment = useMemo(() => capacityByEquipmentType(placements), [placements]);
 
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [legacyInputs, setLegacyInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open) return;
     const candidateRec = getCandidateRec();
     const legacy = legacyCategoryCapacityFromRec(candidateRec);
     const initial = seedInputsWithLegacyFallback(placements, legacy);
-    const next: Record<string, string> = {};
-    for (const [key, value] of Object.entries(initial)) {
-      next[key] = String(value);
+    const nextCapacity: Record<string, string> = {};
+    const nextLegacy: Record<string, string> = {};
+    for (const [key, value] of Object.entries(initial.capacity)) {
+      nextCapacity[key] = String(value);
     }
-    setInputs(next);
+    for (const [key, value] of Object.entries(initial.legacyOurs)) {
+      nextLegacy[key] = String(value);
+    }
+    setInputs(nextCapacity);
+    setLegacyInputs(nextLegacy);
   }, [open, placements, getCandidateRec]);
 
   const candidateRec = getCandidateRec();
@@ -107,6 +113,17 @@ export function ShowcaseEquipmentCapacityDialog({
     return totals;
   }, [byEquipment, inputs]);
 
+  const legacySegmentTotals = useMemo(() => {
+    const totals: Record<ShowcasePlacementSegment, number> = { vh: 0, mk: 0, hardware: 0 };
+    for (const segment of SEGMENTS) {
+      for (const row of byEquipment[segment]) {
+        const key = equipmentCapacityKey(segment, row.placementType);
+        totals[segment] += parseCapacityInput(legacyInputs[key] ?? String(row.legacyOurs));
+      }
+    }
+    return totals;
+  }, [byEquipment, legacyInputs]);
+
   const grandTotal = segmentTotals.vh + segmentTotals.mk + segmentTotals.hardware;
 
   const hasMinError = useMemo(
@@ -119,17 +136,33 @@ export function ShowcaseEquipmentCapacityDialog({
     [catalogLookup, segmentTotals, selectedModels],
   );
 
+  const hasLegacyOverflow = useMemo(
+    () =>
+      SEGMENTS.some((segment) => {
+        const typeKey = SEGMENT_TO_TYPE_KEY[segment];
+        const selectedCount = countSelectedByType(selectedModels, typeKey, catalogLookup);
+        const capacity = segmentTotals[segment];
+        const legacyForSegment = legacySegmentTotals[segment];
+        return selectedCount + legacyForSegment > capacity;
+      }),
+    [catalogLookup, legacySegmentTotals, segmentTotals, selectedModels],
+  );
+
+  const hasSaveError = hasMinError || hasLegacyOverflow;
+
   const handleConfirm = useCallback(() => {
-    if (hasMinError) return;
-    const parsed: EquipmentCapacityInput = {};
+    if (hasSaveError) return;
+    const capacity: Record<string, number> = {};
+    const legacyOurs: Record<string, number> = {};
     for (const segment of SEGMENTS) {
       for (const row of byEquipment[segment]) {
         const key = equipmentCapacityKey(segment, row.placementType);
-        parsed[key] = parseCapacityInput(inputs[key] ?? "0");
+        capacity[key] = parseCapacityInput(inputs[key] ?? "0");
+        legacyOurs[key] = parseCapacityInput(legacyInputs[key] ?? "0");
       }
     }
-    onConfirm(parsed);
-  }, [byEquipment, hasMinError, inputs, onConfirm]);
+    onConfirm({ capacity, legacyOurs });
+  }, [byEquipment, hasSaveError, inputs, legacyInputs, onConfirm]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,6 +184,9 @@ export function ShowcaseEquipmentCapacityDialog({
             const selectedCount = countSelectedByType(selectedModels, typeKey, catalogLookup);
             const categoryGap = categoryGaps.includes(typeKey);
             const minCapacityError = selectedCount > 0 && segmentTotals[segment] < selectedCount;
+            const legacyForSegment = legacySegmentTotals[segment];
+            const legacyOverflowError =
+              selectedCount + legacyForSegment > segmentTotals[segment];
             return (
               <div key={segment} className="space-y-2 rounded-lg border border-border/70 bg-muted/10 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -178,12 +214,30 @@ export function ShowcaseEquipmentCapacityDialog({
                     {selectedCount}).
                   </p>
                 ) : null}
+                {legacyOverflowError ? (
+                  <p
+                    className="text-xs text-destructive"
+                    data-testid={`text-equipment-legacy-overflow-${segment}`}
+                  >
+                    Неактуальные ({legacyForSegment}) и выбранные из каталога ({selectedCount}) вместе
+                    превышают общее количество витрин ({segmentTotals[segment]}) по типу «
+                    {SHOWCASE_TYPE_LABEL_RU[typeKey]}».
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                  <span />
+                  <span className="text-center">Витрин всего</span>
+                  <span className="text-center">Неактуальные</span>
+                </div>
                 <div className="space-y-2">
                   {allowedTypesForSegment(segment).map((placementType) => {
                     const key = equipmentCapacityKey(segment, placementType);
                     const current = getShowcaseTypeCapacity(candidateRec, typeKey);
                     return (
-                      <div key={key} className="grid grid-cols-[minmax(0,1fr)_5.5rem] items-center gap-2">
+                      <div
+                        key={key}
+                        className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-center gap-2"
+                      >
                         <Label htmlFor={key} className="text-xs font-normal text-foreground">
                           {PLACEMENT_TYPE_LABEL_RU[placementType]}
                         </Label>
@@ -192,13 +246,25 @@ export function ShowcaseEquipmentCapacityDialog({
                           className={cn(
                             "h-9 tabular-nums",
                             categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60",
-                            minCapacityError && "border-destructive/60",
+                            (minCapacityError || legacyOverflowError) && "border-destructive/60",
                           )}
                           inputMode="numeric"
                           data-testid={`input-equipment-capacity-${segment}-${placementType}`}
                           value={inputs[key] ?? "0"}
                           onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
                           aria-describedby={current != null ? undefined : `${key}-hint`}
+                        />
+                        <Input
+                          className={cn(
+                            "h-9 tabular-nums",
+                            legacyOverflowError && "border-destructive/60",
+                          )}
+                          inputMode="numeric"
+                          data-testid={`input-equipment-legacy-ours-${segment}-${placementType}`}
+                          value={legacyInputs[key] ?? "0"}
+                          onChange={(e) =>
+                            setLegacyInputs((prev) => ({ ...prev, [key]: e.target.value }))
+                          }
                         />
                       </div>
                     );
@@ -218,7 +284,7 @@ export function ShowcaseEquipmentCapacityDialog({
           <Button
             type="button"
             onClick={handleConfirm}
-            disabled={hasMinError}
+            disabled={hasSaveError}
             data-testid="button-equipment-capacity-confirm"
           >
             Сохранить

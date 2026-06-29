@@ -39,6 +39,7 @@ export type ShowcaseMatrixEntryDto = {
   placementRef: string | null;
   placementOurModels: ShowcasePlacementOurModel[];
   placementCompetitors: ShowcasePlacementCompetitor[];
+  placementLegacyOurs: number | null;
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -61,6 +62,7 @@ export type ShowcaseMatrixEventDto = {
   placementRef: string | null;
   placementOurModels: ShowcasePlacementOurModel[];
   placementCompetitors: ShowcasePlacementCompetitor[];
+  placementLegacyOurs: number | null;
 };
 
 export type ShowcaseMatrixUpsertBody = {
@@ -78,6 +80,7 @@ export type ShowcaseMatrixUpsertBody = {
   placementRef?: string | null;
   placementOurModels?: ShowcasePlacementOurModel[] | null;
   placementCompetitors?: ShowcasePlacementCompetitor[] | null;
+  placementLegacyOurs?: number | null;
 };
 
 function mapShowcaseMatrixEntryDto(raw: Record<string, unknown>): ShowcaseMatrixEntryDto {
@@ -99,6 +102,7 @@ function mapShowcaseMatrixEntryDto(raw: Record<string, unknown>): ShowcaseMatrix
     placementRef: raw.placementRef != null ? String(raw.placementRef) : null,
     placementOurModels: Array.isArray(raw.placementOurModels) ? raw.placementOurModels : [],
     placementCompetitors: Array.isArray(raw.placementCompetitors) ? raw.placementCompetitors : [],
+    placementLegacyOurs: typeof raw.placementLegacyOurs === "number" ? raw.placementLegacyOurs : null,
   };
 }
 
@@ -123,6 +127,7 @@ function mapShowcaseMatrixEventDto(raw: Record<string, unknown>): ShowcaseMatrix
     placementRef: raw.placementRef != null ? String(raw.placementRef) : null,
     placementOurModels: Array.isArray(raw.placementOurModels) ? raw.placementOurModels : [],
     placementCompetitors: Array.isArray(raw.placementCompetitors) ? raw.placementCompetitors : [],
+    placementLegacyOurs: typeof raw.placementLegacyOurs === "number" ? raw.placementLegacyOurs : null,
   };
 }
 

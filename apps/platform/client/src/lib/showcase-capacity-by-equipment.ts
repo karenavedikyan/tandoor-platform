@@ -11,6 +11,7 @@ export type EquipmentTypeCapacityRow = {
   capacity: number;
   blockTargetId: string | null;
   placementActual: number;
+  legacyOurs: number;
 };
 
 export type EquipmentCapacityBySegment = Record<ShowcasePlacementSegment, EquipmentTypeCapacityRow[]>;
@@ -32,7 +33,7 @@ export function capacityByEquipmentType(placements: ShowcaseMatrixEntryDto[]): E
     ShowcasePlacementSegment,
     Map<
       ShowcasePlacementType,
-      { capacity: number; blockTargetId: string | null; placementActual: number }
+      { capacity: number; blockTargetId: string | null; placementActual: number; legacyOurs: number }
     >
   > = {
     vh: new Map(),
@@ -46,15 +47,22 @@ export function capacityByEquipmentType(placements: ShowcaseMatrixEntryDto[]): E
     if (!seg || !type) continue;
     const cap = Math.max(0, block.placementCapacity ?? 0);
     const actual = Math.max(0, block.placementActual ?? 0);
+    const legacyOurs = Math.max(0, block.placementLegacyOurs ?? 0);
     const prev = acc[seg].get(type);
     if (prev) {
       acc[seg].set(type, {
         capacity: prev.capacity + cap,
         blockTargetId: prev.blockTargetId ?? block.targetId,
         placementActual: prev.placementActual + actual,
+        legacyOurs: prev.legacyOurs + legacyOurs,
       });
     } else {
-      acc[seg].set(type, { capacity: cap, blockTargetId: block.targetId, placementActual: actual });
+      acc[seg].set(type, {
+        capacity: cap,
+        blockTargetId: block.targetId,
+        placementActual: actual,
+        legacyOurs,
+      });
     }
   }
 
@@ -67,6 +75,7 @@ export function capacityByEquipmentType(placements: ShowcaseMatrixEntryDto[]): E
         capacity: row?.capacity ?? 0,
         blockTargetId: row?.blockTargetId ?? null,
         placementActual: row?.placementActual ?? 0,
+        legacyOurs: row?.legacyOurs ?? 0,
       });
     }
   }
@@ -176,6 +185,24 @@ export function growPlacementBlockToFitOurMarks(params: {
 
 export type EquipmentCapacityInput = Record<string, number>;
 
+export type EquipmentCapacityInputV2 = {
+  capacity: Record<string, number>;
+  legacyOurs: Record<string, number>;
+};
+
+export function isEquipmentCapacityInputV2(
+  inputs: EquipmentCapacityInput | EquipmentCapacityInputV2,
+): inputs is EquipmentCapacityInputV2 {
+  return typeof inputs === "object" && inputs !== null && "capacity" in inputs;
+}
+
+export function normalizeEquipmentCapacityInputs(
+  inputs: EquipmentCapacityInput | EquipmentCapacityInputV2,
+): EquipmentCapacityInputV2 {
+  if (isEquipmentCapacityInputV2(inputs)) return inputs;
+  return { capacity: inputs, legacyOurs: {} };
+}
+
 export const LEGACY_FALLBACK_TYPE_BY_SEGMENT: Record<ShowcasePlacementSegment, ShowcasePlacementType> = {
   vh: "unmounted",
   mk: "unmounted",
@@ -200,23 +227,28 @@ export function legacyCategoryCapacityFromRec(
 
 export function buildEquipmentCapacityInputs(
   placements: ShowcaseMatrixEntryDto[],
-): EquipmentCapacityInput {
+): EquipmentCapacityInputV2 {
   const byType = capacityByEquipmentType(placements);
-  const inputs: EquipmentCapacityInput = {};
+  const capacity: Record<string, number> = {};
+  const legacyOurs: Record<string, number> = {};
   for (const segment of SEGMENTS) {
     for (const row of byType[segment]) {
-      inputs[equipmentCapacityKey(segment, row.placementType)] = row.capacity;
+      const key = equipmentCapacityKey(segment, row.placementType);
+      capacity[key] = row.capacity;
+      legacyOurs[key] = row.legacyOurs;
     }
   }
-  return inputs;
+  return { capacity, legacyOurs };
 }
 
 /** Сидирует inputs из placement-блоков; при отсутствии блоков — из legacy-категорийной ёмкости. */
 export function seedInputsWithLegacyFallback(
   placements: ShowcaseMatrixEntryDto[],
   legacy: CategoryCapacityFromPlacements,
-): EquipmentCapacityInput {
-  const inputs = buildEquipmentCapacityInputs(placements);
+): EquipmentCapacityInputV2 {
+  const seeded = buildEquipmentCapacityInputs(placements);
+  const inputs = { ...seeded.capacity };
+  const legacyOurs = { ...seeded.legacyOurs };
   const placementCats = categoryCapacityFromPlacements(placements);
 
   const seedSegment = (segment: ShowcasePlacementSegment, legacyValue: number) => {
@@ -234,7 +266,7 @@ export function seedInputsWithLegacyFallback(
   seedSegment("vh", legacy.entrance);
   seedSegment("mk", legacy.interior);
   seedSegment("hardware", legacy.hardware);
-  return inputs;
+  return { capacity: inputs, legacyOurs };
 }
 
 export function resolveEffectiveCategoryTotals(
@@ -292,17 +324,19 @@ export function persistEquipmentCapacityInputs(params: {
   dealerId: string;
   tradePointId: string;
   placements: ShowcaseMatrixEntryDto[];
-  inputs: EquipmentCapacityInput;
+  inputs: EquipmentCapacityInput | EquipmentCapacityInputV2;
   updatedBy: string;
   updatedByName: string;
 }): CategoryCapacityFromPlacements {
-  const { dealerId, tradePointId, placements, inputs, updatedBy, updatedByName } = params;
+  const { dealerId, tradePointId, placements, updatedBy, updatedByName } = params;
+  const { capacity: inputs, legacyOurs } = normalizeEquipmentCapacityInputs(params.inputs);
   const blocks = placementBlocks(placements);
 
   for (const segment of SEGMENTS) {
     for (const placementType of allowedTypesForSegment(segment)) {
       const key = equipmentCapacityKey(segment, placementType);
       const nextCapacity = Math.max(0, Math.floor(inputs[key] ?? 0));
+      const nextLegacyOurs = Math.max(0, Math.floor(legacyOurs[key] ?? 0));
       const matching = blocks.filter(
         (b) => b.placementSegment === segment && b.placementType === placementType,
       );
@@ -310,7 +344,7 @@ export function persistEquipmentCapacityInputs(params: {
       const prevActual = matching.reduce((sum, b) => sum + Math.max(0, b.placementActual ?? 0), 0);
 
       if (matching.length === 0) {
-        if (nextCapacity <= 0) continue;
+        if (nextCapacity <= 0 && nextLegacyOurs <= 0) continue;
         setMatrixPlacement({
           dealerId,
           tradePointId,
@@ -319,6 +353,7 @@ export function persistEquipmentCapacityInputs(params: {
           placementSegment: segment,
           placementCapacity: nextCapacity,
           placementActual: 0,
+          placementLegacyOurs: nextLegacyOurs,
           updatedBy,
           updatedByName,
           comment: null,
@@ -338,6 +373,7 @@ export function persistEquipmentCapacityInputs(params: {
         placementSegment: segment,
         placementCapacity: nextCapacity,
         placementActual: prevActual,
+        placementLegacyOurs: nextLegacyOurs,
         placementCompetitors: primary.placementCompetitors,
         updatedBy,
         updatedByName,
@@ -354,6 +390,7 @@ export function persistEquipmentCapacityInputs(params: {
           placementSegment: segment,
           placementCapacity: 0,
           placementActual: 0,
+          placementLegacyOurs: 0,
           placementCompetitors: extra.placementCompetitors,
           updatedBy,
           updatedByName,

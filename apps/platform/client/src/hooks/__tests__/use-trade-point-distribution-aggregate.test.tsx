@@ -123,6 +123,7 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
       placementRef: null,
       placementOurModels: [],
       placementCompetitors: [],
+      placementLegacyOurs: null,
     };
     loadCachedMatrixMock.mockImplementation((tpId?: string) => (tpId === "tp-0" ? [installedEntry] : []));
 

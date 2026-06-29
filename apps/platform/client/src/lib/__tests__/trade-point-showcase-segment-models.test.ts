@@ -12,6 +12,7 @@ function makeBlock(opts: {
   placementType?: "portal" | "cube" | "book" | "hoof" | "unmounted" | "branded_stand" | "stream_sku";
   capacity?: number;
   actual?: number | null;
+  legacyOurs?: number | null;
   models?: Array<{ modelId: string; count: number }>;
   competitors?: Array<{ brand: string; count: number }>;
 }): ShowcaseMatrixEntryDto {
@@ -33,6 +34,7 @@ function makeBlock(opts: {
     placementRef: null,
     placementOurModels: opts.models ?? [],
     placementCompetitors: opts.competitors ?? [],
+    placementLegacyOurs: opts.legacyOurs ?? null,
   };
 }
 
@@ -62,6 +64,7 @@ function makeModelEntry(
     placementRef: null,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
   };
 }
 
@@ -252,6 +255,33 @@ test("разбивка по типу: blockOurs сохраняется, если
   const portal = vh.byPlacementType.find((r) => r.placementType === "portal");
   assert.equal(portal?.ours, 5);
   assert.equal(portal?.free, 5);
+});
+
+test("разбивка по типу: legacyOurs учитывается в free и rotationPotentialPercent", () => {
+  const entries = [
+    makeBlock({
+      segment: "mk",
+      placementType: "portal",
+      capacity: 100,
+      actual: 25,
+      legacyOurs: 25,
+      competitors: [{ brand: "X", count: 10 }],
+    }),
+    makeBlock({
+      segment: "mk",
+      placementType: "unmounted",
+      capacity: 0,
+      actual: 0,
+      legacyOurs: 0,
+    }),
+  ];
+  const mk = buildSegmentDetail(entries, "mk");
+  const portal = mk.byPlacementType.find((r) => r.placementType === "portal");
+  assert.equal(portal?.legacyOurs, 25);
+  assert.equal(portal?.free, 40);
+  assert.equal(mk.totalLegacyOurs, 25);
+  assert.equal(mk.rotationPotentialPercent, 25);
+  assert.equal(mk.distributionPercent, 25);
 });
 
 test("hardware: installed catalog-модели учитываются", () => {

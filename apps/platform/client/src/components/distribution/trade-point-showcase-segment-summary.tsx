@@ -92,13 +92,14 @@ function SegmentTypeBreakdownTable({
         Разбивка по типу размещения
       </h4>
       <div className="overflow-x-auto rounded-lg border border-border/70">
-        <table className={cn("w-full min-w-[520px] text-left text-xs", compact && "text-[11px]")}>
+        <table className={cn("w-full min-w-[600px] text-left text-xs", compact && "text-[11px]")}>
           <thead>
             <tr className="border-b border-border/70 bg-muted/30">
               <th className="px-2 py-2 font-medium">Тип</th>
               <th className="px-2 py-2 font-medium">Блоков</th>
               <th className="px-2 py-2 font-medium">Ёмкость</th>
               <th className="px-2 py-2 font-medium">Наши</th>
+              <th className="px-2 py-2 font-medium">Неактуальные</th>
               <th className="px-2 py-2 font-medium">Конкур.</th>
               <th className="px-2 py-2 font-medium">Свободно</th>
             </tr>
@@ -110,6 +111,12 @@ function SegmentTypeBreakdownTable({
                 <td className="px-2 py-2 tabular-nums">{row.blockCount}</td>
                 <td className="px-2 py-2 tabular-nums">{row.capacity}</td>
                 <td className="px-2 py-2 tabular-nums">{row.ours}</td>
+                <td
+                  className="px-2 py-2 tabular-nums"
+                  data-testid={`text-segment-type-legacy-${row.placementType}`}
+                >
+                  {row.legacyOurs}
+                </td>
                 <td className="px-2 py-2 tabular-nums">{row.competitors}</td>
                 <td className="px-2 py-2 tabular-nums">{row.free}</td>
               </tr>
@@ -311,6 +318,14 @@ function SegmentExpandedContent({
           {detail.distributionPercent}%
         </p>
         <Progress value={detail.distributionPercent} className="h-2" />
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="text-segment-rotation-potential"
+        >
+          % под ротацию = неактуальные ÷ общая ёмкость = {detail.totalLegacyOurs} ÷{" "}
+          {detail.totalCapacity} = {detail.rotationPotentialPercent}%
+        </p>
+        <Progress value={detail.rotationPotentialPercent} className="h-2 bg-muted [&>div]:bg-amber-500/80" />
       </div>
 
       <SegmentTypeBreakdownTable detail={detail} compact={compact} />
@@ -418,6 +433,8 @@ export function TradePointShowcaseSegmentSummary({
             totalCompetitors: 0,
             free: 0,
             distributionPercent: 0,
+            totalLegacyOurs: 0,
+            rotationPotentialPercent: 0,
             byPlacementType: [],
             ourModels: fromParent,
             competitorRows: [],

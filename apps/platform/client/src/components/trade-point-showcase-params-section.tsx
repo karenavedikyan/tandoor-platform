@@ -34,7 +34,7 @@ import {
   legacyCategoryCapacityFromRec,
   persistEquipmentCapacityInputs,
   resolveEffectiveCategoryTotals,
-  type EquipmentCapacityInput,
+  type EquipmentCapacityInputV2,
 } from "@/lib/showcase-capacity-by-equipment";
 import {
   loadCachedPlacements,
@@ -304,7 +304,7 @@ export function TradePointShowcaseParamsSection({
   }, [canEdit, hasShowcase, save, persist]);
 
   const handleEquipmentDialogConfirm = useCallback(
-    (inputs: EquipmentCapacityInput) => {
+    (inputs: EquipmentCapacityInputV2) => {
       const uid = profile.personaUserId;
       const uname = userLabelFromProfile(profile);
       const cats = persistEquipmentCapacityInputs({
