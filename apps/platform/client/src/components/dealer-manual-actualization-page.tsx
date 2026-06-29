@@ -79,6 +79,8 @@ import {
 } from "@/lib/dealer-card-comments";
 import { ClientResponsiblesSection } from "@/components/client-responsibles-section";
 import { fetchResolveClient, type ClientResponsibles } from "@/lib/responsibility-api";
+import { usePrimaryTradePointMaterialization } from "@/hooks/use-primary-trade-point-materialization";
+import { PRIMARY_TRADE_POINT_MATERIALIZED_EVENT } from "@/lib/primary-trade-point-materialization";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { displayUserName } from "@/lib/auth-api";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -246,6 +248,7 @@ export function DealerManualActualizationPage(props: {
 }): ReactElement {
   const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet } = props;
   useDealerTpOverridesHydration({ dealerId: baseRow.id });
+  usePrimaryTradePointMaterialization(baseRow, profile);
   const overridesVersion = useOverridesRuntimeVersion();
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
@@ -274,9 +277,11 @@ export function DealerManualActualizationPage(props: {
     const bump = () => setResponsiblesBump((n) => n + 1);
     window.addEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, bump);
     window.addEventListener(DEALER_ROP_OVERRIDES_EVENT, bump);
+    window.addEventListener(PRIMARY_TRADE_POINT_MATERIALIZED_EVENT, bump);
     return () => {
       window.removeEventListener(DEALER_REGIONAL_MANAGER_OVERRIDES_EVENT, bump);
       window.removeEventListener(DEALER_ROP_OVERRIDES_EVENT, bump);
+      window.removeEventListener(PRIMARY_TRADE_POINT_MATERIALIZED_EVENT, bump);
     };
   }, []);
 

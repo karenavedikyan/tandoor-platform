@@ -56,6 +56,56 @@ export async function fetchActiveTradePointOverride(
 }
 
 /** Активные ТТ клиента: trade_points + overrides (как tpJoinStatusActive). */
+export type DealerTradePointListItem = {
+  tpId: string;
+  name: string | null;
+  city: string | null;
+};
+
+/** Активные ТТ клиента: trade_points ∪ override-only (единый источник для UI и ответственных). */
+export async function listActiveTradePointsForDealerUnified(
+  pool: PoolLike,
+  dealerId: string,
+): Promise<DealerTradePointListItem[]> {
+  const r = await pool.query<{ tp_id: string; name: string | null; city: string | null }>(
+    `SELECT tp_id, name, city FROM (
+       SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
+              COALESCE(tpo.name, tp.name) AS name,
+              COALESCE(tpo.city, tp.city) AS city
+         FROM trade_points tp
+         INNER JOIN dealers d ON d.id = tp.dealer_id
+         LEFT JOIN trade_point_overrides tpo ON (
+           tpo.tp_id = tp.id::text OR tpo.tp_id = tp.external_key
+         )
+        WHERE (d.external_key = $1 OR d.id::text = $1)
+          AND tp.is_active = TRUE
+          AND ${tpJoinStatusActive("tpo")}
+       UNION
+       SELECT tpo.tp_id,
+              tpo.name,
+              tpo.city
+         FROM trade_point_overrides tpo
+        WHERE tpo.dealer_id = $1
+          AND tpo.status = 'active'
+          AND NOT EXISTS (
+            SELECT 1
+              FROM trade_points tp
+              INNER JOIN dealers d ON d.id = tp.dealer_id
+             WHERE (d.external_key = $1 OR d.id::text = $1)
+               AND tp.is_active = TRUE
+               AND (tp.id::text = tpo.tp_id OR tp.external_key = tpo.tp_id)
+          )
+     ) u
+     ORDER BY name ASC NULLS LAST, tp_id ASC`,
+    [dealerId],
+  );
+  return r.rows.map((row) => ({
+    tpId: String(row.tp_id),
+    name: row.name != null ? String(row.name) : null,
+    city: row.city != null ? String(row.city) : null,
+  }));
+}
+
 export async function countActiveTradePointsForDealer(pool: PoolLike, dealerId: string): Promise<number> {
   const r = await pool.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c

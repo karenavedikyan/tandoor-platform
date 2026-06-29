@@ -21,6 +21,7 @@ import {
   type ResolvedResponsible,
   type ResponsibleRole,
 } from "@/lib/responsibility-api";
+import { PRIMARY_TRADE_POINT_MATERIALIZED_EVENT } from "@/lib/primary-trade-point-materialization";
 
 const UNASSIGN_VALUE = "__unassign__";
 
@@ -91,6 +92,15 @@ export function ClientResponsiblesSection({
   useEffect(() => {
     void loadResolved();
   }, [loadResolved]);
+
+  useEffect(() => {
+    const fn = (e: Event) => {
+      const detail = (e as CustomEvent<{ dealerId?: string }>).detail;
+      if (detail?.dealerId === dealerId) void loadResolved();
+    };
+    window.addEventListener(PRIMARY_TRADE_POINT_MATERIALIZED_EVENT, fn);
+    return () => window.removeEventListener(PRIMARY_TRADE_POINT_MATERIALIZED_EVENT, fn);
+  }, [dealerId, loadResolved]);
 
   useEffect(() => {
     if (!editingRole) {

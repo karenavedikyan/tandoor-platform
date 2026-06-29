@@ -38,7 +38,14 @@ import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
-import { generateStableManualTradePointId, nextManualTradePointInternalCode, isManualActualizationTradePointId, getTradePointDisplayCodeForActualization } from "@/lib/client-base-actualization-stable-ids";
+import { usePrimaryTradePointMaterialization } from "@/hooks/use-primary-trade-point-materialization";
+import { materializePrimaryTradePointIfNeeded } from "@/lib/primary-trade-point-materialization";
+import {
+  generateStableManualTradePointId,
+  nextManualTradePointInternalCode,
+  isManualActualizationTradePointId,
+  getTradePointDisplayCodeForActualization,
+} from "@/lib/client-base-actualization-stable-ids";
 import {
   canArchiveTradePointDuringActualization,
   canEditDealerDuringActualization,
@@ -194,6 +201,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
   const resolvedShowcase = showcaseState ?? emptyShowcase;
   const actx = useClientBaseActualization();
   const useAct = actx.enabled && canEditDealerDuringActualization(profile, row);
+  const { materializing: primaryTpMaterializing } = usePrimaryTradePointMaterialization(row, profile);
   const hideSyntheticTpChrome = actx.enabled && CLIENT_BASE_ACTUALIZATION_CLEAN_MODE;
   const canEdit = canEditDealerTradePoints(profile, row);
   const [tpBump, setTpBump] = useState(0);
@@ -264,13 +272,7 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
     }
     return hasSeeds || hasManualStored;
   }, [useAct, actx.state, row, hasSeeds, hasManualStored]);
-  const isUsingVirtualDefault = useMemo(() => {
-    if (useAct) {
-      const a = mergeTradePointsActiveForActualization(row, actx.state);
-      return a.length === 1 && isVirtualDefaultTradePointId(row.id, a[0].point.id);
-    }
-    return rawMergedActive.length === 0;
-  }, [useAct, actx.state, row, rawMergedActive.length]);
+  const isUsingVirtualDefault = false;
 
   const showcaseOpen = useMemo(() => {
     if (hideSyntheticTpChrome) return undefined;
@@ -509,76 +511,21 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
   const promoteVirtualToManual = useCallback(
     async (virtualTp: DealerTradePoint): Promise<DealerTradePoint | null> => {
       if (!useAct) return null;
-      const newId = generateStableManualTradePointId(row.id);
-      const now = new Date().toISOString();
-      const fields = {
-        name: virtualTp.name || "Основная торговая точка",
-        city: virtualTp.city || "",
-        address: virtualTp.address || "",
-        format: virtualTp.format || "Розница / салон",
-        contactName: virtualTp.contactName ?? "",
-        contactPhone: virtualTp.contactPhone ?? "",
-        email: virtualTp.contactEmail ?? "",
-        comment: virtualTp.tpComment ?? "",
-      };
-      const r = await actx.persist((prev) => {
-        const existing = prev.manuallyCreatedTradePointsById[newId];
-        const internalCode = existing?.internalCode ?? nextManualTradePointInternalCode(prev);
-        const rec = {
-          id: newId,
-          dealerId: row.id,
-          internalCode,
-          fields,
-          createdAt: existing?.createdAt ?? now,
-          createdBy: existing?.createdBy ?? profile.personaUserId,
-          createdByName: existing?.createdByName ?? userLabelFromProfile(profile),
-          updatedAt: now,
-          updatedBy: profile.personaUserId,
-          updatedByName: userLabelFromProfile(profile),
-          source: "manual_actualization" as const,
-        };
-        return mergeActualizationState(prev, {
-          manuallyCreatedTradePointsById: { ...prev.manuallyCreatedTradePointsById, [newId]: rec },
-        });
+      const result = await materializePrimaryTradePointIfNeeded({
+        row,
+        act: actx.state,
+        profile,
+        persist: actx.persist,
       });
-      if (!r.success) {
-        toast({
-          title: "Не удалось создать редактируемую точку. Проверьте соединение.",
-          variant: "destructive",
-        });
+      if (!result.created && !actx.state.manuallyCreatedTradePointsById[result.tradePointId]) {
         return null;
       }
-      try {
-        const tpFields = mapActualizationTpFieldsToOverrides({
-          name: fields.name,
-          city: fields.city,
-          address: fields.address,
-          contactName: fields.contactName,
-          contactPhone: fields.contactPhone,
-          comment: fields.comment,
-        });
-        await saveTradePointFields(newId, tpFields, row.id, {
-          fieldLabel: "Торговая точка",
-          source: "dealer-trade-points-section",
-        });
-      } catch {
-        /* очередь tp-upsert подхватит воркер */
-      }
       setTpBump((n) => n + 1);
-      return {
-        ...virtualTp,
-        id: newId,
-        name: fields.name,
-        city: fields.city,
-        address: fields.address,
-        format: fields.format,
-        contactName: fields.contactName,
-        contactPhone: fields.contactPhone,
-        contactEmail: fields.email,
-        tpComment: fields.comment,
-      };
+      const merged = mergeTradePointsActiveForActualization(row, actx.state);
+      const entry = merged.find((e) => e.point.id === result.tradePointId);
+      return entry?.point ?? { ...virtualTp, id: result.tradePointId };
     },
-    [useAct, actx, row.id, profile],
+    [useAct, actx, row, profile],
   );
 
   const openEdit = useCallback(
@@ -1213,12 +1160,13 @@ export function DealerTradePointsSection({ row, sectionDomId, profile, showcaseS
         </div>
       </div>
 
-      {isUsingVirtualDefault ? (
-        <p
-          className="text-xs text-muted-foreground"
-          data-testid="text-dealer-trade-points-virtual-default-hint"
-        >
-          Точки не заведены отдельно — работаем как с одной основной торговой точкой.
+      {primaryTpMaterializing ? (
+        <p className="text-xs text-muted-foreground" data-testid="text-dealer-trade-points-materializing">
+          Создаём основную торговую точку…
+        </p>
+      ) : mergedActive.length === 0 && useAct ? (
+        <p className="text-xs text-muted-foreground" data-testid="text-dealer-trade-points-empty">
+          Торговые точки пока не заведены.
         </p>
       ) : null}
 

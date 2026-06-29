@@ -3,6 +3,7 @@
  */
 
 import { normalizeTerritoryCityName } from "../client/src/lib/territory-city-normalize.js";
+import { listActiveTradePointsForDealerUnified } from "./trade-point-primary.js";
 
 export type PoolLike = {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }>;
@@ -326,10 +327,7 @@ export async function resolveClientResponsibility(
   tradePoints: Array<{ tpId: string; name: string | null; city: string | null; resolved: ResolvedResponsibles }>;
   sharedByRole: { manager?: boolean; regional_manager?: boolean; rop?: boolean };
 }> {
-  const r = await pool.query<{ tp_id: string; name: string | null; city: string | null }>(
-    `SELECT tp_id, name, city FROM trade_point_overrides WHERE dealer_id = $1 ORDER BY name ASC NULLS LAST, tp_id ASC`,
-    [dealerId],
-  );
+  const rows = await listActiveTradePointsForDealerUnified(pool, dealerId);
 
   const tradePoints: Array<{
     tpId: string;
@@ -338,13 +336,13 @@ export async function resolveClientResponsibility(
     resolved: ResolvedResponsibles;
   }> = [];
 
-  for (const row of r.rows) {
-    const tpId = String(row.tp_id);
+  for (const row of rows) {
+    const tpId = row.tpId;
     const resolved = await resolveResponsiblesForTradePoint(pool, tpId);
     tradePoints.push({
       tpId,
-      name: row.name != null ? String(row.name) : null,
-      city: row.city != null ? String(row.city) : null,
+      name: row.name,
+      city: row.city,
       resolved,
     });
   }
