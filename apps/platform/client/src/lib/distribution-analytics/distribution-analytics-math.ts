@@ -20,6 +20,7 @@ const SEGMENT_BY_TYPE: Record<EquipmentTypeKey, ShowcasePlacementSegment> = {
 export type DistributionByType = {
   capacity: number | null;
   tandoorOnShelf: number;
+  legacyOurs: number;
   percent: number | null;
 };
 
@@ -27,12 +28,24 @@ export type DistributionTradePointMetrics = {
   tradePointId: string;
   byType: Record<EquipmentTypeKey, DistributionByType>;
   averagePercent: number | null;
+  rotationPotentialPercent: number | null;
   hasShowcase: boolean;
 };
 
 export type DistributionGroupMetrics = {
-  byType: Record<EquipmentTypeKey, { capacity: number; tandoorOnShelf: number; percent: number | null }>;
+  byType: Record<
+    EquipmentTypeKey,
+    {
+      capacity: number;
+      tandoorOnShelf: number;
+      legacyOurs: number;
+      percent: number | null;
+      rotationPotentialPercent: number | null;
+    }
+  >;
   averagePercent: number | null;
+  rotationPotentialPercent: number | null;
+  totalLegacyOurs: number;
   tradePointsCount: number;
 };
 
@@ -45,7 +58,7 @@ export type ModelCoverageMetrics = {
 };
 
 function emptyByType(): DistributionByType {
-  return { capacity: null, tandoorOnShelf: 0, percent: null };
+  return { capacity: null, tandoorOnShelf: 0, legacyOurs: 0, percent: null };
 }
 
 /** Есть ли installed-модель с данным id в entries матрицы ТТ. */
@@ -71,6 +84,21 @@ export function countInstalledModelsOfType(
   return countInstalledOursBySegment(entries)[SEGMENT_BY_TYPE[type]];
 }
 
+/** Сумма placementLegacyOurs по placement-блокам данного сегмента (число «неактуальных»). */
+export function countLegacyOursOfType(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  type: EquipmentTypeKey,
+): number {
+  const segment = SEGMENT_BY_TYPE[type];
+  let sum = 0;
+  for (const e of entries) {
+    if (e.targetKind !== "placement") continue;
+    if (e.placementSegment !== segment) continue;
+    sum += Math.max(0, e.placementLegacyOurs ?? 0);
+  }
+  return sum;
+}
+
 /** Дистрибуция одной ТТ по всем типам + средняя. Числитель — installed-модели матрицы. */
 export function computeDistributionForTradePoint(
   sh: TradePointShowcaseActualization | undefined,
@@ -89,6 +117,7 @@ export function computeDistributionForTradePoint(
         hardware: emptyByType(),
       },
       averagePercent: null,
+      rotationPotentialPercent: null,
     };
   }
 
@@ -96,16 +125,21 @@ export function computeDistributionForTradePoint(
   const byType = {} as Record<EquipmentTypeKey, DistributionByType>;
   let sum = 0;
   let n = 0;
+  let legacySum = 0;
+  let capacitySum = 0;
   for (const type of ALL_EQUIPMENT_TYPES) {
     const capacity = sh ? getShowcaseTypeCapacity(sh, type) : null;
     const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
+    const legacyOurs = countLegacyOursOfType(installedEntries, type);
     let percent: number | null = null;
     if (capacity != null && capacity > 0) {
       percent = (onShelf / capacity) * 100;
       sum += percent;
       n += 1;
+      legacySum += legacyOurs;
+      capacitySum += capacity;
     }
-    byType[type] = { capacity, tandoorOnShelf: onShelf, percent };
+    byType[type] = { capacity, tandoorOnShelf: onShelf, legacyOurs, percent };
   }
 
   return {
@@ -113,6 +147,7 @@ export function computeDistributionForTradePoint(
     hasShowcase: true,
     byType,
     averagePercent: n > 0 ? sum / n : null,
+    rotationPotentialPercent: capacitySum > 0 ? (legacySum / capacitySum) * 100 : null,
   };
 }
 
@@ -127,10 +162,10 @@ export function isTradePointEligibleForDistribution(metrics: DistributionTradePo
 /** Агрегат по группе ТТ — формула Σ числителей / Σ знаменателей. */
 export function aggregateDistribution(metrics: DistributionTradePointMetrics[]): DistributionGroupMetrics {
   const eligible = metrics.filter(isTradePointEligibleForDistribution);
-  const acc: Record<EquipmentTypeKey, { capacity: number; tandoorOnShelf: number }> = {
-    entrance: { capacity: 0, tandoorOnShelf: 0 },
-    interior: { capacity: 0, tandoorOnShelf: 0 },
-    hardware: { capacity: 0, tandoorOnShelf: 0 },
+  const acc: Record<EquipmentTypeKey, { capacity: number; tandoorOnShelf: number; legacyOurs: number }> = {
+    entrance: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0 },
+    interior: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0 },
+    hardware: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0 },
   };
 
   for (const m of eligible) {
@@ -139,6 +174,7 @@ export function aggregateDistribution(metrics: DistributionTradePointMetrics[]):
       if (t.capacity != null && t.capacity > 0) {
         acc[type].capacity += t.capacity;
         acc[type].tandoorOnShelf += t.tandoorOnShelf;
+        acc[type].legacyOurs += t.legacyOurs;
       }
     }
   }
@@ -147,8 +183,11 @@ export function aggregateDistribution(metrics: DistributionTradePointMetrics[]):
   for (const type of ALL_EQUIPMENT_TYPES) {
     const row = acc[type];
     byType[type] = {
-      ...row,
+      capacity: row.capacity,
+      tandoorOnShelf: row.tandoorOnShelf,
+      legacyOurs: row.legacyOurs,
       percent: row.capacity > 0 ? (row.tandoorOnShelf / row.capacity) * 100 : null,
+      rotationPotentialPercent: row.capacity > 0 ? (row.legacyOurs / row.capacity) * 100 : null,
     };
   }
 
@@ -161,9 +200,18 @@ export function aggregateDistribution(metrics: DistributionTradePointMetrics[]):
     }
   }
 
+  let totalCapacityAll = 0;
+  let totalLegacyAll = 0;
+  for (const type of ALL_EQUIPMENT_TYPES) {
+    totalCapacityAll += acc[type].capacity;
+    totalLegacyAll += acc[type].legacyOurs;
+  }
+
   return {
     byType,
     averagePercent: n > 0 ? sum / n : null,
+    rotationPotentialPercent: totalCapacityAll > 0 ? (totalLegacyAll / totalCapacityAll) * 100 : null,
+    totalLegacyOurs: totalLegacyAll,
     tradePointsCount: eligible.length,
   };
 }

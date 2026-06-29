@@ -9,11 +9,13 @@ import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 
 const aggregate: DistributionGroupMetrics = {
   byType: {
-    entrance: { capacity: 10, tandoorOnShelf: 3, percent: 30 },
-    interior: { capacity: 8, tandoorOnShelf: 2, percent: 25 },
-    hardware: { capacity: 5, tandoorOnShelf: 1, percent: 20 },
+    entrance: { capacity: 10, tandoorOnShelf: 3, legacyOurs: 0, percent: 30, rotationPotentialPercent: null },
+    interior: { capacity: 8, tandoorOnShelf: 2, legacyOurs: 0, percent: 25, rotationPotentialPercent: null },
+    hardware: { capacity: 5, tandoorOnShelf: 1, legacyOurs: 0, percent: 20, rotationPotentialPercent: null },
   },
   averagePercent: 25,
+  rotationPotentialPercent: null,
+  totalLegacyOurs: 0,
   tradePointsCount: 4,
 };
 

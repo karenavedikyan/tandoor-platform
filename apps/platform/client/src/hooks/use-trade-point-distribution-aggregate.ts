@@ -20,11 +20,13 @@ import {
 
 const EMPTY_AGGREGATE: DistributionGroupMetrics = {
   byType: {
-    entrance: { capacity: 0, tandoorOnShelf: 0, percent: null },
-    interior: { capacity: 0, tandoorOnShelf: 0, percent: null },
-    hardware: { capacity: 0, tandoorOnShelf: 0, percent: null },
+    entrance: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
+    interior: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
+    hardware: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
   },
   averagePercent: null,
+  rotationPotentialPercent: null,
+  totalLegacyOurs: 0,
   tradePointsCount: 0,
 };
 
