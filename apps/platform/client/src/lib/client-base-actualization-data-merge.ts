@@ -19,7 +19,6 @@ import { isDealerTrashedInRuntime } from "./dealer-overrides-runtime.js";
 import { getDealerRowWithProfileOverrides } from "./dealer-profile-overrides.js";
 import {
   getMergedDealerTradePoints,
-  virtualDefaultTradePointId,
   type MergedTradePointEntry,
 } from "./dealer-trade-points-overrides.js";
 import { getMergedDealerLegalEntities, type MergedDealerLegalEntity } from "./dealer-legal-entities.js";
@@ -420,44 +419,7 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
   }
 
   const merged = attachTradePointCoverPhotos(Array.from(byId.values()), act);
-  const active = merged.filter((m) => !m.isArchived);
-  if (active.length > 0) return merged;
-
-  /** У ручного клиента без ТТ не подставляем виртуальную точку из адреса дилера. */
-  if (isManualActualizationDealerId(row.id)) {
-    return merged;
-  }
-
-  const virtualEntry: MergedTradePointEntry = {
-    point: {
-      id: virtualDefaultTradePointId(row.id),
-      name: "Основная торговая точка",
-      city: displayRow.city?.trim() || "—",
-      address: displayRow.releaseAddress?.trim() || "Адрес не указан",
-      format: "Розница / салон",
-      status: "Активна",
-      equipment: "—",
-      hardwareStockStatus: "—",
-      doorsStockStatus: "—",
-      distribution: { mk: 0, vh: 0, total: 0 },
-      showcaseStatus: "—",
-      showcaseNeeds: "",
-      lastVisitDate: "—",
-      nextVisitDate: "—",
-      responsibleRegionalManager: getDealerRegionalManagerDisplay(displayRow) || "—",
-      issues: "",
-      tasks: [],
-      activityHistory: [],
-      photos: { attached: false },
-      productTrainingStatus: "not_required",
-      productTrainingCompleted: false,
-      contactPhone: displayRow.contacts?.phone?.trim() || undefined,
-    },
-    isManual: false,
-    isEdited: false,
-    isArchived: false,
-  };
-  return attachTradePointCoverPhotos([virtualEntry, ...merged.filter((m) => m.isArchived)], act);
+  return merged;
 }
 
 export function mergeTradePointsActiveForActualization(row: DealerRow, act: ActualizationState): MergedTradePointEntry[] {
