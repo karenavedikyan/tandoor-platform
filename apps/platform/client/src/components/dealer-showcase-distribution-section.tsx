@@ -340,7 +340,17 @@ export function DealerShowcaseDistributionSection({
               className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-sm font-semibold text-foreground transition hover:bg-amber-50/60"
               onClick={() => setOutdatedOpen((v) => !v)}
             >
-              Неактуальная витрина
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                Неактуальная витрина
+                {outdated.rotation.length > 0 ? (
+                  <span
+                    className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-amber-900 dark:bg-amber-950/50 dark:text-amber-100"
+                    data-testid="badge-dealer-rotation-count"
+                  >
+                    Под ротацию: {outdated.rotation.length}
+                  </span>
+                ) : null}
+              </span>
               <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", outdatedOpen && "rotate-180")} aria-hidden />
             </button>
             {outdatedOpen ? (

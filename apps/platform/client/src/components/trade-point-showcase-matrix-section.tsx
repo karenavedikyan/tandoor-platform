@@ -1637,6 +1637,20 @@ export function TradePointShowcaseMatrixSection({
                       <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
                         наши {item.data.ours} из {item.data.total}
                       </p>
+                      {item.data.legacyOurs > 0 ? (
+                        <>
+                          <Progress
+                            value={item.data.rotationPct}
+                            className="mt-1.5 h-1.5 bg-muted [&>div]:bg-amber-500/80"
+                          />
+                          <p
+                            className="mt-1 text-[10px] tabular-nums text-amber-700 dark:text-amber-300"
+                            data-testid={`text-trade-point-rotation-${item.label.toLowerCase()}`}
+                          >
+                            под ротацию {item.data.legacyOurs} ({item.data.rotationPct}%)
+                          </p>
+                        </>
+                      ) : null}
                     </div>
                   ))}
                 </div>

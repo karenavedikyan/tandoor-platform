@@ -40,6 +40,7 @@ function makeBlock(segment: "vh" | "mk" | "hardware", capacity: number): Showcas
     placementRef: null,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
   };
 }
 
@@ -62,6 +63,7 @@ function makeInstalledModel(targetId: string): ShowcaseMatrixEntryDto {
     placementRef: null,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
   };
 }
 
@@ -118,5 +120,21 @@ const catalogOnlyEntries = [makeInstalledModel(MK_CATALOG)];
 const mkCatalog = buildSegmentDetail(catalogOnlyEntries, "mk");
 assert.equal(mkCatalog.totalOurs, 1);
 assert.equal(mkCatalog.source, "models");
+
+{
+  const mkLegacyBlock: ShowcaseMatrixEntryDto = {
+    ...makeBlock("mk", 10),
+    placementLegacyOurs: 3,
+  };
+  const legacyDistribution = computeDistributionOnPoint({
+    entries: [mkLegacyBlock],
+    installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+    portalCapacity: { entrance: 0, interior: 0, hardware: 0 },
+  });
+  assert.equal(legacyDistribution.mk.legacyOurs, 3);
+  assert.equal(legacyDistribution.mk.rotationPct, 30);
+  assert.equal(legacyDistribution.total.legacyOurs, 3);
+  assert.equal(legacyDistribution.total.rotationPct, 30);
+}
 
 console.log("✓ showcase-installed-models-distribution tests passed");

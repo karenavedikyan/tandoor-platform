@@ -27,6 +27,7 @@ function placement(
     placementActual: 100,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
     ...partial,
   };
 }
@@ -145,5 +146,12 @@ const zeroCap = computePlacementDistribution([
 ]);
 assert.equal(zeroCap.overall.distributionPercent, 0);
 assert.equal(zeroCap.overall.totalCapacity, 0);
+
+// 8. legacy ours summed per block
+const withLegacy = computePlacementDistribution([
+  placement({ placementCapacity: 10, placementLegacyOurs: 3 }),
+  placement({ targetId: "b2", placementCapacity: 20, placementLegacyOurs: 2 }),
+]);
+assert.equal(withLegacy.overall.totalLegacyOurs, 5);
 
 console.log("✓ showcase-placement-distribution tests passed");

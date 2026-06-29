@@ -2,6 +2,7 @@ import type { ReactElement } from "react";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { DistributionPercentBadge } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
+import { DistributionRotationBadge } from "@/components/distribution-analytics/distribution-rotation-tile";
 
 type Props = {
   /** Заголовок строки (имя менеджера или название города). */
@@ -28,7 +29,14 @@ export function DistributionBreakdownRow({ label, tradePointIds, act, testId }: 
         <p className="truncate text-sm font-medium text-foreground">{label}</p>
         <p className="text-[11px] text-muted-foreground">ТТ: {tradePointsCount}</p>
       </div>
-      <DistributionPercentBadge value={aggregate.averagePercent} />
+      <div className="flex shrink-0 items-center gap-2">
+        <DistributionRotationBadge
+          count={aggregate.totalLegacyOurs}
+          percent={aggregate.rotationPotentialPercent}
+          testId={testId ? `${testId}-rotation` : undefined}
+        />
+        <DistributionPercentBadge value={aggregate.averagePercent} />
+      </div>
     </div>
   );
 }
