@@ -240,6 +240,7 @@ describe("useDistributionAnalyticsData matrix prefetch", () => {
       placementRef: null,
       placementOurModels: [],
       placementCompetitors: [],
+      placementLegacyOurs: null,
     };
     fetchShowcaseMatrixScopeMock.mockResolvedValue([installedEntry]);
     loadCachedMatrixMock.mockImplementation((tpId: string) => (tpId === "tp-1" ? [installedEntry] : []));
