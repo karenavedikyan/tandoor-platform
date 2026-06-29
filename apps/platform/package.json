@@ -90,6 +90,7 @@
     "test:trade-point-set-primary": "tsx shared/__tests__/trade-point-set-primary.test.ts",
     "test:primary-trade-point-materialization": "tsx shared/__tests__/primary-trade-point-materialization.test.ts && tsx client/src/lib/__tests__/primary-trade-point-materialization-client.test.ts",
     "test:trade-points-actualization-hydration": "tsx shared/__tests__/trade-points-actualization-reconcile.test.ts",
+    "test:trade-points-actualization-hydration-hook": "tsx client/src/hooks/__tests__/use-trade-points-actualization-hydration.test.ts",
     "test:tp-diag-trace": "tsx client/src/lib/__tests__/tp-diag-trace.test.ts",
     "test:trade-point-detail-db-fallback": "tsx client/src/lib/__tests__/trade-point-detail-db-fallback.test.ts",
     "test:trade-points-db-display-merge": "tsx client/src/lib/__tests__/trade-points-db-display-merge.test.ts",
