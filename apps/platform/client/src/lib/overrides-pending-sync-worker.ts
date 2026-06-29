@@ -174,6 +174,7 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         placementRef: typeof p.placementRef === "string" ? p.placementRef : null,
         placementOurModels: Array.isArray(p.placementOurModels) ? p.placementOurModels : undefined,
         placementCompetitors: Array.isArray(p.placementCompetitors) ? p.placementCompetitors : undefined,
+        placementLegacyOurs: typeof p.placementLegacyOurs === "number" ? p.placementLegacyOurs : null,
       });
       break;
     }

@@ -145,4 +145,37 @@ assert.ok(workerFetchLog.some((c) => c.url.includes("/set-status")));
 assert.ok(workerFetchLog.some((c) => c.url.includes("/delete")));
 assert.ok(workerFetchLog.some((c) => c.url.includes("/replace-models")));
 
+store.clear();
+workerFetchLog.length = 0;
+
+enqueuePendingSync({
+  id: "showcase-matrix-upsert:op-legacy-1",
+  kind: "showcase-matrix-upsert",
+  payload: {
+    dealerId: "d1",
+    tradePointId: "tp1",
+    targetKind: "placement",
+    targetId: "block-mk-book",
+    status: "installed",
+    clientOpId: "op-legacy-1",
+    placementType: "book",
+    placementSegment: "mk",
+    placementCapacity: 66,
+    placementActual: 0,
+    placementLegacyOurs: 3,
+    placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
+  },
+});
+
+const matrixRun = await runOverridesPendingSyncOnce();
+assert.ok(matrixRun, "worker should sync showcase-matrix-upsert");
+assert.equal(matrixRun!.succeeded, 1);
+const matrixUpsertCall = workerFetchLog.find((c) => c.url.includes("/api/showcase-matrix/upsert"));
+assert.ok(matrixUpsertCall, "showcase-matrix upsert API should be called");
+const matrixBody = matrixUpsertCall!.body as Record<string, unknown>;
+assert.equal(matrixBody.placementLegacyOurs, 3);
+assert.equal(matrixBody.placementCapacity, 66);
+
 console.log("✓ overrides-pending-sync tests passed");
