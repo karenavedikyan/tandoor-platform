@@ -179,7 +179,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import {
   mergeDealerRowWithActualization,
   mergeLegalEntitiesForActualization,
-  mergeTradePointsActiveForActualization,
+  mergeTradePointsActiveFromDbWithActualizationOverlay,
   resolveDealerRowForCard,
 } from "@/lib/client-base-actualization-data-merge";
 import { isManualActualizationDealerId } from "@/lib/client-base-actualization-stable-ids";
@@ -1011,10 +1011,13 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const mergedProfView = useMemo(() => getMergedDealerProfile(row), [row, dealerDataBump]);
   const tradePointsCount = useMemo(() => {
     if (actx.enabled && canActualizeClientBase(profile)) {
-      return mergeTradePointsActiveForActualization(row, actx.state).length;
+      if (tpDbHydration.ready) {
+        return mergeTradePointsActiveFromDbWithActualizationOverlay(row, actx.state, tpDbHydration.dbTradePoints).length;
+      }
+      return 0;
     }
     return getMergedDealerTradePoints(row, { includeArchived: false }).length;
-  }, [row, dealerDataBump, actx.enabled, actx.state, profile]);
+  }, [row, dealerDataBump, actx.enabled, actx.state, profile, tpDbHydration.ready, tpDbHydration.dbTradePoints, tpDbHydration.hydrationVersion]);
   const legalEntitiesCount = useMemo(() => {
     if (actx.enabled && canActualizeClientBase(profile)) {
       return mergeLegalEntitiesForActualization(row, actx.state).filter((e) => e.status !== "archived").length;
@@ -1875,6 +1878,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
               profile={profile}
               showcaseState={showcaseStorage}
               primaryTpMaterializing={primaryTpMaterializing}
+              dbHydrationReady={tpDbHydration.ready}
+              dbTradePoints={tpDbHydration.dbTradePoints}
             />
 
             {competitorActivityRows.length > 0 || canEditCardComments || isManualDealerRow ? (

@@ -36,7 +36,8 @@ import {
 import { getShowcaseTasksForDealerDisplay, type ShowcaseStorageV1Dto, userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
-import { mergeTradePointsActiveForActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
+import type { UnifiedActiveTradePointDetail } from "@shared/trade-point-primary";
+import { mergeTradePointsActiveForActualization, mergeTradePointsActiveFromDbWithActualizationOverlay, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { materializePrimaryTradePointIfNeeded } from "@/lib/primary-trade-point-materialization";
 import { tpDiag } from "@/lib/tp-diag-trace";
@@ -87,6 +88,10 @@ type Props = {
   showcaseState?: ShowcaseStorageV1Dto;
   /** Флаг материализации основной ТТ с уровня страницы (после гидрации). */
   primaryTpMaterializing?: boolean;
+  /** Гидрация единого DB-источника завершена (для actualization-режима). */
+  dbHydrationReady?: boolean;
+  /** Активные ТТ из единого DB-источника (первичный набор для списка). */
+  dbTradePoints?: UnifiedActiveTradePointDetail[];
 };
 
 function isFilled(v: string | undefined): boolean {
@@ -200,6 +205,8 @@ export function DealerTradePointsSection({
   profile,
   showcaseState,
   primaryTpMaterializing = false,
+  dbHydrationReady = true,
+  dbTradePoints = [],
 }: Props) {
   const [, setLocation] = useLocation();
   const emptyShowcase: ShowcaseStorageV1Dto = useMemo(
@@ -258,9 +265,12 @@ export function DealerTradePointsSection({
 
   const rawMergedActive = useMemo(() => getMergedDealerTradePoints(row, { includeArchived: false }), [row, tpBump]);
   const mergedActive = useMemo(() => {
-    const base = useAct
-      ? mergeTradePointsActiveForActualization(row, actx.state)
-      : getEffectiveDealerTradePoints(row, { includeArchived: false });
+    const base =
+      useAct && dbHydrationReady
+        ? mergeTradePointsActiveFromDbWithActualizationOverlay(row, actx.state, dbTradePoints)
+        : useAct
+          ? mergeTradePointsActiveForActualization(row, actx.state)
+          : getEffectiveDealerTradePoints(row, { includeArchived: false });
     const visible = base.filter((entry) => !isTradePointTrashedInRuntime(entry.point.id, actx.state));
     const activeCount = visible.length;
     return visible.map((entry) => ({
@@ -270,7 +280,9 @@ export function DealerTradePointsSection({
         isPrimary: resolveTradePointIsPrimary(entry.point, activeCount),
       },
     }));
-  }, [useAct, actx.state, row, tpBump]);
+  }, [useAct, dbHydrationReady, dbTradePoints, actx.state, row, tpBump]);
+
+  const dbListLoading = useAct && !dbHydrationReady;
 
   useEffect(() => {
     tpDiag("section:count", {
@@ -816,6 +828,24 @@ export function DealerTradePointsSection({
     }
     setBulkArchiveTpBusy(false);
   }, [selectedBulkArchiveTpIds, archivableTradePointIdsFull, refreshTradePointsFromServer, setLocation]);
+
+  if (dbListLoading) {
+    return (
+      <section
+        id={sectionDomId}
+        data-testid="section-dealer-trade-points"
+        className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
+        {...diagAttrs}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold text-foreground sm:text-base">Торговые точки</h3>
+        </div>
+        <p className="text-xs text-muted-foreground" data-testid="text-dealer-trade-points-loading">
+          Загрузка торговых точек…
+        </p>
+      </section>
+    );
+  }
 
   if (mergedActive.length === 0 && !hasAnyTradePointEver) {
     return (

@@ -45,7 +45,7 @@ import {
 import { DEALER_ROP_OVERRIDES_EVENT, getDealerRopEffectiveDisplay } from "@/lib/dealer-rop-overrides";
 import { logisticsShipmentDaysTextFromManualFields } from "@/lib/dealer-shipment-days";
 import { getClientCategoryLabel } from "@/lib/client-category";
-import { mergeTradePointsActiveForActualization, mergeDealerRowWithActualization, mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
+import { mergeTradePointsActiveFromDbWithActualizationOverlay, mergeDealerRowWithActualization, mergeLegalEntitiesForActualization } from "@/lib/client-base-actualization-data-merge";
 import { commercialTriLabelRu } from "@/lib/dealer-commercial-characteristics";
 import {
   mergeActualizationState,
@@ -377,7 +377,10 @@ export function DealerManualActualizationPage(props: {
     }
   }, [canTrash, baseRow.id, setLocation]);
 
-  const tps = useMemo(() => mergeTradePointsActiveForActualization(row, actx.state), [row, actx.state]);
+  const tps = useMemo(() => {
+    if (!tpDbHydration.ready) return [];
+    return mergeTradePointsActiveFromDbWithActualizationOverlay(row, actx.state, tpDbHydration.dbTradePoints);
+  }, [row, actx.state, tpDbHydration.ready, tpDbHydration.dbTradePoints, tpDbHydration.hydrationVersion]);
 
   const { filledShowcase, needShowcase } = useMemo(() => {
     let filled = 0;
@@ -821,18 +824,28 @@ export function DealerManualActualizationPage(props: {
           <AccordionSectionTrigger title="Торговые точки" summary={sectionMeta.tps.summary} status={sectionMeta.tps.status} />
           <AccordionContent className="border-t border-border/35 space-y-2 px-3 pb-2.5 pt-1.5 text-sm sm:px-3.5">
             <p className="text-muted-foreground">
-              Всего точек: <span className="font-semibold text-foreground">{tps.length}</span>
-              {" · "}
-              С заполненной витриной: <span className="font-semibold text-foreground">{filledShowcase}</span>
-              {" · "}
-              Требуют заполнения витрины: <span className="font-semibold text-foreground">{needShowcase}</span>
+              {!tpDbHydration.ready ? (
+                "Загрузка торговых точек…"
+              ) : (
+                <>
+                  Всего точек: <span className="font-semibold text-foreground">{tps.length}</span>
+                  {" · "}
+                  С заполненной витриной: <span className="font-semibold text-foreground">{filledShowcase}</span>
+                  {" · "}
+                  Требуют заполнения витрины: <span className="font-semibold text-foreground">{needShowcase}</span>
+                </>
+              )}
             </p>
-            {tps.length === 0 ? <p className="text-muted-foreground">Торговые точки не добавлены</p> : null}
+            {tpDbHydration.ready && tps.length === 0 ? (
+              <p className="text-muted-foreground">Торговые точки не добавлены</p>
+            ) : null}
             <DealerTradePointsSection
               row={row}
               profile={profile}
               sectionDomId="dealer-section-points"
               primaryTpMaterializing={primaryTpMaterializing}
+              dbHydrationReady={tpDbHydration.ready}
+              dbTradePoints={tpDbHydration.dbTradePoints}
             />
           </AccordionContent>
         </AccordionItem>
