@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { PRIMARY_TRADE_POINT_MATERIALIZED_EVENT } from "@/lib/primary-trade-point-materialization";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { UnifiedActiveTradePointDetail } from "@shared/trade-point-primary";
@@ -10,6 +11,85 @@ import {
   unifiedDbTradePointIds,
 } from "@/lib/trade-points-actualization-hydration";
 import { tpDiag } from "@/lib/tp-diag-trace";
+
+export const TP_DB_HYDRATION_FETCH_TIMEOUT_MS = 8000;
+
+export function shouldSkipTradePointsHydrationFetch(
+  attemptedRef: { current: string | null },
+  id: string,
+  force: boolean,
+): boolean {
+  return !force && attemptedRef.current === id;
+}
+
+export function releaseTradePointsHydrationAttemptOnCancel(
+  attemptedRef: { current: string | null },
+  id: string,
+  completed: boolean,
+): void {
+  if (!completed && attemptedRef.current === id) {
+    attemptedRef.current = null;
+  }
+}
+
+export function scheduleHydrationReadyFallback(args: {
+  timeoutMs?: number;
+  isCancelled: () => boolean;
+  isReadySet: () => boolean;
+  onFallback: () => void;
+}): () => void {
+  const timeoutMs = args.timeoutMs ?? TP_DB_HYDRATION_FETCH_TIMEOUT_MS;
+  const timer = globalThis.setTimeout(() => {
+    if (args.isCancelled() || args.isReadySet()) return;
+    args.onFallback();
+  }, timeoutMs);
+  return () => globalThis.clearTimeout(timer);
+}
+
+export async function executeTradePointsDbHydration(args: {
+  id: string;
+  force?: boolean;
+  attemptedRef: { current: string | null };
+  isCancelled: () => boolean;
+  fetchRows?: (dealerId: string) => Promise<UnifiedActiveTradePointDetail[] | null>;
+  persist: (mutate: (prev: ActualizationState) => ActualizationState) => Promise<{ success: boolean }>;
+  actState: ActualizationState;
+  profile: ReleaseDemoProfile;
+  onRows: (rows: UnifiedActiveTradePointDetail[], ids: string[]) => void;
+  markCompleted: () => void;
+}): Promise<boolean> {
+  const { id, force = false, attemptedRef, isCancelled } = args;
+  if (shouldSkipTradePointsHydrationFetch(attemptedRef, id, force)) return false;
+  attemptedRef.current = id;
+
+  tpDiag("hydration:fetch:start", { dealerId: id });
+  const fetchFn = args.fetchRows ?? fetchUnifiedActiveTradePointsForDealer;
+  const rows = await fetchFn(id);
+  tpDiag("hydration:fetch:done", { dealerId: id, rows: rows?.length ?? 0 });
+  if (isCancelled()) return false;
+
+  const ids = unifiedDbTradePointIds(rows);
+  args.onRows(rows ?? [], ids);
+
+  if (rows && rows.length > 0) {
+    const { changed } = reconcileUnifiedTradePointsIntoActualizationState(args.actState, rows, id, args.profile);
+    tpDiag("hydration:reconcile:persist", { dealerId: id, changed });
+    const r = await args.persist((prev) => {
+      const { next, changed: changedInPersist } = reconcileUnifiedTradePointsIntoActualizationState(
+        prev,
+        rows,
+        id,
+        args.profile,
+      );
+      return changedInPersist ? next : prev;
+    });
+    void r;
+  }
+
+  if (isCancelled()) return false;
+  args.markCompleted();
+  return true;
+}
 
 /**
  * При открытии карточки клиента подтягивает активные ТТ из единого DB-источника
@@ -32,11 +112,15 @@ export function useTradePointsActualizationHydration(
   const [dbActiveTradePointIds, setDbActiveTradePointIds] = useState<string[]>([]);
   const [dbTradePoints, setDbTradePoints] = useState<UnifiedActiveTradePointDetail[]>([]);
   const attemptedRef = useRef<string | null>(null);
+  const persistRef = useRef(actx.persist);
+  persistRef.current = actx.persist;
+  const readySetRef = useRef(false);
 
   useEffect(() => {
     const id = dealerId?.trim();
     tpDiag("hydration:effect", { dealerId: id ?? "", enabled, actxEnabled: actx.enabled });
     if (!enabled || !id || !actx.enabled || !canActualizeClientBase(profile)) {
+      readySetRef.current = true;
       setReady(true);
       setDbActiveTradePointIds([]);
       setDbTradePoints([]);
@@ -45,48 +129,48 @@ export function useTradePointsActualizationHydration(
     }
 
     let cancelled = false;
+    let completed = false;
+
+    const markReady = () => {
+      readySetRef.current = true;
+      setReady(true);
+      setHydrationVersion((n) => {
+        const next = n + 1;
+        tpDiag("hydration:ready", { dealerId: id, hydrationVersion: next });
+        return next;
+      });
+    };
+
+    const clearReadyFallback = scheduleHydrationReadyFallback({
+      isCancelled: () => cancelled,
+      isReadySet: () => readySetRef.current,
+      onFallback: () => {
+        tpDiag("hydration:timeout", { dealerId: id });
+        completed = true;
+        markReady();
+      },
+    });
 
     const run = async (force = false) => {
-      if (!force && attemptedRef.current === id) return;
-      attemptedRef.current = id;
-
-      tpDiag("hydration:fetch:start", { dealerId: id });
-      const rows = await fetchUnifiedActiveTradePointsForDealer(id);
-      tpDiag("hydration:fetch:done", { dealerId: id, rows: rows?.length ?? 0 });
-      if (cancelled) return;
-
-      const ids = unifiedDbTradePointIds(rows);
-      setDbActiveTradePointIds(ids);
-      setDbTradePoints(rows ?? []);
-
-      if (rows && rows.length > 0) {
-        const { changed } = reconcileUnifiedTradePointsIntoActualizationState(
-          actx.state,
-          rows,
-          id,
-          profile,
-        );
-        tpDiag("hydration:reconcile:persist", { dealerId: id, changed });
-        const r = await actx.persist((prev) => {
-          const { next, changed: changedInPersist } = reconcileUnifiedTradePointsIntoActualizationState(
-            prev,
-            rows,
-            id,
-            profile,
-          );
-          return changedInPersist ? next : prev;
-        });
-        void r;
-      }
-
-      if (!cancelled) {
-        setReady(true);
-        setHydrationVersion((n) => {
-          const next = n + 1;
-          tpDiag("hydration:ready", { dealerId: id, hydrationVersion: next });
-          return next;
-        });
-      }
+      const didComplete = await executeTradePointsDbHydration({
+        id,
+        force,
+        attemptedRef,
+        isCancelled: () => cancelled,
+        persist: (mutate) => persistRef.current(mutate),
+        actState: actx.state,
+        profile,
+        onRows: (rows, ids) => {
+          setDbActiveTradePointIds(ids);
+          setDbTradePoints(rows);
+        },
+        markCompleted: () => {
+          completed = true;
+          clearReadyFallback();
+          markReady();
+        },
+      });
+      void didComplete;
     };
 
     void run();
@@ -103,9 +187,11 @@ export function useTradePointsActualizationHydration(
 
     return () => {
       cancelled = true;
+      clearReadyFallback();
+      releaseTradePointsHydrationAttemptOnCancel(attemptedRef, id, completed);
       window.removeEventListener(PRIMARY_TRADE_POINT_MATERIALIZED_EVENT, onMaterialized);
     };
-  }, [enabled, dealerId, profile, actx.enabled, actx.persist]);
+  }, [enabled, dealerId, profile, actx.enabled]);
 
   return {
     ready,
