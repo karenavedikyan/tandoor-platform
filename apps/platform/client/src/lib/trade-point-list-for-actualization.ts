@@ -25,6 +25,7 @@ import type { MergedTradePointEntry } from "./dealer-trade-points-overrides.js";
 import { isVirtualDefaultTradePointId } from "./dealer-trade-points-overrides.js";
 import { isDealerTrashedInRuntime, isDealerOverridesHydrated, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
 import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay } from "./dealer-base-mock-data.js";
+import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 
 export type TradePointShowcaseBucket =
   | "not_filled"
@@ -206,7 +207,9 @@ export function buildTradePointListForActualization(
           ? dealer.distribution
           : null;
 
+    const tradePointName = resolveTradePointDisplayName(dealer, tp);
     const searchHaystack = buildHaystack([
+      tradePointName,
       tp.name,
       tp.city,
       tp.address,
@@ -231,7 +234,7 @@ export function buildTradePointListForActualization(
       tradePointDisplayCode,
       dealerClientCode,
       dealerName: dealer.name,
-      tradePointName: tp.name,
+      tradePointName: resolveTradePointDisplayName(dealer, tp),
       city: tp.city?.trim() || "—",
       address: tp.address?.trim() || "—",
       tradePointFormatLabel: tradePointFormatFromPoint(tp),

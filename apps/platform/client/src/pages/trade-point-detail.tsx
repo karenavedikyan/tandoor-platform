@@ -80,6 +80,12 @@ import {
   updateTradePoint,
   type MergedTradePointEntry,
 } from "@/lib/dealer-trade-points-overrides";
+import {
+  computeTradePointAutoDisplayName,
+  displayNameContextFromDealerPoint,
+  resolveTradePointDisplayName,
+  tradePointManualNameForEdit,
+} from "@/lib/trade-point-display-labels";
 import { getDealerRowWithProfileOverrides, DEALER_PROFILE_OVERRIDES_EVENT } from "@/lib/dealer-profile-overrides";
 import { DEALER_SHIPMENT_DAY_LABELS, DEALER_SHIPMENT_DAY_ORDER, type DealerShipmentDayId } from "@/lib/dealer-shipment-days";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -443,7 +449,7 @@ function TradePointDetailContent({
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editErr, setEditErr] = useState("");
-  const [eName, setEName] = useState(point.name);
+  const [eName, setEName] = useState(() => tradePointManualNameForEdit(point.name, point.city));
   const [eCity, setECity] = useState(point.city);
   const [eAddress, setEAddress] = useState(point.address);
   const [eContactName, setEContactName] = useState(point.contactName ?? "");
@@ -459,8 +465,14 @@ function TradePointDetailContent({
   const [eHwWh, setEHwWh] = useState(Boolean(point.tpHasHardwareWarehouse));
   const tpEditSave = useSectionSaveFeedback();
 
+  const displayName = useMemo(() => resolveTradePointDisplayName(dealer, point), [dealer, point]);
+  const defaultAutoDisplayName = useMemo(
+    () => computeTradePointAutoDisplayName(displayNameContextFromDealerPoint(dealer, point)) ?? displayName,
+    [dealer, point, displayName],
+  );
+
   useEffect(() => {
-    setEName(point.name);
+    setEName(tradePointManualNameForEdit(point.name, point.city));
     setECity(point.city);
     setEAddress(point.address);
     setEContactName(point.contactName ?? "");
@@ -589,9 +601,9 @@ function TradePointDetailContent({
 
   const handleSaveEdit = useCallback((): boolean => {
     setEditErr("");
-    if (!eName.trim() || !eCity.trim() || !eAddress.trim()) {
-      setEditErr("Укажите название, город и адрес.");
-      toast({ title: "Укажите название, город и адрес.", variant: "destructive" });
+    if (!eCity.trim() || !eAddress.trim()) {
+      setEditErr("Укажите город и адрес.");
+      toast({ title: "Укажите город и адрес.", variant: "destructive" });
       return false;
     }
     void updateTradePoint(
@@ -631,7 +643,7 @@ function TradePointDetailContent({
 
   const handleCancelEdit = useCallback(() => {
     setEditErr("");
-    setEName(point.name);
+    setEName(tradePointManualNameForEdit(point.name, point.city));
     setECity(point.city);
     setEAddress(point.address);
     setEContactName(point.contactName ?? "");
@@ -736,7 +748,7 @@ function TradePointDetailContent({
       <BackNav
         breadcrumbs={breadcrumbsFor(`/dealers/${dealer.id}/trade-points/${point.id}`, {
           dealer: dealer.name,
-          tradePoint: point.name,
+          tradePoint: displayName,
         })}
         fallbackHref={`/dealers/${dealer.id}`}
       />
@@ -748,7 +760,7 @@ function TradePointDetailContent({
         </p>
         <p className="mt-3 text-xs text-muted-foreground">Торговая точка</p>
         <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl" data-testid="text-trade-point-name">
-          {point.name}
+          {displayName}
         </h1>
         {point.releaseCode ? (
           <p className="mt-2 text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${point.id}`}>
@@ -859,6 +871,7 @@ function TradePointDetailContent({
                 <Input
                   className="min-h-10"
                   value={eName}
+                  placeholder={defaultAutoDisplayName ? `По умолчанию: ${defaultAutoDisplayName}` : undefined}
                   onChange={(e) => {
                     setEName(e.target.value);
                     tpEditSave.markDirty();
@@ -1056,7 +1069,7 @@ function TradePointDetailContent({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
                 <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
                 <div className="min-w-0 flex-1 space-y-1">
-                  <h2 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{point.name}</h2>
+                  <h2 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{displayName}</h2>
                   <p className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">{[point.city, point.address?.trim()].filter(Boolean).join(" · ")}</p>
                   <TradePointLegalEntitiesSection dealerId={dealer.id} tradePointId={point.id} canEdit={canEditTp} />
                 </div>
@@ -1194,7 +1207,7 @@ function TradePointDetailContent({
             <TradePointShowcaseAssignmentsPanel
               dealerId={dealer.id}
               tradePointId={point.id}
-              tradePointName={point.name}
+              tradePointName={displayName}
               actorUserId={user?.id ?? profile.personaUserId}
               actorName={displayUserName(user) ?? userLabelFromProfile(profile)}
             />

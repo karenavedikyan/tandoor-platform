@@ -1,5 +1,6 @@
 import type { DealerRow } from "../dealer-base-mock-data.js";
 import type { OrgSnapshot } from "../use-org-snapshot.js";
+import { resolveTradePointDisplayName } from "../trade-point-display-labels.js";
 
 export const DISTRIBUTION_ANALYTICS_FILTER_OPTIONS_MAX_DEALERS = 5000;
 
@@ -32,9 +33,9 @@ function dealerClientCodeLabel(dealer: DealerRow): string {
   return dealer.releaseCode?.trim() || dealer.external1cCode?.trim() || "—";
 }
 
-function tradePointDisplayLabel(tp: DealerRow["tradePoints"][number]): string {
+function tradePointDisplayLabel(dealer: DealerRow, tp: DealerRow["tradePoints"][number]): string {
   const code = tp.releaseCode?.trim() || tp.id;
-  return `${code} · ${tp.name}`;
+  return `${code} · ${resolveTradePointDisplayName(dealer, tp)}`;
 }
 
 function uniqueSelectOptions(labels: string[], values?: string[]): DistributionAnalyticsFilterSelectOption[] {
@@ -95,7 +96,7 @@ export function buildDistributionAnalyticsFilterOptionsFromDealers(
 
     for (const tp of dealer.tradePoints ?? []) {
       if (tp.city?.trim()) cityLabels.push(tp.city.trim());
-      tpLabels.push(tradePointDisplayLabel(tp));
+      tpLabels.push(tradePointDisplayLabel(dealer, tp));
       tpValues.push(tp.id);
     }
 

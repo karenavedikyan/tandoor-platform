@@ -10,6 +10,7 @@ import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import { loadCachedMatrix } from "./showcase-matrix-store.js";
 import { countInstalledOursBySegment } from "./trade-point-showcase-segment-models.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 
 export type DistributionEntryInstalledOursBySegment = {
   vh: number;
@@ -143,7 +144,7 @@ export function buildDistributionEntryTradePointRows(
       rows.push({
         dealerId: dealer.id,
         tradePointId: point.id,
-        tradePointName: point.name?.trim() || point.id,
+        tradePointName: resolveTradePointDisplayName(dealer, point),
         clientName,
         city: normalizeCity(point.city?.trim() || dealer.city),
         clientCategory: dealer.clientCategory,

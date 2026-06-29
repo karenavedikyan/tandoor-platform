@@ -19,6 +19,8 @@ import {
   type TradePointListRow,
 } from "./trade-point-list-for-actualization.js";
 import type { ScopedTradePointDto } from "./trade-points-scoped-api.js";
+import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
+import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 
 function buildHaystack(parts: (string | null | undefined)[]): string {
   return parts
@@ -156,16 +158,20 @@ export function buildTradePointListFromDb(
     const rm = dealer.regionalManager?.trim() || "—";
     const rop = tp.ropFullName?.trim() || dealer.ropName?.trim() || "—";
 
+    const mergedEntry = mergeTradePointsForActualization(dealer, act).find((e) => e.point.id === point.id);
+    const displayPoint = mergedEntry?.point ?? point;
+    const tradePointName = resolveTradePointDisplayName(dealer, displayPoint);
+
     rows.push({
       tradePointId: point.id,
       dealerId: dealer.id,
       dealer,
-      point,
+      point: displayPoint,
       entry,
       tradePointDisplayCode,
       dealerClientCode,
       dealerName: dealer.name,
-      tradePointName: point.name,
+      tradePointName,
       city: point.city?.trim() || "—",
       address: point.address?.trim() || "—",
       tradePointFormatLabel: point.format?.trim() || null,
@@ -189,9 +195,10 @@ export function buildTradePointListFromDb(
       isArchived: false,
       isVirtual: false,
       searchHaystack: buildHaystack([
-        point.name,
-        point.city,
-        point.address,
+        tradePointName,
+        displayPoint.name,
+        displayPoint.city,
+        displayPoint.address,
         dealer.name,
         tradePointDisplayCode,
         dealerClientCode,

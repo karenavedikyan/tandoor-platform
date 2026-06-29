@@ -126,6 +126,7 @@ import { isManualActualizationDealerId } from "@/lib/client-base-actualization-s
 import { mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { getManualDealerDisplayCode } from "@/lib/client-base-actualization-stable-ids";
 import { countShowcaseMatrixDeficitForDealer, deriveShowcaseBucket } from "@/lib/trade-point-list-for-actualization";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 import { toast } from "@/hooks/use-toast";
 import { bulkTrashDealersStrict, trashDealerStrict } from "@/lib/dealer-overrides-api";
 import { hydrateDealerOverridesFromServer } from "@/lib/dealer-overrides-sync";
@@ -2199,8 +2200,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       const cityB = b.point.city?.trim() || b.row.city || "";
       const cityCmp = RU_COLLATOR.compare(cityA, cityB);
       if (cityCmp !== 0) return cityCmp;
-      const nameA = a.point.name?.trim() || a.row.name || "";
-      const nameB = b.point.name?.trim() || b.row.name || "";
+      const nameA = resolveTradePointDisplayName(a.row, a.point);
+      const nameB = resolveTradePointDisplayName(b.row, b.point);
       return RU_COLLATOR.compare(nameA, nameB);
     });
     return out;
@@ -3391,7 +3392,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         dealerId: parsed.dealerId,
         tradePointId: parsed.tradePointId,
         dealerName: row?.name ?? parsed.dealerId,
-        tradePointName: tp?.point.name ?? parsed.tradePointId,
+        tradePointName: row && tp ? resolveTradePointDisplayName(row, tp.point) : parsed.tradePointId,
         city: tp?.point.city?.trim() || row?.city?.trim() || "",
       });
     }

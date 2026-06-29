@@ -11,6 +11,7 @@ import {
 } from "./showcase-matrix-api.js";
 import { loadCachedMatrix } from "./showcase-matrix-store.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 import type {
   MatrixTaskPriority,
   MatrixTaskStatus,
@@ -34,7 +35,7 @@ function buildDealerPointMaps(dealers: DealerRow[]): DealerPointMaps {
     for (const point of dealer.tradePoints) {
       if (point.status?.trim() === "Архив") continue;
       pointToDealer.set(point.id, dealer);
-      pointName.set(point.id, point.name?.trim() || point.id);
+      pointName.set(point.id, resolveTradePointDisplayName(dealer, point));
       tradePointIds.push(point.id);
     }
   }

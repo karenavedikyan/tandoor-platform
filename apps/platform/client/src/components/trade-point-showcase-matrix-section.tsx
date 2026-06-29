@@ -76,6 +76,7 @@ import { computeDistributionOnPoint } from "@/lib/showcase-distribution-on-point
 import { getShowcaseTypeCapacity } from "@/lib/showcase-type-capacity";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { resolveShowcaseMatrixPositionForEntry } from "@/lib/showcase-matrix-deficit-tasks";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 
 export type ShowcaseMatrixViewMode = "large" | "compact" | "mini" | "list";
 export type ShowcaseSectionDensity = "comfortable" | "compact";
@@ -327,6 +328,7 @@ export function TradePointShowcaseMatrixSection({
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
+  const tradePointDisplayName = useMemo(() => resolveTradePointDisplayName(dealer, point), [dealer, point]);
   const isCompact = density === "compact";
   const actx = useClientBaseActualization();
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
@@ -1692,7 +1694,7 @@ export function TradePointShowcaseMatrixSection({
             <TradePointShowcaseAssignmentsPanel
               dealerId={dealer.id}
               tradePointId={point.id}
-              tradePointName={point.name}
+              tradePointName={tradePointDisplayName}
               actorUserId={actorUserId}
               actorName={actorName}
             />

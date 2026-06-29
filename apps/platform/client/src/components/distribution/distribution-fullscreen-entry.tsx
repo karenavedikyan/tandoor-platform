@@ -77,7 +77,7 @@ import {
   type CatalogCardSize,
 } from "@/lib/catalog-card-grid";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { fullscreenCounterpartyLine } from "@/lib/trade-point-display-labels";
+import { fullscreenCounterpartyLine, resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import {
   allowedTypesForSegment,
@@ -420,6 +420,10 @@ export function DistributionFullscreenEntry({
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const counterpartyLine = useMemo(
     () => fullscreenCounterpartyLine(dealer, point),
+    [dealer, point],
+  );
+  const tradePointDisplayName = useMemo(
+    () => resolveTradePointDisplayName(dealer, point),
     [dealer, point],
   );
   const [saving, setSaving] = useState(false);
@@ -1397,7 +1401,7 @@ export function DistributionFullscreenEntry({
       const assignment = await createAssignment({
         dealerId: dealer.id,
         tradePointId: point.id,
-        title: `Отгрузить на витрину · ${point.name}`,
+        title: `Отгрузить на витрину · ${tradePointDisplayName}`,
         comment: assignmentComment.trim() || null,
         dueDate: assignmentDueDate || null,
         assigneeUserId: assignee?.id ?? null,
@@ -1430,7 +1434,7 @@ export function DistributionFullscreenEntry({
     dealer.id,
     matrixModelById,
     point.id,
-    point.name,
+    tradePointDisplayName,
     toast,
   ]);
 
@@ -1577,7 +1581,7 @@ export function DistributionFullscreenEntry({
               </p>
             ) : (
               <>
-                <p className="truncate text-base font-semibold text-foreground">{point.name}</p>
+                <p className="truncate text-base font-semibold text-foreground">{tradePointDisplayName}</p>
                 <p className="truncate text-sm text-muted-foreground">
                   {dealer.name}
                   {point.city?.trim() && point.city !== "—" ? ` · ${point.city.trim()}` : ""}
@@ -2078,7 +2082,7 @@ export function DistributionFullscreenEntry({
       <Dialog open={assignmentDialogOpen} onOpenChange={handleAssignmentDialogOpenChange}>
         <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto overflow-x-hidden sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="break-words pr-6">Задание на отгрузку — {point.name}</DialogTitle>
+            <DialogTitle className="break-words pr-6">Задание на отгрузку — {tradePointDisplayName}</DialogTitle>
           </DialogHeader>
 
           {assignmentPhase === "form" ? (

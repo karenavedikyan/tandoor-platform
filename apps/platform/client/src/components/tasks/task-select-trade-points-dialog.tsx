@@ -12,6 +12,7 @@ import {
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { activeTradePointsForDealerRow, taskSelectTargetKey } from "@/lib/task-select-mode";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 
 type Props = {
   open: boolean;
@@ -73,7 +74,9 @@ export function TaskSelectTradePointsDialog({
         <ul className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
           {tradePoints.map((e) => {
             const key = row ? taskSelectTargetKey(row.id, e.point.id) : "";
-            const label = [e.point.name, e.point.city?.trim()].filter(Boolean).join(" · ");
+            const label = row
+              ? [resolveTradePointDisplayName(row, e.point), e.point.city?.trim()].filter(Boolean).join(" · ")
+              : e.point.id;
             return (
               <li key={e.point.id}>
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5 hover:bg-muted/40">
