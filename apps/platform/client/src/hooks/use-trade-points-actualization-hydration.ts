@@ -10,6 +10,10 @@ import {
   reconcileUnifiedTradePointsIntoActualizationState,
   unifiedDbTradePointIds,
 } from "@/lib/trade-points-actualization-hydration";
+import {
+  getTpHydrationNoWritebackFlagSync,
+  shouldUseTpHydrationNoWriteback,
+} from "@/lib/tp-hydration-no-writeback-flag";
 
 export const TP_DB_HYDRATION_FETCH_TIMEOUT_MS = 8000;
 
@@ -56,8 +60,11 @@ export async function executeTradePointsDbHydration(args: {
   profile: ReleaseDemoProfile;
   onRows: (rows: UnifiedActiveTradePointDetail[], ids: string[]) => void;
   markCompleted: () => void;
+  /** TP_HYDRATION_NO_WRITEBACK: только read-overlay, без persist в blob. */
+  noWriteback?: boolean;
 }): Promise<boolean> {
   const { id, force = false, attemptedRef, isCancelled } = args;
+  const noWriteback = args.noWriteback === true;
   if (shouldSkipTradePointsHydrationFetch(attemptedRef, id, force)) return false;
   attemptedRef.current = id;
 
@@ -68,8 +75,9 @@ export async function executeTradePointsDbHydration(args: {
   const ids = unifiedDbTradePointIds(rows);
   args.onRows(rows ?? [], ids);
 
-  if (rows && rows.length > 0) {
-    reconcileUnifiedTradePointsIntoActualizationState(args.actState, rows, id, args.profile);
+  // Write-back DB→blob нужен только при флаге off (legacy). Отображение читает dbTradePoints +
+  // mergeTradePointsActiveFromDbWithActualizationOverlay — результат reconcile в blob не используется.
+  if (!noWriteback && rows && rows.length > 0) {
     const r = await args.persist((prev) => {
       const { next, changed: changedInPersist } = reconcileUnifiedTradePointsIntoActualizationState(
         prev,
@@ -89,7 +97,7 @@ export async function executeTradePointsDbHydration(args: {
 
 /**
  * При открытии карточки клиента подтягивает активные ТТ из единого DB-источника
- * и реконсилирует их в actualization-blob (идемпотентно).
+ * в read-overlay (`dbTradePoints`). При TP_HYDRATION_NO_WRITEBACK — без write-back в blob.
  */
 export function useTradePointsActualizationHydration(
   dealerId: string | undefined,
@@ -110,6 +118,7 @@ export function useTradePointsActualizationHydration(
   const attemptedRef = useRef<string | null>(null);
   const persistRef = useRef(actx.persist);
   persistRef.current = actx.persist;
+  const noWritebackRef = useRef(getTpHydrationNoWritebackFlagSync());
   const readySetRef = useRef(false);
 
   useEffect(() => {
@@ -141,11 +150,15 @@ export function useTradePointsActualizationHydration(
     });
 
     const run = async (force = false) => {
+      noWritebackRef.current = await shouldUseTpHydrationNoWriteback();
+      if (cancelled) return;
+
       const didComplete = await executeTradePointsDbHydration({
         id,
         force,
         attemptedRef,
         isCancelled: () => cancelled,
+        noWriteback: noWritebackRef.current,
         persist: (mutate) => persistRef.current(mutate),
         actState: actx.state,
         profile,

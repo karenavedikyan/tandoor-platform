@@ -13,3 +13,7 @@ export function shadowDiffEnabled(): boolean {
 export function useServerKpiAggregates(): boolean {
   return process.env.USE_SERVER_KPI_AGGREGATES === "true";
 }
+
+export function useTpHydrationNoWriteback(): boolean {
+  return process.env.TP_HYDRATION_NO_WRITEBACK === "true";
+}

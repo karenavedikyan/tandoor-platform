@@ -5,6 +5,7 @@ import type { OrgSnapshot } from "./use-org-snapshot.js";
 import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
 import { seedFeatureFlagsFromBootstrap } from "./dealer-base-source.js";
 import { seedServerKpiAggregatesFromBootstrap } from "./server-kpi-aggregates-flag.js";
+import { seedTpHydrationNoWritebackFromBootstrap } from "./tp-hydration-no-writeback-flag.js";
 
 export type BootstrapFeatureFlags = {
   success: true;
@@ -12,6 +13,7 @@ export type BootstrapFeatureFlags = {
     USE_DB_DEALERS: boolean;
     SHADOW_DIFF_ENABLED: boolean;
     USE_SERVER_KPI_AGGREGATES: boolean;
+    TP_HYDRATION_NO_WRITEBACK: boolean;
   };
 };
 
@@ -64,4 +66,5 @@ export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void
   qc.setQueryData(["auth", "my-visible-codes"], visibleCodesToQueryResult(b.visible_codes));
   seedFeatureFlagsFromBootstrap(b.feature_flags);
   seedServerKpiAggregatesFromBootstrap(b.feature_flags);
+  seedTpHydrationNoWritebackFromBootstrap(b.feature_flags);
 }
