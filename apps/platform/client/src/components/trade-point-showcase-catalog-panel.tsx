@@ -16,7 +16,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { ShowcaseMatrixTask, TradePointShowcaseSelectedModel } from "@/lib/client-base-actualization-state";
+import {
+  normalizeHasShowcase,
+  type ShowcaseMatrixTask,
+  type TradePointShowcaseActualization,
+  type TradePointShowcaseSelectedModel,
+} from "@/lib/client-base-actualization-state";
 import type { CatalogProduct } from "@/lib/catalog-product-type";
 import {
   CATALOG_PRODUCTS,
@@ -35,7 +40,6 @@ import {
   resolveTradePointMatrixWithSource,
   type ResolvedTradePointMatrix,
 } from "@/lib/trade-point-matrix-resolver";
-import type { TradePointShowcaseActualization } from "@/lib/client-base-actualization-state";
 import {
   countSelectedByType,
   evaluateSelectionGate,
@@ -47,6 +51,13 @@ import {
 } from "@/lib/showcase-type-capacity";
 import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
 import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
+import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment-capacity-dialog";
+import {
+  categoryCapacityFieldsForPersist,
+  categoryCapacityFromPlacements,
+  persistEquipmentCapacityInputs,
+  type EquipmentCapacityInputV2,
+} from "@/lib/showcase-capacity-by-equipment";
 import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
 import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
 import {
@@ -56,6 +67,7 @@ import {
 } from "@/lib/showcase-matrix-catalog-store";
 import {
   loadCachedMatrix,
+  loadCachedPlacements,
   refreshMatrixFromServer,
   setMatrixStatus,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
@@ -217,7 +229,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [matrixListMode, setMatrixListMode] = useState<"deficit" | "all">("deficit");
   const [jumpHighlightId, setJumpHighlightId] = useState<string | null>(null);
   const [pendingSelectionProductId, setPendingSelectionProductId] = useState<string | null>(null);
-  const [headerCapacityFormType, setHeaderCapacityFormType] = useState<ShowcaseTypeKey | null>(null);
+  const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [bump, setBump] = useState(0);
   const [catalogBump, setCatalogBump] = useState(0);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -468,6 +480,30 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       onPatchShowcase?.(patch);
     },
     [onMarkDirty, onPatchShowcase],
+  );
+
+  const handleEquipmentDialogConfirm = useCallback(
+    (inputs: EquipmentCapacityInputV2) => {
+      persistEquipmentCapacityInputs({
+        dealerId,
+        tradePointId,
+        placements: loadCachedPlacements(tradePointId),
+        inputs,
+        updatedBy: actorUserId,
+        updatedByName: actorLabel,
+      });
+      const freshPlacements = loadCachedPlacements(tradePointId);
+      const cats = categoryCapacityFromPlacements(freshPlacements);
+      const capacityFields = categoryCapacityFieldsForPersist({
+        next: cats,
+        prevRec: showcaseRec ?? {},
+        hasShowcase: normalizeHasShowcase(showcaseRec?.hasShowcase) !== false,
+      });
+      applyShowcasePatch(capacityFields);
+      setBump((n) => n + 1);
+      setEquipmentDialogOpen(false);
+    },
+    [actorLabel, actorUserId, applyShowcasePatch, dealerId, showcaseRec, tradePointId],
   );
 
   const performSelect = useCallback(
@@ -1106,27 +1142,29 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                     <button
                       type="button"
                       className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-300"
-                      onClick={() => setHeaderCapacityFormType(row.type)}
+                      onClick={() => setEquipmentDialogOpen(true)}
                     >
                       не заполнено
                     </button>
                   </>
+                ) : canEdit ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      "text-left underline-offset-2 hover:underline",
+                      row.overfill ? "font-medium text-destructive" : "text-muted-foreground",
+                    )}
+                    onClick={() => setEquipmentDialogOpen(true)}
+                  >
+                    {row.label}
+                  </button>
                 ) : (
-                  <span className={row.overfill ? "font-medium text-destructive" : "text-muted-foreground"}>{row.label}</span>
+                  <span className={row.overfill ? "font-medium text-destructive" : "text-muted-foreground"}>
+                    {row.label}
+                  </span>
                 )}
               </p>
             ))}
-            {headerCapacityFormType ? (
-              <ShowcaseTypeCapacityInlineForm
-                type={headerCapacityFormType}
-                currentCapacity={getShowcaseTypeCapacity(showcaseRec, headerCapacityFormType)}
-                onSave={(value) => {
-                  applyShowcasePatch(patchShowcaseTypeCapacity(headerCapacityFormType, value));
-                  setHeaderCapacityFormType(null);
-                }}
-                onCancel={() => setHeaderCapacityFormType(null)}
-              />
-            ) : null}
           </div>
           {countsLine ? <p className="text-[11px] text-muted-foreground">{countsLine}</p> : null}
 
@@ -1210,6 +1248,17 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           )}
         </TabsContent>
       </Tabs>
+
+      <ShowcaseEquipmentCapacityDialog
+        open={equipmentDialogOpen}
+        onOpenChange={setEquipmentDialogOpen}
+        tradePointId={tradePointId}
+        getCandidateRec={() => showcaseRec}
+        selectedModels={effectiveSelectedModels}
+        catalogLookup={catalogLookup}
+        onConfirm={handleEquipmentDialogConfirm}
+        onCancel={() => setEquipmentDialogOpen(false)}
+      />
 
       <Sheet open={detailProductId != null} onOpenChange={(o) => !o && setDetailProductId(null)}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto sm:max-w-lg sm:rounded-t-xl" data-testid="dialog-showcase-model-detail">
