@@ -22,4 +22,7 @@ assert.ok(mkTypes.includes("portal_second"));
 assert.equal(mkTypes[mkTypes.length - 1], "portal_second");
 assert.deepEqual(mkTypes, ["portal", "cube", "book", "hoof", "unmounted", "portal_second"]);
 
+const hwTypes = allowedTypesForSegment("hardware");
+assert.ok(!hwTypes.includes("portal_second"));
+
 console.log("showcase-placement-labels: ok");
