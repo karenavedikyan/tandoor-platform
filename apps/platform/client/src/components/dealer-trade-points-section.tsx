@@ -40,7 +40,6 @@ import type { UnifiedActiveTradePointDetail } from "@shared/trade-point-primary"
 import { mergeTradePointsActiveForActualization, mergeTradePointsActiveFromDbWithActualizationOverlay, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
 import { mergeActualizationState } from "@/lib/client-base-actualization-state";
 import { materializePrimaryTradePointIfNeeded } from "@/lib/primary-trade-point-materialization";
-import { tpDiag } from "@/lib/tp-diag-trace";
 import {
   generateStableManualTradePointId,
   nextManualTradePointInternalCode,
@@ -283,14 +282,6 @@ export function DealerTradePointsSection({
   }, [useAct, dbHydrationReady, dbTradePoints, actx.state, row, tpBump]);
 
   const dbListLoading = useAct && !dbHydrationReady;
-
-  useEffect(() => {
-    tpDiag("section:count", {
-      dealerId: row.id,
-      active: mergedActive.length,
-      materializing: primaryTpMaterializing,
-    });
-  }, [row.id, mergedActive.length, primaryTpMaterializing]);
 
   const hasSeeds = row.tradePoints.length > 0;
   const hasManualStored = getManualTradePoints(row.id).length > 0;
