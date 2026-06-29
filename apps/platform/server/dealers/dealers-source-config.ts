@@ -9,3 +9,7 @@ export function useDbDealers(): boolean {
 export function shadowDiffEnabled(): boolean {
   return process.env.SHADOW_DIFF_ENABLED === "true";
 }
+
+export function useServerKpiAggregates(): boolean {
+  return process.env.USE_SERVER_KPI_AGGREGATES === "true";
+}

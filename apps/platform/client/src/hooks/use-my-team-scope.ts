@@ -3,6 +3,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import type { KpiCountsFromScope } from "@/hooks/use-my-scope-from-db";
 import {
   fetchTeamScope,
   teamScopeQueryKey,
@@ -44,6 +45,18 @@ export function useMyTeamScope(options?: UseMyTeamScopeOptions): MyTeamScopeFrom
     isLoading: q.isLoading,
     isError: q.isError,
     forbidden,
+  };
+}
+
+export function kpiCountsFromTeamScope(scope: MyTeamScopeFromDB): KpiCountsFromScope | null {
+  if (!scope.ready || !scope.data) return null;
+  const t = scope.data.team_totals;
+  return {
+    total: t.active_dealers,
+    active: t.tp_status_active,
+    potential: t.tp_status_potential,
+    attention: t.tp_status_attention,
+    avgDist: t.avg_distribution,
   };
 }
 

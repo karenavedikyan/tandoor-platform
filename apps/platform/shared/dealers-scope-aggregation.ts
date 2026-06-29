@@ -4,6 +4,14 @@
 
 import type { TeamScopeMember, TeamTotals } from "./dealers-scope-types.js";
 
+const KPI_PLACEHOLDER = {
+  tp_status_active: 0,
+  tp_status_potential: 0,
+  tp_status_attention: 0,
+  dealer_no_status: 0,
+  avg_distribution: 0,
+} as const;
+
 export function unionExternalKeys(members: TeamScopeMember[]): {
   active: Set<string>;
   trashed: Set<string>;
@@ -36,6 +44,7 @@ export function aggregateMemberTotals(members: TeamScopeMember[]): TeamTotals {
     trashed_dealers: keys.trashed.size,
     // TODO(423c): SET-union по trashed tp_id, когда в TeamScopeMember появится trashed_trade_points[].
     trashed_trade_points: members.reduce((s, m) => s + m.totals.trashed_trade_points, 0),
+    ...KPI_PLACEHOLDER,
   };
 }
 
@@ -52,6 +61,7 @@ export function aggregateOrgTotals(
     active_trade_points: unionTradePointIds(allMembers).size,
     trashed_trade_points:
       teamTotalsList.reduce((s, t) => s + t.trashed_trade_points, 0) + orphanTotals.trashed_trade_points,
+    ...KPI_PLACEHOLDER,
   };
 }
 
@@ -68,5 +78,6 @@ export function sumMemberFieldTotals(members: TeamScopeMember[]): TeamTotals {
     active_trade_points: members.reduce((s, m) => s + m.totals.active_trade_points, 0),
     trashed_dealers: members.reduce((s, m) => s + m.totals.trashed_dealers, 0),
     trashed_trade_points: members.reduce((s, m) => s + m.totals.trashed_trade_points, 0),
+    ...KPI_PLACEHOLDER,
   };
 }

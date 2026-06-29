@@ -4,12 +4,13 @@
 
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
-import { computeDbScopeForUser } from "./db-scope-formula.js";
+import { computeDbScopeForUser, computeDealerKpiTotalsForActiveDealers } from "./db-scope-formula.js";
 import {
   fetchActiveTradePointsForScope,
   type MyDealerScopeTradePoint,
 } from "./dealers-my-scope-handlers.js";
 import { aggregateMemberTotals } from "./dealers-scope-aggregation.js";
+import { finalizeKpiScopeTotals } from "./kpi-scope-totals.js";
 import type { TeamScopeMember, TeamScopePayload } from "./dealers-scope-types.js";
 
 export type TeamScopeViewer = {
@@ -71,7 +72,13 @@ export async function buildMemberScope(
       active_trade_points: scope.totals.active_trade_points,
       trashed_dealers: scope.totals.trashed_dealers,
       trashed_trade_points: scope.totals.trashed_trade_points,
+      tp_status_active: scope.totals.tp_status_active,
+      tp_status_potential: scope.totals.tp_status_potential,
+      tp_status_attention: scope.totals.tp_status_attention,
+      dealer_no_status: scope.totals.dealer_no_status,
+      avg_distribution: scope.totals.avg_distribution,
     },
+    active_dealer_ids: scope.active_dealer_ids,
     active_dealer_external_keys: scope.active_dealer_external_keys,
     trashed_dealer_external_keys: scope.trashed_dealer_external_keys,
     active_trade_points: activeTradePoints.map((tp: MyDealerScopeTradePoint) => ({
@@ -89,6 +96,14 @@ export async function buildTeamScopePayload(
   const members = await fetchTeamMembersForTeam(pool, team.id);
   const memberScopes = await Promise.all(members.map((m) => buildMemberScope(pool, m)));
   const ropId = team.rop_user_id ?? "";
+  const unionDealerIds = new Set<string>();
+  for (const m of memberScopes) {
+    for (const id of m.active_dealer_ids) unionDealerIds.add(id);
+  }
+  const kpiFields = finalizeKpiScopeTotals(
+    await computeDealerKpiTotalsForActiveDealers(pool, Array.from(unionDealerIds)),
+  );
+  const countTotals = aggregateMemberTotals(memberScopes);
   return {
     success: true,
     team: {
@@ -101,7 +116,7 @@ export async function buildTeamScopePayload(
       },
     },
     members: memberScopes,
-    team_totals: aggregateMemberTotals(memberScopes),
+    team_totals: { ...countTotals, ...kpiFields },
   };
 }
 

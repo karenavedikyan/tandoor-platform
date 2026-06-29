@@ -9,6 +9,8 @@ import {
   aggregateOrgTotals,
 } from "./dealers-scope-aggregation.js";
 import type { OrgScopePayload, TeamScopeMember } from "./dealers-scope-types.js";
+import { computeDealerKpiTotalsForActiveDealers } from "./db-scope-formula.js";
+import { finalizeKpiScopeTotals } from "./kpi-scope-totals.js";
 import {
   buildMemberScope,
   buildTeamScopePayload,
@@ -121,7 +123,13 @@ async function buildOrphanBlock(
             active_trade_points: 0,
             trashed_dealers: unassignedTrashed.length,
             trashed_trade_points: 0,
+            tp_status_active: 0,
+            tp_status_potential: 0,
+            tp_status_attention: 0,
+            dealer_no_status: 0,
+            avg_distribution: 0,
           },
+          active_dealer_ids: [],
           active_dealer_external_keys: unassignedActive,
           trashed_dealer_external_keys: unassignedTrashed,
           active_trade_points: [],
@@ -161,11 +169,19 @@ export async function fetchOrgScopeForRequest(
   const orphan = await buildOrphanBlock(pool, covered.active, covered.trashed);
 
   const allMembers = [...allTeamMembers, ...orphan.members];
-  const org_totals = aggregateOrgTotals(
+  const countTotals = aggregateOrgTotals(
     teamBlocks.map((b) => b.team_totals),
     orphan.totals,
     allMembers,
   );
+  const unionDealerIds = new Set<string>();
+  for (const m of allMembers) {
+    for (const id of m.active_dealer_ids) unionDealerIds.add(id);
+  }
+  const kpiFields = finalizeKpiScopeTotals(
+    await computeDealerKpiTotalsForActiveDealers(pool, Array.from(unionDealerIds)),
+  );
+  const org_totals = { ...countTotals, ...kpiFields };
 
   const orgNameQ = await pool.query<{ name: string }>(
     `SELECT COALESCE((SELECT name FROM teams ORDER BY name LIMIT 1), 'Организация') AS name`,
