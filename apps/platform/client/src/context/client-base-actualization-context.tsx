@@ -17,6 +17,7 @@ import {
 } from "@/lib/client-base-actualization-api";
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
+import { tpDiag } from "@/lib/tp-diag-trace";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 
@@ -102,9 +103,17 @@ export function ClientBaseActualizationProvider({ children }: { children: ReactN
       setErrorMessage(r.errorMessage);
       if (r.syncStatus === "api_ok" && r.meta.success) {
         setState(r.meta.state);
+        tpDiag("actx:persist", {
+          keysCount: Object.keys(r.meta.state.manuallyCreatedTradePointsById ?? {}).length,
+          success: true,
+        });
         return { success: true, syncStatus: r.syncStatus, storageMode: r.meta.storageMode };
       }
       setState(r.meta.state);
+      tpDiag("actx:persist", {
+        keysCount: Object.keys(r.meta.state.manuallyCreatedTradePointsById ?? {}).length,
+        success: false,
+      });
       return { success: false, syncStatus: r.syncStatus, storageMode: r.meta.storageMode };
     },
     [enabled, profile],

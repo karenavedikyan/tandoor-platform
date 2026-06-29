@@ -162,6 +162,7 @@ import {
 import { DealerCharacteristicsSection } from "@/components/dealer-characteristics-section";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
+import { TpDiagPanel } from "@/components/tp-diag-panel";
 import { DealerActionFocusSection } from "@/components/dealer-action-focus-section";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
@@ -2532,6 +2533,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
         testId="floating-back-to-dealer-base"
         ariaLabel="Назад к клиентской базе"
       />
+
+      <TpDiagPanel dealerId={baseRow.id} />
     </div>
   );
 }

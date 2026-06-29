@@ -17,6 +17,7 @@ import {
   type PrimaryTradePointMaterializationFields,
 } from "@shared/primary-trade-point-materialization";
 import type { ManualTradePoint } from "./client-base-actualization-state.js";
+import { tpDiag } from "./tp-diag-trace.js";
 
 export const PRIMARY_TRADE_POINT_MATERIALIZED_EVENT = "primary-trade-point-materialized";
 
@@ -74,11 +75,17 @@ export async function materializePrimaryTradePointIfNeeded(args: {
 }): Promise<{ created: boolean; tradePointId: string; skipped: boolean }> {
   const { row, profile, persist } = args;
   const tpId = primaryTradePointMaterializationId(row.id);
+  tpDiag("mat:fn:enter", { dealerId: row.id, tpId });
 
   let outcome: "created" | "skipped" | "failed" = "failed";
   let materializedFields: PrimaryTradePointMaterializationFields | null = null;
 
   const r = await persist((prev) => {
+    tpDiag("mat:fn:persist:prevCount", {
+      dealerId: row.id,
+      prevRealCount: countRealActiveTradePoints(row, prev),
+      hasManualPrimary: Boolean(prev.manuallyCreatedTradePointsById[tpId]),
+    });
     if (!shouldMaterializePrimaryTradePoint(row, prev)) {
       outcome = "skipped";
       return prev;
@@ -105,6 +112,8 @@ export async function materializePrimaryTradePointIfNeeded(args: {
     });
   });
 
+  tpDiag("mat:fn:persisted", { dealerId: row.id, success: r.success });
+
   if (!r.success || outcome === "failed") {
     return { created: false, tradePointId: tpId, skipped: false };
   }
@@ -114,6 +123,7 @@ export async function materializePrimaryTradePointIfNeeded(args: {
 
   const fields = materializedFields!;
   try {
+    tpDiag("mat:fn:saveOverride", { dealerId: row.id, tpId });
     const tpFields = mapActualizationTpFieldsToOverrides({
       name: fields.name,
       city: fields.city,
