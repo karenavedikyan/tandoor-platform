@@ -8,6 +8,8 @@ export type DistributionOnPointSegment = {
   pct: number;
   ours: number;
   total: number;
+  legacyOurs: number;
+  rotationPct: number;
 };
 
 export type DistributionOnPointSummary = {
@@ -34,10 +36,13 @@ function mergeSegmentWithInstalled(
 ): DistributionOnPointSegment {
   const total = stats?.totalCapacity ?? 0;
   const ours = Math.max(stats?.totalOurs ?? 0, installedOurs);
+  const legacyOurs = stats?.totalLegacyOurs ?? 0;
   return {
     pct: segmentDistributionPercent(ours, total),
     ours,
     total,
+    legacyOurs,
+    rotationPct: segmentDistributionPercent(legacyOurs, total),
   };
 }
 
@@ -59,6 +64,7 @@ export function computeDistributionOnPoint(args: {
     const hardware = mergeSegmentWithInstalled(statsFor("hardware"), args.installedOursBySegment.hardware);
     const totalCap = mk.total + vh.total + hardware.total;
     const totalOurs = mk.ours + vh.ours + hardware.ours;
+    const totalLegacy = mk.legacyOurs + vh.legacyOurs + hardware.legacyOurs;
     return {
       hasData: true,
       mk,
@@ -68,6 +74,8 @@ export function computeDistributionOnPoint(args: {
         pct: segmentDistributionPercent(totalOurs, totalCap),
         ours: totalOurs,
         total: totalCap,
+        legacyOurs: totalLegacy,
+        rotationPct: segmentDistributionPercent(totalLegacy, totalCap),
       },
     };
   }
@@ -88,21 +96,29 @@ export function computeDistributionOnPoint(args: {
       pct: segmentDistributionPercent(oursMk, capInt),
       ours: oursMk,
       total: capInt,
+      legacyOurs: 0,
+      rotationPct: 0,
     },
     vh: {
       pct: segmentDistributionPercent(oursVh, capEnt),
       ours: oursVh,
       total: capEnt,
+      legacyOurs: 0,
+      rotationPct: 0,
     },
     hardware: {
       pct: segmentDistributionPercent(oursHw, capHw),
       ours: oursHw,
       total: capHw,
+      legacyOurs: 0,
+      rotationPct: 0,
     },
     total: {
       pct: segmentDistributionPercent(totalOurs, totalCap),
       ours: totalOurs,
       total: totalCap,
+      legacyOurs: 0,
+      rotationPct: 0,
     },
   };
 }
