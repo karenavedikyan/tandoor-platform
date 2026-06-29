@@ -22,6 +22,7 @@ import {
   handleTradePointsListScoped,
   type ListScopedTradePointsResult,
 } from "../../shared/trade-points-list-scoped-handlers.js";
+import { listActiveTradePointsForDealerUnifiedDetailed } from "../../shared/trade-point-primary.js";
 
 const READ_ROLES = new Set([
   "admin",
@@ -152,6 +153,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return;
       }
       sendJson(res, 200, payload);
+      return;
+    }
+
+    if (action === "active-unified") {
+      const dealerId =
+        parseQueryString(req.query.dealerId) ?? parseQueryString(req.query.dealer_id);
+      if (!dealerId) {
+        sendJson(res, 400, {
+          success: false,
+          code: "VALIDATION",
+          message: "Параметр dealerId обязателен.",
+        });
+        return;
+      }
+      const tradePoints = await listActiveTradePointsForDealerUnifiedDetailed(pool, dealerId);
+      sendJson(res, 200, { success: true, data: { tradePoints } });
       return;
     }
 

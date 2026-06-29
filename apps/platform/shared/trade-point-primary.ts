@@ -62,16 +62,97 @@ export type DealerTradePointListItem = {
   city: string | null;
 };
 
-/** Активные ТТ клиента: trade_points ∪ override-only (единый источник для UI и ответственных). */
-export async function listActiveTradePointsForDealerUnified(
-  pool: PoolLike,
-  dealerId: string,
-): Promise<DealerTradePointListItem[]> {
-  const r = await pool.query<{ tp_id: string; name: string | null; city: string | null }>(
-    `SELECT tp_id, name, city FROM (
+type UnifiedActiveTpSqlRow = {
+  tp_id: string;
+  dealer_id: string;
+  name: string | null;
+  city: string | null;
+  address: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  comment: string | null;
+  showcase_status: string | null;
+  format: string | null;
+  is_primary: boolean;
+  is_override_only: boolean;
+  has_override_row: boolean;
+  updated_at: string | null;
+  updated_by: string | null;
+};
+
+/** Полная строка активной ТТ из единого источника (для гидрации actualization-blob). */
+export type UnifiedActiveTradePointDetail = {
+  tpId: string;
+  dealerId: string;
+  name: string | null;
+  city: string | null;
+  address: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  comment: string | null;
+  showcaseStatus: string | null;
+  format: string | null;
+  isPrimary: boolean;
+  /** Нет соответствующей активной trade_points — только override-строка. */
+  isOverrideOnly: boolean;
+  /** Есть строка trade_point_overrides (правки к release или override-only). */
+  hasOverrideRow: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+};
+
+function mapUnifiedActiveTradePointDetail(row: UnifiedActiveTpSqlRow): UnifiedActiveTradePointDetail {
+  return {
+    tpId: String(row.tp_id),
+    dealerId: String(row.dealer_id),
+    name: row.name != null ? String(row.name) : null,
+    city: row.city != null ? String(row.city) : null,
+    address: row.address != null ? String(row.address) : null,
+    contactName: row.contact_name != null ? String(row.contact_name) : null,
+    contactPhone: row.contact_phone != null ? String(row.contact_phone) : null,
+    comment: row.comment != null ? String(row.comment) : null,
+    showcaseStatus: row.showcase_status != null ? String(row.showcase_status) : null,
+    format: row.format != null ? String(row.format) : null,
+    isPrimary: row.is_primary === true,
+    isOverrideOnly: row.is_override_only === true,
+    hasOverrideRow: row.has_override_row === true,
+    updatedAt: row.updated_at != null ? String(row.updated_at) : null,
+    updatedBy: row.updated_by != null ? String(row.updated_by) : null,
+  };
+}
+
+const UNIFIED_ACTIVE_TP_SQL = `SELECT
+       tp_id,
+       dealer_id,
+       name,
+       city,
+       address,
+       contact_name,
+       contact_phone,
+       comment,
+       showcase_status,
+       format,
+       is_primary,
+       is_override_only,
+       has_override_row,
+       updated_at,
+       updated_by
+  FROM (
        SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
+              COALESCE(tpo.dealer_id, d.external_key) AS dealer_id,
               COALESCE(tpo.name, tp.name) AS name,
-              COALESCE(tpo.city, tp.city) AS city
+              COALESCE(tpo.city, tp.city) AS city,
+              COALESCE(tpo.address, tp.address) AS address,
+              tpo.contact_name,
+              tpo.contact_phone,
+              tpo.comment,
+              tpo.showcase_status,
+              COALESCE(tp.format, 'Розница / салон') AS format,
+              COALESCE(tpo.is_primary, FALSE) AS is_primary,
+              FALSE AS is_override_only,
+              (tpo.tp_id IS NOT NULL) AS has_override_row,
+              COALESCE(tpo.updated_at, tp.updated_at) AS updated_at,
+              tpo.updated_by
          FROM trade_points tp
          INNER JOIN dealers d ON d.id = tp.dealer_id
          LEFT JOIN trade_point_overrides tpo ON (
@@ -80,10 +161,22 @@ export async function listActiveTradePointsForDealerUnified(
         WHERE (d.external_key = $1 OR d.id::text = $1)
           AND tp.is_active = TRUE
           AND ${tpJoinStatusActive("tpo")}
-       UNION
+       UNION ALL
        SELECT tpo.tp_id,
+              tpo.dealer_id,
               tpo.name,
-              tpo.city
+              tpo.city,
+              tpo.address,
+              tpo.contact_name,
+              tpo.contact_phone,
+              tpo.comment,
+              tpo.showcase_status,
+              'Розница / салон' AS format,
+              COALESCE(tpo.is_primary, FALSE) AS is_primary,
+              TRUE AS is_override_only,
+              TRUE AS has_override_row,
+              tpo.updated_at,
+              tpo.updated_by
          FROM trade_point_overrides tpo
         WHERE tpo.dealer_id = $1
           AND tpo.status = 'active'
@@ -96,13 +189,27 @@ export async function listActiveTradePointsForDealerUnified(
                AND (tp.id::text = tpo.tp_id OR tp.external_key = tpo.tp_id)
           )
      ) u
-     ORDER BY name ASC NULLS LAST, tp_id ASC`,
-    [dealerId],
-  );
-  return r.rows.map((row) => ({
-    tpId: String(row.tp_id),
-    name: row.name != null ? String(row.name) : null,
-    city: row.city != null ? String(row.city) : null,
+     ORDER BY name ASC NULLS LAST, tp_id ASC`;
+
+/** Активные ТТ клиента с полями для UI (trade_points ∪ override-only). */
+export async function listActiveTradePointsForDealerUnifiedDetailed(
+  pool: PoolLike,
+  dealerId: string,
+): Promise<UnifiedActiveTradePointDetail[]> {
+  const r = await pool.query<UnifiedActiveTpSqlRow>(UNIFIED_ACTIVE_TP_SQL, [dealerId]);
+  return r.rows.map(mapUnifiedActiveTradePointDetail);
+}
+
+/** Активные ТТ клиента: trade_points ∪ override-only (единый источник для UI и ответственных). */
+export async function listActiveTradePointsForDealerUnified(
+  pool: PoolLike,
+  dealerId: string,
+): Promise<DealerTradePointListItem[]> {
+  const rows = await listActiveTradePointsForDealerUnifiedDetailed(pool, dealerId);
+  return rows.map((row) => ({
+    tpId: row.tpId,
+    name: row.name,
+    city: row.city,
   }));
 }
 

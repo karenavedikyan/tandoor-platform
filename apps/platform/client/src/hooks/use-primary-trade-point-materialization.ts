@@ -12,13 +12,16 @@ import {
 export function usePrimaryTradePointMaterialization(
   row: DealerRow,
   profile: ReleaseDemoProfile,
+  opts?: { enabled?: boolean },
 ): { materializing: boolean; materialized: boolean } {
   const actx = useClientBaseActualization();
   const [materializing, setMaterializing] = useState(false);
   const [materialized, setMaterialized] = useState(false);
   const attemptedDealerRef = useRef<string | null>(null);
+  const hydrationEnabled = opts?.enabled !== false;
 
   useEffect(() => {
+    if (!hydrationEnabled) return;
     if (!actx.enabled || !canActualizeClientBase(profile)) return;
     if (!shouldMaterializePrimaryTradePoint(row, actx.state)) {
       setMaterialized(true);
@@ -47,7 +50,7 @@ export function usePrimaryTradePointMaterialization(
     return () => {
       cancelled = true;
     };
-  }, [actx, actx.enabled, actx.state, profile, row]);
+  }, [hydrationEnabled, actx, actx.enabled, actx.state, profile, row]);
 
   return { materializing, materialized };
 }

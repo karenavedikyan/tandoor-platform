@@ -68,6 +68,7 @@ import {
 import { DealerActualizationEditDialog } from "@/components/client-base-actualization-dealer-forms";
 import { ClientBaseActualizationSyncStatus } from "@/components/client-base-actualization-sync-status";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { useTradePointsActualizationHydration } from "@/hooks/use-trade-points-actualization-hydration";
 import { useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { DealerClientNextStepSection } from "@/components/dealer-client-next-step-section";
@@ -248,7 +249,8 @@ export function DealerManualActualizationPage(props: {
 }): ReactElement {
   const { baseRow, profile, readOnly: readOnlyProp, embeddedInSheet } = props;
   useDealerTpOverridesHydration({ dealerId: baseRow.id });
-  usePrimaryTradePointMaterialization(baseRow, profile);
+  const tpDbHydration = useTradePointsActualizationHydration(baseRow.id, profile);
+  usePrimaryTradePointMaterialization(baseRow, profile, { enabled: tpDbHydration.ready });
   const overridesVersion = useOverridesRuntimeVersion();
   const actx = useClientBaseActualization();
   const { user } = useCurrentUser();
