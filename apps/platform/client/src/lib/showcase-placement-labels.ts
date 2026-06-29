@@ -8,6 +8,7 @@ export const PLACEMENT_TYPE_LABEL_RU: Record<ShowcasePlacementType, string> = {
   unmounted: "Без крепления",
   branded_stand: "Фирменный стенд",
   stream_sku: "Ручеёк (SKU)",
+  portal_second: "2-й план",
 };
 
 export const PLACEMENT_SEGMENT_LABEL_RU: Record<ShowcasePlacementSegment, string> = {
@@ -24,11 +25,21 @@ export const PLACEMENT_QUALITY_WEIGHT: Record<ShowcasePlacementType, number> = {
   unmounted: 0.2,
   branded_stand: 1.0,
   stream_sku: 0.6,
+  portal_second: 1.0,
 };
 
-export const DOOR_PLACEMENT_TYPES: ShowcasePlacementType[] = ["portal", "cube", "book", "hoof", "unmounted"];
+export const DOOR_PLACEMENT_TYPES: ShowcasePlacementType[] = [
+  "portal",
+  "cube",
+  "book",
+  "hoof",
+  "unmounted",
+  "portal_second",
+];
 export const HARDWARE_PLACEMENT_TYPES: ShowcasePlacementType[] = ["branded_stand", "stream_sku"];
 
 export function allowedTypesForSegment(segment: ShowcasePlacementSegment): ShowcasePlacementType[] {
-  return segment === "hardware" ? HARDWARE_PLACEMENT_TYPES : DOOR_PLACEMENT_TYPES;
+  if (segment === "hardware") return HARDWARE_PLACEMENT_TYPES;
+  if (segment === "mk") return ["portal", "cube", "book", "hoof", "unmounted", "portal_second"];
+  return ["portal", "cube", "book", "hoof", "unmounted"];
 }

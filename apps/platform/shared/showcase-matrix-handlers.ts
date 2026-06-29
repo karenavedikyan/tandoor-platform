@@ -15,7 +15,8 @@ export type ShowcasePlacementType =
   | "hoof"
   | "unmounted"
   | "branded_stand"
-  | "stream_sku";
+  | "stream_sku"
+  | "portal_second";
 
 export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
 
@@ -31,6 +32,7 @@ export const PLACEMENT_TYPES = new Set<ShowcasePlacementType>([
   "unmounted",
   "branded_stand",
   "stream_sku",
+  "portal_second",
 ]);
 export const PLACEMENT_SEGMENTS = new Set<ShowcasePlacementSegment>(["vh", "mk", "hardware"]);
 
@@ -40,6 +42,7 @@ const DOOR_PLACEMENT_TYPES = new Set<ShowcasePlacementType>([
   "book",
   "hoof",
   "unmounted",
+  "portal_second",
 ]);
 const HARDWARE_PLACEMENT_TYPES = new Set<ShowcasePlacementType>(["branded_stand", "stream_sku"]);
 
@@ -296,6 +299,9 @@ function assertPlacementTypeMatchesSegment(
       );
     }
     return;
+  }
+  if (placementType === "portal_second" && placementSegment !== "mk") {
+    throw new ShowcaseMatrixValidationError("Тип «2-й план» доступен только для сегмента МК-двери.");
   }
   if (!DOOR_PLACEMENT_TYPES.has(placementType)) {
     throw new ShowcaseMatrixValidationError(

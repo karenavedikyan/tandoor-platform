@@ -14,7 +14,8 @@ export type ShowcasePlacementType =
   | "hoof"
   | "unmounted"
   | "branded_stand"
-  | "stream_sku";
+  | "stream_sku"
+  | "portal_second";
 
 export type ShowcasePlacementSegment = "vh" | "mk" | "hardware";
 
