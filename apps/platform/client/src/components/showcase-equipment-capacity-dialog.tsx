@@ -17,6 +17,7 @@ import {
   equipmentCapacityKey,
   legacyCategoryCapacityFromRec,
   seedInputsWithLegacyFallback,
+  validateMkPortalSecondCapacity,
   type EquipmentCapacityInputV2,
 } from "@/lib/showcase-capacity-by-equipment";
 import type { ShowcasePlacementSegment } from "@/lib/showcase-matrix-api";
@@ -148,7 +149,23 @@ export function ShowcaseEquipmentCapacityDialog({
     [catalogLookup, legacySegmentTotals, segmentTotals, selectedModels],
   );
 
-  const hasSaveError = hasMinError || hasLegacyOverflow;
+  const parsedCapacity = useMemo(() => {
+    const capacity: Record<string, number> = {};
+    for (const segment of SEGMENTS) {
+      for (const row of byEquipment[segment]) {
+        const key = equipmentCapacityKey(segment, row.placementType);
+        capacity[key] = parseCapacityInput(inputs[key] ?? "0");
+      }
+    }
+    return capacity;
+  }, [byEquipment, inputs]);
+
+  const mkPortalSecondValidation = useMemo(
+    () => validateMkPortalSecondCapacity(parsedCapacity),
+    [parsedCapacity],
+  );
+
+  const hasSaveError = hasMinError || hasLegacyOverflow || !mkPortalSecondValidation.valid;
 
   const handleConfirm = useCallback(() => {
     if (hasSaveError) return;
@@ -224,6 +241,14 @@ export function ShowcaseEquipmentCapacityDialog({
                     {SHOWCASE_TYPE_LABEL_RU[typeKey]}».
                   </p>
                 ) : null}
+                {segment === "mk" && !mkPortalSecondValidation.valid ? (
+                  <p
+                    className="text-xs text-destructive"
+                    data-testid="text-equipment-mk-portal-second-overflow"
+                  >
+                    {mkPortalSecondValidation.message}
+                  </p>
+                ) : null}
                 <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                   <span />
                   <span className="text-center">Витрин всего</span>
@@ -233,6 +258,10 @@ export function ShowcaseEquipmentCapacityDialog({
                   {allowedTypesForSegment(segment).map((placementType) => {
                     const key = equipmentCapacityKey(segment, placementType);
                     const current = getShowcaseTypeCapacity(candidateRec, typeKey);
+                    const portalSecondFieldError =
+                      segment === "mk" &&
+                      placementType === "portal_second" &&
+                      !mkPortalSecondValidation.valid;
                     return (
                       <div
                         key={key}
@@ -246,7 +275,8 @@ export function ShowcaseEquipmentCapacityDialog({
                           className={cn(
                             "h-9 tabular-nums",
                             categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60",
-                            (minCapacityError || legacyOverflowError) && "border-destructive/60",
+                            (minCapacityError || legacyOverflowError || portalSecondFieldError) &&
+                              "border-destructive/60",
                           )}
                           inputMode="numeric"
                           data-testid={`input-equipment-capacity-${segment}-${placementType}`}

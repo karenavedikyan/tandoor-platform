@@ -104,6 +104,21 @@ export function equipmentCapacityKey(
   return `${segment}:${placementType}`;
 }
 
+export const MK_PORTAL_SECOND_CAPACITY_ERROR =
+  "2-й план не может превышать количество порталов МК";
+
+/** Ёмкость mk:portal_second не может превышать mk:portal. */
+export function validateMkPortalSecondCapacity(
+  capacity: Record<string, number>,
+): { valid: boolean; message: string | null } {
+  const portalCap = Math.max(0, Math.floor(capacity[equipmentCapacityKey("mk", "portal")] ?? 0));
+  const secondCap = Math.max(0, Math.floor(capacity[equipmentCapacityKey("mk", "portal_second")] ?? 0));
+  if (secondCap > portalCap) {
+    return { valid: false, message: MK_PORTAL_SECOND_CAPACITY_ERROR };
+  }
+  return { valid: true, message: null };
+}
+
 export function parseEquipmentCapacityKey(
   key: string,
 ): { segment: ShowcasePlacementSegment; placementType: ShowcasePlacementType } | null {

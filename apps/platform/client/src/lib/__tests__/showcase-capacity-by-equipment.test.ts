@@ -13,6 +13,7 @@ import {
   ourMarkLimitFromPlacementBlock,
   seedInputsWithLegacyFallback,
   sumPlacementCompetitors,
+  validateMkPortalSecondCapacity,
 } from "../showcase-capacity-by-equipment.js";
 
 function placement(
@@ -149,5 +150,46 @@ const grown = growPlacementBlockToFitOurMarks({
 assert.ok(grown);
 assert.equal(grown!.oldCapacity, 10);
 assert.equal(grown!.nextCapacity, 11);
+
+assert.equal(
+  validateMkPortalSecondCapacity({
+    "mk:portal": 5,
+    "mk:portal_second": 6,
+  }).valid,
+  false,
+);
+assert.equal(
+  validateMkPortalSecondCapacity({
+    "mk:portal": 5,
+    "mk:portal_second": 6,
+  }).message,
+  "2-й план не может превышать количество порталов МК",
+);
+assert.equal(
+  validateMkPortalSecondCapacity({
+    "mk:portal": 5,
+    "mk:portal_second": 5,
+  }).valid,
+  true,
+);
+assert.equal(
+  validateMkPortalSecondCapacity({
+    "mk:portal": 10,
+    "mk:portal_second": 3,
+  }).valid,
+  true,
+);
+
+const mkWithSecond = capacityByEquipmentType([
+  ...entries,
+  placement({
+    targetId: "mk-second",
+    placementSegment: "mk",
+    placementType: "portal_second",
+    placementCapacity: 2,
+  }),
+]);
+assert.equal(mkWithSecond.mk.find((r) => r.placementType === "portal_second")?.capacity, 2);
+assert.ok(!byType.vh.some((r) => r.placementType === "portal_second"));
 
 console.log("showcase-capacity-by-equipment: ok");
