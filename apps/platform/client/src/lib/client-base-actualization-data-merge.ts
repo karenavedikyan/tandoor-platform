@@ -827,6 +827,25 @@ export function resolveActualizationTradePointDetail(
   return { dealer, point: entry.point, entry };
 }
 
+/** Карточка торговой точки: тот же DB-overlay набор, что и список секции. */
+export function resolveActualizationTradePointDetailFromDbOverlay(
+  rawDealerId: string,
+  rawPointId: string,
+  act: ActualizationState,
+  profile: ReleaseDemoProfile,
+  dbRows: UnifiedActiveTradePointDetail[],
+): { dealer: DealerRow; point: DealerTradePoint; entry: MergedTradePointEntry } | undefined {
+  const dealer = resolveDealerRowForCard(rawDealerId, act, profile);
+  if (!dealer) return undefined;
+  const pidTrim = rawPointId.trim();
+  const merged = mergeTradePointsActiveFromDbWithActualizationOverlay(dealer, act, dbRows);
+  const entry =
+    merged.find((e) => e.point.id === pidTrim) ??
+    merged.find((e) => e.point.id === normalizeTradePointId(dealer.id, pidTrim));
+  if (!entry) return undefined;
+  return { dealer, point: entry.point, entry };
+}
+
 export function patchActualizationState(prev: ActualizationState, patch: Partial<ActualizationState>): ActualizationState {
   return mergeActualizationState(prev, patch);
 }
