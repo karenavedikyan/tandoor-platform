@@ -58,7 +58,7 @@ import {
   categoryCapacityFromPlacements,
   growPlacementBlockToFitOurMarks,
   ourMarkLimitFromPlacementBlock,
-  type EquipmentCapacityInput,
+  type EquipmentCapacityInputV2,
 } from "@/lib/showcase-capacity-by-equipment";
 import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
@@ -1268,7 +1268,7 @@ export function DistributionFullscreenEntry({
   ]);
 
   const handleEquipmentDialogConfirm = useCallback(
-    (inputs: EquipmentCapacityInput) => {
+    (inputs: EquipmentCapacityInputV2) => {
       const uid = profile.personaUserId;
       const uname = userLabelFromProfile(profile);
       persistEquipmentCapacityInputs({

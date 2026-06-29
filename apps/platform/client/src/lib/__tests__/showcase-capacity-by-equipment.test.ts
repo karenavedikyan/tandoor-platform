@@ -37,6 +37,7 @@ function placement(
     placementActual: 0,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
     ...partial,
   };
 }
@@ -62,13 +63,34 @@ assert.equal(equipmentCapacityKey("vh", "portal"), "vh:portal");
 
 const legacy = { entrance: 10, interior: 20, hardware: 20 };
 const seeded = seedInputsWithLegacyFallback([], legacy);
-assert.equal(seeded["vh:unmounted"], 10);
-assert.equal(seeded["mk:unmounted"], 20);
-assert.equal(seeded["hardware:branded_stand"], 20);
+assert.equal(seeded.capacity["vh:unmounted"], 10);
+assert.equal(seeded.capacity["mk:unmounted"], 20);
+assert.equal(seeded.capacity["hardware:branded_stand"], 20);
+assert.equal(seeded.legacyOurs["vh:portal"] ?? 0, 0);
 
 const seededWithPlacement = seedInputsWithLegacyFallback(entries, legacy);
-assert.equal(seededWithPlacement["vh:portal"], 6);
-assert.equal(seededWithPlacement["vh:unmounted"] ?? 0, 0);
+assert.equal(seededWithPlacement.capacity["vh:portal"], 6);
+assert.equal(seededWithPlacement.capacity["vh:unmounted"] ?? 0, 0);
+
+const legacyEntries = [
+  placement({
+    targetId: "vh-portal-legacy",
+    placementSegment: "vh",
+    placementType: "portal",
+    placementCapacity: 10,
+    placementLegacyOurs: 3,
+  }),
+  placement({
+    targetId: "vh-cube-legacy",
+    placementSegment: "vh",
+    placementType: "cube",
+    placementCapacity: 5,
+    placementLegacyOurs: 2,
+  }),
+];
+const byTypeWithLegacy = capacityByEquipmentType(legacyEntries);
+assert.equal(byTypeWithLegacy.vh.find((r) => r.placementType === "portal")?.legacyOurs, 3);
+assert.equal(byTypeWithLegacy.vh.find((r) => r.placementType === "cube")?.legacyOurs, 2);
 
 assert.deepEqual(mergeCategoryCapacityPreservingLegacy({ entrance: 0, interior: 0, hardware: 0 }, legacy), legacy);
 

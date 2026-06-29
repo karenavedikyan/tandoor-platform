@@ -69,6 +69,7 @@ export type ShowcaseMatrixEntryDto = {
   placementRef: string | null;
   placementOurModels: ShowcasePlacementOurModel[];
   placementCompetitors: ShowcasePlacementCompetitor[];
+  placementLegacyOurs: number | null;
 };
 
 export type ShowcaseMatrixEventDto = {
@@ -91,6 +92,7 @@ export type ShowcaseMatrixEventDto = {
   placementRef: string | null;
   placementOurModels: ShowcasePlacementOurModel[];
   placementCompetitors: ShowcasePlacementCompetitor[];
+  placementLegacyOurs: number | null;
 };
 
 export type ShowcaseMatrixSessionUser = {
@@ -115,6 +117,7 @@ export type ShowcaseMatrixUpsertInput = {
   placementRef?: string | null;
   placementOurModels?: ShowcasePlacementOurModel[] | null;
   placementCompetitors?: ShowcasePlacementCompetitor[] | null;
+  placementLegacyOurs?: number | null;
 };
 
 export type ShowcaseMatrixUpsertResult = {
@@ -324,6 +327,7 @@ function normalizePlacementFields(input: ShowcaseMatrixUpsertInput): ShowcaseMat
     placementRef: input.placementRef ?? null,
     placementOurModels: [],
     placementCompetitors: [],
+    placementLegacyOurs: null,
   };
 }
 
@@ -344,6 +348,7 @@ export function parseShowcaseMatrixUpsertInput(body: Record<string, unknown>): S
     placementRef: parseOptionalRef(body.placementRef),
     placementOurModels: parseOurModels(body.placementOurModels),
     placementCompetitors: parseCompetitors(body.placementCompetitors),
+    placementLegacyOurs: parseOptionalCount(body.placementLegacyOurs, "placementLegacyOurs"),
   };
   return normalizePlacementFields(parsed);
 }
@@ -385,6 +390,7 @@ function mapEntryRow(row: Record<string, unknown>): ShowcaseMatrixEntryDto {
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
     placementOurModels: parseOurModels(row.placement_our_models),
     placementCompetitors: parseCompetitors(row.placement_competitors),
+    placementLegacyOurs: mapOptionalInt(row.placement_legacy_ours),
   };
 }
 
@@ -409,6 +415,7 @@ function mapEventRow(row: Record<string, unknown>): ShowcaseMatrixEventDto {
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
     placementOurModels: parseOurModels(row.placement_our_models),
     placementCompetitors: parseCompetitors(row.placement_competitors),
+    placementLegacyOurs: mapOptionalInt(row.placement_legacy_ours),
   };
 }
 
@@ -446,6 +453,7 @@ type PlacementSnapshot = {
   placementRef: string | null;
   placementOurModels: ShowcasePlacementOurModel[];
   placementCompetitors: ShowcasePlacementCompetitor[];
+  placementLegacyOurs: number | null;
 };
 
 async function insertEvent(
@@ -469,8 +477,8 @@ async function insertEvent(
        entry_id, dealer_id, trade_point_id, target_kind, target_id,
        old_status, new_status, comment, changed_by, changed_by_name,
        placement_type, placement_segment, placement_capacity, placement_actual, placement_ref,
-       placement_our_models, placement_competitors
-     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb)`,
+       placement_our_models, placement_competitors, placement_legacy_ours
+     ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9::uuid, $10, $11, $12, $13, $14, $15, $16::jsonb, $17::jsonb, $18)`,
     [
       params.entryId,
       params.dealerId,
@@ -489,6 +497,7 @@ async function insertEvent(
       params.placement.placementRef,
       JSON.stringify(params.placement.placementOurModels ?? []),
       JSON.stringify(params.placement.placementCompetitors ?? []),
+      params.placement.placementLegacyOurs,
     ],
   );
 }
@@ -502,6 +511,7 @@ function placementSnapshotFromInput(input: ShowcaseMatrixUpsertInput): Placement
     placementRef: input.placementRef ?? null,
     placementOurModels: input.placementOurModels ?? [],
     placementCompetitors: input.placementCompetitors ?? [],
+    placementLegacyOurs: input.placementLegacyOurs ?? null,
   };
 }
 
@@ -522,6 +532,7 @@ function entryChanged(prev: ShowcaseMatrixEntryDto | null, input: ShowcaseMatrix
   ) {
     return true;
   }
+  if (prev.placementLegacyOurs !== (input.placementLegacyOurs ?? null)) return true;
   return false;
 }
 
@@ -558,8 +569,8 @@ export async function upsertShowcaseMatrixEntry(
        dealer_id, trade_point_id, target_kind, target_id, status, comment,
        client_op_id, updated_at, updated_by, updated_by_name,
        placement_type, placement_segment, placement_capacity, placement_actual, placement_ref,
-       placement_our_models, placement_competitors
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb)
+       placement_our_models, placement_competitors, placement_legacy_ours
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8::uuid, $9, $10, $11, $12, $13, $14, $15::jsonb, $16::jsonb, $17)
      ON CONFLICT (trade_point_id, target_kind, target_id)
      DO UPDATE SET
        dealer_id = EXCLUDED.dealer_id,
@@ -575,7 +586,8 @@ export async function upsertShowcaseMatrixEntry(
        placement_actual = EXCLUDED.placement_actual,
        placement_ref = EXCLUDED.placement_ref,
        placement_our_models = EXCLUDED.placement_our_models,
-       placement_competitors = EXCLUDED.placement_competitors
+       placement_competitors = EXCLUDED.placement_competitors,
+       placement_legacy_ours = EXCLUDED.placement_legacy_ours
      RETURNING *`,
     [
       normalized.dealerId,
@@ -594,6 +606,7 @@ export async function upsertShowcaseMatrixEntry(
       normalized.placementRef,
       JSON.stringify(normalized.placementOurModels ?? []),
       JSON.stringify(normalized.placementCompetitors ?? []),
+      normalized.placementLegacyOurs ?? null,
     ],
   );
 

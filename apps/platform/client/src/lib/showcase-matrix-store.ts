@@ -160,6 +160,7 @@ const NULL_PLACEMENT_FIELDS = {
   placementRef: null,
   placementOurModels: [] as ShowcaseMatrixEntryDto["placementOurModels"],
   placementCompetitors: [] as ShowcaseMatrixEntryDto["placementCompetitors"],
+  placementLegacyOurs: null,
 } as const;
 
 function enqueueShowcaseMatrixUpsert(
@@ -196,6 +197,7 @@ export function setMatrixPlacement(params: {
   placementSegment: ShowcasePlacementSegment;
   placementCapacity: number;
   placementActual: number;
+  placementLegacyOurs?: number | null;
   placementCompetitors?: ShowcaseMatrixEntryDto["placementCompetitors"];
   comment?: string | null;
   updatedBy?: string;
@@ -209,6 +211,7 @@ export function setMatrixPlacement(params: {
   const prev = loadCacheRecord()[cacheKey];
   const placementOurModels = prev?.placementOurModels ?? [];
   const placementCompetitors = params.placementCompetitors ?? prev?.placementCompetitors ?? [];
+  const placementLegacyOurs = params.placementLegacyOurs ?? prev?.placementLegacyOurs ?? null;
 
   const entry: ShowcaseMatrixEntryDto = {
     id: prev?.id ?? `local-${clientOpId}`,
@@ -228,6 +231,7 @@ export function setMatrixPlacement(params: {
     placementRef: null,
     placementOurModels,
     placementCompetitors,
+    placementLegacyOurs,
   };
 
   const record = loadCacheRecord();
@@ -249,6 +253,7 @@ export function setMatrixPlacement(params: {
     placementRef: null,
     placementOurModels,
     placementCompetitors,
+    placementLegacyOurs,
   });
 
   return { entry, queued: true };
@@ -329,6 +334,7 @@ export function setMatrixStatus(params: {
   const placementRef = prev?.placementRef ?? null;
   const placementOurModels = prev?.placementOurModels ?? [];
   const placementCompetitors = prev?.placementCompetitors ?? [];
+  const placementLegacyOurs = prev?.placementLegacyOurs ?? null;
 
   const entry: ShowcaseMatrixEntryDto = {
     id: prev?.id ?? `local-${clientOpId}`,
@@ -348,6 +354,7 @@ export function setMatrixStatus(params: {
     placementRef,
     placementOurModels,
     placementCompetitors,
+    placementLegacyOurs,
   };
 
   const record = loadCacheRecord();

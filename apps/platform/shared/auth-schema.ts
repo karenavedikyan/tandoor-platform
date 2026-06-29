@@ -277,6 +277,7 @@ export const showcaseMatrixEntries = pgTable(
     placementRef: text("placement_ref"),
     placementOurModels: jsonb("placement_our_models"),
     placementCompetitors: jsonb("placement_competitors"),
+    placementLegacyOurs: integer("placement_legacy_ours"),
   },
   (t) => [
     uniqueIndex("uq_showcase_matrix_entry").on(t.tradePointId, t.targetKind, t.targetId),
@@ -344,6 +345,7 @@ export const showcaseMatrixEvents = pgTable(
     placementRef: text("placement_ref"),
     placementOurModels: jsonb("placement_our_models"),
     placementCompetitors: jsonb("placement_competitors"),
+    placementLegacyOurs: integer("placement_legacy_ours"),
   },
   (t) => [
     index("idx_showcase_matrix_events_tp").on(t.tradePointId, t.changedAt),

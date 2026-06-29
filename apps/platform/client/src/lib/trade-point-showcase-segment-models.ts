@@ -29,6 +29,7 @@ export type SegmentPlacementTypeBreakdownRow = {
   blockCount: number;
   capacity: number;
   ours: number;
+  legacyOurs: number;
   competitors: number;
   free: number;
 };
@@ -44,6 +45,8 @@ export type SegmentDetail = {
   totalCompetitors: number;
   free: number;
   distributionPercent: number;
+  totalLegacyOurs: number;
+  rotationPotentialPercent: number;
   byPlacementType: SegmentPlacementTypeBreakdownRow[];
   ourModels: SegmentOurModelCard[];
   competitorRows: SegmentCompetitorRow[];
@@ -108,6 +111,10 @@ function countInstalledOursByPlacementType(
   return counts;
 }
 
+function recalculatePlacementTypeRowFree(row: SegmentPlacementTypeBreakdownRow): void {
+  row.free = Math.max(0, row.capacity - row.ours - row.competitors - row.legacyOurs);
+}
+
 function applyInstalledOursToPlacementTypeBreakdown(
   byType: Map<ShowcasePlacementType, SegmentPlacementTypeBreakdownRow>,
   installedByType: Map<ShowcasePlacementType, number>,
@@ -119,6 +126,7 @@ function applyInstalledOursToPlacementTypeBreakdown(
       blockCount: 0,
       capacity: 0,
       ours: 0,
+      legacyOurs: 0,
       competitors: 0,
       free: 0,
     };
@@ -127,7 +135,7 @@ function applyInstalledOursToPlacementTypeBreakdown(
   }
 
   for (const row of Array.from(byType.values())) {
-    row.free = Math.max(0, row.capacity - row.ours - row.competitors);
+    recalculatePlacementTypeRowFree(row);
   }
 }
 
@@ -178,6 +186,7 @@ export function buildSegmentDetail(
     const cap = Math.max(0, b.placementCapacity ?? 0);
     const ours = blockOurs(b);
     const comp = blockCompetitors(b);
+    const legacyOurs = Math.max(0, b.placementLegacyOurs ?? 0);
     totalCapacity += cap;
     totalOurs += ours;
     totalCompetitors += comp;
@@ -189,14 +198,16 @@ export function buildSegmentDetail(
       blockCount: 0,
       capacity: 0,
       ours: 0,
+      legacyOurs: 0,
       competitors: 0,
       free: 0,
     };
     row.blockCount += 1;
     row.capacity += cap;
     row.ours += ours;
+    row.legacyOurs += legacyOurs;
     row.competitors += comp;
-    row.free = Math.max(0, row.capacity - row.ours - row.competitors);
+    recalculatePlacementTypeRowFree(row);
     byType.set(t, row);
   }
 
@@ -250,6 +261,7 @@ export function buildSegmentDetail(
 
       if (blocks.length === 0) {
         const modelOurs = ourModels.reduce((sum, m) => sum + m.count, 0);
+        const totalLegacyOurs = Array.from(byType.values()).reduce((sum, row) => sum + row.legacyOurs, 0);
         return {
           segment,
           source: "models",
@@ -259,6 +271,8 @@ export function buildSegmentDetail(
           totalCompetitors: 0,
           free: 0,
           distributionPercent: 0,
+          totalLegacyOurs,
+          rotationPotentialPercent: 0,
           byPlacementType: sortedPlacementTypeBreakdown(byType),
           ourModels,
           competitorRows: [],
@@ -269,11 +283,16 @@ export function buildSegmentDetail(
 
   const installedOursFromModels = ourModels.reduce((sum, m) => sum + m.count, 0);
   const effectiveTotalOurs = Math.max(totalOurs, installedOursFromModels);
+  const totalLegacyOurs = Array.from(byType.values()).reduce((sum, row) => sum + row.legacyOurs, 0);
 
   const free = Math.max(0, totalCapacity - effectiveTotalOurs - totalCompetitors);
   const distributionPercent =
     totalCapacity > 0
       ? Math.min(100, Math.max(0, Math.floor((effectiveTotalOurs / totalCapacity) * 100)))
+      : 0;
+  const rotationPotentialPercent =
+    totalCapacity > 0
+      ? Math.min(100, Math.max(0, Math.floor((totalLegacyOurs / totalCapacity) * 100)))
       : 0;
 
   const source: SegmentDetailSource =
@@ -288,6 +307,8 @@ export function buildSegmentDetail(
     totalCompetitors,
     free,
     distributionPercent,
+    totalLegacyOurs,
+    rotationPotentialPercent,
     byPlacementType: sortedPlacementTypeBreakdown(byType),
     ourModels,
     competitorRows: Array.from(compAcc.values()).sort((a, b) => b.count - a.count),
