@@ -23,6 +23,7 @@ import {
 } from "@/lib/showcase-matrix-store";
 import {
   buildSegmentDetail,
+  extractPortalSecondPlanDetail,
   type SegmentDetail,
   type SegmentOurModelCard,
 } from "@/lib/trade-point-showcase-segment-models";
@@ -77,6 +78,21 @@ function SegmentHeaderMetrics({ detail, compact }: { detail: SegmentDetail; comp
   );
 }
 
+function SegmentPortalSecondPlanSummary({ detail }: { detail: SegmentDetail }) {
+  const second = extractPortalSecondPlanDetail(detail);
+  if (!second) return null;
+
+  return (
+    <p
+      className="rounded-md border border-border/60 bg-muted/20 px-2.5 py-2 text-sm tabular-nums text-muted-foreground"
+      data-testid="text-segment-portal-second-summary"
+    >
+      2-й план: всего {second.capacity} · наши {second.ours} · остаток {second.free} · дистрибуция{" "}
+      {second.distributionPercent}% · неактуальные {second.legacyOurs}
+    </p>
+  );
+}
+
 function SegmentTypeBreakdownTable({
   detail,
   compact,
@@ -102,10 +118,16 @@ function SegmentTypeBreakdownTable({
               <th className="px-2 py-2 font-medium">Неактуальные</th>
               <th className="px-2 py-2 font-medium">Конкур.</th>
               <th className="px-2 py-2 font-medium">Свободно</th>
+              <th className="px-2 py-2 font-medium">Дистриб. %</th>
             </tr>
           </thead>
           <tbody>
-            {detail.byPlacementType.map((row) => (
+            {detail.byPlacementType.map((row) => {
+              const rowPercent =
+                row.capacity > 0
+                  ? Math.min(100, Math.max(0, Math.floor((row.ours / row.capacity) * 100)))
+                  : 0;
+              return (
               <tr key={row.placementType} className="border-b border-border/50 last:border-0">
                 <td className="px-2 py-2">{PLACEMENT_TYPE_LABEL_RU[row.placementType]}</td>
                 <td className="px-2 py-2 tabular-nums">{row.blockCount}</td>
@@ -119,8 +141,10 @@ function SegmentTypeBreakdownTable({
                 </td>
                 <td className="px-2 py-2 tabular-nums">{row.competitors}</td>
                 <td className="px-2 py-2 tabular-nums">{row.free}</td>
+                <td className="px-2 py-2 tabular-nums">{rowPercent}%</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -329,6 +353,7 @@ function SegmentExpandedContent({
       </div>
 
       <SegmentTypeBreakdownTable detail={detail} compact={compact} />
+      <SegmentPortalSecondPlanSummary detail={detail} />
       <SegmentOurModelsGrid detail={detail} compact={compact} cardSize={cardSize} />
       <SegmentCompetitorsList detail={detail} />
     </div>

@@ -137,4 +137,33 @@ assert.equal(mkCatalog.source, "models");
   assert.equal(legacyDistribution.total.rotationPct, 30);
 }
 
+{
+  const mkPortalSecondEntries: ShowcaseMatrixEntryDto[] = [
+    {
+      ...makeBlock("mk", 10),
+      placementType: "portal",
+      placementActual: 5,
+    },
+    {
+      ...makeBlock("mk", 4),
+      targetId: "mk-second",
+      placementType: "portal_second",
+      placementActual: 2,
+    },
+  ];
+  const withSecond = computeDistributionOnPoint({
+    entries: mkPortalSecondEntries,
+    installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+    portalCapacity: { entrance: 0, interior: 0, hardware: 0 },
+  });
+  assert.equal(withSecond.mk.pct, 50);
+  assert.equal(withSecond.mk.ours, 7);
+  assert.equal(withSecond.mk.total, 14);
+  assert.ok(withSecond.mk.portalSecond);
+  assert.equal(withSecond.mk.portalSecond!.ours, 2);
+  assert.equal(withSecond.mk.portalSecond!.total, 4);
+  assert.equal(withSecond.mk.portalSecond!.pct, 50);
+  assert.equal(withSecond.vh.portalSecond, null);
+}
+
 console.log("✓ showcase-installed-models-distribution tests passed");

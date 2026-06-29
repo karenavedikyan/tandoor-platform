@@ -4,12 +4,12 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { buildSegmentDetail } from "../trade-point-showcase-segment-models.js";
+import { buildPortalSecondPlanDetail, buildSegmentDetail } from "../trade-point-showcase-segment-models.js";
 import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 
 function makeBlock(opts: {
   segment: "vh" | "mk" | "hardware";
-  placementType?: "portal" | "cube" | "book" | "hoof" | "unmounted" | "branded_stand" | "stream_sku";
+  placementType?: "portal" | "cube" | "book" | "hoof" | "unmounted" | "branded_stand" | "stream_sku" | "portal_second";
   capacity?: number;
   actual?: number | null;
   legacyOurs?: number | null;
@@ -306,6 +306,45 @@ test("buildSegmentDetail: разные сегменты изолированы",
   assert.equal(buildSegmentDetail(entries, "vh").ourModels.length, 1);
   assert.equal(buildSegmentDetail(entries, "mk").ourModels.length, 1);
   assert.equal(buildSegmentDetail(entries, "hardware").ourModels.length, 0);
+});
+
+test("portal_second: под-расчёт ёмкость/наши/неактуальные/%", () => {
+  const entries = [
+    makeBlock({ segment: "mk", placementType: "portal", capacity: 10, actual: 5 }),
+    makeBlock({
+      segment: "mk",
+      placementType: "portal_second",
+      capacity: 4,
+      actual: 2,
+      legacyOurs: 1,
+    }),
+  ];
+  const second = buildPortalSecondPlanDetail(entries);
+  assert.ok(second);
+  assert.equal(second.capacity, 4);
+  assert.equal(second.ours, 2);
+  assert.equal(second.legacyOurs, 1);
+  assert.equal(second.free, 1);
+  assert.equal(second.distributionPercent, 50);
+});
+
+test("portal_second: без блоков — показатель пустой, общий % МК не меняется", () => {
+  const entries = [makeBlock({ segment: "mk", placementType: "portal", capacity: 10, actual: 5 })];
+  const mk = buildSegmentDetail(entries, "mk");
+  assert.equal(buildPortalSecondPlanDetail(entries), null);
+  assert.equal(mk.distributionPercent, 50);
+});
+
+test("portal_second: общий % МК включает 2-й план и не меняется от детализации", () => {
+  const entries = [
+    makeBlock({ segment: "mk", placementType: "portal", capacity: 10, actual: 5 }),
+    makeBlock({ segment: "mk", placementType: "portal_second", capacity: 4, actual: 2 }),
+  ];
+  const mk = buildSegmentDetail(entries, "mk");
+  assert.equal(mk.totalCapacity, 14);
+  assert.equal(mk.totalOurs, 7);
+  assert.equal(mk.distributionPercent, 50);
+  assert.ok(buildPortalSecondPlanDetail(entries));
 });
 
 console.log("trade-point-showcase-segment-models: ok");

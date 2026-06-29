@@ -3,6 +3,7 @@ import {
   computePlacementDistribution,
   type PlacementDistributionStats,
 } from "./showcase-placement-distribution.js";
+import { buildPortalSecondPlanDetail } from "./trade-point-showcase-segment-models.js";
 
 export type DistributionOnPointSegment = {
   pct: number;
@@ -10,6 +11,11 @@ export type DistributionOnPointSegment = {
   total: number;
   legacyOurs: number;
   rotationPct: number;
+  portalSecond: {
+    ours: number;
+    total: number;
+    pct: number;
+  } | null;
 };
 
 export type DistributionOnPointSummary = {
@@ -33,6 +39,7 @@ function segmentDistributionPercent(ours: number, total: number): number {
 function mergeSegmentWithInstalled(
   stats: PlacementDistributionStats | null,
   installedOurs: number,
+  portalSecond: DistributionOnPointSegment["portalSecond"] = null,
 ): DistributionOnPointSegment {
   const total = stats?.totalCapacity ?? 0;
   const ours = Math.max(stats?.totalOurs ?? 0, installedOurs);
@@ -43,6 +50,19 @@ function mergeSegmentWithInstalled(
     total,
     legacyOurs,
     rotationPct: segmentDistributionPercent(legacyOurs, total),
+    portalSecond,
+  };
+}
+
+function portalSecondOnPoint(
+  entries: readonly ShowcaseMatrixEntryDto[],
+): DistributionOnPointSegment["portalSecond"] {
+  const second = buildPortalSecondPlanDetail(entries);
+  if (!second) return null;
+  return {
+    ours: second.ours,
+    total: second.capacity,
+    pct: second.distributionPercent,
   };
 }
 
@@ -59,7 +79,11 @@ export function computeDistributionOnPoint(args: {
   if (summary.overall.totalCapacity > 0) {
     const statsFor = (segment: ShowcasePlacementSegment) =>
       summary.bySegment.find((s) => s.segment === segment)?.stats ?? null;
-    const mk = mergeSegmentWithInstalled(statsFor("mk"), args.installedOursBySegment.mk);
+    const mk = mergeSegmentWithInstalled(
+      statsFor("mk"),
+      args.installedOursBySegment.mk,
+      portalSecondOnPoint(args.entries),
+    );
     const vh = mergeSegmentWithInstalled(statsFor("vh"), args.installedOursBySegment.vh);
     const hardware = mergeSegmentWithInstalled(statsFor("hardware"), args.installedOursBySegment.hardware);
     const totalCap = mk.total + vh.total + hardware.total;
@@ -76,6 +100,7 @@ export function computeDistributionOnPoint(args: {
         total: totalCap,
         legacyOurs: totalLegacy,
         rotationPct: segmentDistributionPercent(totalLegacy, totalCap),
+        portalSecond: null,
       },
     };
   }
@@ -98,6 +123,7 @@ export function computeDistributionOnPoint(args: {
       total: capInt,
       legacyOurs: 0,
       rotationPct: 0,
+      portalSecond: null,
     },
     vh: {
       pct: segmentDistributionPercent(oursVh, capEnt),
@@ -105,6 +131,7 @@ export function computeDistributionOnPoint(args: {
       total: capEnt,
       legacyOurs: 0,
       rotationPct: 0,
+      portalSecond: null,
     },
     hardware: {
       pct: segmentDistributionPercent(oursHw, capHw),
@@ -112,6 +139,7 @@ export function computeDistributionOnPoint(args: {
       total: capHw,
       legacyOurs: 0,
       rotationPct: 0,
+      portalSecond: null,
     },
     total: {
       pct: segmentDistributionPercent(totalOurs, totalCap),
@@ -119,6 +147,7 @@ export function computeDistributionOnPoint(args: {
       total: totalCap,
       legacyOurs: 0,
       rotationPct: 0,
+      portalSecond: null,
     },
   };
 }

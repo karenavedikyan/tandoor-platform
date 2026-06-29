@@ -36,6 +36,14 @@ export type SegmentPlacementTypeBreakdownRow = {
 
 export type SegmentDetailSource = "blocks" | "models" | "empty";
 
+export type PortalSecondPlanDetail = {
+  capacity: number;
+  ours: number;
+  legacyOurs: number;
+  free: number;
+  distributionPercent: number;
+};
+
 export type SegmentDetail = {
   segment: ShowcasePlacementSegment;
   source: SegmentDetailSource;
@@ -54,6 +62,12 @@ export type SegmentDetail = {
 
 function modelDefinitionForTargetId(targetId: string): ShowcaseMatrixModelDefinition | undefined {
   return SHOWCASE_MATRIX_MODEL_DEFINITIONS.find((m) => m.id === targetId);
+}
+
+function segmentDistributionPercent(ours: number, capacity: number): number {
+  return capacity > 0
+    ? Math.min(100, Math.max(0, Math.floor((ours / capacity) * 100)))
+    : 0;
 }
 
 function blockOurs(b: ShowcaseMatrixEntryDto): number {
@@ -286,14 +300,8 @@ export function buildSegmentDetail(
   const totalLegacyOurs = Array.from(byType.values()).reduce((sum, row) => sum + row.legacyOurs, 0);
 
   const free = Math.max(0, totalCapacity - effectiveTotalOurs - totalCompetitors);
-  const distributionPercent =
-    totalCapacity > 0
-      ? Math.min(100, Math.max(0, Math.floor((effectiveTotalOurs / totalCapacity) * 100)))
-      : 0;
-  const rotationPotentialPercent =
-    totalCapacity > 0
-      ? Math.min(100, Math.max(0, Math.floor((totalLegacyOurs / totalCapacity) * 100)))
-      : 0;
+  const distributionPercent = segmentDistributionPercent(effectiveTotalOurs, totalCapacity);
+  const rotationPotentialPercent = segmentDistributionPercent(totalLegacyOurs, totalCapacity);
 
   const source: SegmentDetailSource =
     blocks.length > 0 ? "blocks" : ourModels.length > 0 ? "models" : "empty";
@@ -313,4 +321,25 @@ export function buildSegmentDetail(
     ourModels,
     competitorRows: Array.from(compAcc.values()).sort((a, b) => b.count - a.count),
   };
+}
+
+/** Детализация 2-го плана из уже посчитанной разбивки МК (без изменения общего итога). */
+export function extractPortalSecondPlanDetail(detail: SegmentDetail): PortalSecondPlanDetail | null {
+  if (detail.segment !== "mk") return null;
+  const row = detail.byPlacementType.find((r) => r.placementType === "portal_second");
+  if (!row || (row.capacity <= 0 && row.ours <= 0)) return null;
+  return {
+    capacity: row.capacity,
+    ours: row.ours,
+    legacyOurs: row.legacyOurs,
+    free: row.free,
+    distributionPercent: segmentDistributionPercent(row.ours, row.capacity),
+  };
+}
+
+/** Под-расчёт 2-го плана МК из entries матрицы (тот же источник, что buildSegmentDetail). */
+export function buildPortalSecondPlanDetail(
+  entries: readonly ShowcaseMatrixEntryDto[],
+): PortalSecondPlanDetail | null {
+  return extractPortalSecondPlanDetail(buildSegmentDetail(entries, "mk"));
 }
