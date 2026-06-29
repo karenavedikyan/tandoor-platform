@@ -35,6 +35,7 @@ import {
 import { ClientCategoryBadge } from "@/components/client-category-badge";
 import { resolveEffectiveClientCategory } from "@/lib/effective-client-category";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
+import { useTradePointsActualizationHydration } from "@/hooks/use-trade-points-actualization-hydration";
 import { useDealerUnloadingOrder, useOverridesRuntimeVersion } from "@/lib/dealer-overrides-runtime";
 import {
   getDealerManagerDisplay,
@@ -770,6 +771,7 @@ function DealerSectionNav({ active }: { active: SectionId }) {
 function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
   const { profile } = useReleaseDemoProfile();
   useDealerTpOverridesHydration({ dealerId: baseRow.id });
+  useTradePointsActualizationHydration(baseRow.id, profile);
   useClientContactsHydration(baseRow.id);
   useDealerLegalEntitiesHydration(baseRow.id);
   useClientCommentsHydration(baseRow.id);

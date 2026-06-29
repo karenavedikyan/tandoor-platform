@@ -89,6 +89,7 @@
     "test:record-status": "tsx shared/__tests__/record-status.test.ts && tsx shared/__tests__/record-status-cascade.test.ts && vitest run server/migrations/__tests__/record-status-migration.spec.ts",
     "test:trade-point-set-primary": "tsx shared/__tests__/trade-point-set-primary.test.ts",
     "test:primary-trade-point-materialization": "tsx shared/__tests__/primary-trade-point-materialization.test.ts && tsx client/src/lib/__tests__/primary-trade-point-materialization-client.test.ts",
+    "test:trade-points-actualization-hydration": "tsx shared/__tests__/trade-points-actualization-reconcile.test.ts",
     "test:trade-point-trash-protections": "tsx shared/__tests__/trade-point-trash-protections.test.ts",
     "test:trade-point-backfill-migration": "vitest run shared/__tests__/trade-point-backfill-migration.spec.ts",
     "test:dealer-card-tp-primary-ui": "vitest run client/src/__tests__/dealer-card-tp-primary-ui.test.tsx",
