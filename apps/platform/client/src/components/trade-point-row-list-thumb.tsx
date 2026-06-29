@@ -2,6 +2,7 @@
 
 import type { ReactElement } from "react";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import { tradePointDisplayLabel } from "@/lib/trade-point-display-labels";
 import { SafeImage } from "@/components/safe-image";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +44,7 @@ export function TradePointRowListThumb(props: {
       )}
       data-testid={`trade-point-list-thumb-fallback-${point.id}`}
     >
-      {initialsFromTpName(point.name)}
+      {initialsFromTpName(tradePointDisplayLabel(point))}
     </div>
   );
 }

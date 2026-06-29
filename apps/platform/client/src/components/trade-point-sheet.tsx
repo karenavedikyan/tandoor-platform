@@ -9,6 +9,7 @@ import { TradePointReadOnlyProvider } from "@/lib/trade-point-read-only-context"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { TradePointLegalEntitiesSection } from "@/components/trade-point-legal-entities-section";
 import { canEditDealerTradePoints } from "@/lib/dealer-trade-points-overrides";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 
 export interface TradePointSheetProps {
   open: boolean;
@@ -42,7 +43,7 @@ export function TradePointSheet({
         <SheetHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
           <div className="flex flex-wrap items-center gap-2">
             <SheetTitle className="text-base font-semibold text-foreground">
-              {title?.trim() ? title.trim() : point.name}
+              {title?.trim() ? title.trim() : resolveTradePointDisplayName(dealer, point)}
             </SheetTitle>
           </div>
           <SheetDescription className="sr-only">Карточка торговой точки</SheetDescription>

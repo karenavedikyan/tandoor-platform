@@ -8,6 +8,7 @@ import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
 import type { DistributionSegmentFilter } from "./distribution-filters.js";
 import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
+import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 import {
   type ShowcaseMatrixModelDefinition,
 } from "./trade-point-showcase-matrix-models.js";
@@ -139,7 +140,7 @@ export function buildEntryProductTradePointRows(
       const presence = resolveEntryProductTpPresence(model, dealer, point, readEntries(point.id));
       if (presence === "not_in_plan") continue;
 
-      const tradePointName = point.name?.trim() || point.id;
+      const tradePointName = resolveTradePointDisplayName(dealer, point);
       const city = point.city?.trim() || dealer.city?.trim() || null;
       const haystack = `${tradePointName} ${clientName} ${city ?? ""}`.toLowerCase();
       if (q && !haystack.includes(q)) continue;

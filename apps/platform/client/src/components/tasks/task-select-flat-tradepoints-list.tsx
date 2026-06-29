@@ -5,6 +5,7 @@ import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { getDealerManagerDisplay } from "@/lib/dealer-base-mock-data";
 import { isVirtualDefaultTradePointId } from "@/lib/dealer-trade-points-overrides";
 import { taskSelectTargetKey } from "@/lib/task-select-mode";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 import { cn } from "@/lib/utils";
 
 export type TaskSelectFlatTradePointEntry = {
@@ -20,15 +21,10 @@ type TaskSelectFlatTradePointsListProps = {
 };
 
 function tradePointTitle(row: DealerRow, point: DealerTradePoint): string {
-  const name = point.name?.trim();
-  if (
-    !name ||
-    isVirtualDefaultTradePointId(row.id, point.id) ||
-    name.toLowerCase() === "основная торговая точка"
-  ) {
+  if (isVirtualDefaultTradePointId(row.id, point.id)) {
     return row.name;
   }
-  return name;
+  return resolveTradePointDisplayName(row, point);
 }
 
 function tradePointLocation(row: DealerRow, point: DealerTradePoint): string {

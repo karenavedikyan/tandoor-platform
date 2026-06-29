@@ -23,6 +23,12 @@ import { useTradePointReadOnly } from "@/lib/trade-point-read-only-context";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
+  computeTradePointAutoDisplayName,
+  displayNameContextFromDealerPoint,
+  resolveTradePointDisplayName,
+  tradePointManualNameForEdit,
+} from "@/lib/trade-point-display-labels";
+import {
   mergeActualizationState,
   normalizeHasShowcase,
   type TradePointShowcaseActualization,
@@ -262,7 +268,13 @@ export function TradePointManualActualizationView(props: {
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
   const hasShowcase = normalizeHasShowcase(showcaseRec?.hasShowcase);
 
-  const [name, setName] = useState(point.name);
+  const displayName = useMemo(() => resolveTradePointDisplayName(dealer, point), [dealer, point]);
+  const defaultAutoDisplayName = useMemo(
+    () => computeTradePointAutoDisplayName(displayNameContextFromDealerPoint(dealer, point)) ?? displayName,
+    [dealer, point, displayName],
+  );
+
+  const [name, setName] = useState(() => tradePointManualNameForEdit(point.name, point.city));
   const [formatKind, setFormatKind] = useState(readField("formatKind") || "store");
   const [tpStatus, setTpStatus] = useState(readField("tpStatusKind") || "working");
   const [city, setCity] = useState(point.city);
@@ -281,7 +293,7 @@ export function TradePointManualActualizationView(props: {
     const rf = (k: string) => (typeof mf[k] === "string" ? (mf[k] as string).trim() : "");
     const edit = getTradePointEdit(dealer.id, point.id);
     const hydratedComment = edit?.comment ?? tpOverride?.comment ?? point.tpComment ?? "";
-    setName(point.name);
+    setName(tradePointManualNameForEdit(point.name, point.city));
     setCity(point.city);
     setAddress(point.address);
     setContactName(point.contactName ?? "");
@@ -714,7 +726,7 @@ export function TradePointManualActualizationView(props: {
                 <div className="min-w-0">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <h1 className="line-clamp-2 text-base font-semibold leading-snug tracking-tight text-foreground sm:text-lg">
-                      {name.trim() || point.name}
+                      {name.trim() || displayName}
                     </h1>
                   </div>
                   <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Торговая точка</p>
@@ -799,7 +811,13 @@ export function TradePointManualActualizationView(props: {
             <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Название</Label>
-              <Input className="min-h-9" value={name} onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }} disabled={!canEditUi} />
+              <Input
+                className="min-h-9"
+                value={name}
+                placeholder={defaultAutoDisplayName ? `По умолчанию: ${defaultAutoDisplayName}` : undefined}
+                onChange={(e) => { setName(e.target.value); mainSave.markDirty(); }}
+                disabled={!canEditUi}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Формат</Label>
@@ -964,7 +982,7 @@ export function TradePointManualActualizationView(props: {
               dealerId={dealer.id}
               dealerName={dealer.name}
               tradePointId={point.id}
-              tradePointName={point.name}
+              tradePointName={displayName}
               canCreate={canEditClientNextStep(profile, dealer)}
               actorUserId={user?.id ?? profile.personaUserId}
               actorLabel={user ? displayUserName(user) : userLabelFromProfile(profile)}

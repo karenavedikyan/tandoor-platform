@@ -13,6 +13,7 @@ import { resolveShowcaseMatrixClientCategory } from "@/lib/trade-point-showcase-
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import type { ClientCategoryId } from "@/lib/client-category";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 
 function emptyShowcase(dealerId: string, tradePointId: string): TradePointShowcaseActualization {
   const iso = new Date().toISOString();
@@ -62,6 +63,7 @@ export function TradePointShowcaseCatalogSlot({
 }: TradePointShowcaseCatalogSlotProps): ReactElement {
   const actx = useClientBaseActualization();
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
+  const tradePointDisplayName = useMemo(() => resolveTradePointDisplayName(dealer, point), [dealer, point]);
 
   const matrixClientCategory = useMemo((): ClientCategoryId | null => {
     const fields = {
@@ -120,7 +122,7 @@ export function TradePointShowcaseCatalogSlot({
     <TradePointShowcaseCatalogPanel
       tradePointId={point.id}
       dealerId={dealer.id}
-      tradePointName={point.name}
+      tradePointName={tradePointDisplayName}
       tradePointCode={point.releaseCode ?? point.id}
       dealerName={dealer.name}
       dealerCode={dealer.releaseCode ?? dealer.id}

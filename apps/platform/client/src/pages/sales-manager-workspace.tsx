@@ -25,6 +25,7 @@ import {
   MATRIX_TASK_STATUS_LABEL,
   type MatrixTaskWithContext,
 } from "@/lib/trade-point-task-data";
+import { resolveTradePointDisplayName } from "@/lib/trade-point-display-labels";
 import {
   currentMonthPeriodLabel,
   formatMoney,
@@ -554,7 +555,9 @@ export default function SalesManagerWorkspace() {
             <Card key={`${row.dealerId}-${row.point.id}`} className="rounded-2xl border border-border/80 bg-card shadow-md">
               <CardContent className="space-y-3 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold text-foreground">{row.point.name}</p>
+                  <p className="font-semibold text-foreground">
+                    {resolveTradePointDisplayName({ name: row.dealerName, id: row.dealerId }, row.point)}
+                  </p>
                   <Badge variant="outline" className="border-amber-200 bg-amber-50 text-xs font-medium text-amber-950">
                     Матрица {row.matrixPercent}%
                   </Badge>
