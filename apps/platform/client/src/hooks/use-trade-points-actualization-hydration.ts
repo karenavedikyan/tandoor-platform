@@ -3,6 +3,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { canActualizeClientBase } from "@/lib/client-base-actualization-permissions";
 import { PRIMARY_TRADE_POINT_MATERIALIZED_EVENT } from "@/lib/primary-trade-point-materialization";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
+import type { UnifiedActiveTradePointDetail } from "@shared/trade-point-primary";
 import {
   fetchUnifiedActiveTradePointsForDealer,
   reconcileUnifiedTradePointsIntoActualizationState,
@@ -18,11 +19,18 @@ export function useTradePointsActualizationHydration(
   dealerId: string | undefined,
   profile: ReleaseDemoProfile,
   enabled = true,
-): { ready: boolean; hydrationVersion: number; dbActiveTradePointIds: string[] } {
+): {
+  ready: boolean;
+  hydrationVersion: number;
+  dbActiveTradePointIds: string[];
+  dbTradePoints: UnifiedActiveTradePointDetail[];
+  dbActiveCount: number;
+} {
   const actx = useClientBaseActualization();
   const [hydrationVersion, setHydrationVersion] = useState(0);
   const [ready, setReady] = useState(false);
   const [dbActiveTradePointIds, setDbActiveTradePointIds] = useState<string[]>([]);
+  const [dbTradePoints, setDbTradePoints] = useState<UnifiedActiveTradePointDetail[]>([]);
   const attemptedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +39,7 @@ export function useTradePointsActualizationHydration(
     if (!enabled || !id || !actx.enabled || !canActualizeClientBase(profile)) {
       setReady(true);
       setDbActiveTradePointIds([]);
+      setDbTradePoints([]);
       tpDiag("hydration:ready", { dealerId: id ?? "", hydrationVersion: 0, skipped: true });
       return;
     }
@@ -48,6 +57,7 @@ export function useTradePointsActualizationHydration(
 
       const ids = unifiedDbTradePointIds(rows);
       setDbActiveTradePointIds(ids);
+      setDbTradePoints(rows ?? []);
 
       if (rows && rows.length > 0) {
         const { changed } = reconcileUnifiedTradePointsIntoActualizationState(
@@ -97,5 +107,11 @@ export function useTradePointsActualizationHydration(
     };
   }, [enabled, dealerId, profile, actx.enabled, actx.persist]);
 
-  return { ready, hydrationVersion, dbActiveTradePointIds };
+  return {
+    ready,
+    hydrationVersion,
+    dbActiveTradePointIds,
+    dbTradePoints,
+    dbActiveCount: dbActiveTradePointIds.length,
+  };
 }

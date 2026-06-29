@@ -15,7 +15,7 @@ import {
   normalizeTradePointId,
 } from "./dealer-base-mock-data.js";
 import { getCatalogDealerById, getCatalogDealerRows } from "./dealer-base-source.js";
-import { isDealerTrashedInRuntime } from "./dealer-overrides-runtime.js";
+import { isDealerTrashedInRuntime, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
 import { getDealerRowWithProfileOverrides } from "./dealer-profile-overrides.js";
 import {
   getMergedDealerTradePoints,
@@ -55,6 +55,8 @@ import {
   formatShipmentDaysForDisplay,
   normalizeManualDealerShipmentDayIdsFromFields,
 } from "./dealer-shipment-days.js";
+import type { UnifiedActiveTradePointDetail } from "@shared/trade-point-primary";
+import { fieldsFromDbRow, localIsNewerThanDb } from "@shared/trade-points-actualization-reconcile";
 
 function str(v: unknown): string | undefined {
   if (typeof v !== "string") return undefined;
@@ -424,6 +426,123 @@ export function mergeTradePointsForActualization(row: DealerRow, act: Actualizat
 
 export function mergeTradePointsActiveForActualization(row: DealerRow, act: ActualizationState): MergedTradePointEntry[] {
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived);
+}
+
+function manualTradePointStubFromDbRow(
+  dbRow: UnifiedActiveTradePointDetail,
+  dealerId: string,
+  now: string,
+): ManualTradePoint {
+  return {
+    id: dbRow.tpId,
+    dealerId,
+    fields: fieldsFromDbRow(dbRow),
+    createdAt: dbRow.updatedAt ?? now,
+    createdBy: dbRow.updatedBy ?? "",
+    createdByName: "",
+    updatedAt: dbRow.updatedAt ?? undefined,
+    updatedBy: dbRow.updatedBy ?? undefined,
+    source: "manual_actualization",
+  };
+}
+
+function overlayBlobTradePointIfNewer(
+  entry: MergedTradePointEntry,
+  tpId: string,
+  dbUpdatedAt: string | null,
+  act: ActualizationState,
+  displayRow: DealerRow,
+): MergedTradePointEntry {
+  const manual = act.manuallyCreatedTradePointsById[tpId];
+  if (manual?.dealerId === displayRow.id && localIsNewerThanDb(dbUpdatedAt, manual.updatedAt)) {
+    return {
+      point: tradePointFromManualActualization(manual, displayRow),
+      isManual: true,
+      isEdited: false,
+      isArchived: false,
+    };
+  }
+  const ov = act.tradePointOverridesById[tpId];
+  if (ov?.dealerId === displayRow.id && localIsNewerThanDb(dbUpdatedAt, ov.updatedAt)) {
+    return {
+      ...entry,
+      point: applyTradePointFields(entry.point, ov.fields as Record<string, unknown>),
+      isEdited: true,
+    };
+  }
+  return entry;
+}
+
+/**
+ * Активные ТТ для карточки: первичный набор из единого DB-источника, blob — наложение локальных правок.
+ */
+export function mergeTradePointsActiveFromDbWithActualizationOverlay(
+  row: DealerRow,
+  act: ActualizationState,
+  dbRows: UnifiedActiveTradePointDetail[],
+): MergedTradePointEntry[] {
+  const displayRow = mergeDealerRowWithActualization(row, act);
+  const dealerDbRows = dbRows.filter((r) => r.dealerId === row.id);
+  const dbTpIds = new Set(dealerDbRows.map((r) => r.tpId));
+  const baseMerged = getMergedDealerTradePoints(displayRow, { includeArchived: true });
+  const baseById = new Map(baseMerged.map((e) => [e.point.id, e]));
+  const byId = new Map<string, MergedTradePointEntry>();
+  const now = new Date().toISOString();
+
+  for (const dbRow of dealerDbRows) {
+    if (isTradePointTrashedInRuntime(dbRow.tpId, act)) continue;
+
+    let entry: MergedTradePointEntry;
+    if (dbRow.isOverrideOnly) {
+      const stub = manualTradePointStubFromDbRow(dbRow, row.id, now);
+      entry = {
+        point: tradePointFromManualActualization(stub, displayRow),
+        isManual: true,
+        isEdited: false,
+        isArchived: false,
+      };
+    } else {
+      const prev = baseById.get(dbRow.tpId);
+      if (prev?.isArchived) continue;
+      const basePoint = prev?.point ?? minimalTradePoint(dbRow.tpId, displayRow);
+      const point = applyTradePointFields(basePoint, fieldsFromDbRow(dbRow));
+      entry = {
+        point: {
+          ...point,
+          isPrimary: dbRow.isPrimary === true ? true : point.isPrimary,
+        },
+        isManual: prev?.isManual ?? false,
+        isEdited: dbRow.hasOverrideRow,
+        isArchived: false,
+      };
+    }
+
+    entry = overlayBlobTradePointIfNewer(entry, dbRow.tpId, dbRow.updatedAt, act, displayRow);
+    byId.set(dbRow.tpId, entry);
+  }
+
+  for (const m of Object.values(act.manuallyCreatedTradePointsById)) {
+    if (m.dealerId !== row.id) continue;
+    if (dbTpIds.has(m.id)) continue;
+    if (isTradePointTrashedInRuntime(m.id, act)) continue;
+    byId.set(m.id, {
+      point: tradePointFromManualActualization(m, displayRow),
+      isManual: true,
+      isEdited: false,
+      isArchived: false,
+    });
+  }
+
+  for (const [id, entry] of Array.from(byId.entries())) {
+    const m = act.manuallyCreatedTradePointsById[id];
+    if (!m || m.dealerId !== row.id) continue;
+    byId.set(id, {
+      ...entry,
+      point: { ...entry.point, releaseCode: getManualTradePointDisplayCode(m) },
+    });
+  }
+
+  return attachTradePointCoverPhotos(Array.from(byId.values()), act).filter((e) => !e.isArchived);
 }
 
 /** Для списков/KPI рабочей базы: `outlets`, `tradePoints` и `format` отражают только неархивные ТТ. */

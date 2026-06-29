@@ -60,7 +60,16 @@ function dbIsNewerThanLocal(dbUpdatedAt: string | null, localUpdatedAt: string |
   return dbTs > localTs;
 }
 
-function fieldsFromDbRow(row: UnifiedActiveTradePointDetail): Record<string, unknown> {
+/** Локальная правка в blob новее строки DB-источника (для отображения поверх DB). */
+export function localIsNewerThanDb(dbUpdatedAt: string | null, localUpdatedAt: string | undefined): boolean {
+  const dbTs = parseTs(dbUpdatedAt);
+  const localTs = parseTs(localUpdatedAt);
+  if (localTs === 0) return false;
+  if (dbTs === 0) return true;
+  return localTs > dbTs;
+}
+
+export function fieldsFromDbRow(row: UnifiedActiveTradePointDetail): Record<string, unknown> {
   const fields: Record<string, unknown> = {
     name: row.name?.trim() || "Торговая точка",
     city: row.city?.trim() || "—",
