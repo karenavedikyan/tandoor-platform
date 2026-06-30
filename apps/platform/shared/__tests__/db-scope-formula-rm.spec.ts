@@ -79,6 +79,12 @@ function makePool(): PoolLike {
       if (s.includes("client_assignments ca") && s.includes("team_id = ANY")) {
         return { rows: ROP_TEAM_CODES.map((client_code) => ({ client_code })) };
       }
+      if (s.includes("rop_team_codes") || (s.includes("d_ov.rop_id = $1") && s.includes("UNION"))) {
+        return { rows: ROP_TEAM_CODES.map((client_code) => ({ client_code })) };
+      }
+      if (s.includes("d_ov.rop_id = $1") && s.includes("upper(d.release_code)")) {
+        return { rows: [] };
+      }
 
       if (s.includes("rop_client_grants")) {
         return { rows: [] };
@@ -147,7 +153,7 @@ describe("db-scope-formula regional_manager (prompt 427)", () => {
     expect(meta.allCodes).toHaveLength(3);
   });
 
-  it("does not change rop teamCodes behavior", async () => {
+  it("rop teamCodes still resolves for rop role (live rop_id + team fallback)", async () => {
     const pool = makePool();
     const meta = await resolveScopeCodesMeta(pool, ROP_ID, "rop");
 

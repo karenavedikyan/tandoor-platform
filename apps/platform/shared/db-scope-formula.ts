@@ -304,15 +304,43 @@ export async function resolveScopeCodesMeta(
   }
 
   let teamCodes: string[] = [];
-  if (role === "rop" && teamIds.length > 0) {
-    // [prompt-427] teamCodes — ТОЛЬКО для РОПа. Для RM teamCodes пуст.
-    const teamQ = await pool.query<{ client_code: string }>(
-      `SELECT DISTINCT ca.client_code
-       FROM client_assignments ca
-       WHERE ca.team_id = ANY($1::uuid[])
-       ORDER BY ca.client_code`,
-      [teamIds],
-    );
+  if (role === "rop") {
+    // [rop-scope] teamCodes = A ∪ B:
+    // A) dealers where live dealer_overrides.rop_id = this ROP (territorial truth)
+    // B) client_assignments.team_id fallback only when rop_id is empty
+    const teamQ =
+      teamIds.length > 0
+        ? await pool.query<{ client_code: string }>(
+            `SELECT DISTINCT client_code FROM (
+               SELECT upper(d.release_code) AS client_code
+                 FROM dealers d
+                 ${DEALER_OVERRIDE_JOIN}
+                WHERE d_ov.rop_id = $1::uuid
+                  AND d.release_code IS NOT NULL
+               UNION
+               SELECT ca.client_code
+                 FROM client_assignments ca
+                WHERE ca.team_id = ANY($2::uuid[])
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM dealers d
+                      ${DEALER_OVERRIDE_JOIN}
+                     WHERE upper(d.release_code) = ca.client_code
+                       AND d_ov.rop_id IS NOT NULL
+                  )
+             ) rop_team_codes
+             ORDER BY client_code`,
+            [userId, teamIds],
+          )
+        : await pool.query<{ client_code: string }>(
+            `SELECT DISTINCT upper(d.release_code) AS client_code
+               FROM dealers d
+               ${DEALER_OVERRIDE_JOIN}
+              WHERE d_ov.rop_id = $1::uuid
+                AND d.release_code IS NOT NULL
+              ORDER BY client_code`,
+            [userId],
+          );
     teamCodes = teamQ.rows.map((r) => r.client_code).filter(Boolean);
   }
 
