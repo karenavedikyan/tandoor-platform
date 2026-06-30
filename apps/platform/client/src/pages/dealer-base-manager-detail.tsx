@@ -495,7 +495,7 @@ export default function DealerBaseManagerDetailPage() {
                 </Badge>
               </div>
             ) : null}
-            <DealerBase embedListOnly scopeUserId={managerApiUserId} />
+            <DealerBase embedListOnly scopeUserId={managerApiUserId} forcedSegmentFilter={segmentFilter} />
           </TabsContent>
 
           <TabsContent value="cities" className="mt-3">
