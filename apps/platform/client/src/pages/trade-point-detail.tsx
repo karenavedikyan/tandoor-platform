@@ -1,7 +1,7 @@
 import type { ComponentProps, ComponentType, ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
-import { Camera, ChevronDown, ChevronRight, MapPin, Store, BookOpen, Trash2 } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, MapPin, Store, BookOpen, Trash2, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import {
+  isTradePointAddressEmpty,
+  TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL,
+} from "@/lib/trade-point-address-empty";
 import { BackNav } from "@/components/navigation/back-nav";
 import { TradePointDetailSkeleton } from "@/components/skeletons/trade-point-detail-skeleton";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
@@ -836,7 +840,17 @@ function TradePointDetailContent({
           </div>
         ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
-          <span data-testid="text-trade-point-address">{point.address}</span>
+          {isTradePointAddressEmpty(point.address) ? (
+            <span
+              className="inline-flex items-center gap-1.5 font-medium text-destructive"
+              data-testid="text-trade-point-address"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              {TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL}
+            </span>
+          ) : (
+            <span data-testid="text-trade-point-address">{point.address}</span>
+          )}
         </p>
         {contactLine ? (
           <p className="mt-2 text-sm font-medium text-foreground" data-testid="text-trade-point-contact">
@@ -1075,7 +1089,16 @@ function TradePointDetailContent({
                 <ShowcaseCoverPhotoSlot kind="trade_point" dealer={dealer} tradePoint={point} profile={profile} size="hero" rounded="xl" className="w-full shrink-0 sm:max-w-[15rem]" />
                 <div className="min-w-0 flex-1 space-y-1">
                   <h2 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{displayName}</h2>
-                  <p className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">{[point.city, point.address?.trim()].filter(Boolean).join(" · ")}</p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1">
+                    {[point.city, isTradePointAddressEmpty(point.address) ? null : point.address?.trim()]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    {isTradePointAddressEmpty(point.address) ? (
+                      <span className="mt-0.5 block font-medium text-destructive">
+                        {TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL}
+                      </span>
+                    ) : null}
+                  </p>
                   <TradePointLegalEntitiesSection dealerId={dealer.id} tradePointId={point.id} canEdit={canEditTp} />
                 </div>
               </div>
@@ -1083,7 +1106,22 @@ function TradePointDetailContent({
             <div className="mt-3 grid gap-4 lg:grid-cols-2 lg:items-start">
               <SurfaceCard>
                 <CardContent className="space-y-0 pt-5">
-                  <FieldRow label="Адрес" value={point.address} icon={MapPin} />
+                  {isTradePointAddressEmpty(point.address) ? (
+                    <div className="flex gap-3 border-b border-border py-3 sm:items-start sm:gap-4">
+                      <span className="mt-0.5 hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive sm:flex">
+                        <MapPin className="h-4 w-4" aria-hidden />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Адрес</p>
+                        <p className="mt-0.5 inline-flex items-center gap-1.5 break-words text-sm font-medium leading-snug text-destructive sm:text-[15px]">
+                          <AlertTriangle className="h-4 w-4 shrink-0 sm:hidden" aria-hidden />
+                          {TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <FieldRow label="Адрес" value={point.address} icon={MapPin} />
+                  )}
                   <FieldRow label="Город" value={point.city} />
                   <FieldRow label="Формат" value={point.format} />
                   <FieldRow label="Статус" value={point.status} />

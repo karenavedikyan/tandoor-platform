@@ -99,6 +99,11 @@ import {
 import { CLIENT_CATEGORY_META, getClientCategoryLabel, type ClientCategoryId } from "@/lib/client-category";
 import type { DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { cn } from "@/lib/utils";
+import {
+  isTradePointAddressEmpty,
+  tradePointListRowHasNoAddress,
+  TRADE_POINT_ADDRESS_EMPTY_LIST_LABEL,
+} from "@/lib/trade-point-address-empty";
 import { displayUserName } from "@/lib/auth-api";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
@@ -281,9 +286,7 @@ function rowHasNoResponsible(r: TradePointListRow): boolean {
 }
 
 function rowHasNoAddress(r: TradePointListRow): boolean {
-  const a = r.address.trim();
-  const c = r.city.trim();
-  return a === "" || a === "—" || c === "" || c === "—";
+  return tradePointListRowHasNoAddress(r.address, r.city);
 }
 
 function uniqueSortedStaff(values: Iterable<string>): string[] {
@@ -2000,8 +2003,18 @@ export default function TradePointsPage({
                     <td className="p-2 align-middle">
                       <p className="truncate">{r.city}</p>
                     </td>
-                    <td className="p-2 align-middle text-muted-foreground">
-                      <p className="line-clamp-2 text-xs">{r.address}</p>
+                    <td className="p-2 align-middle">
+                      {isTradePointAddressEmpty(r.address) ? (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/30 bg-destructive/10 text-[10px] text-destructive"
+                          data-testid={`badge-trade-point-no-address-${r.tradePointId}`}
+                        >
+                          {TRADE_POINT_ADDRESS_EMPTY_LIST_LABEL}
+                        </Badge>
+                      ) : (
+                        <p className="line-clamp-2 text-xs text-muted-foreground">{r.address}</p>
+                      )}
                     </td>
                     <td className="p-2 align-middle">
                       <Badge variant="outline" className={cn("text-[10px]", tpBadgeOutline)}>
@@ -2080,7 +2093,11 @@ export default function TradePointsPage({
                       {r.tradePointDisplayCode}
                     </p>
                     <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{r.tradePointName}</p>
-                    <p className="line-clamp-1 text-xs text-muted-foreground">{addrShort || "—"}</p>
+                    {isTradePointAddressEmpty(r.address) ? (
+                      <p className="text-xs font-medium text-destructive">{TRADE_POINT_ADDRESS_EMPTY_LIST_LABEL}</p>
+                    ) : (
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{addrShort || "—"}</p>
+                    )}
                     <p className="line-clamp-1 text-xs font-medium text-foreground" data-testid={`text-trade-point-list-dealer-${r.tradePointId}`}>
                       {r.dealerName}
                     </p>
@@ -2249,7 +2266,13 @@ export default function TradePointsPage({
                           <CardTitle className="text-lg leading-snug sm:text-xl">{r.tradePointName}</CardTitle>
                           <p className="text-sm text-muted-foreground">
                             <span className="font-medium text-foreground">{r.city}</span>
-                            {r.address && r.address !== "—" ? <span className="mt-0.5 block text-xs">{r.address}</span> : null}
+                            {isTradePointAddressEmpty(r.address) ? (
+                              <span className="mt-0.5 block text-xs font-medium text-destructive">
+                                {TRADE_POINT_ADDRESS_EMPTY_LIST_LABEL}
+                              </span>
+                            ) : (
+                              <span className="mt-0.5 block text-xs">{r.address}</span>
+                            )}
                           </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap justify-end gap-1">

@@ -88,7 +88,7 @@ const SCOPED_TP_SELECT = `
   tp.address,
   tp.format,
   tp.is_active,
-  COALESCE(tpo.is_primary, FALSE) AS is_primary,
+  tp.is_primary AS is_primary,
   tp.importance_tier,
   d.id::text AS dealer_id,
   d.external_key AS dealer_external_key,
