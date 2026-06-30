@@ -106,6 +106,8 @@ export type ManagerRowModel = {
   rows: DealerRow[];
   isExternal: boolean;
   externalTeamName?: string | null;
+  /** Серверные member-totals из team-scope/org-scope — не перезаписывать overview. */
+  countsFromServerTotals?: boolean;
 };
 
 export type RopGroupModel = {
@@ -350,6 +352,7 @@ export function aggregateManagersForTeam(
         rows,
         isExternal: false,
         externalTeamName: null,
+        countsFromServerTotals: true,
       };
     }
     const active = rows.filter((r) => r.status === "активный").length;
@@ -875,6 +878,7 @@ export function mergeOverviewClientCountsIntoRopGroups(
     }
 
     const managers = group.managers.map((manager) => {
+      if (manager.countsFromServerTotals) return manager;
       const overviewManager = overviewMgrByCatalogId.get(manager.managerId);
       if (!overviewManager) return manager;
       return {

@@ -95,13 +95,15 @@ import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import { useLocation } from "wouter";
 import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
+import { RopTeamTreeDiagPanel } from "@/components/dealer-base/rop-team-tree-diag-panel";
+import { buildRopTeamTreeDiagLines, isRopTreeDiagEnabled } from "@/lib/dealer-base-rop-tree-diag";
 import {
   computeManagerHeatMap,
   sortManagersByHeat,
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
-import type { MemberTotals, TeamTotals } from "@shared/dealers-scope-types";
+import type { MemberTotals, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
@@ -312,6 +314,7 @@ export function DealerBaseManagementCockpit({
   mergedDealerRowsForCreate,
   teamTotalsById,
   membersTotalsByTeamId,
+  teamScopeForDiag,
 }: {
   rows: DealerRow[];
   profile: ReleaseDemoProfile;
@@ -321,6 +324,7 @@ export function DealerBaseManagementCockpit({
   mergedDealerRowsForCreate?: DealerRow[] | null;
   teamTotalsById?: Map<string, TeamTotals>;
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
+  teamScopeForDiag?: TeamScopePayload | null;
 }) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
@@ -429,6 +433,23 @@ export function DealerBaseManagementCockpit({
       userIdToCatalogMgrId,
     );
   }, [baseRopGroups, overview, orgTeamCtx?.snap, userIdToCatalogMgrId]);
+
+  const ropTreeDiagLines = useMemo(() => {
+    if (!isRopTreeDiagEnabled() || access !== "team_lead" || !teamScopeForDiag || !orgTeamCtx?.snap) {
+      return [];
+    }
+    const ownGroup = ropGroups.find((g) =>
+      isOwnTeamForUser(g.teamId, profile, access, orgTeamCtx.snap),
+    );
+    const membersTotalsById = membersTotalsByTeamId?.get(ownGroup?.teamId ?? teamScopeForDiag.team.id);
+    return buildRopTeamTreeDiagLines({
+      teamId: ownGroup?.teamId ?? teamScopeForDiag.team.id,
+      orgSnap: orgTeamCtx.snap,
+      members: teamScopeForDiag.members,
+      membersTotalsById,
+      ropGroup: ownGroup,
+    });
+  }, [access, teamScopeForDiag, orgTeamCtx?.snap, ropGroups, membersTotalsByTeamId, profile]);
 
   const ownTeamIds = useMemo(
     () =>
@@ -1507,6 +1528,7 @@ export function DealerBaseManagementCockpit({
           </div>
         </div>
       ) : null}
+      {ropTreeDiagLines.length > 0 ? <RopTeamTreeDiagPanel lines={ropTreeDiagLines} /> : null}
     </div>
   );
 }
