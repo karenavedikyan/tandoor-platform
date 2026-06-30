@@ -126,4 +126,66 @@ describe("dealer-base management overview helpers", () => {
     expect(merged[0]?.managers[0]?.attention).toBe(2);
     expect(merged[0]?.outlets).toBe(5);
   });
+
+  it("mergeOverviewClientCountsIntoRopGroups keeps server member totals for regional_manager", () => {
+    const rmUserId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const catalogGroups: RopGroupModel[] = [
+      {
+        teamId: "team-a",
+        ropName: "Команда A",
+        managers: [
+          {
+            managerId: rmUserId,
+            name: "Дзодзиков",
+            teamId: "team-a",
+            active: 312,
+            potential: 0,
+            attention: 0,
+            outlets: 312,
+            topSegmentLabel: "—",
+            rows: [],
+            isExternal: false,
+            countsFromServerTotals: true,
+          },
+        ],
+        active: 312,
+        potential: 0,
+        attention: 0,
+        outlets: 312,
+        managerCatalogCount: 1,
+        statusLine: "",
+        rows: [],
+      },
+    ];
+
+    const overviewWithZeroActive: ClientBaseOverview["ropGroups"] = [
+      {
+        ropUserId: "rop-1",
+        ropFullName: "РОП",
+        teamId: "team-a",
+        teamName: "Команда A",
+        clients: 100,
+        tradePoints: 312,
+        potential: 0,
+        attention: 0,
+        managerCount: 1,
+        managersWithEmptyBase: 0,
+        managers: [
+          {
+            userId: rmUserId,
+            fullName: "Дзодзиков",
+            active: 0,
+            tradePoints: 312,
+            segment: null,
+            potential: 0,
+            attention: 0,
+          },
+        ],
+      },
+    ];
+
+    const merged = mergeOverviewClientCountsIntoRopGroups(catalogGroups, overviewWithZeroActive, null, new Map());
+    expect(merged[0]?.managers[0]?.active).toBe(312);
+    expect(merged[0]?.managers[0]?.outlets).toBe(312);
+  });
 });

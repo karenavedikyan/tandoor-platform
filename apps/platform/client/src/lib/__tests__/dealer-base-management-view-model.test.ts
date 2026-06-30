@@ -124,6 +124,62 @@ const teamRows = [
   assert.equal(boyko!.active, 1);
 }
 
+// regional_manager: server member totals → active/outlets на карточке (не 0 из rows/overview)
+{
+  const RM_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const MGR_UUID = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
+  const TEAM_UUID = "cccccccc-dddd-eeee-ffff-000000000001";
+  const snap = {
+    me: { id: "rop-uuid" },
+    teams: [{ id: TEAM_UUID, name: "Скалабан", ropUserId: "rop-uuid", ropName: "Скалабан" }],
+    users: [
+      { id: RM_UUID, fullName: "Дзодзиков", role: "regional_manager", teamId: TEAM_UUID },
+      { id: MGR_UUID, fullName: "Илюченко", role: "manager", teamId: TEAM_UUID },
+    ],
+  } as import("../use-org-snapshot.js").OrgSnapshot;
+  const membersTotalsById = new Map([
+    [
+      RM_UUID,
+      {
+        active_dealers: 312,
+        active_trade_points: 312,
+        trashed_dealers: 0,
+        trashed_trade_points: 0,
+        tp_status_active: 0,
+        tp_status_potential: 0,
+        tp_status_attention: 0,
+        dealer_no_status: 0,
+        avg_distribution: 0,
+      },
+    ],
+    [
+      MGR_UUID,
+      {
+        active_dealers: 134,
+        active_trade_points: 219,
+        trashed_dealers: 0,
+        trashed_trade_points: 0,
+        tp_status_active: 0,
+        tp_status_potential: 0,
+        tp_status_attention: 0,
+        dealer_no_status: 0,
+        avg_distribution: 0,
+      },
+    ],
+  ]);
+  const managers = aggregateManagersForTeam(TEAM_UUID, [], snap, {}, undefined, membersTotalsById);
+  const rm = managers.find((m) => m.managerId === RM_UUID);
+  const mgr = managers.find((m) => m.managerId === MGR_UUID);
+  assert.ok(rm, "regional_manager in catalog");
+  assert.ok(mgr, "manager in catalog");
+  assert.equal(rm!.active, 312);
+  assert.equal(rm!.outlets, 312);
+  assert.equal(rm!.countsFromServerTotals, true);
+  assert.equal(mgr!.active, 134);
+  assert.equal(mgr!.outlets, 219);
+  assert.equal(mgr!.countsFromServerTotals, true);
+}
+
 // buildRopGroups + findManagerInRopGroups: те же id клиентов, что у aggregateManagersForTeam
 {
   const responsibleByCode: Record<string, string> = {
