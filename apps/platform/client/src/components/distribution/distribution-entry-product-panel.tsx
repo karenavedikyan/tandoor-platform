@@ -51,7 +51,7 @@ import {
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 
 type Step = "segment" | "model" | "tradePoints" | "showcase";
-const DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY = "catalog-card-size";
+const DISTRIBUTION_ENTRY_CATALOG_CARD_SIZE_KEY = "distribution-entry-catalog-card-size-v1";
 
 type DistributionEntryProductPanelProps = {
   profile: ReleaseDemoProfile;
