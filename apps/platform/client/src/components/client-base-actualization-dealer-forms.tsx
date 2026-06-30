@@ -1264,8 +1264,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
 
   const runPersist = useCallback(async () => {
     if (saveLockRef.current) return;
-    if (!name.trim() || !city.trim()) {
-      toast({ title: "Заполните обязательные поля", description: "Название и город.", variant: "destructive" });
+    if (!name.trim() || !city.trim() || !address.trim()) {
+      toast({ title: "Заполните обязательные поля", description: "Название, город и адрес.", variant: "destructive" });
       return;
     }
     const mgr = getSalesUserById(managerUserId);
@@ -1511,8 +1511,8 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
   ]);
 
   const onSaveClick = useCallback(() => {
-    if (!name.trim() || !city.trim()) {
-      toast({ title: "Заполните обязательные поля", description: "Название и город.", variant: "destructive" });
+    if (!name.trim() || !city.trim() || !address.trim()) {
+      toast({ title: "Заполните обязательные поля", description: "Название, город и адрес.", variant: "destructive" });
       return;
     }
     const mgr = getSalesUserById(managerUserId);
@@ -1545,7 +1545,7 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
     }
 
     void runPersist();
-  }, [name, city, inn, managerUserId, mergedDealerRows, state, runPersist]);
+  }, [name, city, address, inn, managerUserId, mergedDealerRows, state, runPersist]);
 
   return (
     <>
@@ -1761,7 +1761,9 @@ export function DealerActualizationCreateDialog(props: DealerActualizationCreate
                 <Input data-testid="input-dealer-create-city" value={city} onChange={(e) => setCity(e.target.value)} className="min-h-10" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Адрес</Label>
+                <Label className="text-xs">
+                  Адрес <span className="text-destructive">*</span>
+                </Label>
                 <AddressSuggestInput
                   key={draftDealerIdRef.current ?? "dealer-create"}
                   value={address}

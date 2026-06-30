@@ -9,6 +9,10 @@ import {
   getReleaseClientTypeLabel,
   type ReleaseClient,
 } from "../client/src/lib/release-client-data.js";
+import {
+  PRIMARY_TRADE_POINT_FORMAT,
+  PRIMARY_TRADE_POINT_NAME,
+} from "./primary-trade-point-materialization.js";
 
 export type DealerSeedRow = {
   externalKey: string;
@@ -42,6 +46,7 @@ export type TradePointSeedRow = {
   address: string | null;
   format: string | null;
   isActive: boolean;
+  isPrimary: boolean;
   importanceTier: string | null;
   source: string;
 };
@@ -74,9 +79,15 @@ function buildTradePointSeedRows(c: ReleaseClient, clientCategory: ClientCategor
   const city = c.city?.trim() || "—";
   const addr = c.address?.trim() || "";
   const importanceTier = deriveImportanceTier(clientCategory);
-  const tpFormat = "Розница / салон";
+  const tpFormat = PRIMARY_TRADE_POINT_FORMAT;
 
-  const mkTp = (suffix: string, name: string, tpCity: string, tpAddress: string): TradePointSeedRow => ({
+  const mkTp = (
+    suffix: string,
+    name: string,
+    tpCity: string,
+    tpAddress: string,
+    isPrimary: boolean,
+  ): TradePointSeedRow => ({
     externalKey: `${dealerKey}-${suffix}`,
     dealerExternalKey: dealerKey,
     name,
@@ -84,6 +95,7 @@ function buildTradePointSeedRows(c: ReleaseClient, clientCategory: ClientCategor
     address: tpAddress,
     format: tpFormat,
     isActive: c.isActive,
+    isPrimary,
     importanceTier,
     source: "release-seed",
   });
@@ -94,11 +106,13 @@ function buildTradePointSeedRows(c: ReleaseClient, clientCategory: ClientCategor
       const suf = String(idx + 1).padStart(2, "0");
       const tpCity = (tp.city ?? "").trim() || city;
       const tpAddr = (tp.address ?? "").trim() || `г. ${tpCity}, адрес уточняется`;
-      return mkTp(suf, tp.name.trim() || `Торговая точка ${idx + 1}`, tpCity, tpAddr);
+      return mkTp(suf, tp.name.trim() || `Торговая точка ${idx + 1}`, tpCity, tpAddr, idx === 0);
     });
   }
-  if (!addr) return [];
-  return [mkTp("01", `Торговая точка · ${city}`, city, addr)];
+  if (!addr) {
+    return [mkTp("01", PRIMARY_TRADE_POINT_NAME, city, "", true)];
+  }
+  return [mkTp("01", `Торговая точка · ${city}`, city, addr, true)];
 }
 
 export function buildDealerSeedBundle(c: ReleaseClient): DealerSeedBundle {

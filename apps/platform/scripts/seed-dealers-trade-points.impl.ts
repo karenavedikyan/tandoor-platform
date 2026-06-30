@@ -107,6 +107,8 @@ async function main(): Promise<void> {
 
     dealerUuidByExternal.set(d.externalKey, dealerUuid);
 
+    await db.update(tradePoints).set({ isPrimary: false }).where(eq(tradePoints.dealerId, dealerUuid));
+
     for (const tp of bundle.tradePoints) {
       const tpExisting = await db
         .select({ id: tradePoints.id })
@@ -123,6 +125,7 @@ async function main(): Promise<void> {
             address: tp.address,
             format: tp.format,
             isActive: tp.isActive,
+            isPrimary: tp.isPrimary,
             importanceTier: tp.importanceTier,
             dealerId: dealerUuid,
             source: tp.source,
@@ -139,6 +142,7 @@ async function main(): Promise<void> {
           address: tp.address,
           format: tp.format,
           isActive: tp.isActive,
+          isPrimary: tp.isPrimary,
           importanceTier: tp.importanceTier,
           source: tp.source,
         });
