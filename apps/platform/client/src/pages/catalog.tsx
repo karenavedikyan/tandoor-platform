@@ -35,6 +35,7 @@ import {
 } from "@/components/catalog/ProductListRow";
 import { CatalogSkeleton } from "@/components/skeletons/catalog-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import { cn } from "@/lib/utils";
 import {
   LARGE_LIST_VIRTUAL_THRESHOLD,
   VirtualizedStackList,
