@@ -266,6 +266,8 @@ function ourMarkLimitFromBlock(block: ShowcaseMatrixEntryDto | null): number | n
   return ourMarkLimitFromPlacementBlock(block);
 }
 
+const SEGMENTS: ShowcasePlacementSegment[] = ["vh", "mk", "hardware"];
+
 const PLACEMENT_SEGMENT_TO_TYPE_KEY: Record<ShowcasePlacementSegment, ShowcaseTypeKey> = {
   vh: "entrance",
   mk: "interior",
@@ -1006,6 +1008,60 @@ export function DistributionFullscreenEntry({
     ],
   );
 
+  /** При сохранении: гарантировать, что ёмкость каждого (segment, placementType)
+   *  не меньше числа отмеченных «наших». Поднимает ёмкость и собирает уведомления по типу оборудования. */
+  const growAllPlacementsToFitMarksOnSave = useCallback(
+    (nextDraft: FullscreenEntryDraftMap) => {
+      const uid = profile.personaUserId;
+      const uname = userLabelFromProfile(profile);
+      const growByType = new Map<ShowcaseTypeKey, { oldCapacity: number; nextCapacity: number }>();
+      let changed = false;
+
+      for (const segment of SEGMENTS) {
+        for (const placementType of allowedTypesForSegment(segment)) {
+          const marked = countMarkedOursInPlacement(nextDraft, baselines, segment, placementType);
+          if (marked <= 0) continue;
+          const grown = growPlacementBlockToFitOurMarks({
+            dealerId: dealer.id,
+            tradePointId: point.id,
+            placements: loadCachedPlacements(point.id),
+            segment,
+            placementType,
+            ourMarkCount: marked,
+            updatedBy: uid,
+            updatedByName: uname,
+          });
+          if (!grown) continue;
+          changed = true;
+          const typeKey = PLACEMENT_SEGMENT_TO_TYPE_KEY[segment];
+          const acc = growByType.get(typeKey);
+          if (acc) {
+            growByType.set(typeKey, {
+              oldCapacity: acc.oldCapacity + grown.oldCapacity,
+              nextCapacity: acc.nextCapacity + grown.nextCapacity,
+            });
+          } else {
+            growByType.set(typeKey, { oldCapacity: grown.oldCapacity, nextCapacity: grown.nextCapacity });
+          }
+        }
+      }
+
+      if (!changed) return;
+      syncCategoryCapacityAfterPlacementChange();
+      setBump((n) => n + 1);
+      for (const [type, agg] of Array.from(growByType.entries())) {
+        if (agg.nextCapacity === agg.oldCapacity) continue;
+        notifyShowcaseCapacityAutoGrow({
+          tradePointId: point.id,
+          type,
+          oldCapacity: agg.oldCapacity,
+          nextCapacity: agg.nextCapacity,
+        });
+      }
+    },
+    [baselines, dealer.id, point.id, profile, syncCategoryCapacityAfterPlacementChange],
+  );
+
   const productsForList = useMemo(() => {
     if (!placementTypeMode) return orderedProducts;
     return orderedProducts.filter((p) => {
@@ -1237,6 +1293,10 @@ export function DistributionFullscreenEntry({
         });
       }
 
+      if (!needInstallMode) {
+        growAllPlacementsToFitMarksOnSave(draft);
+      }
+
       setBump((n) => n + 1);
       setDraft((prev) => {
         const next = { ...prev };
@@ -1306,6 +1366,7 @@ export function DistributionFullscreenEntry({
     dealer.id,
     draft,
     flushPendingNow,
+    growAllPlacementsToFitMarksOnSave,
     matrixModelById,
     needInstallMarkedIds,
     needInstallMode,
