@@ -17,3 +17,7 @@ export function useServerKpiAggregates(): boolean {
 export function useTpHydrationNoWriteback(): boolean {
   return process.env.TP_HYDRATION_NO_WRITEBACK === "true";
 }
+
+export function useDistributionDbPrimary(): boolean {
+  return process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY === "true";
+}

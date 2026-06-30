@@ -1,5 +1,6 @@
 import { normalizeHasShowcase } from "../client-base-actualization-state.js";
 import type { TradePointShowcaseActualization } from "../client-base-actualization-state.js";
+import { getDistributionDbPrimaryFlagSync } from "../distribution-db-primary-flag.js";
 import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import type { ShowcasePlacementSegment } from "../showcase-matrix-api.js";
 import type { ShowcaseTypeKey } from "../showcase-type-capacity.js";
@@ -99,13 +100,41 @@ export function countLegacyOursOfType(
   return sum;
 }
 
+/**
+ * Capacity по типу оборудования из matrix entries (БД).
+ * Суммирует placementCapacity по placement-блокам сегмента (как categoryCapacityFromPlacements).
+ * null — нет данных в БД по типу → fallback на blob.
+ */
+export function capacityFromMatrixEntries(
+  entries: readonly ShowcaseMatrixEntryDto[],
+  type: EquipmentTypeKey,
+): number | null {
+  const segment = SEGMENT_BY_TYPE[type];
+  let sum = 0;
+  let hasCapacity = false;
+  for (const e of entries) {
+    if (e.targetKind !== "placement") continue;
+    if (e.placementSegment !== segment) continue;
+    if (e.placementCapacity == null) continue;
+    hasCapacity = true;
+    sum += Math.max(0, e.placementCapacity);
+  }
+  return hasCapacity ? sum : null;
+}
+
 /** Дистрибуция одной ТТ по всем типам + средняя. Числитель — installed-модели матрицы. */
 export function computeDistributionForTradePoint(
   sh: TradePointShowcaseActualization | undefined,
   installedEntries: readonly ShowcaseMatrixEntryDto[] = [],
 ): DistributionTradePointMetrics {
-  const tradePointId = sh?.tradePointId ?? "";
-  const hasShowcase = sh ? normalizeHasShowcase(sh.hasShowcase) : true;
+  const tradePointId = sh?.tradePointId ?? installedEntries[0]?.tradePointId ?? "";
+  const dbPrimary = getDistributionDbPrimaryFlagSync();
+  const hasShowcase =
+    dbPrimary && installedEntries.length > 0
+      ? true
+      : sh
+        ? normalizeHasShowcase(sh.hasShowcase)
+        : true;
 
   if (!hasShowcase) {
     return {
@@ -128,7 +157,13 @@ export function computeDistributionForTradePoint(
   let legacySum = 0;
   let capacitySum = 0;
   for (const type of ALL_EQUIPMENT_TYPES) {
-    const capacity = sh ? getShowcaseTypeCapacity(sh, type) : null;
+    const dbCapacity = capacityFromMatrixEntries(installedEntries, type);
+    const capacity =
+      dbPrimary && dbCapacity != null
+        ? dbCapacity
+        : sh
+          ? getShowcaseTypeCapacity(sh, type)
+          : null;
     const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
     const legacyOurs = countLegacyOursOfType(installedEntries, type);
     let percent: number | null = null;

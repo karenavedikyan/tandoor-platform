@@ -4,6 +4,7 @@ import { AUTH_ME_QUERY_KEY } from "../hooks/use-auth-user.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
 import { seedFeatureFlagsFromBootstrap } from "./dealer-base-source.js";
+import { seedDistributionDbPrimaryFromBootstrap } from "./distribution-db-primary-flag.js";
 import { seedServerKpiAggregatesFromBootstrap } from "./server-kpi-aggregates-flag.js";
 import { seedTpHydrationNoWritebackFromBootstrap } from "./tp-hydration-no-writeback-flag.js";
 
@@ -14,6 +15,7 @@ export type BootstrapFeatureFlags = {
     SHADOW_DIFF_ENABLED: boolean;
     USE_SERVER_KPI_AGGREGATES: boolean;
     TP_HYDRATION_NO_WRITEBACK: boolean;
+    DISTRIBUTION_DB_PRIMARY_CAPACITY: boolean;
   };
 };
 
@@ -67,4 +69,5 @@ export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void
   seedFeatureFlagsFromBootstrap(b.feature_flags);
   seedServerKpiAggregatesFromBootstrap(b.feature_flags);
   seedTpHydrationNoWritebackFromBootstrap(b.feature_flags);
+  seedDistributionDbPrimaryFromBootstrap(b.feature_flags);
 }
