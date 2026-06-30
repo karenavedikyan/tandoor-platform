@@ -480,22 +480,32 @@ export async function computeDbScopeForUser(
   let activeTp = 0;
   let trashedTp = 0;
   const scopeDealerIds = [...activeIds, ...trashedIds];
-  if (scopeDealerIds.length > 0) {
-    const tpTrashFilter = buildTradePointTrashByFilter(trashRbacMode, userId, teamMemberIds);
-    const tpQ = await pool.query<{ active_tps: string; trashed_tps: string }>(
-      `SELECT
-         COUNT(*) FILTER (WHERE tp.is_active = TRUE AND ${tpJoinStatusActive("tpo")})::text AS active_tps,
-         COUNT(*) FILTER (
-           WHERE ${tpStatusTrash("tpo")}
-             ${tpTrashFilter.sql}
-         )::text AS trashed_tps
+
+  if (activeIds.length > 0) {
+    const activeTpQ = await pool.query<{ active_tps: string }>(
+      `SELECT COUNT(*)::text AS active_tps
        FROM trade_points tp
        ${TRADE_POINT_OVERRIDE_JOIN}
-       WHERE tp.dealer_id = ANY($1::uuid[])`,
+       WHERE tp.dealer_id = ANY($1::uuid[])
+         AND tp.is_active = TRUE
+         AND ${tpJoinStatusActive("tpo")}`,
+      [activeIds],
+    );
+    activeTp = Number(activeTpQ.rows[0]?.active_tps ?? 0);
+  }
+
+  if (scopeDealerIds.length > 0) {
+    const tpTrashFilter = buildTradePointTrashByFilter(trashRbacMode, userId, teamMemberIds);
+    const trashedTpQ = await pool.query<{ trashed_tps: string }>(
+      `SELECT COUNT(*)::text AS trashed_tps
+       FROM trade_points tp
+       ${TRADE_POINT_OVERRIDE_JOIN}
+       WHERE tp.dealer_id = ANY($1::uuid[])
+         AND ${tpStatusTrash("tpo")}
+         ${tpTrashFilter.sql}`,
       [scopeDealerIds, ...tpTrashFilter.params],
     );
-    activeTp = Number(tpQ.rows[0]?.active_tps ?? 0);
-    trashedTp = Number(tpQ.rows[0]?.trashed_tps ?? 0);
+    trashedTp = Number(trashedTpQ.rows[0]?.trashed_tps ?? 0);
   }
 
   const kpiTotals = await computeDealerKpiTotalsForActiveDealers(pool, activeIds);
