@@ -37,6 +37,22 @@ export function getShowcaseTypeCapacity(
   return sh.hardwareSections ?? null;
 }
 
+/** Типы, по которым ёмкость в actualization-state нужно поднять до числа отмеченных моделей. */
+export function neededCapacityGrowthByType(
+  sh: TradePointShowcaseActualization | undefined,
+  markedByType: ReadonlyMap<ShowcaseTypeKey, number>,
+): Array<{ type: ShowcaseTypeKey; oldCapacity: number; nextCapacity: number }> {
+  const out: Array<{ type: ShowcaseTypeKey; oldCapacity: number; nextCapacity: number }> = [];
+  for (const [type, marked] of Array.from(markedByType.entries())) {
+    if (marked <= 0) continue;
+    const current = getShowcaseTypeCapacity(sh, type);
+    const currentNum = current == null ? 0 : current;
+    if (marked <= currentNum) continue;
+    out.push({ type, oldCapacity: currentNum, nextCapacity: marked });
+  }
+  return out;
+}
+
 /** Сколько моделей этого типа уже выбрано. */
 export function countSelectedByType(
   selected: readonly TradePointShowcaseSelectedModel[],
