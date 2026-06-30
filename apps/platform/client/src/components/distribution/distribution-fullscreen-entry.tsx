@@ -71,6 +71,7 @@ import {
   searchCatalog,
   type CatalogProduct,
 } from "@/lib/catalog-data";
+import { useCatalogReady } from "@/lib/catalog-warmup";
 import {
   readCatalogCardSizeFromStorage,
   writeCatalogCardSizeToStorage,
@@ -374,6 +375,7 @@ export function DistributionFullscreenEntry({
   initialProductId,
 }: Props) {
   const { toast } = useToast();
+  const catalogReady = useCatalogReady();
   const { user } = useCurrentUser();
   const actx = useClientBaseActualization();
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
@@ -617,11 +619,13 @@ export function DistributionFullscreenEntry({
     for (const model of matrixModels) {
       out[model.id] = baselineForProduct(model.id);
     }
-    for (const p of CATALOG_PRODUCTS) {
-      if (!out[p.id]) out[p.id] = baselineForProduct(p.id);
+    if (catalogReady) {
+      for (const p of CATALOG_PRODUCTS) {
+        if (!out[p.id]) out[p.id] = baselineForProduct(p.id);
+      }
     }
     return out;
-  }, [matrixModels, baselineForProduct]);
+  }, [matrixModels, baselineForProduct, catalogReady]);
 
   const selectedCategories = selectedCategoryIds as DistributionCatalogCategoryId[];
 
@@ -635,13 +639,14 @@ export function DistributionFullscreenEntry({
   }, [matrixModels]);
 
   const catalogProducts = useMemo(() => {
+    if (!catalogReady) return [];
     const q = searchQuery.trim();
     let list: CatalogProduct[] = q
       ? searchCatalog(q, 500)
       : [...CATALOG_PRODUCTS].sort((a, b) => a.showcasePriority - b.showcasePriority);
     list = filterCatalogProductsByFilters(list, catalogFilters, selectedCategories);
     return list;
-  }, [catalogFilters, searchQuery, selectedCategories]);
+  }, [catalogFilters, catalogReady, searchQuery, selectedCategories]);
 
   const facetBaseProducts = useMemo(
     () => (sourceTab === "matrix" ? matrixCatalogProducts : catalogProducts),
@@ -654,12 +659,12 @@ export function DistributionFullscreenEntry({
   );
 
   const categoryChips = useMemo(() => {
-    const pool = sourceTab === "matrix" ? matrixCatalogProducts : [...CATALOG_PRODUCTS];
+    const pool = sourceTab === "matrix" ? matrixCatalogProducts : catalogReady ? [...CATALOG_PRODUCTS] : [];
     return DISTRIBUTION_CATALOG_CATEGORIES.map((cat) => ({
       ...cat,
       count: pool.filter((p) => productDistributionCategory(p) === cat.id).length,
     })).filter((c) => c.count > 0);
-  }, [matrixCatalogProducts, sourceTab]);
+  }, [matrixCatalogProducts, sourceTab, catalogReady]);
 
   const segmentCategoryChips = useMemo(
     () =>

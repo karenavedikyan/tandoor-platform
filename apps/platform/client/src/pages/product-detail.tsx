@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { FloatingBackButton } from "@/components/navigation/floating-back-button";
 import { ProductDetailSkeleton } from "@/components/skeletons/product-detail-skeleton";
 import { getProductById, type CatalogProduct } from "@/lib/catalog-data";
+import { useCatalogReady } from "@/lib/catalog-warmup";
 import {
   getMatrixPresencesForProduct,
   getTradePointMatrix,
@@ -758,6 +759,7 @@ function ProductFound({ product }: { product: CatalogProduct }) {
 export function ProductDetailPage() {
   const params = useParams<{ productId: string }>();
   const raw = params.productId ?? "";
+  const catalogReady = useCatalogReady();
   const [pageReady, setPageReady] = useState(false);
 
   useLayoutEffect(() => {
@@ -765,8 +767,8 @@ export function ProductDetailPage() {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  const product = getProductById(raw);
-  if (!pageReady) return <ProductDetailSkeleton />;
+  const product = catalogReady ? getProductById(raw) : undefined;
+  if (!pageReady || !catalogReady) return <ProductDetailSkeleton />;
   if (!product) return <ProductNotFound />;
   return <ProductFound product={product} />;
 }

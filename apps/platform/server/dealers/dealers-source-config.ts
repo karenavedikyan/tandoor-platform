@@ -21,3 +21,7 @@ export function useTpHydrationNoWriteback(): boolean {
 export function useDistributionDbPrimary(): boolean {
   return process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY === "true";
 }
+
+export function catalogLazyLoadEnabled(): boolean {
+  return process.env.CATALOG_LAZY_LOAD === "true";
+}

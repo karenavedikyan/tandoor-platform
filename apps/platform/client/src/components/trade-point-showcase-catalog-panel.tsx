@@ -29,6 +29,7 @@ import {
   catalogSearchQueryMatchesHaystack,
   getProductById,
 } from "@/lib/catalog-data";
+import { useCatalogReady } from "@/lib/catalog-warmup";
 import type { ClientCategoryId } from "@/lib/client-category";
 import {
   computeShowcasePortalOverfill,
@@ -206,6 +207,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     dealerCode,
     counterpartyCity,
   } = props;
+
+  const catalogReady = useCatalogReady();
 
   const portalCaps = useMemo((): ShowcasePortalCaps => {
     if (portalCapsProp) return portalCapsProp;
@@ -394,7 +397,10 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     return n;
   }, [requiredDefs, isProductSelected]);
 
-  const doorCatalog = useMemo(() => CATALOG_PRODUCTS.filter(isShowcaseCatalogProduct), []);
+  const doorCatalog = useMemo(
+    () => (catalogReady ? CATALOG_PRODUCTS.filter(isShowcaseCatalogProduct) : []),
+    [catalogReady],
+  );
 
   const hayById = useMemo(() => {
     const m = new Map<string, string>();

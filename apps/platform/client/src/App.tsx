@@ -46,6 +46,7 @@ import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
 import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
+import { scheduleCatalogBackgroundWarmup } from "@/lib/catalog-warmup";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -503,6 +504,10 @@ function AuthenticatedApp({ user, logout }: { user: AuthUserDTO; logout: () => P
   useEffect(() => {
     initWebVitalsReporter(user.id, user.role);
   }, [user.id, user.role]);
+
+  useEffect(() => {
+    scheduleCatalogBackgroundWarmup();
+  }, []);
 
   const path = loc && loc.length > 0 ? loc : "/";
   const normPath = normRoutePath(path);

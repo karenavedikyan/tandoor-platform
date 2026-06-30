@@ -10,111 +10,17 @@
  * с дилерами и задачами. Публичные позиции не участвуют в моке матрицы витрин (`includeInTradePointMatrix: false`).
  */
 
-import {
-  TANDOOR_REAL_CATALOG_SEED,
-  type TandoorRealCatalogSeedItem,
-} from "./tandoor-real-catalog-seed.generated";
 import type { CatalogProduct } from "./catalog-product-type";
 import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
 import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
+import { isCatalogLazyLoadEnabled } from "./catalog-lazy-load-flag.js";
 
 export type { CatalogProduct } from "./catalog-product-type";
 
 export { normalizeDealerIdForCatalog };
 
-function cleanPublicDescription(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  return raw
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#8381;/g, "₽")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/<[^>]+>/g, "")
-    .trim();
-}
-
-function mapPublicSeedToCatalogProduct(row: TandoorRealCatalogSeedItem): CatalogProduct {
-  const doorKind =
-    row.category === "entrance" ? "Входная" : row.category === "interior" ? "Межкомнатная" : "Фурнитура";
-  const categoryLabel =
-    row.category === "entrance"
-      ? "Входные двери"
-      : row.category === "interior"
-        ? "Межкомнатные двери"
-        : "Фурнитура";
-  const series = row.collection ?? "Каталог Tandoor";
-  const coatingGuess = () => {
-    const t = row.title.toLowerCase();
-    if (t.includes("эмаль") || t.includes("emal")) return "Эмаль";
-    if (t.includes("шпон")) return "Шпон";
-    if (t.includes("ламинат")) return "Ламинат";
-    if (t.includes("пэт") || t.includes("pet")) return "ПЭТ";
-    if (t.includes("мдф") || t.includes("mdf")) return "МДФ";
-    if (row.category === "hardware") return "Фурнитура";
-    return "По каталогу";
-  };
-  const shortDescription = cleanPublicDescription(row.shortDescription) ?? row.title;
-  const boostTags: string[] = [];
-  if (row.id === "tc-mk-benatti-2-belyy-zhemchug-dg-2000-800") boostTags.push("Zefir", "зефир");
-  if (row.id === "tc-mk-benatti-1-0-belyy-zhemchug-dg-2100-800" || row.id === "tc-mk-benatti-1-0-belyy-zhemchug-dg-2000-800") {
-    boostTags.push("Grand 13", "Гранд 13", "Medzhik", "меджик");
-  }
-  if (row.id === "tc-mk-m-36-emal-belaya-dg-2000-800") boostTags.push("Mona", "мона");
-  const mergedTags = [...row.tags, ...boostTags];
-  const catalogImages = (row.images ?? [{ src: row.imageSrc, alt: row.imageAlt }]).map((im) => ({
-    src: im.src,
-    alt: im.alt,
-  }));
-  const searchText = [row.searchText, ...boostTags, ...catalogImages.map((c) => c.alt)].join(" ").toLowerCase();
-  const specs: { label: string; value: string }[] = [];
-  if (typeof row.priceRetail === "number") {
-    specs.push({ label: "Розничная цена, ₽", value: String(row.priceRetail) });
-  }
-  specs.push({ label: "Категория", value: categoryLabel });
-  if (row.collection) specs.push({ label: "Коллекция / модель", value: row.collection });
-
-  return {
-    id: row.id,
-    name: row.title,
-    article: row.id.replace(/^tc-(?:vh|mk|hw)-/, "").slice(0, 28).toUpperCase(),
-    category: categoryLabel,
-    series,
-    type: row.category === "hardware" ? "Артикул" : "Модель",
-    doorKind,
-    status: "В продаже",
-    image: catalogImages[0]?.src ?? row.imageSrc,
-    shortDescription,
-    description: shortDescription,
-    features: mergedTags,
-    specs,
-    equipment: row.category === "hardware" ? ["Комплект по спецификации витрины"] : ["Полотно", "Коробка", "Фурнитура по комплекту"],
-    variants: [{ label: "Исполнение", value: "См. публичную карточку" }],
-    colors: [],
-    sizes: [],
-    manufacturer: "Tandoor",
-    warranty: "По условиям производителя",
-    coating: coatingGuess(),
-    openType: row.category === "hardware" ? "—" : "См. карточку",
-    isTop: false,
-    isNew: false,
-    isExclusive: false,
-    isAction: false,
-    inStock: true,
-    showcasePriority: 3,
-    salesPriority: 5,
-    recommendedForShowcase: false,
-    relatedDealerIds: [],
-    relatedTradePointIds: [],
-    relatedTaskCount: 0,
-    history: [],
-    sourcePublicUrl: row.sourceUrl,
-    priceRetailRub: row.priceRetail,
-    catalogTags: mergedTags,
-    catalogSearchText: searchText,
-    includeInTradePointMatrix: false,
-    catalogImages: catalogImages.length > 1 ? catalogImages : undefined,
-  };
-}
+let catalogCache: CatalogProduct[] | null = null;
+let catalogLoadPromise: Promise<CatalogProduct[]> | null = null;
 
 /** Уникальные `id` — в seed импорта иногда встречаются дубликаты; иначе React ломает список при фильтрации. */
 function dedupeCatalogProductsById(products: CatalogProduct[]): CatalogProduct[] {
@@ -128,10 +34,62 @@ function dedupeCatalogProductsById(products: CatalogProduct[]): CatalogProduct[]
   return out;
 }
 
-export const CATALOG_PRODUCTS: CatalogProduct[] = dedupeCatalogProductsById([
-  ...TANDOOR_REAL_CATALOG_SEED.map(mapPublicSeedToCatalogProduct),
-  ...MOCK_CATALOG_PRODUCTS,
-]);
+async function buildCatalogCache(): Promise<CatalogProduct[]> {
+  const { buildCatalogProductsFromSeed } = await import("./catalog-products-from-seed.js");
+  return dedupeCatalogProductsById([...buildCatalogProductsFromSeed(), ...MOCK_CATALOG_PRODUCTS]);
+}
+
+/** Идемпотентная загрузка seed + mock в in-memory кэш. */
+export function ensureCatalogLoaded(): Promise<CatalogProduct[]> {
+  if (catalogCache) return Promise.resolve(catalogCache);
+  if (!catalogLoadPromise) {
+    catalogLoadPromise = buildCatalogCache().then((products) => {
+      catalogCache = products;
+      return products;
+    });
+  }
+  return catalogLoadPromise;
+}
+
+/** Синхронный снимок кэша; до прогрева при CATALOG_LAZY_LOAD — пустой массив. */
+export function getCatalogProducts(): CatalogProduct[] {
+  return catalogCache ?? [];
+}
+
+/** Сброс кэша (тесты). */
+export function resetCatalogDataCacheForTests(): void {
+  catalogCache = null;
+  catalogLoadPromise = null;
+}
+
+function createCatalogProductsProxy(): CatalogProduct[] {
+  return new Proxy([] as CatalogProduct[], {
+    get(_target, prop, receiver) {
+      const products = catalogCache ?? [];
+      const value = Reflect.get(products, prop, receiver);
+      if (typeof value === "function") {
+        return (value as (...args: unknown[]) => unknown).bind(products);
+      }
+      return value;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(catalogCache ?? []);
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Reflect.getOwnPropertyDescriptor(catalogCache ?? [], prop);
+    },
+    has(_target, prop) {
+      return Reflect.has(catalogCache ?? [], prop);
+    },
+  }) as CatalogProduct[];
+}
+
+if (!isCatalogLazyLoadEnabled()) {
+  await ensureCatalogLoaded();
+}
+
+/** Обратная совместимость: прокси на in-memory кэш (при lazy — пуст до прогрева). */
+export const CATALOG_PRODUCTS: CatalogProduct[] = createCatalogProductsProxy();
 
 export function buildCatalogProductSearchHaystack(p: CatalogProduct): string {
   return [
@@ -176,12 +134,12 @@ export function catalogSearchQueryMatchesHaystack(rawQuery: string, haystack: st
 
 export function getProductById(id: string): CatalogProduct | undefined {
   const t = id.trim().toLowerCase();
-  return CATALOG_PRODUCTS.find((p) => p.id.toLowerCase() === t);
+  return getCatalogProducts().find((p) => p.id.toLowerCase() === t);
 }
 
 /** Поиск по каталогу для диалога брифа (Промт 105). */
 export function searchCatalog(query: string, limit = 30): CatalogProduct[] {
-  const sorted = [...CATALOG_PRODUCTS].sort((a, b) => a.showcasePriority - b.showcasePriority);
+  const sorted = [...getCatalogProducts()].sort((a, b) => a.showcasePriority - b.showcasePriority);
   const q = query.trim();
   if (!q) return sorted.slice(0, limit);
   const matched: CatalogProduct[] = [];
@@ -212,13 +170,13 @@ export function snapshotCatalogProduct(p: CatalogProduct): {
 
 export function getProductsForDealer(dealerId: string): CatalogProduct[] {
   const id = normalizeDealerIdForCatalog(dealerId);
-  return CATALOG_PRODUCTS.filter((p) => p.relatedDealerIds.includes(id));
+  return getCatalogProducts().filter((p) => p.relatedDealerIds.includes(id));
 }
 
 export function getProductsForTradePoint(dealerId: string, pointId: string): CatalogProduct[] {
   const d = normalizeDealerIdForCatalog(dealerId);
   const normalizedPoint = pointId.includes("-") ? pointId.trim() : `${d}-${pointId.trim().padStart(2, "0")}`;
-  return CATALOG_PRODUCTS.filter((p) => p.relatedTradePointIds.includes(normalizedPoint));
+  return getCatalogProducts().filter((p) => p.relatedTradePointIds.includes(normalizedPoint));
 }
 
 /** Для блока «модели в работе» у дилера — стабильный поднабор по id дилера. */
