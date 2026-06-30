@@ -73,6 +73,7 @@ export const tradePoints = pgTable(
     address: text("address"),
     format: text("format"),
     isActive: boolean("is_active").notNull().default(true),
+    isPrimary: boolean("is_primary").notNull().default(false),
     importanceTier: text("importance_tier"),
     source: text("source").notNull().default("release-seed"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
