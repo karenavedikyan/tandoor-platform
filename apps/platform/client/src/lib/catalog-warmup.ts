@@ -21,7 +21,9 @@ export function scheduleCatalogBackgroundWarmup(): void {
   if (!isCatalogLazyLoadEnabled() || backgroundWarmupScheduled) return;
   backgroundWarmupScheduled = true;
   scheduleIdle(() => {
-    void ensureCatalogLoaded();
+    void ensureCatalogLoaded().catch(() => {
+      /* non-fatal: витрины могут остаться пустыми до повторного прогрева */
+    });
   });
 }
 
@@ -34,9 +36,13 @@ export function useCatalogReady(): boolean {
 
   useEffect(() => {
     let cancelled = false;
-    void ensureCatalogLoaded().then(() => {
-      if (!cancelled) setReady(true);
-    });
+    void ensureCatalogLoaded()
+      .then(() => {
+        if (!cancelled) setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setReady(false);
+      });
     return () => {
       cancelled = true;
     };

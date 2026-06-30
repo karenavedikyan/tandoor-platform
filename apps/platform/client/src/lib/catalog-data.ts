@@ -14,6 +14,7 @@ import type { CatalogProduct } from "./catalog-product-type";
 import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
 import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
 import { isCatalogLazyLoadEnabled } from "./catalog-lazy-load-flag.js";
+import { buildCatalogProductsFromSeed } from "./catalog-products-from-seed.js";
 
 export type { CatalogProduct } from "./catalog-product-type";
 
@@ -34,19 +35,46 @@ function dedupeCatalogProductsById(products: CatalogProduct[]): CatalogProduct[]
   return out;
 }
 
+function buildFullCatalogFromSeedBuilder(
+  buildFromSeed: () => CatalogProduct[],
+): CatalogProduct[] {
+  return dedupeCatalogProductsById([...buildFromSeed(), ...MOCK_CATALOG_PRODUCTS]);
+}
+
+async function buildCatalogCacheLazy(): Promise<CatalogProduct[]> {
+  const { buildCatalogProductsFromSeed: buildFromSeed } = await import("./catalog-products-from-seed.js");
+  return buildFullCatalogFromSeedBuilder(buildFromSeed);
+}
+
+function initEagerCatalogCacheIfNeeded(): void {
+  if (!isCatalogLazyLoadEnabled() && catalogCache === null) {
+    catalogCache = buildFullCatalogFromSeedBuilder(buildCatalogProductsFromSeed);
+  }
+}
+
 async function buildCatalogCache(): Promise<CatalogProduct[]> {
-  const { buildCatalogProductsFromSeed } = await import("./catalog-products-from-seed.js");
-  return dedupeCatalogProductsById([...buildCatalogProductsFromSeed(), ...MOCK_CATALOG_PRODUCTS]);
+  if (!isCatalogLazyLoadEnabled()) {
+    initEagerCatalogCacheIfNeeded();
+    return catalogCache ?? [];
+  }
+  return buildCatalogCacheLazy();
 }
 
 /** Идемпотентная загрузка seed + mock в in-memory кэш. */
 export function ensureCatalogLoaded(): Promise<CatalogProduct[]> {
   if (catalogCache) return Promise.resolve(catalogCache);
   if (!catalogLoadPromise) {
-    catalogLoadPromise = buildCatalogCache().then((products) => {
-      catalogCache = products;
-      return products;
-    });
+    catalogLoadPromise = buildCatalogCache()
+      .then((products) => {
+        catalogCache = products;
+        return products;
+      })
+      .catch((err) => {
+        catalogLoadPromise = null;
+        console.warn("[catalog-data] failed to load catalog seed", err);
+        catalogCache = [];
+        return catalogCache;
+      });
   }
   return catalogLoadPromise;
 }
@@ -84,9 +112,7 @@ function createCatalogProductsProxy(): CatalogProduct[] {
   }) as CatalogProduct[];
 }
 
-if (!isCatalogLazyLoadEnabled()) {
-  await ensureCatalogLoaded();
-}
+initEagerCatalogCacheIfNeeded();
 
 /** Обратная совместимость: прокси на in-memory кэш (при lazy — пуст до прогрева). */
 export const CATALOG_PRODUCTS: CatalogProduct[] = createCatalogProductsProxy();

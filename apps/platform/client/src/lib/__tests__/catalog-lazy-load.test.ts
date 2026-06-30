@@ -21,6 +21,14 @@ const catalogDataSrc = fs.readFileSync(catalogDataPath, "utf8");
     !catalogDataSrc.includes('from "./tandoor-real-catalog-seed.generated"'),
     "catalog-data.ts must not statically import tandoor-real-catalog-seed.generated",
   );
+  assert.ok(
+    !/^\s*await\s+/m.test(catalogDataSrc),
+    "catalog-data.ts must not use top-level await",
+  );
+  assert.ok(
+    catalogDataSrc.includes(".catch((err)"),
+    "ensureCatalogLoaded must handle dynamic import failures",
+  );
   const seedImporterPath = path.resolve(here, "../catalog-products-from-seed.ts");
   const seedImporterSrc = fs.readFileSync(seedImporterPath, "utf8");
   assert.ok(
