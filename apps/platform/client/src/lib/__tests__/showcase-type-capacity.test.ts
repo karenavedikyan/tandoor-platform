@@ -7,6 +7,7 @@ import type { CatalogProduct } from "../catalog-product-type";
 import {
   evaluateSelectionGate,
   getShowcaseTypeCapacity,
+  neededCapacityGrowthByType,
   patchShowcaseTypeCapacity,
 } from "../showcase-type-capacity";
 
@@ -80,6 +81,60 @@ const catalogLookup = () => undefined;
   assert.equal(gate?.action, "select-and-grow");
   assert.equal(gate?.nextCapacity, 11);
   assert.equal(gate?.oldCapacity, 10);
+}
+
+{
+  const marked = new Map([["entrance", 14]] as const);
+  const growths = neededCapacityGrowthByType({ ...baseShowcase, entrancePortals: 11 }, marked);
+  assert.equal(growths.length, 1);
+  assert.equal(growths[0]!.type, "entrance");
+  assert.equal(growths[0]!.oldCapacity, 11);
+  assert.equal(growths[0]!.nextCapacity, 14);
+}
+
+{
+  const marked = new Map([["interior", 5]] as const);
+  const growths = neededCapacityGrowthByType({ ...baseShowcase, interiorPortals: 10 }, marked);
+  assert.equal(growths.length, 0);
+}
+
+{
+  const marked = new Map([["hardware", 3]] as const);
+  const growths = neededCapacityGrowthByType({ ...baseShowcase, hardwareSections: null }, marked);
+  assert.equal(growths.length, 1);
+  assert.equal(growths[0]!.type, "hardware");
+  assert.equal(growths[0]!.oldCapacity, 0);
+  assert.equal(growths[0]!.nextCapacity, 3);
+}
+
+{
+  const marked = new Map<"entrance" | "interior" | "hardware", number>();
+  const growths = neededCapacityGrowthByType({ ...baseShowcase, entrancePortals: null }, marked);
+  assert.equal(growths.length, 0);
+  assert.equal(getShowcaseTypeCapacity({ ...baseShowcase, entrancePortals: null }, "entrance"), null);
+}
+
+{
+  const marked = new Map([
+    ["entrance", 14],
+    ["interior", 5],
+    ["hardware", 8],
+  ] as const);
+  const growths = neededCapacityGrowthByType(
+    { ...baseShowcase, entrancePortals: 11, interiorPortals: 10, hardwareSections: 2 },
+    marked,
+  );
+  assert.equal(growths.length, 2);
+  assert.deepEqual(
+    growths.map((g) => g.type).sort(),
+    ["entrance", "hardware"],
+  );
+  const entrance = growths.find((g) => g.type === "entrance");
+  const hardware = growths.find((g) => g.type === "hardware");
+  assert.equal(entrance?.oldCapacity, 11);
+  assert.equal(entrance?.nextCapacity, 14);
+  assert.equal(hardware?.oldCapacity, 2);
+  assert.equal(hardware?.nextCapacity, 8);
 }
 
 console.log("showcase-type-capacity: ok");

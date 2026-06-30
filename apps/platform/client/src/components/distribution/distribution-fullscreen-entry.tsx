@@ -49,6 +49,7 @@ import {
 } from "@/lib/client-base-actualization-state";
 import {
   findShowcaseCapacityGaps,
+  neededCapacityGrowthByType,
   patchShowcaseTypeCapacity,
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
@@ -1062,6 +1063,35 @@ export function DistributionFullscreenEntry({
     [baselines, dealer.id, point.id, profile, syncCategoryCapacityAfterPlacementChange],
   );
 
+  /** При сохранении: гарантировать, что ёмкость каждого типа в actualization-state
+   *  (entrancePortals/interiorPortals/hardwareSections) не меньше числа выбранных «наших».
+   *  Только рост, никогда не уменьшение. Сводный toast по типу. */
+  const growActualizationCapacityToFitMarksOnSave = useCallback(
+    async (nextDraft: FullscreenEntryDraftMap) => {
+      const rec = getCandidateShowcaseRec();
+      const markedByType = new Map<ShowcaseTypeKey, number>();
+      for (const segment of SEGMENTS) {
+        for (const placementType of allowedTypesForSegment(segment)) {
+          const marked = countMarkedOursInPlacement(nextDraft, baselines, segment, placementType);
+          if (marked <= 0) continue;
+          const typeKey = PLACEMENT_SEGMENT_TO_TYPE_KEY[segment];
+          markedByType.set(typeKey, (markedByType.get(typeKey) ?? 0) + marked);
+        }
+      }
+
+      for (const { type, oldCapacity, nextCapacity } of neededCapacityGrowthByType(rec, markedByType)) {
+        await persistShowcaseCapacity(type, nextCapacity);
+        notifyShowcaseCapacityAutoGrow({
+          tradePointId: point.id,
+          type,
+          oldCapacity,
+          nextCapacity,
+        });
+      }
+    },
+    [baselines, getCandidateShowcaseRec, persistShowcaseCapacity, point.id],
+  );
+
   const productsForList = useMemo(() => {
     if (!placementTypeMode) return orderedProducts;
     return orderedProducts.filter((p) => {
@@ -1295,6 +1325,7 @@ export function DistributionFullscreenEntry({
 
       if (!needInstallMode) {
         growAllPlacementsToFitMarksOnSave(draft);
+        await growActualizationCapacityToFitMarksOnSave(draft);
       }
 
       setBump((n) => n + 1);
@@ -1366,6 +1397,7 @@ export function DistributionFullscreenEntry({
     dealer.id,
     draft,
     flushPendingNow,
+    growActualizationCapacityToFitMarksOnSave,
     growAllPlacementsToFitMarksOnSave,
     matrixModelById,
     needInstallMarkedIds,
