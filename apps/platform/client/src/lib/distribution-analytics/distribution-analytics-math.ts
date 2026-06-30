@@ -62,6 +62,18 @@ function emptyByType(): DistributionByType {
   return { capacity: null, tandoorOnShelf: 0, legacyOurs: 0, percent: null };
 }
 
+/** Доля занятых слотов в процентах, ограниченная диапазоном [0, 100].
+ *  Дистрибуция не может превышать 100% (нельзя занять больше слотов, чем есть). */
+export function distributionPercentFromCounts(
+  onShelf: number,
+  capacity: number | null | undefined,
+): number | null {
+  if (capacity == null || !(capacity > 0)) return null;
+  const raw = (onShelf / capacity) * 100;
+  if (!Number.isFinite(raw)) return null;
+  return Math.min(100, Math.max(0, raw));
+}
+
 /** Есть ли installed-модель с данным id в entries матрицы ТТ. */
 export function isModelInstalledInEntries(
   entries: readonly ShowcaseMatrixEntryDto[] | undefined,
@@ -166,9 +178,8 @@ export function computeDistributionForTradePoint(
           : null;
     const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
     const legacyOurs = countLegacyOursOfType(installedEntries, type);
-    let percent: number | null = null;
-    if (capacity != null && capacity > 0) {
-      percent = (onShelf / capacity) * 100;
+    const percent = distributionPercentFromCounts(onShelf, capacity);
+    if (percent != null && capacity != null && capacity > 0) {
       sum += percent;
       n += 1;
       legacySum += legacyOurs;
@@ -221,7 +232,7 @@ export function aggregateDistribution(metrics: DistributionTradePointMetrics[]):
       capacity: row.capacity,
       tandoorOnShelf: row.tandoorOnShelf,
       legacyOurs: row.legacyOurs,
-      percent: row.capacity > 0 ? (row.tandoorOnShelf / row.capacity) * 100 : null,
+      percent: distributionPercentFromCounts(row.tandoorOnShelf, row.capacity),
       rotationPotentialPercent: row.capacity > 0 ? (row.legacyOurs / row.capacity) * 100 : null,
     };
   }
