@@ -106,6 +106,7 @@
     "test:trash-bulk": "tsx shared/__tests__/trash-bulk-actions.test.ts && vitest run client/src/__tests__/trash-bin-bulk-selection.test.tsx",
     "test:scope-for-other-user": "tsx shared/__tests__/scope-for-other-user.test.ts",
     "test:team-scope-endpoint": "tsx server/__tests__/team-scope-endpoint.test.ts",
+    "test:dealers-team-scope-totals": "tsx shared/__tests__/dealers-team-scope-totals.test.ts",
     "test:dealers-scope-aggregation-tp-union": "tsx shared/__tests__/dealers-scope-aggregation-tp-union.test.ts",
     "test:org-scope-endpoint": "tsx server/__tests__/org-scope-endpoint.test.ts",
     "test:rop-sees-manager-tp-from-db": "vitest run client/src/__tests__/rop-sees-manager-tp-count-from-db.test.ts",
