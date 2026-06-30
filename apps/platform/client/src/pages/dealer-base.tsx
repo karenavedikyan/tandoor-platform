@@ -77,7 +77,7 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyScopeFromDB, sidebarCountsFromDbScope, kpiCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
-import { useMyTeamScope, sidebarCountsFromTeamScope, kpiCountsFromTeamScope } from "@/hooks/use-my-team-scope";
+import { useMyTeamScope, useMyTeamScopeTotals, sidebarCountsFromTeamScope, kpiCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope, kpiCountsFromOrgScope } from "@/hooks/use-org-scope";
 import {
   getServerKpiAggregatesFlagSync,
@@ -1485,6 +1485,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     ropUserId: targetIsRop ? scopeUserIdResolved : undefined,
   });
 
+  const teamScopeTotalsQ = useMyTeamScopeTotals({
+    enabled: Boolean(isRealUser && (targetIsRop || (!viewingOtherUserScope && me?.role === "rop"))),
+    ropUserId: targetIsRop ? scopeUserIdResolved : undefined,
+  });
+
   const orgScopeQ = useOrgScope({
     enabled: Boolean(
       isRealUser &&
@@ -1643,7 +1648,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       return sidebarCountsFromOrgScope(orgScopeQ).dealers;
     }
     if (me?.role === "rop") {
-      return sidebarCountsFromTeamScope(teamScopeQ).dealers;
+      return sidebarCountsFromTeamScope(teamScopeTotalsQ).dealers;
     }
     if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
       return sidebarCountsFromDbScope(selfDbScopeQ).dealers;
@@ -1655,7 +1660,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     targetScopeQ,
     me?.role,
     orgScopeQ,
-    teamScopeQ,
+    teamScopeTotalsQ,
     selfDbScopeQ,
   ]);
 
@@ -2234,7 +2239,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (!useReal || !useServerKpiAggregates) return null;
     if (viewingOtherUserScope) return kpiCountsFromDbScope(targetScopeQ);
     if (me?.role === "director") return kpiCountsFromOrgScope(orgScopeQ);
-    if (me?.role === "rop") return kpiCountsFromTeamScope(teamScopeQ);
+    if (me?.role === "rop") return kpiCountsFromTeamScope(teamScopeTotalsQ);
     if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
       return kpiCountsFromDbScope(selfDbScopeQ);
     }
@@ -2246,7 +2251,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     targetScopeQ,
     me?.role,
     orgScopeQ,
-    teamScopeQ,
+    teamScopeTotalsQ,
     selfDbScopeQ,
   ]);
 

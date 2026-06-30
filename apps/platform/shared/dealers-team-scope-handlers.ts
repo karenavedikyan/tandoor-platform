@@ -127,6 +127,15 @@ export async function buildTeamScopePayload(
     teamTotals = { ...countTotals, ...kpiFields };
   }
 
+  return teamScopePayloadFromParts(team, memberScopes, teamTotals, ropId);
+}
+
+function teamScopePayloadFromParts(
+  team: TeamRow,
+  memberScopes: TeamScopeMember[],
+  teamTotals: TeamTotals,
+  ropId: string,
+): TeamScopePayload {
   return {
     success: true,
     team: {
@@ -141,6 +150,21 @@ export async function buildTeamScopePayload(
     members: memberScopes,
     team_totals: teamTotals,
   };
+}
+
+/** Лёгкий режим: team_totals без fan-out по членам (когда есть rop_user_id). */
+export async function buildTeamScopeTotalsOnly(
+  pool: PoolLike,
+  team: TeamRow,
+): Promise<TeamScopePayload> {
+  const ropId = team.rop_user_id ?? "";
+
+  if (team.rop_user_id) {
+    const ropScope = await computeDbScopeForUser(pool, team.rop_user_id, "rop");
+    return teamScopePayloadFromParts(team, [], teamTotalsFromDbScope(ropScope.totals), ropId);
+  }
+
+  return buildTeamScopePayload(pool, team);
 }
 
 async function resolveTeamByRopUserId(pool: PoolLike, ropUserId: string): Promise<TeamRow | null> {
@@ -177,6 +201,7 @@ export async function fetchTeamScopeForRequest(
   pool: PoolLike,
   viewer: TeamScopeViewer,
   ropUserId?: string | null,
+  options?: { totalsOnly?: boolean },
 ): Promise<TeamScopePayload | { forbidden: true } | { notFound: true }> {
   const targetRopId = ropUserId?.trim() || viewer.id;
 
@@ -189,6 +214,10 @@ export async function fetchTeamScopeForRequest(
       : await resolveTeamByRopUserId(pool, targetRopId);
 
   if (!team) return { notFound: true };
+
+  if (options?.totalsOnly) {
+    return buildTeamScopeTotalsOnly(pool, team);
+  }
 
   return buildTeamScopePayload(pool, team);
 }

@@ -16,6 +16,10 @@ export function teamScopeQueryKey(ropUserId?: string): readonly [string, string,
     : (["dealers", "scope", "team", "self"] as const);
 }
 
+export function teamScopeTotalsQueryKey(ropUserId?: string): readonly [string, string, string, ...string[]] {
+  return [...teamScopeQueryKey(ropUserId), "totals"] as const;
+}
+
 export async function fetchTeamScope(ropUserId?: string): Promise<TeamScopePayload> {
   const q = ropUserId ? `?ropUserId=${encodeURIComponent(ropUserId)}` : "";
   const res = await fetch(`/api/dealers/team-scope${q}`, { method: "GET", credentials: "same-origin" });
@@ -28,8 +32,22 @@ export async function fetchTeamScope(ropUserId?: string): Promise<TeamScopePaylo
   return json;
 }
 
+export async function fetchTeamScopeTotals(ropUserId?: string): Promise<TeamScopePayload> {
+  const params = new URLSearchParams({ totalsOnly: "1" });
+  if (ropUserId) params.set("ropUserId", ropUserId);
+  const res = await fetch(`/api/dealers/team-scope?${params}`, { method: "GET", credentials: "same-origin" });
+  if (res.status === 401) throw new Error("UNAUTHENTICATED");
+  if (res.status === 403) throw new Error(SCOPE_FORBIDDEN_ERROR);
+  const json = (await res.json()) as TeamScopePayload & { success: boolean; message?: string };
+  if (!res.ok || !json.success) {
+    throw new Error(json.message ?? `team-scope HTTP ${res.status}`);
+  }
+  return json;
+}
+
 export function invalidateTeamScope(qc: QueryClient = queryClient, ropUserId?: string): void {
   void qc.invalidateQueries({ queryKey: teamScopeQueryKey(ropUserId) });
+  void qc.invalidateQueries({ queryKey: teamScopeTotalsQueryKey(ropUserId) });
   void qc.invalidateQueries({ queryKey: ["dealers", "scope", "team"] });
 }
 

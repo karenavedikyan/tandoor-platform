@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import type { PoolLike } from "../responsibility-resolver.js";
 import { computeDbScopeForUser } from "../db-scope-formula.js";
 import { aggregateMemberTotals } from "../dealers-scope-aggregation.js";
-import { buildTeamScopePayload } from "../dealers-team-scope-handlers.js";
+import { buildTeamScopePayload, buildTeamScopeTotalsOnly } from "../dealers-team-scope-handlers.js";
 import { fetchScopedTradePointsRows } from "../trade-points-list-scoped-handlers.js";
 
 const TEAM_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -151,6 +151,24 @@ function makeTeamScopePool(): PoolLike {
   });
   const unionTotals = aggregateMemberTotals(payload.members);
   assert.equal(payload.team_totals.active_dealers, unionTotals.active_dealers);
+}
+
+{
+  const pool = makeTeamScopePool();
+  const team = {
+    id: TEAM_ID,
+    name: "Команда тест",
+    rop_user_id: ROP_ID,
+    rop_name: "ROP",
+    rop_email: "rop@test.ru",
+  };
+  const full = await buildTeamScopePayload(pool, team);
+  const totalsOnly = await buildTeamScopeTotalsOnly(pool, team);
+
+  assert.equal(totalsOnly.members.length, 0);
+  assert.equal(totalsOnly.team_totals.active_trade_points, full.team_totals.active_trade_points);
+  assert.equal(totalsOnly.team_totals.active_dealers, full.team_totals.active_dealers);
+  assert.equal(totalsOnly.team_totals.active_trade_points, ROP_CANONICAL_TP);
 }
 
 {

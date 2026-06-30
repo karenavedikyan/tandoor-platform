@@ -15,6 +15,11 @@ function parseQueryString(value: unknown): string | undefined {
   return trimmed || undefined;
 }
 
+function parseTotalsOnlyQuery(value: unknown): boolean {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw === "1" || raw === "true";
+}
+
 /** `/api/clients/*` для локального dev (Express). */
 export function registerClientsRoutes(app: Express): void {
   app.get("/api/clients/my-codes", requireAuth(), async (req: Request, res: Response) => {
@@ -123,6 +128,7 @@ export function registerClientsRoutes(app: Express): void {
           full_name: req.auth.fullName,
         },
         ropUserId,
+        { totalsOnly: parseTotalsOnlyQuery(req.query.totalsOnly) },
       );
       if ("forbidden" in result) {
         res.status(403).json({ success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
