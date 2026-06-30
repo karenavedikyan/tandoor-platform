@@ -278,7 +278,12 @@ export function ProductCardGrid({
         </div>
       ) : null}
 
-      <div className="Card-product__block-img relative mt-2 aspect-square w-full overflow-hidden bg-white">
+      <div
+        className={cn(
+          "Card-product__block-img relative mt-2 w-full overflow-hidden bg-white aspect-square",
+          size === "xl" ? "max-h-[320px]" : size === "m" ? "max-h-[220px]" : "max-h-[150px]",
+        )}
+      >
         <Link href={detailHref} className="block h-full w-full">
           {imageSrc ? (
             <img

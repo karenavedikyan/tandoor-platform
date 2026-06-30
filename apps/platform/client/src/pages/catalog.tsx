@@ -87,7 +87,6 @@ type SyncLogRow = {
 
 const PAGE_SIZE = 100;
 const CATALOG_LIST_ROW_ESTIMATE = 56;
-const CATALOG_GRID_CARD_ESTIMATE = 220;
 const CARD_SIZE_KEY = "catalog-card-size";
 
 function readCardSize(): CardSize {
@@ -708,16 +707,13 @@ export default function CatalogPage() {
               />
             </div>
           ) : (
-            <VirtualizedStackList
-              listRef={catalogListRef}
-              items={items}
-              estimateSize={CATALOG_GRID_CARD_ESTIMATE}
-              className={gridCls}
-              data-testid="catalog-products-virtual-list"
-              getKey={(p) => p.id}
-              rowTestIdPrefix="row-catalog-product"
-              renderItem={(p) => <ProductCardGrid product={p} size={cardSize} />}
-            />
+            <div className={gridCls} data-testid="catalog-products-grid">
+              {items.map((p) => (
+                <div key={p.id} data-testid={`row-catalog-product-${p.id}`}>
+                  <ProductCardGrid product={p} size={cardSize} />
+                </div>
+              ))}
+            </div>
           )}
 
           {items.length < total && items.length < LARGE_LIST_VIRTUAL_THRESHOLD ? (
