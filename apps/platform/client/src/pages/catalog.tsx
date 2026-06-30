@@ -39,6 +39,7 @@ import {
   LARGE_LIST_VIRTUAL_THRESHOLD,
   VirtualizedStackList,
 } from "@/lib/window-list-virtualizer";
+import { useCatalogReady } from "@/lib/catalog-warmup";
 
 type CardSize = "xl" | "m" | "s" | "list";
 
@@ -125,6 +126,7 @@ function formatDateTime(iso: string | null): string {
 
 export default function CatalogPage() {
   const { user } = useAuthUser();
+  useCatalogReady();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
 

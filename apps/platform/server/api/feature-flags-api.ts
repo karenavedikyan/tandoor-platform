@@ -3,6 +3,7 @@
  */
 
 import {
+  catalogLazyLoadEnabled,
   shadowDiffEnabled,
   useDbDealers,
   useDistributionDbPrimary,
@@ -18,6 +19,7 @@ export type FeatureFlagsResponse = {
     USE_SERVER_KPI_AGGREGATES: boolean;
     TP_HYDRATION_NO_WRITEBACK: boolean;
     DISTRIBUTION_DB_PRIMARY_CAPACITY: boolean;
+    CATALOG_LAZY_LOAD: boolean;
   };
 };
 
@@ -30,6 +32,7 @@ export function getFeatureFlags(): FeatureFlagsResponse {
       USE_SERVER_KPI_AGGREGATES: useServerKpiAggregates(),
       TP_HYDRATION_NO_WRITEBACK: useTpHydrationNoWriteback(),
       DISTRIBUTION_DB_PRIMARY_CAPACITY: useDistributionDbPrimary(),
+      CATALOG_LAZY_LOAD: catalogLazyLoadEnabled(),
     },
   };
 }

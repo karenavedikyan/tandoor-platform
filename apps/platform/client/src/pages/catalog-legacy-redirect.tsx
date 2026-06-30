@@ -3,7 +3,7 @@ import { Link, useParams } from "wouter";
 import { useHashLocation } from "@/lib/hash-location-router";
 import { Button } from "@/components/ui/button";
 import { PageLoadingFallback } from "@/components/navigation/page-loading";
-import { getProductById } from "@/lib/catalog-data";
+import { getProductById, ensureCatalogLoaded } from "@/lib/catalog-data";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,24 +19,28 @@ export function CatalogLegacyRedirect() {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (!productId) {
-      setNotFound(true);
-      return;
-    }
-
-    if (UUID_RE.test(productId)) {
-      setLoc(`/catalog/1c/${productId}`);
-      return;
-    }
-
-    const seedName = getProductById(productId)?.name?.trim();
-    if (!seedName) {
-      setNotFound(true);
-      return;
-    }
-
     let cancelled = false;
-    (async () => {
+
+    void (async () => {
+      await ensureCatalogLoaded();
+
+      if (cancelled) return;
+      if (!productId) {
+        setNotFound(true);
+        return;
+      }
+
+      if (UUID_RE.test(productId)) {
+        setLoc(`/catalog/1c/${productId}`);
+        return;
+      }
+
+      const seedName = getProductById(productId)?.name?.trim();
+      if (!seedName) {
+        setNotFound(true);
+        return;
+      }
+
       try {
         const r = await fetch(`/api/catalog/resolve-by-name?name=${encodeURIComponent(seedName)}`, {
           credentials: "include",

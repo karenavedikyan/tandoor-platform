@@ -10,6 +10,7 @@ import { ModelCardCompetitorsSection } from "@/components/model-card/model-card-
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { getProductById } from "@/lib/catalog-data";
+import { useCatalogReady } from "@/lib/catalog-warmup";
 import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
 import { deserializeFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import {
@@ -25,7 +26,8 @@ import NotFound from "@/pages/not-found";
 export default function ModelCardPage() {
   const params = useParams<{ modelId: string }>();
   const modelId = decodeURIComponent(params.modelId ?? "");
-  const product = getProductById(modelId);
+  const catalogReady = useCatalogReady();
+  const product = catalogReady ? getProductById(modelId) : undefined;
   const { profile } = useReleaseDemoProfile();
   const routeQs = useHashRouteSearchParams();
   const filters = useMemo(() => deserializeFilters(routeQs.get("fromFilters")), [routeQs]);
@@ -35,6 +37,7 @@ export default function ModelCardPage() {
   const act = actx.enabled ? managementPlane.mergedState : actx.state;
   const shMap = act.tradePointShowcaseActualizationById;
 
+  if (!catalogReady) return null;
   if (!product) return <NotFound />;
 
   const portalType = inferShowcasePortalTypeFromCatalogProduct(product);

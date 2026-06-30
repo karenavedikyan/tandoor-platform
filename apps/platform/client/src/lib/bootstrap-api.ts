@@ -5,6 +5,11 @@ import type { OrgSnapshot } from "./use-org-snapshot.js";
 import type { MyVisibleCodesResult } from "./use-my-visible-client-codes.js";
 import { seedFeatureFlagsFromBootstrap } from "./dealer-base-source.js";
 import { seedDistributionDbPrimaryFromBootstrap } from "./distribution-db-primary-flag.js";
+import {
+  isCatalogLazyLoadEnabled,
+  seedCatalogLazyLoadFromBootstrap,
+} from "./catalog-lazy-load-flag.js";
+import { ensureCatalogLoaded } from "./catalog-data.js";
 import { seedServerKpiAggregatesFromBootstrap } from "./server-kpi-aggregates-flag.js";
 import { seedTpHydrationNoWritebackFromBootstrap } from "./tp-hydration-no-writeback-flag.js";
 
@@ -16,6 +21,7 @@ export type BootstrapFeatureFlags = {
     USE_SERVER_KPI_AGGREGATES: boolean;
     TP_HYDRATION_NO_WRITEBACK: boolean;
     DISTRIBUTION_DB_PRIMARY_CAPACITY: boolean;
+    CATALOG_LAZY_LOAD: boolean;
   };
 };
 
@@ -70,4 +76,8 @@ export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void
   seedServerKpiAggregatesFromBootstrap(b.feature_flags);
   seedTpHydrationNoWritebackFromBootstrap(b.feature_flags);
   seedDistributionDbPrimaryFromBootstrap(b.feature_flags);
+  seedCatalogLazyLoadFromBootstrap(b.feature_flags);
+  if (!isCatalogLazyLoadEnabled()) {
+    void ensureCatalogLoaded();
+  }
 }

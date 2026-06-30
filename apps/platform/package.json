@@ -69,6 +69,7 @@
     "test:showcase-default-true": "tsx client/src/lib/__tests__/showcase-default-true.test.ts",
     "test:showcase-type-capacity": "tsx client/src/lib/__tests__/showcase-type-capacity.test.ts",
     "test:distribution-analytics-math": "tsx client/src/lib/__tests__/distribution-analytics-math.test.ts",
+    "test:catalog-lazy-load": "tsx client/src/lib/__tests__/catalog-lazy-load.test.ts",
     "test:distribution-db-primary": "tsx client/src/lib/distribution-analytics/__tests__/distribution-db-primary.test.ts",
     "test:distribution-analytics-view-models": "tsx client/src/lib/__tests__/distribution-analytics-view-models.test.ts",
     "test:distribution-analytics-sort": "tsx client/src/lib/__tests__/distribution-analytics-sort.test.ts",
