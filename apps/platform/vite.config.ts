@@ -39,6 +39,30 @@ export default defineConfig({
           if (id.includes("tandoor-real-catalog-seed.generated")) {
             return "catalog-real-seed";
           }
+          if (id.includes("node_modules")) {
+            if (
+              id.includes("node_modules/react-dom") ||
+              id.includes("node_modules/react/") ||
+              id.includes("node_modules/scheduler")
+            ) {
+              return "vendor-react";
+            }
+            if (id.includes("@tanstack")) {
+              return "vendor-query";
+            }
+            if (
+              id.includes("@radix-ui") ||
+              id.includes("lucide-react") ||
+              id.includes("cmdk") ||
+              id.includes("vaul")
+            ) {
+              return "vendor-ui";
+            }
+            if (id.includes("recharts") || id.includes("d3-")) {
+              return "vendor-charts";
+            }
+            return "vendor";
+          }
           return undefined;
         },
       },
