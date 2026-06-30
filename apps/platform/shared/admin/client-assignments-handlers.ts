@@ -292,6 +292,56 @@ async function resolveTargetUserTeamId(pool: PoolLike, userId: string): Promise<
   return r.rows[0]?.team_id ?? null;
 }
 
+/** После переназначения клиента: синхронизировать dealer_overrides.rop_id с РОПом новой команды. */
+export async function syncRopIdForReassignedClients(
+  pool: PoolLike,
+  clientCodes: string[],
+  newTeamId: string,
+): Promise<void> {
+  if (clientCodes.length === 0) return;
+
+  const ropQ = await pool.query<{ rop_user_id: string; full_name: string | null }>(
+    `SELECT t.rop_user_id::text, u.full_name
+     FROM teams t
+     LEFT JOIN users u ON u.id = t.rop_user_id AND u.status = 'active'
+     WHERE t.id = $1::uuid AND t.rop_user_id IS NOT NULL
+     LIMIT 1`,
+    [newTeamId],
+  );
+  const targetRopId = ropQ.rows[0]?.rop_user_id;
+  if (!targetRopId) return;
+
+  const ropName = ropQ.rows[0]?.full_name?.trim() || null;
+
+  await pool.query(
+    `INSERT INTO dealer_overrides (dealer_id, rop_id, rop_name, created_at, updated_at)
+     SELECT sub.dealer_id, $2::uuid, $3, now(), now()
+       FROM (
+         SELECT DISTINCT COALESCE(
+           d_ov.dealer_id,
+           d.external_key,
+           'client-' || lower(code)
+         ) AS dealer_id
+           FROM unnest($1::text[]) AS code
+           LEFT JOIN dealers d ON upper(d.release_code) = code
+           LEFT JOIN dealer_overrides d_ov ON (
+             d_ov.dealer_id = d.id::text
+             OR d_ov.dealer_id = d.external_key
+             OR (
+               d.release_code IS NOT NULL
+               AND lower(d_ov.dealer_id) = 'client-' || lower(d.release_code)
+             )
+           )
+       ) sub
+      WHERE sub.dealer_id IS NOT NULL
+     ON CONFLICT (dealer_id) DO UPDATE
+       SET rop_id = EXCLUDED.rop_id,
+           rop_name = EXCLUDED.rop_name,
+           updated_at = now()`,
+    [clientCodes, targetRopId, ropName],
+  );
+}
+
 export async function handleClientsReassign(
   req: VercelRequest,
   res: VercelResponse,
@@ -425,6 +475,15 @@ export async function handleClientsReassign(
      RETURNING ca.client_code, old.responsible_user_id AS from_uid, old.team_id AS from_tid, ca.responsible_user_id AS to_uid, ca.team_id AS to_tid`,
     upParams,
   );
+
+  if (upd.rows.length > 0) {
+    await syncRopIdForReassignedClients(
+      pool,
+      upd.rows.map((row) => row.client_code),
+      newTeamId,
+    );
+  }
+
   for (const row of upd.rows) {
     await pool.query(
       `INSERT INTO client_assignment_history (client_code, from_user_id, to_user_id, from_team_id, to_team_id, actor_user_id, reason)
