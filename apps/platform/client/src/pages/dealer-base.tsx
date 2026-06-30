@@ -2258,6 +2258,31 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   /** KPI-карточки: при флаге — серверные totals scope (как сайдбар); иначе клиентский pickerFiltered. */
   const kpis = serverKpiFromScope ?? clientKpis;
 
+  const kpisReady = useMemo(() => {
+    if (!useReal || !useServerKpiAggregates) return true;
+    if (viewingOtherUserScope) return targetScopeQ.ready;
+    if (me?.role === "director") return orgScopeQ.ready && Boolean(orgScopeQ.data);
+    if (me?.role === "rop") return teamScopeTotalsQ.ready && Boolean(teamScopeTotalsQ.data);
+    if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
+      return selfDbScopeQ.ready;
+    }
+    return true;
+  }, [
+    useReal,
+    useServerKpiAggregates,
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    me?.role,
+    orgScopeQ.ready,
+    orgScopeQ.data,
+    teamScopeTotalsQ.ready,
+    teamScopeTotalsQ.data,
+    selfDbScopeQ.ready,
+  ]);
+
+  const kpiValuePlaceholder = "…";
+  const formatKpiCount = (n: number) => (kpisReady ? String(n) : kpiValuePlaceholder);
+
   const selectQuickAndScrollToList = useCallback((q: QuickFilter) => {
     setQuick(q);
     requestAnimationFrame(() => {
@@ -3922,21 +3947,26 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       <section className="space-y-3" data-testid="section-dealer-base-kpis">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {[
-            { label: "Всего клиентов", value: String(kpis.total), quick: "all" as QuickFilter, testId: "kpi-card-total" },
-            { label: "Активные", value: String(kpis.active), quick: "active" as QuickFilter, testId: "kpi-card-active" },
-            { label: "Потенциальные", value: String(kpis.potential), quick: "potential" as QuickFilter, testId: "kpi-card-potential" },
-            { label: "Требуют внимания", value: String(kpis.attention), quick: "attention" as QuickFilter, testId: "kpi-card-attention" },
+            { label: "Всего клиентов", value: formatKpiCount(kpis.total), quick: "all" as QuickFilter, testId: "kpi-card-total" },
+            { label: "Активные", value: formatKpiCount(kpis.active), quick: "active" as QuickFilter, testId: "kpi-card-active" },
+            { label: "Потенциальные", value: formatKpiCount(kpis.potential), quick: "potential" as QuickFilter, testId: "kpi-card-potential" },
+            { label: "Требуют внимания", value: formatKpiCount(kpis.attention), quick: "attention" as QuickFilter, testId: "kpi-card-attention" },
             {
               label: "Торговые точки",
               value: overviewTradePointsLoading
-                ? "…"
+                ? kpiValuePlaceholder
                 : overviewTradePointsCount != null
                   ? String(overviewTradePointsCount)
                   : "—",
               quick: "all" as QuickFilter,
               testId: "kpi-card-trade-points",
             },
-            { label: "Средняя дистрибуция", value: `${kpis.avgDist}%`, quick: null, testId: "kpi-card-avg-dist" },
+            {
+              label: "Средняя дистрибуция",
+              value: kpisReady ? `${kpis.avgDist}%` : kpiValuePlaceholder,
+              quick: null,
+              testId: "kpi-card-avg-dist",
+            },
           ].map((k) => {
             const clickable = k.quick != null;
             const Comp = clickable ? "button" : "div";
@@ -3978,6 +4008,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           tradePointIds={scopeTradePointIds}
           testIdPrefix="manager-home"
           showTradePointsCount={false}
+          loading={!kpisReady}
         />
       ) : null}
 
