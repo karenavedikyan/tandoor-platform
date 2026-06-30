@@ -3774,6 +3774,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         scopeTotalDealers={scopeTotalDealers}
         teamTotalsById={managementScopeTotals?.teamTotalsById}
         membersTotalsByTeamId={managementScopeTotals?.membersTotalsByTeamId}
+        teamScopeForDiag={teamScopeQ.ready ? teamScopeQ.data : null}
         mergedDealerRowsForCreate={
           useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
         }
