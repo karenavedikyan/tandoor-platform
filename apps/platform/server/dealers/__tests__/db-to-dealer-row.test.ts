@@ -45,6 +45,7 @@ function bundleFromReleaseClient(id: string): DbDealerBundle | null {
       address: tp.address,
       format: tp.format,
       is_active: tp.isActive,
+      is_primary: tp.isPrimary,
       importance_tier: tp.importanceTier,
     })),
   };
@@ -70,8 +71,14 @@ function assertComparableMatch(seedId: string, label: string): void {
 // Клиент с одной ТТ (есть address)
 assertComparableMatch("client-ma-ma085093", "with-single-tp");
 
-// Клиент без ТТ (пустой address)
-assertComparableMatch("client-ma-ma085529", "without-tp");
+// Клиент без адреса: seed bundle материализует основную ТТ с пустым адресом
+{
+  const bundle = bundleFromReleaseClient("client-ma-ma085529");
+  assert.ok(bundle, "without-address bundle");
+  assert.equal(bundle!.tradePoints.length, 1);
+  assert.equal(bundle!.tradePoints[0]!.is_primary, true);
+  assert.equal(bundle!.tradePoints[0]!.address, "");
+}
 
 // Koteneva: несколько parsedTradePoints
 {

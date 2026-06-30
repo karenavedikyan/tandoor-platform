@@ -5,9 +5,11 @@ import assert from "node:assert/strict";
 import { getReleaseClients } from "../../client/src/lib/release-client-data.js";
 import {
   buildAllDealerSeedBundles,
+  buildDealerSeedBundle,
   countExpectedTradePointsFromRelease,
   dealerExternalKey,
 } from "../dealers-seed-logic.js";
+import { PRIMARY_TRADE_POINT_NAME } from "../primary-trade-point-materialization.js";
 import type { PoolLike } from "../admin/admin-auth.js";
 import {
   handleDealersTradePointsList,
@@ -33,6 +35,24 @@ import {
   for (const tp of bundle!.tradePoints) {
     assert.ok(tp.externalKey.startsWith(`${key}-`), "tp key prefix matches dealer id");
   }
+}
+
+{
+  const noAddr = getReleaseClients().find((c) => c.id === "client-ma-ma085529");
+  assert.ok(noAddr, "no-address fixture");
+  const bundle = buildDealerSeedBundle(noAddr);
+  assert.equal(bundle.tradePoints.length, 1);
+  assert.equal(bundle.tradePoints[0]!.isPrimary, true);
+  assert.equal(bundle.tradePoints[0]!.address, "");
+  assert.equal(bundle.tradePoints[0]!.name, PRIMARY_TRADE_POINT_NAME);
+}
+
+{
+  const multi = getReleaseClients().find((c) => c.parsedTradePoints && c.parsedTradePoints.length > 1);
+  assert.ok(multi, "multi-tp fixture");
+  const bundle = buildDealerSeedBundle(multi);
+  assert.equal(bundle.tradePoints.filter((tp) => tp.isPrimary).length, 1);
+  assert.equal(bundle.tradePoints[0]!.isPrimary, true);
 }
 
 // --- handler mocks ---
