@@ -3,6 +3,7 @@
  *
  * Действия:
  *   POST /api/admin/client-assignments/clients-reassign
+ *   POST /api/admin/client-assignments/reassign-rop
  *   POST /api/admin/client-assignments/user-team-reassign
  *   GET  /api/admin/client-assignments/clients-assignments-list
  *   GET  /api/admin/client-assignments/client-assignment-history
@@ -26,6 +27,7 @@ import {
   handleClientsAssignmentsList,
   handleClientsReassign,
   handleRegionalManagerReassign,
+  handleRopReassign,
   handleRopGrantsAdd,
   handleRopGrantsList,
   handleRopGrantsRemove,
@@ -57,6 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     if (action === "clients-reassign" && req.method === "POST") {
       await handleClientsReassign(req, res, pool, me);
+      return;
+    }
+    if (action === "reassign-rop" && req.method === "POST") {
+      await handleRopReassign(req, res, pool, me);
       return;
     }
     if (action === "regional-manager-reassign" && req.method === "POST") {

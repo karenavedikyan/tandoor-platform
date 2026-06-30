@@ -342,6 +342,56 @@ export async function syncRopIdForReassignedClients(
   );
 }
 
+/** Явно записать dealer_overrides.rop_id для клиентов под выбранного РОПа (без смены менеджера/команды). */
+export async function applyRopToClients(
+  pool: PoolLike,
+  clientCodes: string[],
+  ropUserId: string,
+): Promise<number> {
+  if (clientCodes.length === 0) return 0;
+
+  const ropQ = await pool.query<{ rop_user_id: string; full_name: string | null }>(
+    `SELECT u.id::text AS rop_user_id, u.full_name
+     FROM users u
+     WHERE u.id = $1::uuid AND u.role = 'rop' AND u.status = 'active'
+     LIMIT 1`,
+    [ropUserId],
+  );
+  const targetRopId = ropQ.rows[0]?.rop_user_id;
+  if (!targetRopId) return 0;
+
+  const ropName = ropQ.rows[0]?.full_name?.trim() || null;
+
+  const r = await pool.query(
+    `INSERT INTO dealer_overrides (dealer_id, rop_id, rop_name, created_at, updated_at)
+     SELECT sub.dealer_id, $2::uuid, $3, now(), now()
+       FROM (
+         SELECT DISTINCT COALESCE(
+           d_ov.dealer_id,
+           d.external_key,
+           'client-' || lower(code)
+         ) AS dealer_id
+           FROM unnest($1::text[]) AS code
+           LEFT JOIN dealers d ON upper(d.release_code) = code
+           LEFT JOIN dealer_overrides d_ov ON (
+             d_ov.dealer_id = d.id::text
+             OR d_ov.dealer_id = d.external_key
+             OR (
+               d.release_code IS NOT NULL
+               AND lower(d_ov.dealer_id) = 'client-' || lower(d.release_code)
+             )
+           )
+       ) sub
+      WHERE sub.dealer_id IS NOT NULL
+     ON CONFLICT (dealer_id) DO UPDATE
+       SET rop_id = EXCLUDED.rop_id,
+           rop_name = EXCLUDED.rop_name,
+           updated_at = now()`,
+    [clientCodes, targetRopId, ropName],
+  );
+  return r.rowCount ?? 0;
+}
+
 export async function handleClientsReassign(
   req: VercelRequest,
   res: VercelResponse,
@@ -507,6 +557,131 @@ export async function handleClientsReassign(
   }));
 
   sendJson(res, 200, { success: true, reassigned: upd.rows.length, history });
+}
+
+export async function handleRopReassign(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  me: SessionUser,
+): Promise<void> {
+  if (me.status !== "active") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+  if (me.role !== "admin" && me.role !== "director" && me.role !== "rop") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав." });
+    return;
+  }
+
+  const body = (req.body ?? {}) as {
+    ropUserId?: unknown;
+    reason?: unknown;
+    clientCodes?: unknown;
+    filter?: unknown;
+  };
+  const ropUserId = typeof body.ropUserId === "string" ? body.ropUserId.trim() : "";
+  if (!UUID_RE.test(ropUserId)) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Некорректный ropUserId." });
+    return;
+  }
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+
+  const ropChk = await pool.query(
+    `SELECT 1 FROM users WHERE id = $1::uuid AND role = 'rop' AND status = 'active' LIMIT 1`,
+    [ropUserId],
+  );
+  if (ropChk.rows.length === 0) {
+    sendJson(res, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "Целевой пользователь не является активным РОПом.",
+    });
+    return;
+  }
+
+  if (me.role === "rop" && ropUserId !== me.id) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "РОП может назначать только на себя." });
+    return;
+  }
+
+  let codes: string[] = [];
+  if (Array.isArray(body.clientCodes) && body.clientCodes.length > 0) {
+    codes = body.clientCodes.filter((c): c is string => typeof c === "string" && c.trim() !== "").map((c) => c.trim());
+  } else if (body.filter && typeof body.filter === "object" && body.filter !== null) {
+    const parsed = parseReassignFilterBody(body.filter as Record<string, unknown>);
+    if (!hasAnyReassignFilter(parsed)) {
+      sendJson(res, 400, {
+        success: false,
+        code: "VALIDATION_ERROR",
+        message: "Укажите clientCodes или хотя бы одно поле filter.",
+      });
+      return;
+    }
+    const cond: string[] = ["1=1"];
+    const pr: unknown[] = [];
+    appendReassignAssignmentFilters(cond, pr, parsed);
+    if (me.role === "rop") {
+      const myTeam = await resolveRopTeamId(pool, me.id);
+      if (!myTeam) {
+        sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Не найдена команда РОПа." });
+        return;
+      }
+      pr.push(myTeam);
+      cond.push(`ca.team_id = $${pr.length}::uuid`);
+    }
+    const whereSql = cond.join(" AND ");
+    const sel = await pool.query<{ client_code: string }>(
+      `SELECT ca.client_code
+       FROM client_assignments ca
+       ${DEALER_OVERRIDE_JOIN}
+       WHERE ${whereSql}
+       LIMIT 1000`,
+      pr,
+    );
+    codes = sel.rows.map((r) => r.client_code);
+  } else {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Укажите clientCodes или filter." });
+    return;
+  }
+
+  if (codes.length === 0) {
+    sendJson(res, 200, { success: true, affected: 0 });
+    return;
+  }
+  if (codes.length > 1000) {
+    sendJson(res, 400, { success: false, code: "VALIDATION_ERROR", message: "Не более 1000 client_code за запрос." });
+    return;
+  }
+
+  if (me.role === "rop" && Array.isArray(body.clientCodes) && body.clientCodes.length > 0) {
+    const myTeam = await resolveRopTeamId(pool, me.id);
+    if (!myTeam) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Не найдена команда РОПа." });
+      return;
+    }
+    const chk = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM client_assignments WHERE client_code = ANY($1::text[]) AND team_id <> $2::uuid`,
+      [codes, myTeam],
+    );
+    const n = Number((chk.rows[0] as { n: number }).n ?? 0);
+    if (n > 0) {
+      sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Есть клиенты вне вашей команды." });
+      return;
+    }
+  }
+
+  const affected = await applyRopToClients(pool, codes, ropUserId);
+
+  await tryAudit(pool, {
+    actorUserId: me.id,
+    action: "client.reassign-rop",
+    entityType: "dealer_overrides",
+    entityId: "batch",
+    metadata: { count: affected, ropUserId, reason: reason || null, filter: body.filter ?? null },
+  });
+
+  sendJson(res, 200, { success: true, affected });
 }
 
 async function isRegionalManagerUser(pool: PoolLike, userId: string): Promise<boolean> {
