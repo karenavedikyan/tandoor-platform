@@ -101,6 +101,23 @@ describe("RoleDistributionSummaryBar", () => {
     expect(getByTestId("tile-trade-points-distribution-entrance-delta")).toBeTruthy();
   });
 
+  it("renders loading placeholder instead of zero metrics when loading=true", () => {
+    const { getByTestId, queryByTestId } = render(
+      <RoleDistributionSummaryBar
+        access="team_lead"
+        aggregate={aggregate}
+        tradePointsCount={0}
+        tradePointIds={[]}
+        testIdPrefix="trade-points"
+        showTradePointsCount={false}
+        loading
+      />,
+    );
+    expect(getByTestId("section-trade-points-distribution-loading")).toBeTruthy();
+    expect(queryByTestId("tile-trade-points-distribution-entrance")).toBeNull();
+    expect(queryByTestId("tile-trade-points-rotation")).toBeNull();
+  });
+
   it("renders rotation tile with count and percent when legacy present", () => {
     mockSnapshotRange(null);
     const rotationAggregate: DistributionGroupMetrics = {

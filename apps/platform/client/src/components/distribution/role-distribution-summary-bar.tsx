@@ -26,7 +26,32 @@ type Props = {
   testIdPrefix: string;
   /** Показывать ли плитку «ТТ в выборке». По умолчанию false (как у менеджера сейчас). */
   showTradePointsCount?: boolean;
+  /** Плейсхолдер загрузки вместо ложных Σ0/—. */
+  loading?: boolean;
 };
+
+function DistributionSummaryLoadingTiles({ testIdPrefix }: { testIdPrefix: string }): ReactElement {
+  const titles = ["Средняя дистрибуция ВХ", "Средняя дистрибуция МК", "Средняя дистрибуция Фурнитура", "Ротация"];
+  return (
+    <>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid={`section-${testIdPrefix}-distribution-loading`}>
+        {titles.slice(0, 3).map((title) => (
+          <div key={title} className="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Загрузка…</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-xs" data-testid={`tile-${testIdPrefix}-rotation-loading`}>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{titles[3]}</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
+        </div>
+      </div>
+    </>
+  );
+}
 
 export function RoleDistributionSummaryBar({
   access,
@@ -35,6 +60,7 @@ export function RoleDistributionSummaryBar({
   tradePointIds,
   testIdPrefix,
   showTradePointsCount = false,
+  loading = false,
 }: Props): ReactElement {
   const [periodDays, setPeriodDays] = useState<DistributionPeriodDays>(30);
   const { deltaByType } = useTradePointDistributionDynamics(tradePointIds, periodDays);
@@ -81,20 +107,26 @@ export function RoleDistributionSummaryBar({
           })}
         </div>
       </div>
-      <DistributionAnalyticsKpiTiles
-        aggregate={aggregate}
-        tradePointsCount={tradePointsCount}
-        showTradePointsCount={showTradePointsCount}
-        tileTestIdByType={tileTestIdByType}
-        deltaByType={deltaByType}
-        deltaTestIdByType={deltaTestIdByType}
-      />
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <DistributionRotationTile
-          aggregate={aggregate}
-          testId={`tile-${testIdPrefix}-rotation`}
-        />
-      </div>
+      {loading ? (
+        <DistributionSummaryLoadingTiles testIdPrefix={testIdPrefix} />
+      ) : (
+        <>
+          <DistributionAnalyticsKpiTiles
+            aggregate={aggregate}
+            tradePointsCount={tradePointsCount}
+            showTradePointsCount={showTradePointsCount}
+            tileTestIdByType={tileTestIdByType}
+            deltaByType={deltaByType}
+            deltaTestIdByType={deltaTestIdByType}
+          />
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <DistributionRotationTile
+              aggregate={aggregate}
+              testId={`tile-${testIdPrefix}-rotation`}
+            />
+          </div>
+        </>
+      )}
     </section>
   );
 }
