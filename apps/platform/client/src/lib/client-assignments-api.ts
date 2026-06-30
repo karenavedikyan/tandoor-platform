@@ -462,6 +462,48 @@ export async function reassignClients(input: {
   return { ok: true, reassigned };
 }
 
+export async function reassignRop(input: {
+  ropUserId: string;
+  reason?: string;
+  clientCodes?: string[];
+  filter?: ReassignFilter;
+}): Promise<{ ok: true; affected: number } | { ok: false; code: string; message: string }> {
+  const payload: Record<string, unknown> = {
+    ropUserId: input.ropUserId,
+    reason: input.reason,
+  };
+  if (input.filter) {
+    const f = input.filter;
+    const filter: Record<string, unknown> = {};
+    if (f.fromUserId) filter.fromUserId = f.fromUserId;
+    if (f.responsibleUserId?.length) filter.responsibleUserId = f.responsibleUserId;
+    if (f.fromTeamId?.length) filter.fromTeamId = f.fromTeamId;
+    if (f.city?.length) filter.city = f.city;
+    if (f.category?.length) filter.category = f.category;
+    if (f.regionalManager?.length) filter.regionalManager = f.regionalManager;
+    if (f.rop?.length) filter.rop = f.rop;
+    if (f.search?.trim()) filter.search = f.search.trim();
+    if (f.clientCodes?.length) filter.clientCodes = f.clientCodes;
+    if (f.tradePointIds?.length) filter.tradePointIds = f.tradePointIds;
+    payload.filter = filter;
+  } else if (input.clientCodes) {
+    payload.clientCodes = input.clientCodes;
+  }
+  const res = await fetch(`${ASSIGNMENTS_BASE}/reassign-rop`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.success !== true) {
+    return { ok: false, ...errFromBody(body, "Не удалось сменить РОПа.") };
+  }
+  const affected = typeof body.affected === "number" ? body.affected : Number(body.affected);
+  if (!Number.isFinite(affected)) return { ok: false, code: "INVALID_RESPONSE", message: "Некорректный ответ сервера." };
+  return { ok: true, affected };
+}
+
 export async function reassignRegionalManager(params: {
   toUserId: string | null;
   reason?: string;

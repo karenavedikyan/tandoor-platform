@@ -64,6 +64,7 @@ import {
   listTeams,
   reassignClients,
   reassignRegionalManager,
+  reassignRop,
   removeRopGrants,
   type ClientAssignmentHistoryRow,
   type ClientAssignmentRow,
@@ -87,7 +88,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 type ActionMode = "reassign" | "grant";
-type BulkAssignmentType = "manager" | "regional_manager";
+type BulkAssignmentType = "manager" | "regional_manager" | "rop";
 
 const RM_UNASSIGN_VALUE = "__unassign_rm__";
 
@@ -410,6 +411,7 @@ export default function AdminClientAssignmentsPage() {
   const qc = useQueryClient();
   const canPage = Boolean(user && canManageClientAssignments(user.role));
   const canManageRopGrants = user?.role === "admin" || user?.role === "director";
+  const canReassignRop = user?.role === "admin" || user?.role === "director" || user?.role === "rop";
   const homeHref = user ? defaultHomePathForUserRole(user.role) : "/";
 
   const [searchInput, setSearchInput] = useState("");
@@ -697,8 +699,11 @@ export default function AdminClientAssignmentsPage() {
     if (bulkAssignmentType === "regional_manager") {
       return regionalManagers.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
     }
+    if (bulkAssignmentType === "rop") {
+      return ropUsers.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
+    }
     return users.find((u) => u.id === bulkToUserId)?.fullName?.trim() ?? "";
-  }, [bulkToUserId, bulkAssignmentType, regionalManagers, users]);
+  }, [bulkToUserId, bulkAssignmentType, regionalManagers, ropUsers, users]);
 
   const selectAllInFilter = async () => {
     if (!hasActiveFilter) return;
@@ -1317,7 +1322,25 @@ export default function AdminClientAssignmentsPage() {
           <DialogHeader>
             <DialogTitle>{bulkMode === "filter" ? "Переназначить по фильтру" : "Переназначить выбранных"}</DialogTitle>
             <DialogDescription>
-              {bulkAssignmentType === "regional_manager" ? (
+              {bulkAssignmentType === "rop" ? (
+                bulkMode === "filter" ? (
+                  <>
+                    Назначение РОПа для клиентов под фильтром (до 1000, сейчас {total}). Менеджер и команда клиента не
+                    изменятся.
+                  </>
+                ) : (
+                  <>
+                    Назначение РОПа для {selectedCount} выбранных клиентов
+                    {bulkTargetUserName ? (
+                      <>
+                        {" "}
+                        на: <span className="font-medium text-foreground">{bulkTargetUserName}</span>
+                      </>
+                    ) : null}
+                    . Менеджер и команда клиента не изменятся.
+                  </>
+                )
+              ) : bulkAssignmentType === "regional_manager" ? (
                 bulkMode === "filter" ? (
                   `Назначение регионального менеджера для клиентов под фильтром (до 1000, сейчас ${total}).`
                 ) : (
@@ -1349,7 +1372,7 @@ export default function AdminClientAssignmentsPage() {
                 type="single"
                 value={bulkAssignmentType}
                 onValueChange={(v) => {
-                  if (v === "manager" || v === "regional_manager") {
+                  if (v === "manager" || v === "regional_manager" || v === "rop") {
                     setBulkAssignmentType(v);
                     setBulkToUserId("");
                   }
@@ -1370,10 +1393,25 @@ export default function AdminClientAssignmentsPage() {
                 >
                   Региональный менеджер
                 </ToggleGroupItem>
+                {canReassignRop ? (
+                  <ToggleGroupItem
+                    value="rop"
+                    className="min-h-10 flex-1 px-3 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                    data-testid="toggle-bulk-assignment-rop"
+                  >
+                    Сменить РОПа
+                  </ToggleGroupItem>
+                ) : null}
               </ToggleGroup>
             </div>
             <div className="space-y-2">
-              <Label>{bulkAssignmentType === "regional_manager" ? "Региональный менеджер" : "Новый ответственный"}</Label>
+              <Label>
+                {bulkAssignmentType === "regional_manager"
+                  ? "Региональный менеджер"
+                  : bulkAssignmentType === "rop"
+                    ? "РОП"
+                    : "Новый ответственный"}
+              </Label>
               <Select
                 value={bulkToUserId || undefined}
                 onValueChange={(v) => setBulkToUserId(v)}
@@ -1391,6 +1429,12 @@ export default function AdminClientAssignmentsPage() {
                         </SelectItem>
                       ))}
                     </>
+                  ) : bulkAssignmentType === "rop" ? (
+                    ropUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName}
+                      </SelectItem>
+                    ))
                   ) : (
                     managerUsers.map((u) => (
                       <SelectItem key={u.id} value={u.id}>
@@ -1429,16 +1473,37 @@ export default function AdminClientAssignmentsPage() {
                 bulkLoading ||
                 (bulkAssignmentType === "manager" && !bulkToUserId) ||
                 (bulkAssignmentType === "regional_manager" && !bulkToUserId) ||
+                (bulkAssignmentType === "rop" && !bulkToUserId) ||
                 (bulkMode === "selected" ? selectedCount === 0 : !hasActiveFilter)
               }
               onClick={async () => {
                 if (bulkAssignmentType === "manager" && !bulkToUserId) return;
                 if (bulkAssignmentType === "regional_manager" && !bulkToUserId) return;
+                if (bulkAssignmentType === "rop" && !bulkToUserId) return;
                 if (bulkMode === "selected" && selectedCount === 0) return;
                 if (bulkMode === "filter" && !hasActiveFilter) return;
                 setBulkLoading(true);
                 try {
-                  if (bulkAssignmentType === "regional_manager") {
+                  if (bulkAssignmentType === "rop") {
+                    const r = await reassignRop(
+                      bulkMode === "filter"
+                        ? {
+                            filter: currentReassignFilter,
+                            ropUserId: bulkToUserId,
+                            reason: bulkReason.trim() || undefined,
+                          }
+                        : {
+                            clientCodes: selectedCodes,
+                            ropUserId: bulkToUserId,
+                            reason: bulkReason.trim() || undefined,
+                          },
+                    );
+                    if (!r.ok) {
+                      toast({ title: r.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: `РОП назначен: ${r.affected} клиентов` });
+                  } else if (bulkAssignmentType === "regional_manager") {
                     const toUserId = bulkToUserId === RM_UNASSIGN_VALUE ? null : bulkToUserId;
                     const r = await reassignRegionalManager(
                       bulkMode === "filter"
