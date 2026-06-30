@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCategoryTree, type CatalogCategoryItem } from "./CategoryTreeNav";
+import { buildCategoryTree } from "@/lib/catalog-category-tree";
+import type { CatalogCategoryFlat as CatalogCategoryItem } from "@/lib/catalog-category-tree";
 
 describe("buildCategoryTree", () => {
   const flat: CatalogCategoryItem[] = [

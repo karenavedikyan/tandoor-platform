@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { CatalogShowcase, type ShowcaseBadge } from "@/components/catalog/CatalogShowcase";
 import { CategoryTreeNav } from "@/components/catalog/CategoryTreeNav";
+import { CatalogGroupedCategoryFilters } from "@/components/catalog/CatalogGroupedCategoryFilters";
 import { CatalogFiltersPanel } from "@/components/catalog/CatalogFiltersPanel";
 import type { CatalogFilterFacet } from "@/components/catalog/CatalogFiltersPanel";
 import {
@@ -614,23 +615,13 @@ export default function CatalogPage() {
             </div>
           </div>
 
-          <CatalogFiltersPanel
-            categories={categories.map((c) => ({
-              id: c.id,
-              label: c.name,
-              count: c.product_count,
-            }))}
-            selectedCategories={categoryId === "all" ? [] : [categoryId]}
-            onCategoriesChange={(next) => {
-              setCategoryId(next.length === 0 ? "all" : next[next.length - 1]!);
+          <CatalogGroupedCategoryFilters
+            categories={categories}
+            selectedId={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id);
               scrollToListing();
             }}
-            singleCategory
-            facets={[]}
-            value={{}}
-            onChange={() => {}}
-            onResetAll={() => {}}
-            open
             data-testid="catalog-page-category-filters"
           />
 
