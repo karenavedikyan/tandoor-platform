@@ -1,4 +1,4 @@
-import { TANDOOR_REAL_CATALOG_SEED } from "./tandoor-real-catalog-seed.generated.js";
+import { SHOWCASE_MATRIX_SEED_SUBSET_BY_ID } from "./showcase-matrix-seed-subset.js";
 
 export type ShowcaseMatrixModelType = "entrance" | "interior" | "hardware";
 
@@ -25,11 +25,9 @@ export type ShowcaseMatrixModelDefinition = {
   copyMessage: string;
 };
 
-const SEED_BY_ID = new Map(TANDOOR_REAL_CATALOG_SEED.map((p) => [p.id, p]));
-
 /** Порядок фиксирован: без случайных перестановок. */
 /** Порядок влияет на состав стартовой/базовой матрицы (чередование ВХ и МК в начале списка). */
-const MATRIX_MODEL_ORDER: readonly string[] = [
+export const MATRIX_MODEL_ORDER: readonly string[] = [
   "tc-vh-era-grafit-belyy-matovyy-860kh2050-levaya",
   "tc-mk-baget-12-mokko-pet-dg-2000-800-94",
   "tc-vh-panteon-bukle-temno-seryy-chernyy-kvarts-860kh2050-levaya",
@@ -108,7 +106,7 @@ function typeLabel(type: ShowcaseMatrixModelType): ShowcaseMatrixTypeLabelRu {
 function buildDefinitions(): ShowcaseMatrixModelDefinition[] {
   const out: ShowcaseMatrixModelDefinition[] = [];
   for (const id of MATRIX_MODEL_ORDER) {
-    const seed = SEED_BY_ID.get(id);
+    const seed = SHOWCASE_MATRIX_SEED_SUBSET_BY_ID.get(id);
     const meta = MATRIX_META[id];
     if (!seed || !meta) continue;
     const type = catalogTypeToModelType(seed.category);
