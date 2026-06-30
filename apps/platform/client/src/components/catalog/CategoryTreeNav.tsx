@@ -4,53 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { buildCategoryTree } from "@/lib/catalog-category-tree";
+import type { CatalogCategoryFlat, CategoryTreeNode } from "@/lib/catalog-category-tree";
 import { cn } from "@/lib/utils";
 
-export type CatalogCategoryItem = {
-  id: string;
-  name: string;
-  parent_id: string | null;
-  sort_order?: number | null;
-  product_count: number;
-};
-
-export type CategoryTreeNode = CatalogCategoryItem & {
-  children: CategoryTreeNode[];
-};
-
-function sortNodes(a: CategoryTreeNode, b: CategoryTreeNode): number {
-  const sa = a.sort_order ?? Number.MAX_SAFE_INTEGER;
-  const sb = b.sort_order ?? Number.MAX_SAFE_INTEGER;
-  if (sa !== sb) return sa - sb;
-  return a.name.localeCompare(b.name, "ru");
-}
-
-export function buildCategoryTree(flat: CatalogCategoryItem[]): CategoryTreeNode[] {
-  const visible = flat.filter((c) => c.product_count > 0);
-  const nodes = new Map<string, CategoryTreeNode>();
-  for (const c of visible) {
-    nodes.set(c.id, { ...c, children: [] });
-  }
-
-  const roots: CategoryTreeNode[] = [];
-  for (const c of visible) {
-    const node = nodes.get(c.id)!;
-    if (c.parent_id == null) {
-      roots.push(node);
-      continue;
-    }
-    const parent = nodes.get(c.parent_id);
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-  }
-
-  const sortRecursive = (list: CategoryTreeNode[]) => {
-    list.sort(sortNodes);
-    for (const n of list) sortRecursive(n.children);
-  };
-  sortRecursive(roots);
-  return roots;
-}
+export type CatalogCategoryItem = CatalogCategoryFlat;
+export type { CategoryTreeNode };
+export { buildCategoryTree };
 
 type TreePanelProps = {
   nodes: CategoryTreeNode[];

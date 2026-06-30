@@ -69,6 +69,7 @@
     "test:showcase-default-true": "tsx client/src/lib/__tests__/showcase-default-true.test.ts",
     "test:showcase-type-capacity": "tsx client/src/lib/__tests__/showcase-type-capacity.test.ts",
     "test:distribution-analytics-math": "tsx client/src/lib/__tests__/distribution-analytics-math.test.ts",
+    "test:catalog-category-tree": "tsx client/src/lib/__tests__/catalog-category-tree.test.ts",
     "test:catalog-lazy-load": "tsx client/src/lib/__tests__/catalog-lazy-load.test.ts",
     "test:catalog-seed-offcritical": "tsx client/src/lib/__tests__/catalog-seed-offcritical.test.ts",
     "check:seed-offcritical": "node scripts/check-seed-offcritical.mjs",
