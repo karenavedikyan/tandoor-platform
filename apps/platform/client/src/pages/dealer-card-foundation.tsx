@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL } from "@/lib/trade-point-address-empty";
 import {
   CLIENT_CATEGORY_META,
   canEditClientBusinessCategory,
@@ -1372,8 +1373,8 @@ function DealerCardContent({ baseRow }: { baseRow: DealerRow }) {
                     ) : (
                       <div className="min-w-0 sm:col-span-2 xl:col-span-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Адрес</p>
-                        <p className="mt-0.5 text-sm text-muted-foreground" data-testid="text-dealer-quick-info-address">
-                          Адрес не указан
+                        <p className="mt-0.5 text-sm text-destructive" data-testid="text-dealer-quick-info-address">
+                          {TRADE_POINT_ADDRESS_EMPTY_DETAIL_LABEL}
                         </p>
                       </div>
                     )}

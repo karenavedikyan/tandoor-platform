@@ -50,7 +50,7 @@ function mapTradePointRow(
     address: row.address,
     format: row.format,
     is_active: row.isActive,
-    is_primary: false,
+    is_primary: row.isPrimary === true,
     importance_tier: row.importanceTier,
   };
 }

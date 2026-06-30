@@ -82,7 +82,7 @@ export function getTradePointOverride(tpId: string): TradePointOverrideRow | nul
 
 export function getTradePointIsPrimary(tpId: string, fallback?: boolean): boolean {
   const ov = dbTradePointOverridesById[tpId];
-  if (ov) return ov.is_primary === true;
+  if (ov && ov.is_primary === false) return false;
   return fallback === true;
 }
 
