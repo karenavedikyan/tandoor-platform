@@ -7,10 +7,12 @@ import {
 
 type Props = {
   children: ReactNode;
+  renderError?: (error: Error, errorInfo: ErrorInfo | null, onRetry: () => void) => ReactNode;
 };
 
 type State = {
   error: Error | null;
+  errorInfo: ErrorInfo | null;
 };
 
 export function DealerBaseErrorFallback({ onRetry }: { onRetry?: () => void }) {
@@ -38,23 +40,27 @@ export function DealerBaseErrorFallback({ onRetry }: { onRetry?: () => void }) {
 }
 
 export class DealerBaseErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  state: State = { error: null, errorInfo: null };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { error };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { error, errorInfo: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    this.setState({ errorInfo: info });
     console.error("[dealer-base] render error", error, info.componentStack);
     clearSchemaVersionMarkerForHandshake();
   }
 
   private handleRetry = (): void => {
-    this.setState({ error: null });
+    this.setState({ error: null, errorInfo: null });
   };
 
   render(): ReactNode {
     if (this.state.error) {
+      if (this.props.renderError) {
+        return this.props.renderError(this.state.error, this.state.errorInfo, this.handleRetry);
+      }
       return <DealerBaseErrorFallback onRetry={this.handleRetry} />;
     }
     return this.props.children;

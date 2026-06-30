@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { ensureCatalogLoaded, getCatalogProducts } from "./catalog-data.js";
 import { isCatalogLazyLoadEnabled } from "./catalog-lazy-load-flag.js";
+import { isCatalogDiagEnabled } from "./catalog-diag-flag.js";
 
 let backgroundWarmupScheduled = false;
 
@@ -21,8 +22,10 @@ export function scheduleCatalogBackgroundWarmup(): void {
   if (!isCatalogLazyLoadEnabled() || backgroundWarmupScheduled) return;
   backgroundWarmupScheduled = true;
   scheduleIdle(() => {
-    void ensureCatalogLoaded().catch(() => {
-      /* non-fatal: витрины могут остаться пустыми до повторного прогрева */
+    void ensureCatalogLoaded().catch((err) => {
+      if (isCatalogDiagEnabled()) {
+        console.error("[catalog-diag] seed load failed", err);
+      }
     });
   });
 }
@@ -40,8 +43,11 @@ export function useCatalogReady(): boolean {
       .then(() => {
         if (!cancelled) setReady(true);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) setReady(false);
+        if (isCatalogDiagEnabled()) {
+          console.error("[catalog-diag] seed load failed", err);
+        }
       });
     return () => {
       cancelled = true;

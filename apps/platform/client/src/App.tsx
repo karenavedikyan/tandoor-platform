@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, type ComponentType, type LazyExoticComponent, type ReactElement } from "react";
+import { lazy, Suspense, useEffect, useMemo, type ComponentType, type ErrorInfo, type LazyExoticComponent, type ReactElement } from "react";
 import { Switch, Route, Router, useLocation, Link } from "wouter";
 import { useHashLocation } from "@/lib/hash-location-router";
 import { queryClient } from "./lib/queryClient";
@@ -43,10 +43,12 @@ import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-
 import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { useScopedTrashCounts } from "@/hooks/use-scoped-trash-counts";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
-import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
+import { DealerBaseErrorBoundary, DealerBaseErrorFallback } from "@/components/dealer-base-error-boundary";
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 import { scheduleCatalogBackgroundWarmup } from "@/lib/catalog-warmup";
+import { isCatalogDiagEnabled } from "@/lib/catalog-diag-flag";
+import { CatalogDiagErrorFallback } from "@/components/catalog-diag-error-fallback";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -130,14 +132,36 @@ function suspensePage(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentT
   return Wrapped;
 }
 
-function suspensePageWithErrorBoundary(Lazy: LazyExoticComponent<ComponentType<any>>): ComponentType<any> {
+function suspensePageWithErrorBoundary(
+  Lazy: LazyExoticComponent<ComponentType<any>>,
+  options?: {
+    renderError?: (error: Error, errorInfo: ErrorInfo | null, onRetry: () => void) => ReactElement;
+  },
+): ComponentType<any> {
   const Inner = suspensePage(Lazy);
   const Wrapped: ComponentType<any> = (props) => (
-    <DealerBaseErrorBoundary>
+    <DealerBaseErrorBoundary renderError={options?.renderError}>
       <Inner {...props} />
     </DealerBaseErrorBoundary>
   );
   return Wrapped;
+}
+
+function catalogPageRenderError(
+  error: Error,
+  errorInfo: ErrorInfo | null,
+  onRetry: () => void,
+): ReactElement {
+  if (isCatalogDiagEnabled()) {
+    return (
+      <CatalogDiagErrorFallback
+        error={error}
+        componentStack={errorInfo?.componentStack ?? null}
+        onRetry={onRetry}
+      />
+    );
+  }
+  return <DealerBaseErrorFallback onRetry={onRetry} />;
 }
 
 const SalesManagerWorkspaceRoute = suspensePage(LazySalesManagerWorkspace);
@@ -151,7 +175,9 @@ const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
 const TradePointDetailPageRoute = suspensePage(LazyTradePointDetailPage);
-const CatalogPageRoute = suspensePageWithErrorBoundary(LazyCatalogPage);
+const CatalogPageRoute = suspensePageWithErrorBoundary(LazyCatalogPage, {
+  renderError: catalogPageRenderError,
+});
 const CatalogProduct1cPageRoute = suspensePage(LazyCatalogProduct1cPage);
 const CatalogLegacyRedirectRoute = suspensePage(LazyCatalogLegacyRedirect);
 const TasksPageRoute = suspensePage(LazyTasksPage);
