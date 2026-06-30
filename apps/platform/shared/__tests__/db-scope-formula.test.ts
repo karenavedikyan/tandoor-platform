@@ -88,6 +88,12 @@ function mockPool(opts: {
       if (s.includes("client_assignments ca") && s.includes("team_id = ANY")) {
         return { rows: [{ client_code: "C100" }, { client_code: "C200" }] };
       }
+      if (s.includes("rop_team_codes") || (s.includes("d_ov.rop_id = $1") && s.includes("UNION"))) {
+        return { rows: [{ client_code: "C100" }, { client_code: "C200" }] };
+      }
+      if (s.includes("d_ov.rop_id = $1") && s.includes("upper(d.release_code)")) {
+        return { rows: [] };
+      }
       if (s.includes("rop_client_grants")) {
         return { rows: [] };
       }
