@@ -14,7 +14,6 @@ import type { CatalogProduct } from "./catalog-product-type";
 import { MOCK_CATALOG_PRODUCTS } from "./catalog-mock-products";
 import { normalizeDealerIdForCatalog } from "./catalog-dealer-id";
 import { isCatalogLazyLoadEnabled } from "./catalog-lazy-load-flag.js";
-import { isCatalogDiagEnabled } from "./catalog-diag-flag.js";
 import { buildCatalogProductsFromSeed } from "./catalog-products-from-seed.js";
 
 export type { CatalogProduct } from "./catalog-product-type";
@@ -72,11 +71,7 @@ export function ensureCatalogLoaded(): Promise<CatalogProduct[]> {
       })
       .catch((err) => {
         catalogLoadPromise = null;
-        if (isCatalogDiagEnabled()) {
-          console.error("[catalog-diag] seed load failed", err);
-        } else {
-          console.warn("[catalog-data] failed to load catalog seed", err);
-        }
+        console.warn("[catalog-data] failed to load catalog seed", err);
         catalogCache = [];
         return catalogCache;
       });

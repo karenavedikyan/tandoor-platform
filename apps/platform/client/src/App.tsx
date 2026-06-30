@@ -47,8 +47,6 @@ import { DealerBaseErrorBoundary, DealerBaseErrorFallback } from "@/components/d
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 import { scheduleCatalogBackgroundWarmup } from "@/lib/catalog-warmup";
-import { isCatalogDiagEnabled } from "@/lib/catalog-diag-flag";
-import { CatalogDiagErrorFallback } from "@/components/catalog-diag-error-fallback";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -147,20 +145,7 @@ function suspensePageWithErrorBoundary(
   return Wrapped;
 }
 
-function catalogPageRenderError(
-  error: Error,
-  errorInfo: ErrorInfo | null,
-  onRetry: () => void,
-): ReactElement {
-  if (isCatalogDiagEnabled()) {
-    return (
-      <CatalogDiagErrorFallback
-        error={error}
-        componentStack={errorInfo?.componentStack ?? null}
-        onRetry={onRetry}
-      />
-    );
-  }
+function catalogPageRenderError(_error: Error, _errorInfo: ErrorInfo | null, onRetry: () => void): ReactElement {
   return <DealerBaseErrorFallback onRetry={onRetry} />;
 }
 
