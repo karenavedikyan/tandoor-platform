@@ -249,4 +249,131 @@ const balyukDbRow: UnifiedActiveTradePointDetail = {
   cancelled = true;
 }
 
+// no-writeback: persist не вызывается, read-path заполнен
+{
+  const attemptedRef = { current: null as string | null };
+  const rowsOut: UnifiedActiveTradePointDetail[] = [];
+  let idsOut: string[] = [];
+  let persistCalls = 0;
+  let ready = false;
+
+  const actState = createEmptyActualizationState();
+  actState.manuallyCreatedTradePointsById = {
+    "manual-tp-1": {
+      id: "manual-tp-1",
+      dealerId,
+      internalCode: "TND-TP-000099",
+      fields: { name: "Ручная ТТ" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdBy: "u1",
+      createdByName: "Тест",
+      source: "manual_actualization",
+    },
+  };
+  actState.trashedTradePointsById = {
+    "trashed-tp": {
+      tradePointId: "trashed-tp",
+      dealerId,
+      trashedAt: "2026-01-01T00:00:00.000Z",
+      trashedBy: "u1",
+      trashedByName: "Тест",
+      expiresAt: "2026-01-15T00:00:00.000Z",
+      source: "client_card_delete",
+      snapshot: { name: "X", address: null, city: null, tradePointCode: null, dealerFullName: null },
+    },
+  };
+  const manualBefore = actState.manuallyCreatedTradePointsById["manual-tp-1"];
+  const trashBefore = actState.trashedTradePointsById["trashed-tp"];
+
+  const ok = await executeTradePointsDbHydration({
+    id: dealerId,
+    attemptedRef,
+    isCancelled: () => false,
+    noWriteback: true,
+    fetchRows: async () => [balyukDbRow],
+    persist: async () => {
+      persistCalls += 1;
+      return { success: true };
+    },
+    actState,
+    profile,
+    onRows: (rows, ids) => {
+      rowsOut.push(...rows);
+      idsOut = ids;
+    },
+    markCompleted: () => {
+      ready = true;
+    },
+  });
+
+  assert.equal(ok, true);
+  assert.equal(persistCalls, 0, "no-writeback: persist не вызывается");
+  assert.equal(ready, true);
+  assert.equal(rowsOut.length, 1);
+  assert.deepEqual(idsOut, [tpId]);
+  assert.equal(actState.manuallyCreatedTradePointsById["manual-tp-1"], manualBefore);
+  assert.equal(actState.trashedTradePointsById["trashed-tp"], trashBefore);
+}
+
+// no-writeback off: persist вызывается (регрессия legacy)
+{
+  const attemptedRef = { current: null as string | null };
+  let persistCalls = 0;
+
+  const ok = await executeTradePointsDbHydration({
+    id: dealerId,
+    attemptedRef,
+    isCancelled: () => false,
+    noWriteback: false,
+    fetchRows: async () => [balyukDbRow],
+    persist: async (mutate) => {
+      persistCalls += 1;
+      mutate(createEmptyActualizationState());
+      return { success: true };
+    },
+    actState: createEmptyActualizationState(),
+    profile,
+    onRows: () => {},
+    markCompleted: () => {},
+  });
+
+  assert.equal(ok, true);
+  assert.equal(persistCalls, 1, "legacy: persist вызывается при rows.length > 0");
+}
+
+// no-writeback: рестарт effect после отмены — ready наступает, persist не вызывается
+{
+  const attemptedRef = { current: null as string | null };
+  let completed = false;
+  const id = "client-no-writeback-rerun";
+  let persistCalls = 0;
+
+  assert.equal(shouldSkipTradePointsHydrationFetch(attemptedRef, id, false), false);
+  attemptedRef.current = id;
+  releaseTradePointsHydrationAttemptOnCancel(attemptedRef, id, completed);
+
+  let ready = false;
+  const ok = await executeTradePointsDbHydration({
+    id,
+    attemptedRef,
+    isCancelled: () => false,
+    noWriteback: true,
+    fetchRows: async () => [balyukDbRow],
+    persist: async () => {
+      persistCalls += 1;
+      return { success: true };
+    },
+    actState: createEmptyActualizationState(),
+    profile,
+    onRows: () => {},
+    markCompleted: () => {
+      completed = true;
+      ready = true;
+    },
+  });
+  assert.equal(ok, true);
+  assert.equal(ready, true);
+  assert.equal(persistCalls, 0);
+}
+
 console.log("use-trade-points-actualization-hydration: ok");

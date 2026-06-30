@@ -2,7 +2,12 @@
  * Feature flags для клиента (Промт 376).
  */
 
-import { shadowDiffEnabled, useDbDealers, useServerKpiAggregates } from "../dealers/dealers-source-config.js";
+import {
+  shadowDiffEnabled,
+  useDbDealers,
+  useServerKpiAggregates,
+  useTpHydrationNoWriteback,
+} from "../dealers/dealers-source-config.js";
 
 export type FeatureFlagsResponse = {
   success: true;
@@ -10,6 +15,7 @@ export type FeatureFlagsResponse = {
     USE_DB_DEALERS: boolean;
     SHADOW_DIFF_ENABLED: boolean;
     USE_SERVER_KPI_AGGREGATES: boolean;
+    TP_HYDRATION_NO_WRITEBACK: boolean;
   };
 };
 
@@ -20,6 +26,7 @@ export function getFeatureFlags(): FeatureFlagsResponse {
       USE_DB_DEALERS: useDbDealers(),
       SHADOW_DIFF_ENABLED: shadowDiffEnabled(),
       USE_SERVER_KPI_AGGREGATES: useServerKpiAggregates(),
+      TP_HYDRATION_NO_WRITEBACK: useTpHydrationNoWriteback(),
     },
   };
 }
