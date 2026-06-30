@@ -14,6 +14,12 @@ function parseRopUserId(req: VercelRequest): string | undefined {
   return trimmed || undefined;
 }
 
+function parseTotalsOnly(req: VercelRequest): boolean {
+  const raw = req.query.totalsOnly;
+  const s = Array.isArray(raw) ? raw[0] : raw;
+  return s === "1" || s === "true";
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
     if (req.method !== "GET") {
@@ -44,7 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       full_name: me.full_name,
     };
 
-    const result = await fetchTeamScopeForRequest(pool, viewer, parseRopUserId(req));
+    const result = await fetchTeamScopeForRequest(pool, viewer, parseRopUserId(req), {
+      totalsOnly: parseTotalsOnly(req),
+    });
     if ("forbidden" in result) {
       sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав для просмотра scope команды." });
       return;

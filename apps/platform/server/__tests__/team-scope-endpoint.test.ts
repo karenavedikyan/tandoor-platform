@@ -8,6 +8,7 @@ import {
   fetchTeamScopeForRequest,
   buildMemberScope,
   buildTeamScopePayload,
+  buildTeamScopeTotalsOnly,
   canViewerAccessTeamScope,
 } from "../../shared/dealers-team-scope-handlers.js";
 import { aggregateMemberTotals } from "../../shared/dealers-scope-aggregation.js";
@@ -56,7 +57,7 @@ const MEMBERS: TeamScopeMember[] = [
   assert.equal(totals.trashed_dealers, 1, "SET-union trashed dealers");
 }
 
-function mockPool(): PoolLike {
+function mockPool(trackMemberFetch?: { count: number }): PoolLike {
   return {
     query: async (sql: string, params?: unknown[]) => {
       const s = sql.replace(/\s+/g, " ").trim();
@@ -78,6 +79,7 @@ function mockPool(): PoolLike {
         return { rows: [] };
       }
       if (s.includes("user_team_memberships m") && s.includes("team_id = $1")) {
+        if (trackMemberFetch) trackMemberFetch.count += 1;
         return {
           rows: [{ id: MGR_ID, email: "mgr@test.ru", role: "manager", full_name: "Manager" }],
         };
@@ -142,6 +144,38 @@ function mockPool(): PoolLike {
   const pool = mockPool();
   const r = await fetchTeamScopeForRequest(pool, { id: ADMIN_ID, email: "a@test.ru", role: "admin" }, ROP_ID);
   assert.ok(!("forbidden" in r));
+}
+
+// totalsOnly → same team_totals, empty members, no member fan-out
+{
+  const memberFetch = { count: 0 };
+  const pool = mockPool(memberFetch);
+  const teamRow = {
+    id: TEAM_A,
+    name: "Команда A",
+    rop_user_id: ROP_ID,
+    rop_name: "ROP",
+    rop_email: "rop@test.ru",
+  };
+
+  const full = await buildTeamScopePayload(pool, teamRow);
+  memberFetch.count = 0;
+  const totalsOnly = await buildTeamScopeTotalsOnly(pool, teamRow);
+  const viaRequest = await fetchTeamScopeForRequest(
+    pool,
+    { id: ROP_ID, email: "rop@test.ru", role: "rop" },
+    undefined,
+    { totalsOnly: true },
+  );
+
+  assert.ok(!("forbidden" in viaRequest) && !("notFound" in viaRequest));
+  assert.equal(totalsOnly.members.length, 0);
+  assert.equal((viaRequest as { members: unknown[] }).members.length, 0);
+  assert.equal(memberFetch.count, 0, "totalsOnly must not fetch team members when rop_user_id is set");
+  assert.equal(totalsOnly.team_totals.active_trade_points, full.team_totals.active_trade_points);
+  assert.equal(totalsOnly.team_totals.active_dealers, full.team_totals.active_dealers);
+  assert.deepEqual(totalsOnly.team_totals, full.team_totals);
+  assert.deepEqual((viaRequest as { team_totals: unknown }).team_totals, full.team_totals);
 }
 
 console.log("team-scope-endpoint.test.ts OK");

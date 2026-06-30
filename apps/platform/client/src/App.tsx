@@ -39,7 +39,7 @@ import { ProfileShell } from "@/components/profile/profile-shell";
 import { ThemeProvider } from "@/context/theme-provider";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyScopeFromDB, sidebarCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
-import { useMyTeamScope, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
+import { useMyTeamScopeTotals, sidebarCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { useScopedTrashCounts } from "@/hooks/use-scoped-trash-counts";
 import { DealerBaseRowsProvider } from "@/context/dealer-base-rows-provider";
@@ -333,7 +333,7 @@ function AuthenticatedShell({
   const isDirector = user.role === "director";
 
   const dbScope = useMyScopeFromDB(Boolean(user?.id) && (isManagerLike || user.role === "admin"));
-  const teamScope = useMyTeamScope({ enabled: Boolean(user?.id) && isRop });
+  const teamScope = useMyTeamScopeTotals({ enabled: Boolean(user?.id) && isRop });
   const orgScope = useOrgScope({ enabled: Boolean(user?.id) && isDirector });
 
   const dbSidebarCounts = isDirector
