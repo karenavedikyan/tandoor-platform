@@ -18,12 +18,17 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
+import { useMyTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope } from "@/hooks/use-org-scope";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
   buildRopGroups,
+  mergeResponsibleByCodeMaps,
+  responsibleByCodeFromOrgScopePayload,
+  responsibleByCodeFromTeamScopePayload,
   teamsForManagementView,
 } from "@/lib/dealer-base-management-view-model";
 import {
@@ -95,7 +100,17 @@ export default function DealerBaseManagerDetailPage() {
   }, [orgTeamCtx, profile.role]);
 
   const myCodesQ = useMyClientCodes({ enabled: actx.enabled });
-  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? {};
+  const teamScopeQ = useMyTeamScope({ enabled: isRealUser && me?.role === "rop" });
+  const orgScopeQ = useOrgScope({ enabled: isRealUser && me?.role === "director" });
+  const responsibleByCode = useMemo(
+    () =>
+      mergeResponsibleByCodeMaps(
+        myCodesQ.data?.responsibleByCode,
+        teamScopeQ.data ? responsibleByCodeFromTeamScopePayload(teamScopeQ.data) : null,
+        orgScopeQ.data ? responsibleByCodeFromOrgScopePayload(orgScopeQ.data) : null,
+      ),
+    [myCodesQ.data?.responsibleByCode, teamScopeQ.data, orgScopeQ.data],
+  );
   const userIdToCatalogMgrId = useMemo(
     () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
     [],

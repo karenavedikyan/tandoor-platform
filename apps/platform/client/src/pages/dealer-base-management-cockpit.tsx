@@ -82,6 +82,9 @@ import {
   mapClientsListTradePointsToListRows,
   mapManagerOverviewClients,
   mergeOverviewClientCountsIntoRopGroups,
+  mergeResponsibleByCodeMaps,
+  responsibleByCodeFromOrgScopePayload,
+  responsibleByCodeFromTeamScopePayload,
   resolveClientKpisFromOverview,
   topCitiesForChart,
   teamsForManagementView,
@@ -103,7 +106,7 @@ import {
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
-import type { MemberTotals, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
+import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
@@ -315,6 +318,7 @@ export function DealerBaseManagementCockpit({
   teamTotalsById,
   membersTotalsByTeamId,
   teamScopeForDiag,
+  orgScopeForAssignments,
 }: {
   rows: DealerRow[];
   profile: ReleaseDemoProfile;
@@ -325,6 +329,7 @@ export function DealerBaseManagementCockpit({
   teamTotalsById?: Map<string, TeamTotals>;
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
   teamScopeForDiag?: TeamScopePayload | null;
+  orgScopeForAssignments?: OrgScopePayload | null;
 }) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
@@ -406,7 +411,15 @@ export function DealerBaseManagementCockpit({
     () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
     [],
   );
-  const responsibleByCode = myCodesQ.data?.responsibleByCode ?? EMPTY_RESPONSIBLE_BY_CODE;
+  const responsibleByCode = useMemo(
+    () =>
+      mergeResponsibleByCodeMaps(
+        myCodesQ.data?.responsibleByCode,
+        teamScopeForDiag ? responsibleByCodeFromTeamScopePayload(teamScopeForDiag) : null,
+        orgScopeForAssignments ? responsibleByCodeFromOrgScopePayload(orgScopeForAssignments) : null,
+      ),
+    [myCodesQ.data?.responsibleByCode, teamScopeForDiag, orgScopeForAssignments],
+  );
   const grantedCodes = myCodesQ.data?.grantedCodes;
 
   const baseRopGroups = useMemo(
