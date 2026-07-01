@@ -90,6 +90,7 @@ import {
   type CityRowModel,
   type ClientListFilter,
   type DirectorClientBaseMode,
+  type ManagerOverviewClientRow,
   type ManagerRowModel,
   type RopGroupModel,
 } from "@/lib/dealer-base-management-view-model";
@@ -104,17 +105,33 @@ import {
   sortManagersByHeat,
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
-import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
+import { fetchTradePointsOverview, fetchTradePointsManagerDetail } from "@/lib/trade-points-overview-api";
+import type { TradePointsManagerDetailClient } from "@/lib/trade-points-overview-api";
 import {
   buildTradePointsOverviewDisplayIndex,
   filterManagersToTradePointsOverview,
   formatOverviewScopedCount,
+  resolveManagerApiUserId,
 } from "@/lib/trade-points-overview-view-model";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 
 const MODE_LS_KEY = "tandoor-dealer-base-management-mode-v1";
 const OPEN_ROPS_LS_KEY = "tandoor-dealer-base-management-open-rops-v1";
 const EMPTY_RESPONSIBLE_BY_CODE: Record<string, string> = {};
+const MANAGER_API_USER_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function mapManagerDetailClientToOverviewRow(client: TradePointsManagerDetailClient): ManagerOverviewClientRow {
+  return {
+    id: client.id,
+    fullName: client.fullName,
+    inn: null,
+    city: client.city,
+    legalEntity: false,
+    status: client.status,
+    tradePointsCount: client.tradePointsCount,
+    dealerProfileId: client.dealerProfileId ?? client.id,
+  };
+}
 
 type DetailKind =
   | { kind: "rop"; teamId: string }
@@ -713,6 +730,48 @@ export function DealerBaseManagementCockpit({
     return mapManagerOverviewClients(selectedManager.rows);
   }, [selectedManager]);
 
+  const selectedManagerApiUserId = useMemo(() => {
+    if (detail?.kind !== "manager_overview") return null;
+    const catalogId = detail.managerCatalogId;
+    const resolved = resolveManagerApiUserId(catalogId);
+    if (MANAGER_API_USER_ID_RE.test(resolved)) return resolved;
+
+    const overviewManagers = tradePointsOverviewQ.data?.ropGroups.flatMap((g) => g.managers) ?? [];
+    const fromOverview = overviewManagers.find(
+      (m) => m.userId === catalogId || userIdToCatalogMgrId.get(m.userId) === catalogId,
+    );
+    if (fromOverview) return fromOverview.userId;
+
+    if (selectedManager?.name) {
+      const byName = overviewManagers.find((m) => m.fullName.trim() === selectedManager.name.trim());
+      if (byName) return byName.userId;
+    }
+
+    return MANAGER_API_USER_ID_RE.test(catalogId) ? catalogId : null;
+  }, [detail, tradePointsOverviewQ.data, userIdToCatalogMgrId, selectedManager?.name]);
+
+  const managerDetailQ = useQuery({
+    queryKey: ["trade-points-manager-detail", selectedManagerApiUserId],
+    queryFn: () => fetchTradePointsManagerDetail(selectedManagerApiUserId as string),
+    enabled: detail?.kind === "manager_overview" && Boolean(selectedManagerApiUserId),
+    staleTime: 60_000,
+  });
+
+  const selectedManagerClientsFromServer = useMemo(() => {
+    const clients = managerDetailQ.data?.clients;
+    if (!clients) return [];
+    return clients
+      .map(mapManagerDetailClientToOverviewRow)
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ru"));
+  }, [managerDetailQ.data]);
+
+  const useServerManagerDetailClients = Boolean(selectedManagerApiUserId);
+  const managerOverviewClientsLoading =
+    useServerManagerDetailClients && managerDetailQ.isLoading && !managerDetailQ.data;
+  const managerOverviewClients = useServerManagerDetailClients
+    ? selectedManagerClientsFromServer
+    : selectedManagerClients;
+
   const selectedManagerRopName = useMemo(() => {
     if (!selectedManager) return "—";
     return ropGroups.find((g) => g.teamId === selectedManager.teamId)?.ropName ?? "—";
@@ -1152,9 +1211,11 @@ export function DealerBaseManagementCockpit({
               {isKpiDetail ? (
                 detailBody
               ) : detail?.kind === "manager_overview" ? (
-                selectedManagerClients.length ? (
+                managerOverviewClientsLoading ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Загрузка…</p>
+                ) : managerOverviewClients.length ? (
                   <div className="space-y-2">
-                    {selectedManagerClients.map((c) => (
+                    {managerOverviewClients.map((c) => (
                       <Card key={c.id} className="rounded-xl border border-border bg-card text-card-foreground">
                         <CardContent className="space-y-1 p-3">
                           <div className="flex items-start justify-between gap-2">
@@ -1174,9 +1235,11 @@ export function DealerBaseManagementCockpit({
                                 </p>
                               </div>
                             </div>
-                            <Button asChild variant="outline" size="sm">
-                              <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId)}`)}>Карточка</Link>
-                            </Button>
+                            {c.dealerProfileId ? (
+                              <Button asChild variant="outline" size="sm">
+                                <Link href={buildHashPath(`/dealers/${encodeURIComponent(c.dealerProfileId)}`)}>Карточка</Link>
+                              </Button>
+                            ) : null}
                           </div>
                         </CardContent>
                       </Card>
