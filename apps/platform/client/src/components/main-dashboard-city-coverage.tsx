@@ -20,6 +20,7 @@ type MainDashboardCityCoverageProps = {
   rows: DealerRow[];
   act: ActualizationState;
   tradePointCountByCity?: Map<string, number>;
+  clientCountByCity?: Map<string, number>;
   testId?: string;
 };
 
@@ -76,6 +77,7 @@ export function MainDashboardCityCoverage({
   rows,
   act,
   tradePointCountByCity,
+  clientCountByCity,
   testId = "section-main-city-coverage",
 }: MainDashboardCityCoverageProps) {
   const { selectedCity, toggleCity } = useMainDashboardCityFilter();
@@ -83,8 +85,8 @@ export function MainDashboardCityCoverage({
   const [expanded, setExpanded] = useState(false);
 
   const allTiles = useMemo(
-    () => buildMainDashboardCityTiles(rows, act, tradePointCountByCity),
-    [rows, act, tradePointCountByCity],
+    () => buildMainDashboardCityTiles(rows, act, tradePointCountByCity, clientCountByCity),
+    [rows, act, tradePointCountByCity, clientCountByCity],
   );
   const filteredTiles = useMemo(() => filterCityTilesBySearch(allTiles, search), [allTiles, search]);
 
