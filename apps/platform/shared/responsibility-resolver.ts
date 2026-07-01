@@ -12,7 +12,7 @@ export type PoolLike = {
 export type ResponsibleRole = "manager" | "regional_manager" | "rop";
 export type ResolveSource = "assignment" | "legacy";
 export type ResolveLevel = "trade_point" | "client" | "city" | "team";
-export type ScopeKind = "trade_point" | "client" | "city";
+export type ScopeKind = "trade_point" | "dealer" | "client" | "city";
 
 export interface ResolvedResponsible {
   userId: string | null;
@@ -151,6 +151,7 @@ async function loadAssignments(
     `SELECT scope_kind, scope_key, responsible_role, user_id::text AS user_id, user_name
      FROM responsibility_assignments
      WHERE (scope_kind = 'trade_point' AND scope_key = $1)
+        OR ($2::text IS NOT NULL AND scope_kind = 'dealer' AND scope_key = $2)
         OR ($2::text IS NOT NULL AND scope_kind = 'client' AND scope_key = $2)
         OR ($3::text IS NOT NULL AND scope_kind = 'city' AND scope_key = $3)`,
     [args.tpId, args.dealerId, args.cityKey],
@@ -210,6 +211,7 @@ function pickAssignment(
 ): ResolvedResponsible | null {
   const chain: Array<{ kind: ScopeKind; key: string | null; level: ResolveLevel }> = [
     { kind: "trade_point", key: ctx.tpId, level: "trade_point" },
+    { kind: "dealer", key: ctx.dealerId, level: "client" },
     { kind: "client", key: ctx.dealerId, level: "client" },
     { kind: "city", key: ctx.cityKey, level: "city" },
   ];
