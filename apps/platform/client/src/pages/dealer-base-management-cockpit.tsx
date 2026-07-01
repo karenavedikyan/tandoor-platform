@@ -62,7 +62,7 @@ import { UnassignedResponsibleIndicator } from "@/components/unassigned-responsi
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
-import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useTradePointDistributionAggregate, type TradePointDistributionAggregateResult } from "@/hooks/use-trade-point-distribution-aggregate";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
@@ -74,6 +74,9 @@ import {
   resolveManagementOrgTeamUuid,
   buildStructureInfographic,
   buildOverviewCityCardsFromDb,
+  buildOverviewCityCardsFromScopedDb,
+  resolveCockpitDistributionBar,
+  overviewWithoutCityFromScopedDb,
   computeUnstatusedCatalogClients,
   dealerMatchesClientListFilter,
   dealerMatchesKpiClientListFilter,
@@ -342,6 +345,9 @@ export function DealerBaseManagementCockpit({
   scopeAvgDistribution,
   scopeTradePointIds,
   scopeTradePointIdsReady,
+  scopeDistribution,
+  cityClientCountFromDb,
+  cityTpCountFromDb,
   mergedDealerRowsForCreate,
   teamTotalsById,
   membersTotalsByTeamId,
@@ -358,6 +364,10 @@ export function DealerBaseManagementCockpit({
   /** ID активных ТТ из scoped-БД (единый набор с счётчиками). */
   scopeTradePointIds?: string[];
   scopeTradePointIdsReady?: boolean;
+  /** Агрегат дистрибуции из dealer-base (scoped-БД); приоритет над локальным cockpitDistribution. */
+  scopeDistribution?: TradePointDistributionAggregateResult;
+  cityClientCountFromDb?: Map<string, number>;
+  cityTpCountFromDb?: Map<string, number>;
   mergedDealerRowsForCreate?: DealerRow[] | null;
   teamTotalsById?: Map<string, TeamTotals>;
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
@@ -376,12 +386,15 @@ export function DealerBaseManagementCockpit({
   const cockpitScopeTradePointIds = scopeTradePointIds ?? [];
 
   const cockpitDistribution = useTradePointDistributionAggregate(
-    cockpitScopeTradePointIds,
+    scopeDistribution ? [] : cockpitScopeTradePointIds,
     teamCtx.mergedState,
   );
 
-  const cockpitDistributionLoading =
-    scopeTradePointIdsReady === false || cockpitDistribution.loading;
+  const { distribution: distributionForBar, loading: cockpitDistributionLoading } = resolveCockpitDistributionBar(
+    scopeDistribution,
+    cockpitDistribution,
+    scopeTradePointIdsReady,
+  );
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
@@ -695,11 +708,12 @@ export function DealerBaseManagementCockpit({
 
   const resolveCityTp = useCallback(
     (c: { cityKey: string; displayName: string; tradePoints: number }) => {
+      if (cityClientCountFromDb) return c.tradePoints;
       if (overviewTpByCity.has(c.displayName)) return overviewTpByCity.get(c.displayName)!;
       if (overviewTpByCity.has(c.cityKey)) return overviewTpByCity.get(c.cityKey)!;
       return c.tradePoints;
     },
-    [overviewTpByCity],
+    [overviewTpByCity, cityClientCountFromDb],
   );
 
   const maxBar = useMemo(
@@ -815,13 +829,19 @@ export function DealerBaseManagementCockpit({
   }, [selectedManager, ropGroups]);
 
   const overviewTopCities = useMemo(() => {
+    if (cityClientCountFromDb) {
+      return buildOverviewCityCardsFromScopedDb(cityClientCountFromDb, cityTpCountFromDb);
+    }
     if (overview) return buildOverviewCityCardsFromDb(overview);
     return cities
       .filter((c) => c.displayName !== "Без города" && c.activeClients > 0)
       .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru"));
-  }, [overview, cities]);
+  }, [cityClientCountFromDb, cityTpCountFromDb, overview, cities]);
 
   const overviewWithoutCity = useMemo(() => {
+    if (cityClientCountFromDb) {
+      return overviewWithoutCityFromScopedDb(cityClientCountFromDb, cityTpCountFromDb);
+    }
     if (overview) {
       return {
         cityKey: "__no_city__",
@@ -831,7 +851,7 @@ export function DealerBaseManagementCockpit({
       };
     }
     return cities.find((c) => c.displayName === "Без города");
-  }, [overview, cities]);
+  }, [cityClientCountFromDb, cityTpCountFromDb, overview, cities]);
 
   const clientKpis = useMemo(
     () =>
@@ -1061,8 +1081,8 @@ export function DealerBaseManagementCockpit({
             </section>
             <RoleDistributionSummaryBar
               access={access}
-              aggregate={cockpitDistribution.aggregate}
-              tradePointsCount={cockpitDistribution.tradePointsCount}
+              aggregate={distributionForBar.aggregate}
+              tradePointsCount={distributionForBar.tradePointsCount}
               tradePointIds={cockpitScopeTradePointIds}
               testIdPrefix="cockpit-clients"
               showTradePointsCount={false}
@@ -1702,8 +1722,8 @@ export function DealerBaseManagementCockpit({
 
           <RoleDistributionSummaryBar
             access={access}
-            aggregate={cockpitDistribution.aggregate}
-            tradePointsCount={cockpitDistribution.tradePointsCount}
+            aggregate={distributionForBar.aggregate}
+            tradePointsCount={distributionForBar.tradePointsCount}
             tradePointIds={cockpitScopeTradePointIds}
             testIdPrefix="cockpit-clients"
             showTradePointsCount={false}
