@@ -123,12 +123,48 @@ async function fetchUserNames(pool: PoolLike, ids: string[]): Promise<Map<string
 }
 
 async function loadTradePoint(pool: PoolLike, tpId: string): Promise<TradePointRow | null> {
-  const r = await pool.query<Record<string, unknown>>(
-    `SELECT tp_id, dealer_id, name, city, address, regional_manager_id, regional_manager_name, rop_id, rop_name
-     FROM trade_point_overrides WHERE tp_id = $1 LIMIT 1`,
+  const override = await pool.query<Record<string, unknown>>(
+    `SELECT tpo.tp_id,
+            COALESCE(d.external_key, tpo.dealer_id) AS dealer_id,
+            tpo.name, tpo.city, tpo.address,
+            tpo.regional_manager_id, tpo.regional_manager_name,
+            tpo.rop_id, tpo.rop_name
+     FROM trade_point_overrides tpo
+     LEFT JOIN dealers d ON d.id::text = tpo.dealer_id OR d.external_key = tpo.dealer_id
+     WHERE tpo.tp_id = $1
+     LIMIT 1`,
     [tpId],
   );
-  const row = r.rows[0];
+  const overrideRow = override.rows[0];
+  if (overrideRow) {
+    return {
+      tp_id: String(overrideRow.tp_id),
+      dealer_id: overrideRow.dealer_id != null ? String(overrideRow.dealer_id) : null,
+      name: overrideRow.name != null ? String(overrideRow.name) : null,
+      city: overrideRow.city != null ? String(overrideRow.city) : null,
+      address: overrideRow.address != null ? String(overrideRow.address) : null,
+      regional_manager_id:
+        overrideRow.regional_manager_id != null ? String(overrideRow.regional_manager_id) : null,
+      regional_manager_name:
+        overrideRow.regional_manager_name != null ? String(overrideRow.regional_manager_name) : null,
+      rop_id: overrideRow.rop_id != null ? String(overrideRow.rop_id) : null,
+      rop_name: overrideRow.rop_name != null ? String(overrideRow.rop_name) : null,
+    };
+  }
+
+  const fallback = await pool.query<Record<string, unknown>>(
+    `SELECT tp.id::text AS tp_id,
+            d.external_key AS dealer_id,
+            tp.name, tp.city, tp.address,
+            NULL::text AS regional_manager_id, NULL::text AS regional_manager_name,
+            NULL::text AS rop_id, NULL::text AS rop_name
+     FROM trade_points tp
+     INNER JOIN dealers d ON d.id = tp.dealer_id
+     WHERE tp.id::text = $1 OR tp.external_key = $1
+     LIMIT 1`,
+    [tpId],
+  );
+  const row = fallback.rows[0];
   if (!row) return null;
   return {
     tp_id: String(row.tp_id),
@@ -136,10 +172,10 @@ async function loadTradePoint(pool: PoolLike, tpId: string): Promise<TradePointR
     name: row.name != null ? String(row.name) : null,
     city: row.city != null ? String(row.city) : null,
     address: row.address != null ? String(row.address) : null,
-    regional_manager_id: row.regional_manager_id != null ? String(row.regional_manager_id) : null,
-    regional_manager_name: row.regional_manager_name != null ? String(row.regional_manager_name) : null,
-    rop_id: row.rop_id != null ? String(row.rop_id) : null,
-    rop_name: row.rop_name != null ? String(row.rop_name) : null,
+    regional_manager_id: null,
+    regional_manager_name: null,
+    rop_id: null,
+    rop_name: null,
   };
 }
 
