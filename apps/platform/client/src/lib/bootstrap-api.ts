@@ -12,6 +12,7 @@ import {
 import { ensureCatalogLoaded } from "./catalog-data.js";
 import { seedServerKpiAggregatesFromBootstrap } from "./server-kpi-aggregates-flag.js";
 import { seedTpHydrationNoWritebackFromBootstrap } from "./tp-hydration-no-writeback-flag.js";
+import { queryClient } from "./queryClient.js";
 
 export type BootstrapFeatureFlags = {
   success: true;
@@ -66,6 +67,19 @@ export async function fetchBootstrap(): Promise<BootstrapPayload | null> {
   } catch {
     return null;
   }
+}
+
+let bootstrapFlagsPromise: Promise<BootstrapFeatureFlags | null> | null = null;
+
+/** Единый preload bootstrap; сидит флаги до первого fetchDealerBaseRows. */
+export function ensureBootstrapPrewarm(qc: QueryClient = queryClient): Promise<BootstrapFeatureFlags | null> {
+  if (!bootstrapFlagsPromise) {
+    bootstrapFlagsPromise = fetchBootstrap().then((b) => {
+      if (b) prewarmFromBootstrap(qc, b);
+      return b?.feature_flags ?? null;
+    });
+  }
+  return bootstrapFlagsPromise;
 }
 
 export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void {

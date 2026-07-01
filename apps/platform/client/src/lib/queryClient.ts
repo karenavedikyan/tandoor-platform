@@ -57,9 +57,7 @@ export const queryClient = new QueryClient({
 
 /** Опциональный preload react-query (Промт 380-safe). При ошибке bootstrap — тихий fallback. */
 if (typeof globalThis.window !== "undefined") {
-  void import("./bootstrap-api.js").then(({ fetchBootstrap, prewarmFromBootstrap }) => {
-    void fetchBootstrap().then((b) => {
-      if (b) prewarmFromBootstrap(queryClient, b);
-    });
+  void import("./bootstrap-api.js").then(({ ensureBootstrapPrewarm }) => {
+    void ensureBootstrapPrewarm(queryClient);
   });
 }

@@ -15,6 +15,13 @@ let cachedCatalogRows: DealerRow[] | null = null;
 
 export async function shouldUseDbDealers(): Promise<boolean> {
   if (featureFlagUseDb !== null) return featureFlagUseDb;
+  const { ensureBootstrapPrewarm } = await import("./bootstrap-api.js");
+  const bootstrapFlags = await ensureBootstrapPrewarm();
+  if (featureFlagUseDb !== null) return featureFlagUseDb;
+  if (bootstrapFlags?.flags?.USE_DB_DEALERS !== undefined) {
+    featureFlagUseDb = bootstrapFlags.flags.USE_DB_DEALERS === true;
+    return featureFlagUseDb;
+  }
   try {
     const res = await fetch("/api/config/feature-flags", { credentials: "include" });
     if (!res.ok) {
