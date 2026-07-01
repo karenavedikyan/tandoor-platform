@@ -52,7 +52,12 @@ export function getCityRiskLevel(row: CityConcentrationRow): CityRiskLevel {
   return row.pctAttention > 50 ? "critical" : "ok";
 }
 
-export function buildCityConcentrationRows(rows: DealerRow[], _act?: ActualizationState): CityConcentrationRow[] {
+export function buildCityConcentrationRows(
+  rows: DealerRow[],
+  _act?: ActualizationState,
+  clientCountByCity?: Map<string, number>,
+  tradePointCountByCity?: Map<string, number>,
+): CityConcentrationRow[] {
   const map = new Map<
     string,
     { total: number; tradePoints: number; active: number; top: number; attention: number; potential: number }
@@ -72,23 +77,66 @@ export function buildCityConcentrationRows(rows: DealerRow[], _act?: Actualizati
     if (r.status === "потенциальный") cur.potential += 1;
     map.set(city, cur);
   }
-  const sorted = Array.from(map.entries())
-    .map(([city, m]) => {
-      const pctActive = m.total > 0 ? Math.round((100 * m.active) / m.total) : 0;
-      const pctAttention = m.total > 0 ? Math.round((100 * m.attention) / m.total) : 0;
-      return {
-        city,
-        total: m.total,
-        tradePoints: m.tradePoints,
-        active: m.active,
-        top: m.top,
-        attention: m.attention,
-        potential: m.potential,
-        pctActive,
-        pctAttention,
-        intensity: 0,
-      };
-    })
+
+  const entries: Array<[string, CityConcentrationRow]> = clientCountByCity
+    ? (() => {
+        const cityKeys = new Set<string>();
+        clientCountByCity.forEach((_, key) => cityKeys.add(key));
+        if (tradePointCountByCity) {
+          tradePointCountByCity.forEach((_, key) => cityKeys.add(key));
+        }
+        return Array.from(cityKeys).map((city) => {
+          const local = map.get(city) ?? {
+            total: 0,
+            tradePoints: 0,
+            active: 0,
+            top: 0,
+            attention: 0,
+            potential: 0,
+          };
+          const total = clientCountByCity.get(city) ?? 0;
+          const tradePoints = tradePointCountByCity?.get(city) ?? 0;
+          const pctActive = total > 0 ? Math.round((100 * local.active) / total) : 0;
+          const pctAttention = total > 0 ? Math.round((100 * local.attention) / total) : 0;
+          return [
+            city,
+            {
+              city,
+              total,
+              tradePoints,
+              active: local.active,
+              top: local.top,
+              attention: local.attention,
+              potential: local.potential,
+              pctActive,
+              pctAttention,
+              intensity: 0,
+            },
+          ] as [string, CityConcentrationRow];
+        });
+      })()
+    : Array.from(map.entries()).map(([city, m]) => {
+        const pctActive = m.total > 0 ? Math.round((100 * m.active) / m.total) : 0;
+        const pctAttention = m.total > 0 ? Math.round((100 * m.attention) / m.total) : 0;
+        return [
+          city,
+          {
+            city,
+            total: m.total,
+            tradePoints: m.tradePoints,
+            active: m.active,
+            top: m.top,
+            attention: m.attention,
+            potential: m.potential,
+            pctActive,
+            pctAttention,
+            intensity: 0,
+          },
+        ] as [string, CityConcentrationRow];
+      });
+
+  const sorted = entries
+    .map(([, row]) => row)
     .sort((a, b) => b.total - a.total || a.city.localeCompare(b.city, "ru"));
 
   const maxTotal = sorted.reduce((mx, r) => Math.max(mx, r.total), 0) || 1;
