@@ -57,6 +57,11 @@ import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
 import { DistributionBreakdownRow } from "@/components/distribution-analytics/distribution-breakdown-row";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import {
+  buildClientCountByCityFromScopedDb,
+  buildTradePointCountByCityFromScopedDb,
+} from "@/lib/main-dashboard-city-stats";
 
 function countTradePointsForDealer(row: DealerRow, act: ReturnType<typeof useClientBaseTeamActualization>["mergedState"]): number {
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived).length;
@@ -194,6 +199,25 @@ export default function MainRopDetailPage() {
   const teamDistribution = useTradePointDistributionAggregate(
     actx.enabled && allowed ? teamTradePointIds : [],
     managementPlane.mergedState,
+  );
+
+  const scopedTpQ = useTradePointsScoped({
+    forUserId: ropId,
+    enabled: actx.enabled && allowed,
+  });
+  const tradePointCountByCity = useMemo(
+    () =>
+      scopedTpQ.data?.success === true
+        ? buildTradePointCountByCityFromScopedDb(scopedTpQ.data.tradePoints)
+        : undefined,
+    [scopedTpQ.data],
+  );
+  const clientCountByCity = useMemo(
+    () =>
+      scopedTpQ.data?.success === true
+        ? buildClientCountByCityFromScopedDb(scopedTpQ.data.tradePoints)
+        : undefined,
+    [scopedTpQ.data],
   );
 
   const tradePointIdsByManagerName = useMemo(() => {
@@ -338,6 +362,8 @@ export default function MainRopDetailPage() {
         <MainDashboardCityCoverage
           rows={clientRows}
           act={managementPlane.mergedState}
+          tradePointCountByCity={tradePointCountByCity}
+          clientCountByCity={clientCountByCity}
           testId="section-main-rop-city-coverage"
         />
       ) : null}

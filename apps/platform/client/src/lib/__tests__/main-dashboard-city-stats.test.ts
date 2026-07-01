@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import {
+  buildClientCountByCityFromScopedDb,
   buildMainDashboardCityTiles,
+  buildTradePointCountByCityFromScopedDb,
   dealerRowMatchesCityFilter,
   displayCityForDealerRow,
   filterCityTilesBySearch,
 } from "../main-dashboard-city-stats";
+import type { ScopedTradePointDto } from "../trade-points-scoped-api";
 import type { DealerRow, DealerTradePoint } from "../dealer-base-mock-data";
 
 const act = createEmptyActualizationState();
@@ -63,6 +66,33 @@ function tp(id: string): DealerTradePoint {
   };
 }
 
+function scopedTp(partial: Partial<ScopedTradePointDto> & { id: string; dealerId: string }): ScopedTradePointDto {
+  return {
+    externalKey: partial.id,
+    name: "ТТ",
+    city: "Ростов-на-Дону",
+    address: null,
+    format: null,
+    isActive: true,
+    isPrimary: false,
+    importanceTier: null,
+    dealerExternalKey: partial.dealerId,
+    dealerName: "Дилер",
+    dealerReleaseCode: null,
+    dealerCity: null,
+    dealerClientCategory: null,
+    managerUserId: null,
+    managerFullName: null,
+    regionalManagerUserId: null,
+    regionalManagerFullName: null,
+    teamId: null,
+    teamName: null,
+    ropUserId: null,
+    ropFullName: null,
+    ...partial,
+  };
+}
+
 {
   const tiles = buildMainDashboardCityTiles(
     [row({ id: "a", city: "Краснодар" }), row({ id: "b", city: "Краснодар" }), row({ id: "c", city: "" })],
@@ -100,6 +130,36 @@ function tp(id: string): DealerTradePoint {
   const voronezh = tiles.find((t) => t.city === "Воронеж");
   assert.equal(voronezh?.activeClients, 2);
   assert.equal(voronezh?.activeTradePoints, 2, "TP count from row.tradePoints even when act is empty");
+}
+
+// Scoped БД: клиенты и ТТ из одного источника, город только в БД.
+{
+  const scoped = [
+    scopedTp({ id: "tp-1", dealerId: "d-1", city: "Ростов-на-Дону" }),
+    scopedTp({ id: "tp-2", dealerId: "d-2", city: "Ростов-на-Дону" }),
+    scopedTp({ id: "tp-3", dealerId: "d-3", city: "Луганск" }),
+    scopedTp({ id: "tp-4", dealerId: "d-4", city: "Луганск", isActive: false }),
+  ];
+  const clientCountByCity = buildClientCountByCityFromScopedDb(scoped);
+  const tradePointCountByCity = buildTradePointCountByCityFromScopedDb(scoped);
+  assert.equal(clientCountByCity.get("Ростов-на-Дону"), 2);
+  assert.equal(tradePointCountByCity.get("Ростов-на-Дону"), 2);
+  assert.equal(clientCountByCity.get("Луганск"), 1, "inactive TP still counts dealer once");
+  assert.equal(tradePointCountByCity.get("Луганск"), 1, "inactive TP excluded from TP count");
+
+  const tiles = buildMainDashboardCityTiles(
+    [row({ id: "legacy", city: "Воронеж", tradePoints: [tp("legacy-tp")] })],
+    act,
+    tradePointCountByCity,
+    clientCountByCity,
+  );
+  assert.equal(tiles.some((t) => t.city === "Воронеж"), false, "legacy rows ignored when clientCountByCity set");
+  const rostov = tiles.find((t) => t.city === "Ростов-на-Дону");
+  assert.equal(rostov?.activeClients, 2);
+  assert.equal(rostov?.activeTradePoints, 2);
+  const luhansk = tiles.find((t) => t.city === "Луганск");
+  assert.equal(luhansk?.activeClients, 1);
+  assert.equal(luhansk?.activeTradePoints, 1);
 }
 
 console.log("main-dashboard-city-stats: ok");
