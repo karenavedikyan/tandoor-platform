@@ -205,16 +205,26 @@ function searchLocalAssignments(
   return matched;
 }
 
-export function buildLocalGlobalSearch(ctx: LocalGlobalSearchContext, query: string): GlobalSearchResult {
-  const limit = GLOBAL_SEARCH_LIMIT_PER_TYPE;
-  const scopedRows = buildScopedDealerRows(ctx);
+export function buildScopedDealerRowsForSearch(ctx: LocalGlobalSearchContext): DealerRow[] {
+  return buildScopedDealerRows(ctx);
+}
 
+export function matchLocalGlobalSearch(
+  ctx: LocalGlobalSearchContext,
+  scopedRows: DealerRow[],
+  query: string,
+): GlobalSearchResult {
+  const limit = GLOBAL_SEARCH_LIMIT_PER_TYPE;
   return {
     clients: searchLocalClients(scopedRows, query, limit),
     tradePoints: searchLocalTradePoints(ctx, scopedRows, query, limit),
     products: searchLocalProducts(query, limit),
     assignments: searchLocalAssignments(ctx.incomingAssignments, ctx.outgoingAssignments, query, limit),
   };
+}
+
+export function buildLocalGlobalSearch(ctx: LocalGlobalSearchContext, query: string): GlobalSearchResult {
+  return matchLocalGlobalSearch(ctx, buildScopedDealerRows(ctx), query);
 }
 
 export function emptyGlobalSearchResult(): GlobalSearchResult {

@@ -12,6 +12,8 @@ import * as dealerBaseRealScope from "@/lib/dealer-base-real-scope";
 import {
   buildDefaultLocalSearchContext,
   buildLocalGlobalSearch,
+  buildScopedDealerRowsForSearch,
+  matchLocalGlobalSearch,
   type LocalGlobalSearchContext,
 } from "../local-global-search";
 
@@ -285,4 +287,58 @@ describe("buildLocalGlobalSearch scope by role", () => {
     expect(() => buildLocalGlobalSearch(ctx, "тест")).not.toThrow();
     expect(buildLocalGlobalSearch(ctx, "тест").clients).toEqual([]);
   });
+});
+
+function expectEquivalentSearch(ctx: LocalGlobalSearchContext, query: string): void {
+  const legacy = buildLocalGlobalSearch(ctx, query);
+  const scopedRows = buildScopedDealerRowsForSearch(ctx);
+  const split = matchLocalGlobalSearch(ctx, scopedRows, query);
+  expect(split).toEqual(legacy);
+}
+
+describe("matchLocalGlobalSearch equivalence with buildLocalGlobalSearch", () => {
+  const queries = ["", "а", "альфа", "бета", "MA-ALPHA", "егоров"];
+
+  for (const query of queries) {
+    it(`director — query "${query}"`, () => {
+      expectEquivalentSearch(
+        baseCtx({
+          role: "director",
+          snap: directorSnap(),
+          orgScope: orgScopeWithBeta(),
+        }),
+        query,
+      );
+    });
+
+    it(`rop — query "${query}"`, () => {
+      expectEquivalentSearch(
+        baseCtx({
+          role: "rop",
+          snap: ropSnap(),
+          teamScope: teamScopeWithAlpha(),
+        }),
+        query,
+      );
+    });
+
+    it(`manager — query "${query}"`, () => {
+      const snapSpy = vi
+        .spyOn(dealerBaseRealScope, "roleScopedDealerRowsForReal")
+        .mockReturnValue([mockRows[0]!]);
+      expectEquivalentSearch(
+        baseCtx({
+          role: "manager",
+          snap: managerSnap(),
+          assignmentsScope: {
+            ownCodes: new Set(["MA-ALPHA"]),
+            teamCodes: new Set<string>(),
+            grantedCodes: new Set<string>(),
+          },
+        }),
+        query,
+      );
+      snapSpy.mockRestore();
+    });
+  }
 });
