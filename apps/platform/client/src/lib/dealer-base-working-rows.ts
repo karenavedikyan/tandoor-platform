@@ -12,10 +12,53 @@ import {
   roleScopedDealerRows,
   type DealerBaseAccessRole,
 } from "./dealer-base-role-views.js";
-import { roleScopedDealerRowsForReal } from "./dealer-base-real-scope.js";
+import type { DealerRow } from "./dealer-base-mock-data.js";
+import {
+  assignmentsScopeIsActive,
+  roleScopedDealerRowsForReal,
+  safeRoleScopedDealerRowsForReal,
+} from "./dealer-base-real-scope.js";
+import {
+  dealerExternalKeysFromOrgScope,
+  dealerExternalKeysFromTeamScope,
+} from "./dealer-scope-external-keys.js";
 import { getManagersForRopTeam } from "./rop-manager-filters.js";
 import type { ReleaseDemoProfile } from "./release-demo-profile.js";
 import type { SidebarNavRealScope } from "./sidebar-nav-real-scope.js";
+
+function scopeDealerRowsForRealCount(rows: DealerRow[], realScope: SidebarNavRealScope): DealerRow[] {
+  const { orgScope, assignmentsScope } = realScope;
+  if (!orgScope) return rows;
+
+  const access = orgScope.access;
+  if (realScope.platformRole === "rop" && access === "team_lead") {
+    if (!realScope.teamScope) return [];
+    const keys = dealerExternalKeysFromTeamScope(realScope.teamScope);
+    return rows.filter((r) => keys.has(r.id));
+  }
+  if (realScope.platformRole === "director" && access === "sales_director") {
+    if (!realScope.orgScopeData) return [];
+    const keys = dealerExternalKeysFromOrgScope(realScope.orgScopeData);
+    return rows.filter((r) => keys.has(r.id));
+  }
+  if (access === "team_lead" || access === "sales_director") {
+    return safeRoleScopedDealerRowsForReal(
+      rows,
+      orgScope.snap,
+      access,
+      undefined,
+      assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+    );
+  }
+
+  return roleScopedDealerRowsForReal(
+    rows,
+    orgScope.snap,
+    access,
+    undefined,
+    assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
+  );
+}
 
 export type BuildDealerBaseWorkingRowsInput = {
   profile: ReleaseDemoProfile;
@@ -74,13 +117,7 @@ export function buildDealerBaseWorkingRowsForCount(input: BuildDealerBaseWorking
 
   if (!actEnabled) {
     if (realScope?.ready && realScope.releaseDealerRows && realScope.orgScope) {
-      return roleScopedDealerRowsForReal(
-        realScope.releaseDealerRows,
-        realScope.orgScope.snap,
-        realScope.orgScope.access,
-        undefined,
-        realScope.assignmentsScope,
-      );
+      return scopeDealerRowsForRealCount(realScope.releaseDealerRows, realScope);
     }
     if (realScope?.isRealUser) {
       return [];
@@ -93,13 +130,7 @@ export function buildDealerBaseWorkingRowsForCount(input: BuildDealerBaseWorking
   });
 
   if (realScope?.ready && realScope.orgScope) {
-    return roleScopedDealerRowsForReal(
-      merged,
-      realScope.orgScope.snap,
-      realScope.orgScope.access,
-      undefined,
-      realScope.assignmentsScope,
-    );
+    return scopeDealerRowsForRealCount(merged, realScope);
   }
 
   return roleScopedDealerRows(merged, profile);

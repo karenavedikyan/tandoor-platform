@@ -95,6 +95,7 @@
     "test:clients-reassign-rop-sync": "vitest run shared/__tests__/clients-reassign-rop-sync.spec.ts",
     "test:reassign-rop": "vitest run shared/__tests__/reassign-rop.spec.ts",
     "test:global-search-scope": "vitest run client/src/lib/search/__tests__/local-global-search-scope.test.ts client/src/components/search/__tests__/global-search-error-boundary.test.tsx",
+    "test:dealer-base-working-rows-scope": "vitest run client/src/lib/__tests__/dealer-base-working-rows-scope.test.ts",
     "test:two-stage-trash": "tsx shared/__tests__/two-stage-trash.test.ts",
     "test:record-status": "tsx shared/__tests__/record-status.test.ts && tsx shared/__tests__/record-status-cascade.test.ts && vitest run server/migrations/__tests__/record-status-migration.spec.ts",
     "test:trade-point-set-primary": "tsx shared/__tests__/trade-point-set-primary.test.ts",

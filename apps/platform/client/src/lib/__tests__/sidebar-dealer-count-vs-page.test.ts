@@ -24,7 +24,9 @@ import {
 import { setDealerBaseRowsCache } from "../dealer-base-source";
 import { loadReleaseDemoProfile } from "../release-demo-profile";
 import { mergeTrashedDealersForUi, mergeTrashedTradePointsForUi } from "../dealer-overrides-runtime";
+import type { OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
 import type { SidebarNavRealScope } from "../sidebar-nav-real-scope";
+import { dealerExternalKeysFromOrgScope, dealerExternalKeysFromTeamScope } from "../dealer-scope-external-keys";
 
 const allRows = buildDealerRowsFromReleaseClients(getReleaseClients());
 setDealerBaseRowsCache(allRows);
@@ -63,13 +65,126 @@ function ropSnap(): OrgSnapshot {
   } as unknown as OrgSnapshot;
 }
 
-function realScope(snap: OrgSnapshot, access: "sales_manager" | "team_lead" | "sales_director", rows = allRows): SidebarNavRealScope {
+function teamScopeFromKeys(keys: string[]): TeamScopePayload {
+  return {
+    success: true,
+    team: { id: "team-1", name: "Команда", rop: { id: "rop-1", name: "РОП", email: "r@test" } },
+    members: [
+      {
+        user: { id: "mgr-1", name: "Менеджер", email: "m@test", role: "manager" },
+        totals: {
+          active_dealers: keys.length,
+          active_trade_points: 0,
+          trashed_dealers: 0,
+          trashed_trade_points: 0,
+          tp_status_active: 0,
+          tp_status_potential: 0,
+          tp_status_attention: 0,
+          dealer_no_status: 0,
+          avg_distribution: 0,
+        },
+        active_dealer_ids: keys,
+        active_dealer_external_keys: keys,
+        trashed_dealer_external_keys: [],
+        active_trade_points: [],
+      },
+    ],
+    team_totals: {
+      active_dealers: keys.length,
+      active_trade_points: 0,
+      trashed_dealers: 0,
+      trashed_trade_points: 0,
+      tp_status_active: 0,
+      tp_status_potential: 0,
+      tp_status_attention: 0,
+      dealer_no_status: 0,
+      avg_distribution: 0,
+    },
+  };
+}
+
+function orgScopeFromKeys(keys: string[]): OrgScopePayload {
+  return {
+    success: true,
+    org: { id: "org-1", name: "Орг" },
+    teams: [
+      {
+        team: { id: "team-1", name: "Команда", rop: { id: "rop-1", name: "РОП", email: "r@test" } },
+        members: [
+          {
+            user: { id: "mgr-1", name: "Менеджер", email: "m@test", role: "manager" },
+            totals: {
+              active_dealers: keys.length,
+              active_trade_points: 0,
+              trashed_dealers: 0,
+              trashed_trade_points: 0,
+              tp_status_active: 0,
+              tp_status_potential: 0,
+              tp_status_attention: 0,
+              dealer_no_status: 0,
+              avg_distribution: 0,
+            },
+            active_dealer_ids: keys,
+            active_dealer_external_keys: keys,
+            trashed_dealer_external_keys: [],
+            active_trade_points: [],
+          },
+        ],
+        team_totals: {
+          active_dealers: keys.length,
+          active_trade_points: 0,
+          trashed_dealers: 0,
+          trashed_trade_points: 0,
+          tp_status_active: 0,
+          tp_status_potential: 0,
+          tp_status_attention: 0,
+          dealer_no_status: 0,
+          avg_distribution: 0,
+        },
+      },
+    ],
+    orphan: {
+      label: "Без команды",
+      members: [],
+      totals: {
+        active_dealers: 0,
+        active_trade_points: 0,
+        trashed_dealers: 0,
+        trashed_trade_points: 0,
+        tp_status_active: 0,
+        tp_status_potential: 0,
+        tp_status_attention: 0,
+        dealer_no_status: 0,
+        avg_distribution: 0,
+      },
+    },
+    org_totals: {
+      active_dealers: keys.length,
+      active_trade_points: 0,
+      trashed_dealers: 0,
+      trashed_trade_points: 0,
+      tp_status_active: 0,
+      tp_status_potential: 0,
+      tp_status_attention: 0,
+      dealer_no_status: 0,
+      avg_distribution: 0,
+    },
+  };
+}
+
+function realScope(
+  snap: OrgSnapshot,
+  access: "sales_manager" | "team_lead" | "sales_director",
+  rows = allRows,
+  extra: Partial<SidebarNavRealScope> = {},
+): SidebarNavRealScope {
   return {
     isRealUser: true,
     loading: false,
     ready: true,
     releaseDealerRows: rows,
     orgScope: { snap, access },
+    ...extra,
   };
 }
 
@@ -110,12 +225,18 @@ const roles: Array<{ label: string; profile: ReleaseDemoProfile; scope: SidebarN
   {
     label: "team_lead",
     profile: { personaUserId: "rop-demo", role: "team_lead" } as ReleaseDemoProfile,
-    scope: realScope(ropSnap(), "team_lead"),
+    scope: realScope(ropSnap(), "team_lead", allRows, {
+      platformRole: "rop",
+      teamScope: teamScopeFromKeys(allRows.map((r) => r.id)),
+    }),
   },
   {
     label: "sales_director",
     profile: { personaUserId: "dir-demo", role: "sales_director" } as ReleaseDemoProfile,
-    scope: realScope(directorSnap(), "sales_director"),
+    scope: realScope(directorSnap(), "sales_director", allRows, {
+      platformRole: "director",
+      orgScopeData: orgScopeFromKeys(allRows.map((r) => r.id)),
+    }),
   },
   {
     label: "category_manager",
@@ -130,6 +251,10 @@ for (const { label, profile, scope } of roles) {
   const page = pageDealerTotal(profile, act, scope);
   const nav = sidebarDealerTotal(profile, act, scope);
   assert.equal(nav, page, `${label}: сайдбар == шапка /dealer-base`);
+  if (label === "category_manager") {
+    assert.equal(page, 0, `${label}: safe empty scope without director platformRole`);
+    continue;
+  }
   assert.ok(page != null && page > 0, `${label}: count > 0`);
 }
 
@@ -282,6 +407,8 @@ function countRealRopWithWrongPersona(
     ready: true,
     releaseDealerRows: allRows,
     orgScope: { snap: ropSnapFor(ropUserId, teamUuid), access: "team_lead" },
+    platformRole: "rop",
+    teamScope: teamScopeFromKeys(teamRows.map((r) => r.id)),
   };
   return countDealerBaseHeaderTotal({
     profile: WRONG_ROP_PERSONA_PROFILE,

@@ -28,6 +28,10 @@ import {
 import type { ActualizationState } from "../client-base-actualization-state.js";
 import type { UserRole } from "@shared/auth";
 import type { OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
+import {
+  dealerExternalKeysFromOrgScope,
+  dealerExternalKeysFromTeamScope,
+} from "../dealer-scope-external-keys.js";
 
 export type LocalGlobalSearchContext = {
   role: UserRole | null | undefined;
@@ -43,27 +47,6 @@ export type LocalGlobalSearchContext = {
   incomingAssignments: AssignmentDto[];
   outgoingAssignments: AssignmentDto[];
 };
-
-function dealerExternalKeysFromTeamScope(ts: TeamScopePayload): Set<string> {
-  return new Set(
-    ts.members.flatMap((m) => [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]),
-  );
-}
-
-function dealerExternalKeysFromOrgScope(os: OrgScopePayload): Set<string> {
-  const keys = new Set<string>();
-  for (const block of os.teams) {
-    for (const m of block.members) {
-      for (const k of m.active_dealer_external_keys) keys.add(k);
-      for (const k of m.trashed_dealer_external_keys) keys.add(k);
-    }
-  }
-  for (const m of os.orphan.members) {
-    for (const k of m.active_dealer_external_keys) keys.add(k);
-    for (const k of m.trashed_dealer_external_keys) keys.add(k);
-  }
-  return keys;
-}
 
 function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
   const access = ctx.role ? mapUserRoleToDealerBaseAccess(ctx.role) : mapSalesRoleToDealerBaseAccess(ctx.profile.role);
