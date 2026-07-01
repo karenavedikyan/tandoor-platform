@@ -20,6 +20,9 @@ const U_ROP_DEALER = "33333333-3333-4333-8333-333333333332";
 const U_ROP_TEAM = "33333333-3333-4333-8333-333333333333";
 const U_MGR_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const U_MGR_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const U_DEALER_MGR = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const U_DEALER_RM = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const U_DEALER_ROP = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
 type TpRow = {
   tp_id: string;
@@ -67,6 +70,7 @@ class MockResponsibilityDb implements PoolLike {
       const cityKey = params[2] as string | null;
       const rows = this.assignments.filter((a) => {
         if (a.scope_kind === "trade_point" && a.scope_key === tpId) return true;
+        if (dealerId && a.scope_kind === "dealer" && a.scope_key === dealerId) return true;
         if (dealerId && a.scope_kind === "client" && a.scope_key === dealerId) return true;
         if (cityKey && a.scope_kind === "city" && a.scope_key === cityKey) return true;
         return false;
@@ -374,6 +378,73 @@ describe("responsibility-resolver", () => {
     expect(resolved.rop.userName).toBe("ROP TP Legacy");
     expect(fetchedUserIds).not.toContain(U_RM_TP);
     expect(fetchedUserIds).not.toContain(U_ROP_TP);
+  });
+
+  it("resolves manager, RM and ROP from scope_kind=dealer assignments", async () => {
+    const db = new MockResponsibilityDb();
+    db.tradePoints.set("tp-dealer-only", {
+      tp_id: "tp-dealer-only",
+      dealer_id: DEALER_ID,
+      name: "Dealer scope TP",
+      city: "Москва",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.assignments.push(
+      { scope_kind: "dealer", scope_key: DEALER_ID, responsible_role: "manager", user_id: U_DEALER_MGR, user_name: "Понкратова Василиса Владимировна" },
+      { scope_kind: "dealer", scope_key: DEALER_ID, responsible_role: "regional_manager", user_id: U_DEALER_RM, user_name: "Мельник Виктор Викторович" },
+      { scope_kind: "dealer", scope_key: DEALER_ID, responsible_role: "rop", user_id: U_DEALER_ROP, user_name: "Купянский Родион" },
+    );
+
+    const resolved = await resolveResponsiblesForTradePoint(db, "tp-dealer-only");
+    expect(resolved.manager).toEqual({
+      userId: U_DEALER_MGR,
+      userName: "Понкратова Василиса Владимировна",
+      source: "assignment",
+      sourceLevel: "client",
+    });
+    expect(resolved.regional_manager).toEqual({
+      userId: U_DEALER_RM,
+      userName: "Мельник Виктор Викторович",
+      source: "assignment",
+      sourceLevel: "client",
+    });
+    expect(resolved.rop).toEqual({
+      userId: U_DEALER_ROP,
+      userName: "Купянский Родион",
+      source: "assignment",
+      sourceLevel: "client",
+    });
+  });
+
+  it("prefers trade_point assignment over dealer assignment for the same role", async () => {
+    const db = new MockResponsibilityDb();
+    db.tradePoints.set("tp-dealer-priority", {
+      tp_id: "tp-dealer-priority",
+      dealer_id: DEALER_ID,
+      name: "Priority over dealer",
+      city: "Москва",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.assignments.push(
+      { scope_kind: "trade_point", scope_key: "tp-dealer-priority", responsible_role: "manager", user_id: U_TP, user_name: "TP Manager" },
+      { scope_kind: "dealer", scope_key: DEALER_ID, responsible_role: "manager", user_id: U_DEALER_MGR, user_name: "Dealer Manager" },
+    );
+
+    const resolved = await resolveResponsiblesForTradePoint(db, "tp-dealer-priority");
+    expect(resolved.manager).toEqual({
+      userId: U_TP,
+      userName: "TP Manager",
+      source: "assignment",
+      sourceLevel: "trade_point",
+    });
   });
 
   it("sharedByRole is true when trade points have different responsible users", async () => {
