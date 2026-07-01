@@ -15,6 +15,10 @@ const MGR_ID = "e60f1a83-88ae-41f8-8c32-edd91f666e8d";
 const GRANTED_MGR_ID = "yakubova-uuid-0000-0000-000000000001";
 const TEAM_SKALABAN = "cfa2ab87-9fe9-4068-a0e4-347ddad7a5fa";
 const TEAM_KUPIANSKY = "team-kupiansky-uuid-000000000001";
+const RM_DROGO = "6fe22f7f-d8bb-4a16-92bb-5382034de831";
+const RM_BOGACHEV = "10d1abcd-ee9b-42ff-916f-e9d4c43c9bd2";
+const TEAM_SAPOZH = "team-sapozhkov-uuid-000000000002";
+const ROP_SAPOZH = "c36f625f-730e-4ae3-b118-bdb005d10b81";
 
 const VIEWER_TEAM: TradePointsOverviewViewerTeam = {
   teamId: TEAM_SKALABAN,
@@ -46,6 +50,8 @@ const MIXED_SCOPE_TPS = [
     team_name: "Команда Скалабан Александр",
     rop_user_id: ROP_ID,
     rop_full_name: "Скалабан Александр",
+    regional_manager_user_id: null,
+    regional_manager_full_name: null,
   },
   {
     id: "tp2",
@@ -68,6 +74,8 @@ const MIXED_SCOPE_TPS = [
     team_name: "Команда Скалабан Александр",
     rop_user_id: ROP_ID,
     rop_full_name: "Скалабан Александр",
+    regional_manager_user_id: null,
+    regional_manager_full_name: null,
   },
   {
     id: "tp3",
@@ -90,6 +98,36 @@ const MIXED_SCOPE_TPS = [
     team_name: "Команда Купянский Родион",
     rop_user_id: "ccffcf6e-2505-4eee-b257-ac65b60bb779",
     rop_full_name: "Купянский Родион",
+    regional_manager_user_id: null,
+    regional_manager_full_name: null,
+  },
+];
+
+const REGIONAL_DEALER_STATS = [
+  { team_id: TEAM_SKALABAN, rm_id: RM_DROGO, rm_name: "Дрогобицкий", dealer_count: "3" },
+  { team_id: TEAM_SKALABAN, rm_id: RM_BOGACHEV, rm_name: "Богачёв", dealer_count: "2" },
+  { team_id: TEAM_SAPOZH, rm_id: RM_DROGO, rm_name: "Дрогобицкий", dealer_count: "1" },
+];
+
+const MIXED_SCOPE_TPS_WITH_RM = [
+  {
+    ...MIXED_SCOPE_TPS[0]!,
+    regional_manager_user_id: RM_DROGO,
+    regional_manager_full_name: "Дрогобицкий",
+  },
+  {
+    ...MIXED_SCOPE_TPS[1]!,
+    regional_manager_user_id: RM_BOGACHEV,
+    regional_manager_full_name: "Богачёв",
+  },
+  {
+    ...MIXED_SCOPE_TPS[2]!,
+    team_id: TEAM_SAPOZH,
+    team_name: "Команда Сапожков",
+    rop_user_id: ROP_SAPOZH,
+    rop_full_name: "Сапожков",
+    regional_manager_user_id: RM_DROGO,
+    regional_manager_full_name: "Дрогобицкий",
   },
 ];
 
@@ -174,6 +212,10 @@ function mockPoolForOverview(role: string): PoolLike {
         return { rows: MIXED_SCOPE_TPS };
       }
 
+      if (s.includes("d_ov.regional_manager_id") && s.includes("GROUP BY")) {
+        return { rows: REGIONAL_DEALER_STATS };
+      }
+
       return { rows: [] };
     },
   };
@@ -215,6 +257,72 @@ function mockPoolForOverview(role: string): PoolLike {
   assert.equal(yakubova.tradePoints, 1);
   const kupianskyGroup = overview.ropGroups.find((g) => g.teamId === TEAM_KUPIANSKY);
   assert.equal(kupianskyGroup, undefined, "Не должно быть отдельной группы Купянского");
+}
+
+// overview-regional-managers: регионалы в managers команды с числами по зоне
+{
+  function mockPoolRegional(): PoolLike {
+    return {
+      query: async (sql: string, params?: unknown[]) => {
+        const s = sql.replace(/\s+/g, " ").trim();
+        if (s.includes("FROM trade_points tp") && s.includes("ORDER BY d.name")) {
+          if (s.includes("d.external_key = ANY")) {
+            const keys = (params?.[0] as string[]) ?? [];
+            return { rows: MIXED_SCOPE_TPS_WITH_RM.filter((tp) => keys.includes(tp.dealer_external_key)) };
+          }
+          return { rows: MIXED_SCOPE_TPS_WITH_RM };
+        }
+        if (s.includes("d_ov.regional_manager_id") && s.includes("GROUP BY")) {
+          return { rows: REGIONAL_DEALER_STATS };
+        }
+        if (s.includes("client_assignments ca") && s.includes("team_id = ANY")) {
+          return { rows: [{ client_code: "C001" }, { client_code: "C002" }, { client_code: "C003" }] };
+        }
+        if (s.includes("FROM dealers d") && s.includes("release_code = ANY")) {
+          const codes = (params?.[0] as string[]) ?? [];
+          return {
+            rows: codes.map((c) => ({ id: c, external_key: c, status: "active" })),
+          };
+        }
+        if (s.includes("FROM dealers d") && s.includes("dealer_overrides") && !s.includes("release_code = ANY")) {
+          return {
+            rows: [
+              { id: "d1", external_key: "client-a", status: "active" },
+              { id: "d2", external_key: "client-b", status: "active" },
+              { id: "d3", external_key: "client-c", status: "active" },
+            ],
+          };
+        }
+        if (s.includes("COUNT(*) FILTER") && s.includes("trade_points")) {
+          return { rows: [{ active_tps: "3", trashed_tps: "0" }] };
+        }
+        if (s.includes("client_assignments WHERE responsible_user_id")) return { rows: [] };
+        if (s.includes("rop_client_grants")) return { rows: [] };
+        if (s.includes("FROM dealer_overrides d_ov") && s.includes("pending_admin")) return { rows: [{ n: "0" }] };
+        if (s.includes("FROM trade_point_overrides tpo") && s.includes("pending_admin")) return { rows: [{ n: "0" }] };
+        if (s.includes("FROM user_team_memberships")) return { rows: [] };
+        return { rows: [] };
+      },
+    };
+  }
+
+  const pool = mockPoolRegional();
+  const overview = await buildTradePointsOverviewFromDb(pool, ADMIN_ID, "admin", undefined, null);
+  const skalaban = overview.ropGroups.find((g) => g.teamId === TEAM_SKALABAN);
+  assert.ok(skalaban, "Skalaban group");
+  const drogoSk = skalaban!.managers.find((m) => m.userId === RM_DROGO);
+  assert.ok(drogoSk?.isRegional, "Drogo regional in Skalaban");
+  assert.equal(drogoSk!.clientsWithTp, 3);
+  const bogSk = skalaban!.managers.find((m) => m.userId === RM_BOGACHEV);
+  assert.ok(bogSk?.isRegional);
+  assert.equal(bogSk!.clientsWithTp, 2);
+
+  const sapozh = overview.ropGroups.find((g) => g.teamId === TEAM_SAPOZH);
+  assert.ok(sapozh, "Sapozhkov group");
+  const drogoSap = sapozh!.managers.find((m) => m.userId === RM_DROGO);
+  assert.ok(drogoSap?.isRegional);
+  assert.equal(drogoSap!.clientsWithTp, 1);
+  assert.notEqual(drogoSk!.clientsWithTp, drogoSap!.clientsWithTp, "territorial counts differ per team");
 }
 
 console.log("trade-points-overview-grouping.test.ts: ok");

@@ -143,6 +143,7 @@ export function managerCardFromOverview(m: TradePointsOverviewRopManager) {
     withoutPhoto: m.withoutPhoto,
     notFilled: m.notFilled,
     withPhoto,
+    isRegional: m.isRegional === true,
     segments: buildTpStateSegments(withPhoto, m.withoutPhoto, m.notFilled),
     shellHref: managerShellHref(m.userId),
   };
@@ -235,6 +236,19 @@ export function filterManagersToTradePointsOverview<T extends { managerId: strin
   return managers.filter((m) => overviewManagerIds.has(m.managerId));
 }
 
+/** Разбить карточки менеджеров на продажников и региональных (для секций кокпита). */
+export function splitManagersByRegionalRole<T extends { isRegional?: boolean }>(
+  managers: T[],
+): { salesManagers: T[]; regionalManagers: T[] } {
+  const salesManagers: T[] = [];
+  const regionalManagers: T[] = [];
+  for (const m of managers) {
+    if (m.isRegional) regionalManagers.push(m);
+    else salesManagers.push(m);
+  }
+  return { salesManagers, regionalManagers };
+}
+
 function managerIdentityKeys(managerId: string): Set<string> {
   const keys = new Set<string>();
   keys.add(managerId);
@@ -302,6 +316,7 @@ export function unionCatalogManagersWithOverviewCards(
       isExternal: true,
       externalTeamName: null,
       countsFromServerTotals: true,
+      isRegional: card.isRegional,
     });
   }
   return [...base, ...added];

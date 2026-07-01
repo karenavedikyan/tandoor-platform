@@ -17,6 +17,7 @@ import {
   buildRopGroups,
   findManagerInRopGroups,
   matchesManagerForDealerRow,
+  matchesRegionalManagerForDealerRow,
 } from "../dealer-base-management-view-model";
 
 const TEAM = "team-kupiansky";
@@ -348,6 +349,35 @@ const teamRows = [
   const holders = groups.flatMap((g) => g.managers).filter((m) => m.rows.some((x) => x.id === r.id));
   assert.equal(holders.length, 1);
   assert.equal(holders[0]!.managerId, MGR_YAKUBOVA);
+}
+
+{
+  const RM_UUID = "10d1abcd-ee9b-42ff-916f-e9d4c43c9bd2";
+  const r = row("client-rm", {
+    releaseCode: "MA-RM",
+    regionalManager: "Богачёв Денис",
+    responsibles: { regionalManager: "Богачёв Денис", salesManager: "Якубова", director: "РОП" },
+    manager: "Якубова",
+    releaseManagerId: MGR_YAKUBOVA,
+  });
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", {}), true);
+  assert.equal(matchesRegionalManagerForDealerRow(r, RM_UUID, "Богачёв", {}), true);
+  assert.equal(matchesRegionalManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", {}), false);
+
+  const snap = {
+    me: { id: "director", role: "director" as const },
+    users: [
+      { id: RM_UUID, role: "regional_manager" as const, teamId: TEAM, fullName: "Богачёв" },
+      { id: MGR_YAKUBOVA, role: "manager" as const, teamId: TEAM, fullName: "Якубова" },
+    ],
+    teams: [{ id: TEAM, name: "Купянский", ropUserId: "rop-1", ropName: "Купянский" }],
+  };
+  const managers = aggregateManagersForTeam(TEAM, [r], snap as never);
+  const rmCard = managers.find((m) => m.isRegional);
+  assert.ok(rmCard, "regional manager card");
+  assert.equal(rmCard!.rows.length, 1);
+  const salesCard = managers.find((m) => !m.isRegional && m.rows.length > 0);
+  assert.ok(salesCard, "sales manager still matched");
 }
 
 console.log("dealer-base-management-view-model.test.ts: OK");

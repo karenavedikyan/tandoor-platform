@@ -4,7 +4,8 @@
 
 import type { UserRole } from "./auth.js";
 import type { PoolLike } from "./responsibility-resolver.js";
-import { computeDbScopeForUser } from "./db-scope-formula.js";
+import { computeDbScopeForUser, DEALER_OVERRIDE_JOIN } from "./db-scope-formula.js";
+import { dealerJoinStatusActive } from "./record-status.js";
 import {
   fetchScopedTradePointsRows,
   mapScopedTradePointRow,
@@ -37,6 +38,8 @@ export type TradePointsOverviewDbManager = {
   cities: number;
   withoutPhoto: number;
   notFilled: number;
+  /** Региональный менеджер (dealer_overrides.regional_manager_id), не продажник. */
+  isRegional?: boolean;
 };
 
 export type TradePointsOverviewDbRopGroup = {
@@ -94,6 +97,130 @@ function managerName(tp: ScopedTradePointDto): string {
 
 function teamKey(tp: ScopedTradePointDto): string {
   return tp.teamId ?? "__no_team__";
+}
+
+type RegionalManagerDealerStat = {
+  fullName: string;
+  dealerCount: number;
+};
+
+/** Клиенты регионала в зоне команды (dealer_overrides.regional_manager_id ∩ scope). */
+export async function fetchRegionalManagerDealerCountsByTeam(
+  pool: PoolLike,
+  scopedDealerKeys: string[],
+  viewerTeam?: TradePointsOverviewViewerTeam | null,
+): Promise<Map<string, Map<string, RegionalManagerDealerStat>>> {
+  const out = new Map<string, Map<string, RegionalManagerDealerStat>>();
+  if (scopedDealerKeys.length === 0) return out;
+
+  const q = await pool.query<{
+    team_id: string;
+    rm_id: string;
+    rm_name: string | null;
+    dealer_count: string;
+  }>(
+    `SELECT
+       COALESCE(
+         (SELECT t.id::text FROM teams t WHERE t.rop_user_id = d_ov.rop_id LIMIT 1),
+         ca.team_id::text,
+         '__no_team__'
+       ) AS team_id,
+       d_ov.regional_manager_id::text AS rm_id,
+       rmu.full_name AS rm_name,
+       COUNT(DISTINCT d.external_key)::text AS dealer_count
+     FROM dealers d
+     ${DEALER_OVERRIDE_JOIN}
+     LEFT JOIN users rmu ON rmu.id = d_ov.regional_manager_id
+     LEFT JOIN client_assignments ca ON ca.client_code = upper(d.release_code)
+     WHERE d.external_key = ANY($1::text[])
+       AND d_ov.regional_manager_id IS NOT NULL
+       AND ${dealerJoinStatusActive("d_ov")}
+     GROUP BY 1, 2, 3`,
+    [scopedDealerKeys],
+  );
+
+  for (const row of q.rows) {
+    const teamId = viewerTeam ? viewerTeam.teamId : row.team_id;
+    const rmId = row.rm_id?.trim();
+    if (!teamId || !rmId) continue;
+    let teamMap = out.get(teamId);
+    if (!teamMap) {
+      teamMap = new Map();
+      out.set(teamId, teamMap);
+    }
+    teamMap.set(rmId, {
+      fullName: row.rm_name?.trim() || "—",
+      dealerCount: Number(row.dealer_count) || 0,
+    });
+  }
+  return out;
+}
+
+function buildRegionalManagerTpBuckets(
+  tradePoints: ScopedTradePointDto[],
+  viewerTeam?: TradePointsOverviewViewerTeam | null,
+): Map<string, Map<string, { fullName: string; tps: ScopedTradePointDto[] }>> {
+  const buckets = new Map<string, Map<string, { fullName: string; tps: ScopedTradePointDto[] }>>();
+  for (const tp of tradePoints) {
+    const rmId = tp.regionalManagerUserId?.trim();
+    if (!rmId) continue;
+    const tk = viewerTeam ? viewerTeam.teamId : teamKey(tp);
+    let teamMap = buckets.get(tk);
+    if (!teamMap) {
+      teamMap = new Map();
+      buckets.set(tk, teamMap);
+    }
+    let mgr = teamMap.get(rmId);
+    if (!mgr) {
+      mgr = { fullName: tp.regionalManagerFullName?.trim() || "—", tps: [] };
+      teamMap.set(rmId, mgr);
+    }
+    mgr.tps.push(tp);
+  }
+  return buckets;
+}
+
+function appendRegionalManagersToGroup(
+  managersArr: TradePointsOverviewDbManager[],
+  teamId: string,
+  regionalTpBuckets: Map<string, Map<string, { fullName: string; tps: ScopedTradePointDto[] }>>,
+  regionalDealerCounts: Map<string, Map<string, RegionalManagerDealerStat>>,
+  showcaseStatsByTpId?: Map<string, { withoutPhoto: boolean; notFilled: boolean }>,
+): TradePointsOverviewDbManager[] {
+  const existingIds = new Set(managersArr.map((m) => m.userId).filter(Boolean));
+  const tpByRm: Map<string, { fullName: string; tps: ScopedTradePointDto[] }> =
+    regionalTpBuckets.get(teamId) ?? new Map();
+  const dealerByRm: Map<string, RegionalManagerDealerStat> =
+    regionalDealerCounts.get(teamId) ?? new Map();
+  const rmIds = new Set<string>([...Array.from(tpByRm.keys()), ...Array.from(dealerByRm.keys())]);
+
+  for (const rmId of Array.from(rmIds)) {
+    if (existingIds.has(rmId)) continue;
+    const tpEntry = tpByRm.get(rmId);
+    const dealerEntry = dealerByRm.get(rmId);
+    const tps = tpEntry?.tps ?? [];
+    const clientSet = new Set(tps.map((tp) => tp.dealerExternalKey));
+    const citySet = new Set(tps.map((tp) => cityKeyForTp(tp)).filter((c) => c !== "__no_city__"));
+    let mgrWithoutPhoto = 0;
+    let mgrNotFilled = 0;
+    for (const tp of tps) {
+      const dbNotFilled = !tp.address?.trim() || !(tp.city ?? tp.dealerCity)?.trim();
+      const sh = showcaseStatsByTpId?.get(tp.externalKey) ?? showcaseStatsByTpId?.get(tp.id);
+      if (sh?.withoutPhoto) mgrWithoutPhoto += 1;
+      if (sh?.notFilled ?? dbNotFilled) mgrNotFilled += 1;
+    }
+    managersArr.push({
+      userId: rmId,
+      fullName: dealerEntry?.fullName ?? tpEntry?.fullName ?? "—",
+      tradePoints: tps.length,
+      clientsWithTp: dealerEntry?.dealerCount ?? clientSet.size,
+      cities: citySet.size,
+      withoutPhoto: mgrWithoutPhoto,
+      notFilled: mgrNotFilled,
+      isRegional: true,
+    });
+  }
+  return managersArr;
 }
 
 export async function buildTradePointsOverviewFromDb(
@@ -218,8 +345,32 @@ export async function buildTradePointsOverviewFromDb(
     }
   }
 
+  const regionalTpBuckets = buildRegionalManagerTpBuckets(tradePoints, viewerTeam);
+  const regionalDealerCounts =
+    role === "regional_manager"
+      ? new Map<string, Map<string, RegionalManagerDealerStat>>()
+      : await fetchRegionalManagerDealerCountsByTeam(pool, scope.active_dealer_external_keys, viewerTeam);
+
+  for (const teamId of Array.from(
+    new Set<string>([...Array.from(regionalDealerCounts.keys()), ...Array.from(regionalTpBuckets.keys())]),
+  )) {
+    if (teamAgg.has(teamId)) continue;
+    const sampleBucket = regionalTpBuckets.get(teamId);
+    const sampleTp = sampleBucket
+      ? Array.from(sampleBucket.values()).find((v) => v.tps.length > 0)?.tps[0]
+      : undefined;
+    teamAgg.set(teamId, {
+      teamId: teamId === "__no_team__" ? null : teamId,
+      teamName: sampleTp?.teamName?.trim() || "Без команды",
+      ropUserId: sampleTp?.ropUserId ?? null,
+      ropFullName: sampleTp?.ropFullName?.trim() || "—",
+      managers: new Map(),
+    });
+  }
+
   const ropGroups: TradePointsOverviewDbRopGroup[] = Array.from(teamAgg.values()).map((g) => {
-    const managersArr: TradePointsOverviewDbManager[] = Array.from(g.managers.entries()).map(
+    const teamIdForRegional = g.teamId ?? "__no_team__";
+    let managersArr: TradePointsOverviewDbManager[] = Array.from(g.managers.entries()).map(
       ([userId, { fullName, tps }]) => {
         const clientSet = new Set(tps.map((tp) => tp.dealerExternalKey));
         const citySet = new Set(tps.map((tp) => cityKeyForTp(tp)).filter((c) => c !== "__no_city__"));
@@ -241,6 +392,16 @@ export async function buildTradePointsOverviewFromDb(
           notFilled: mgrNotFilled,
         };
       },
+    );
+    managersArr = appendRegionalManagersToGroup(
+      managersArr,
+      teamIdForRegional,
+      regionalTpBuckets,
+      regionalDealerCounts,
+      showcaseStatsByTpId,
+    );
+    managersArr.sort(
+      (a, b) => b.tradePoints - a.tradePoints || a.fullName.localeCompare(b.fullName, "ru"),
     );
     const groupTps = Array.from(g.managers.values()).flatMap((m) => m.tps);
     const groupClientSet = new Set(groupTps.map((tp) => tp.dealerExternalKey));
@@ -264,9 +425,7 @@ export async function buildTradePointsOverviewFromDb(
       cities: groupCitySet.size,
       withoutPhoto: groupWithoutPhoto,
       notFilled: groupNotFilled,
-      managers: managersArr.sort(
-        (a, b) => b.tradePoints - a.tradePoints || a.fullName.localeCompare(b.fullName, "ru"),
-      ),
+      managers: managersArr,
     };
   });
   ropGroups.sort((a, b) => b.tradePoints - a.tradePoints || a.teamName.localeCompare(b.teamName, "ru"));

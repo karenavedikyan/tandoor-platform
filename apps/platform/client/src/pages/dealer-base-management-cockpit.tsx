@@ -111,6 +111,7 @@ import {
   buildTradePointsOverviewDisplayIndex,
   formatOverviewScopedCount,
   resolveManagerApiUserId,
+  splitManagersByRegionalRole,
   unionCatalogManagersWithOverviewCards,
 } from "@/lib/trade-points-overview-view-model";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
@@ -631,7 +632,8 @@ export function DealerBaseManagementCockpit({
     const map = new Map<
       string,
       {
-        sortedManagers: Array<ManagerRowModel & { id: string; fullName: string }>;
+        salesManagers: Array<ManagerRowModel & { id: string; fullName: string }>;
+        regionalManagers: Array<ManagerRowModel & { id: string; fullName: string }>;
         heatMap: Record<string, ManagerHeatLevel>;
       }
     >();
@@ -639,18 +641,30 @@ export function DealerBaseManagementCockpit({
       const teamKey = g.teamId ?? "__no_rop__";
       if (!openSet.has(teamKey)) continue;
       const displayManagers = managersForTeamDisplay(g.managers, teamKey);
-      const heatEntries = displayManagers.map((m) => ({
-        id: m.managerId,
-        clientsActive: resolveManagerClients(m) ?? 0,
-        tradePointsActive: resolveManagerTp(m) ?? 0,
-      }));
-      const heatMap = computeManagerHeatMap(heatEntries);
-      const sortedManagers = sortManagersByHeat(
-        displayManagers.map((m) => ({ ...m, id: m.managerId, fullName: m.name })),
-        heatMap,
-        heatEntries,
-      );
-      map.set(teamKey, { sortedManagers, heatMap });
+      const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
+
+      const sortSection = (managers: ManagerRowModel[]) => {
+        const heatEntries = managers.map((m) => ({
+          id: m.managerId,
+          clientsActive: resolveManagerClients(m) ?? 0,
+          tradePointsActive: resolveManagerTp(m) ?? 0,
+        }));
+        const heatMap = computeManagerHeatMap(heatEntries);
+        const sorted = sortManagersByHeat(
+          managers.map((m) => ({ ...m, id: m.managerId, fullName: m.name })),
+          heatMap,
+          heatEntries,
+        );
+        return { sorted, heatMap };
+      };
+
+      const salesView = sortSection(salesManagers);
+      const regionalView = sortSection(regionalManagers);
+      map.set(teamKey, {
+        salesManagers: salesView.sorted,
+        regionalManagers: regionalView.sorted,
+        heatMap: { ...salesView.heatMap, ...regionalView.heatMap },
+      });
     }
     return map;
   }, [ropGroups, openOverviewTeamIds, resolveManagerTp, resolveManagerClients, managersForTeamDisplay]);
@@ -1139,17 +1153,61 @@ export function DealerBaseManagementCockpit({
                                 Детали команды
                               </Button>
                             </div>
-                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2" data-testid={`grid-managers-${teamKey}`}>
-                              {managersView.sortedManagers.map((m) => (
-                                <ManagerTeamCard
-                                  key={m.managerId}
-                                  manager={{ ...m, active: resolveManagerClients(m) ?? 0, outlets: resolveManagerTp(m) ?? 0 }}
-                                  clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m), m.active)}
-                                  tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
-                                  ropName={g.ropName}
-                                  heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
-                                />
-                              ))}
+                            <div className="space-y-3" data-testid={`grid-managers-${teamKey}`}>
+                              {managersView.salesManagers.length > 0 ? (
+                                <div className="space-y-2">
+                                  {managersView.regionalManagers.length > 0 ? (
+                                    <h4
+                                      className="text-xs font-semibold text-foreground"
+                                      data-testid={`heading-sales-managers-${teamKey}`}
+                                    >
+                                      Менеджеры по продажам
+                                    </h4>
+                                  ) : null}
+                                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                    {managersView.salesManagers.map((m) => (
+                                      <ManagerTeamCard
+                                        key={m.managerId}
+                                        manager={{
+                                          ...m,
+                                          active: resolveManagerClients(m) ?? 0,
+                                          outlets: resolveManagerTp(m) ?? 0,
+                                        }}
+                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m), m.active)}
+                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
+                                        ropName={g.ropName}
+                                        heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
+                              {managersView.regionalManagers.length > 0 ? (
+                                <div className="space-y-2">
+                                  <h4
+                                    className="text-xs font-semibold text-foreground"
+                                    data-testid={`heading-regional-managers-${teamKey}`}
+                                  >
+                                    Региональные менеджеры
+                                  </h4>
+                                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                                    {managersView.regionalManagers.map((m) => (
+                                      <ManagerTeamCard
+                                        key={m.managerId}
+                                        manager={{
+                                          ...m,
+                                          active: resolveManagerClients(m) ?? 0,
+                                          outlets: resolveManagerTp(m) ?? 0,
+                                        }}
+                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m), m.active)}
+                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
+                                        ropName={g.ropName}
+                                        heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </div>
                           </>
                         ) : null}
@@ -1441,10 +1499,44 @@ export function DealerBaseManagementCockpit({
         {ropGroups.map((g) => {
           const teamKey = g.teamId ?? "__no_rop__";
           const displayManagers = managersForTeamDisplay(g.managers, teamKey);
+          const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
           const maxMgrActive = Math.max(
             1,
             ...displayManagers.map((m) => resolveManagerClients(m) ?? m.active),
           );
+          const renderLegacyManagerCard = (m: ManagerRowModel) => {
+            const mgrClients = resolveManagerClients(m) ?? m.active;
+            const share = Math.round((mgrClients / maxMgrActive) * 100);
+            return (
+              <button
+                key={m.managerId}
+                type="button"
+                className="rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/50"
+                data-testid={`button-client-base-manager-open-${m.managerId}`}
+                onClick={() => setDetail({ kind: "manager", teamId: g.teamId, managerId: m.managerId })}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="truncate text-sm font-semibold text-[#222631]" data-testid={`card-client-base-manager-${m.managerId}`}>
+                    {m.name}
+                  </p>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
+                </div>
+                <p className="mt-1 text-[11px] text-[#8F96B0]">
+                  активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m), m.active)}</span>
+                  {" · "}
+                  ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m), m.outlets)}</span>
+                  {" · "}
+                  сегм. {m.topSegmentLabel}
+                </p>
+                <p className="mt-0.5 text-[11px] text-[#8F96B0]">
+                  потенц. {m.potential} · вним. {m.attention}
+                </p>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
+                  <div className="h-full rounded-full bg-[#9ACA3C]/75" style={{ width: `${share}%` }} />
+                </div>
+              </button>
+            );
+          };
           return (
             <AccordionItem key={g.teamId} value={g.teamId} className="border-[#E3E6F3]" data-testid={`card-client-base-rop-${g.teamId}`}>
               <AccordionTrigger
@@ -1469,42 +1561,25 @@ export function DealerBaseManagementCockpit({
                     Детали команды
                   </Button>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2" data-testid={`section-client-base-rop-members-${g.teamId}`}>
-                  {displayManagers.map((m) => {
-                    const mgrClients = resolveManagerClients(m) ?? m.active;
-                    const share = Math.round((mgrClients / maxMgrActive) * 100);
-                    return (
-                      <button
-                        key={m.managerId}
-                        type="button"
-                        className="rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/50"
-                        data-testid={`button-client-base-manager-open-${m.managerId}`}
-                        onClick={() => setDetail({ kind: "manager", teamId: g.teamId, managerId: m.managerId })}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-[#222631]" data-testid={`card-client-base-manager-${m.managerId}`}>
-                            {m.name}
-                          </p>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
-                        </div>
-                        <p className="mt-1 text-[11px] text-[#8F96B0]">
-                          активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m), m.active)}</span>
-                          
-                          {" · "}
-                          ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m), m.outlets)}</span>
-                          
-                          {" · "}
-                          сегм. {m.topSegmentLabel}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-[#8F96B0]">
-                          потенц. {m.potential} · вним. {m.attention}
-                        </p>
-                        <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
-                          <div className="h-full rounded-full bg-[#9ACA3C]/75" style={{ width: `${share}%` }} />
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="space-y-3" data-testid={`section-client-base-rop-members-${g.teamId}`}>
+                  {salesManagers.length > 0 ? (
+                    <div className="space-y-2">
+                      {regionalManagers.length > 0 ? (
+                        <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-sales-managers-${g.teamId}`}>
+                          Менеджеры по продажам
+                        </h4>
+                      ) : null}
+                      <div className="grid gap-2 sm:grid-cols-2">{salesManagers.map(renderLegacyManagerCard)}</div>
+                    </div>
+                  ) : null}
+                  {regionalManagers.length > 0 ? (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-regional-managers-${g.teamId}`}>
+                        Региональные менеджеры
+                      </h4>
+                      <div className="grid gap-2 sm:grid-cols-2">{regionalManagers.map(renderLegacyManagerCard)}</div>
+                    </div>
+                  ) : null}
                 </div>
               </AccordionContent>
             </AccordionItem>
