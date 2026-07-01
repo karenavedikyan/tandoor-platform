@@ -496,6 +496,7 @@ export function DealerBaseManagementCockpit({
   });
   const overviewTradePointsCount = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;
   const overviewTradePointsLoading = tradePointsOverviewQ.isLoading && !tradePointsOverviewQ.data;
+  const overviewTpReady = Boolean(tradePointsOverviewQ.data);
   const tpKpiCount = overviewTradePointsCount ?? structure.outlets;
   const tpCountDisplay = (): string =>
     overviewTradePointsLoading
@@ -503,6 +504,11 @@ export function DealerBaseManagementCockpit({
       : overviewTradePointsCount != null
         ? String(overviewTradePointsCount)
         : String(structure.outlets);
+  const formatScopedTpCount = (value: number | null): string => {
+    if (overviewTradePointsLoading) return "…";
+    if (!overviewTpReady) return "—";
+    return String(value ?? 0);
+  };
 
   const overviewByManagerId = useMemo<Map<string, number>>(() => {
     const out = new Map<string, number>();
@@ -542,20 +548,22 @@ export function DealerBaseManagementCockpit({
   }, [tradePointsOverviewQ.data, orgTeamCtx?.snap]);
 
   const resolveTeamTp = useCallback(
-    (g: { teamId?: string | null; ropUserId?: string | null; outlets: number }) => {
+    (g: { teamId?: string | null; ropUserId?: string | null; outlets: number }): number | null => {
+      if (!overviewTpReady) return null;
       const key = String(g.teamId ?? g.ropUserId ?? "__no_rop__");
-      return overviewByTeamId.get(key) ?? g.outlets;
+      return overviewByTeamId.get(key) ?? 0;
     },
-    [overviewByTeamId],
+    [overviewTpReady, overviewByTeamId],
   );
 
   const resolveManagerTp = useCallback(
-    (m: { managerId?: string; userId?: string; outlets: number }) => {
+    (m: { managerId?: string; userId?: string; outlets: number }): number | null => {
+      if (!overviewTpReady) return null;
       const key = String(m.managerId ?? m.userId ?? "");
-      if (!key) return m.outlets;
-      return overviewByManagerId.get(key) ?? m.outlets;
+      if (!key) return 0;
+      return overviewByManagerId.get(key) ?? 0;
     },
-    [overviewByManagerId],
+    [overviewTpReady, overviewByManagerId],
   );
 
   const ropGroupManagersViewByTeamKey = useMemo(() => {
@@ -573,7 +581,7 @@ export function DealerBaseManagementCockpit({
       const heatEntries = g.managers.map((m) => ({
         id: m.managerId,
         clientsActive: m.active,
-        tradePointsActive: resolveManagerTp(m),
+        tradePointsActive: resolveManagerTp(m) ?? 0,
       }));
       const heatMap = computeManagerHeatMap(heatEntries);
       const sortedManagers = sortManagersByHeat(
@@ -1001,7 +1009,7 @@ export function DealerBaseManagementCockpit({
                         <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
                           <span className="truncate text-sm font-semibold text-foreground">{g.ropName}</span>
                           <span className="text-[11px] text-muted-foreground">
-                            менеджеров {g.managers.length} · клиенты {g.active} · ТТ {resolveTeamTp(g)}
+                            менеджеров {g.managers.length} · клиенты {g.active} · ТТ {formatScopedTpCount(resolveTeamTp(g))}
                           </span>
                         </div>
                       </AccordionTrigger>
@@ -1030,7 +1038,8 @@ export function DealerBaseManagementCockpit({
                               {managersView.sortedManagers.map((m) => (
                                 <ManagerTeamCard
                                   key={m.managerId}
-                                  manager={{ ...m, outlets: resolveManagerTp(m) }}
+                                  manager={{ ...m, outlets: resolveManagerTp(m) ?? 0 }}
+                                  tpCountDisplay={formatScopedTpCount(resolveManagerTp(m))}
                                   ropName={g.ropName}
                                   heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                                 />
@@ -1091,7 +1100,7 @@ export function DealerBaseManagementCockpit({
                 {isKpiDetail
                   ? "Список клиентов по выбранной категории"
                   : detail?.kind === "manager_overview" && selectedManager
-                    ? `Команда: ${selectedManagerRopName} · клиентов ${selectedManagerClients.length} · ТТ ${resolveManagerTp(selectedManager)}`
+                    ? `Команда: ${selectedManagerRopName} · клиентов ${selectedManagerClients.length} · ТТ ${formatScopedTpCount(resolveManagerTp(selectedManager))}`
                     : detail?.kind === "manager_overview"
                       ? "Клиенты по данным базы (назначения и seed)"
                       : "Реальные данные из актуализации"}
@@ -1147,7 +1156,7 @@ export function DealerBaseManagementCockpit({
                     >
                       <p className="truncate text-sm font-semibold text-foreground">{m.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        активные {m.active} · ТТ {resolveManagerTp(m)} · потенц. {m.potential} · вним. {m.attention}
+                        активные {m.active} · ТТ {formatScopedTpCount(resolveManagerTp(m))} · потенц. {m.potential} · вним. {m.attention}
                       </p>
                     </button>
                   ))}
@@ -1331,7 +1340,7 @@ export function DealerBaseManagementCockpit({
                     {g.ropName}
                   </span>
                   <span className="text-[11px] text-[#8F96B0]">
-                    клиенты {g.active} · ТТ {resolveTeamTp(g)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
+                    клиенты {g.active} · ТТ {formatScopedTpCount(resolveTeamTp(g))} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
                     {g.managerCatalogCount}
                   </span>
                 </div>
@@ -1364,7 +1373,7 @@ export function DealerBaseManagementCockpit({
                           активные <span className="text-[#222631]">{m.active}</span>
                           
                           {" · "}
-                          ТТ <span className="text-[#222631]">{resolveManagerTp(m)}</span>
+                          ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m))}</span>
                           
                           {" · "}
                           сегм. {m.topSegmentLabel}
