@@ -49,6 +49,7 @@ import {
 import {
   buildManagerDashboardModel,
   findManagerInRopGroups,
+  resolveManagerDetailObservationCtx,
 } from "@/lib/dealer-base-manager-dashboard-view-model";
 import {
   computeManagerHeatMap,
@@ -218,9 +219,47 @@ export default function DealerBaseManagerDetailPage() {
     return out;
   }, [tradePointsOverviewQ.data, userIdToCatalogMgrId]);
 
+  const observedManagerDisplayName = useMemo(() => {
+    const fromScope = targetScopeQ.scopeSubject.full_name?.trim();
+    if (fromScope) return fromScope;
+    const data = tradePointsOverviewQ.data;
+    if (data && managerApiUserId) {
+      for (const g of data.ropGroups) {
+        for (const m of g.managers) {
+          if (m.userId === managerApiUserId) return m.fullName;
+        }
+      }
+    }
+    return managerId;
+  }, [targetScopeQ.scopeSubject, tradePointsOverviewQ.data, managerApiUserId, managerId]);
+
+  const observerRopName = useMemo(() => me?.fullName?.trim() || "", [me?.fullName]);
+
+  const effectiveManagerCtx = useMemo(
+    () =>
+      resolveManagerDetailObservationCtx({
+        managerCtx,
+        viewingOtherUserScope,
+        targetScopeReady: targetScopeQ.ready,
+        managerId,
+        scopedRows,
+        managerDisplayName: observedManagerDisplayName,
+        observerRopName,
+      }),
+    [
+      managerCtx,
+      viewingOtherUserScope,
+      targetScopeQ.ready,
+      managerId,
+      scopedRows,
+      observedManagerDisplayName,
+      observerRopName,
+    ],
+  );
+
   const heatLevel: ManagerHeatLevel = useMemo(() => {
-    if (!managerCtx) return "medium";
-    const m = managerCtx.manager;
+    if (!effectiveManagerCtx) return "medium";
+    const m = effectiveManagerCtx.manager;
     const map = computeManagerHeatMap([
       {
         id: m.managerId,
@@ -229,12 +268,12 @@ export default function DealerBaseManagerDetailPage() {
       },
     ]);
     return map[m.managerId] ?? "medium";
-  }, [managerCtx, overviewByManagerId]);
+  }, [effectiveManagerCtx, overviewByManagerId]);
 
   const dashboard = useMemo(() => {
-    if (!managerCtx) return null;
-    return buildManagerDashboardModel(managerCtx.manager, managerCtx.ropName, heatLevel);
-  }, [managerCtx, heatLevel]);
+    if (!effectiveManagerCtx) return null;
+    return buildManagerDashboardModel(effectiveManagerCtx.manager, effectiveManagerCtx.ropName, heatLevel);
+  }, [effectiveManagerCtx, heatLevel]);
 
   const [segmentFilter, setSegmentFilter] = useState<DealerBaseSegmentKey | null>(null);
   const [activeTab, setActiveTab] = useState<"clients" | "cities" | "trade_points" | "attention">("clients");
@@ -315,11 +354,11 @@ export default function DealerBaseManagerDetailPage() {
     );
   }
 
-  if (!loading && (!actx.enabled || !managementPlane)) {
+  if (!loading && (!actx.enabled || (!managementPlane && !viewingOtherUserScope))) {
     return <Redirect to={buildHashPath("/dealer-base")} />;
   }
 
-  if (!loading && !dashboard) {
+  if (!loading && !dashboard && !(viewingOtherUserScope && targetScopeQ.loading)) {
     return <Redirect to={buildHashPath("/dealer-base")} />;
   }
 

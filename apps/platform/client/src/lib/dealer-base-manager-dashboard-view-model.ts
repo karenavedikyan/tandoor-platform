@@ -9,6 +9,61 @@ import type { DealerRow } from "./dealer-base-mock-data.js";
 import type { ManagerHeatLevel } from "./manager-load-heat.js";
 import type { ManagerRowModel } from "./dealer-base-management-view-model.js";
 
+export type ManagerDetailObservationCtx = {
+  manager: ManagerRowModel;
+  ropName: string;
+  teamId: string;
+};
+
+/** Счётчики ManagerRowModel из строк — как в aggregateManagersForTeam (без каталога). */
+export function buildManagerRowModelFromDealerRows(
+  managerId: string,
+  name: string,
+  rows: DealerRow[],
+  teamId = "",
+): ManagerRowModel {
+  return {
+    managerId,
+    name,
+    teamId,
+    active: rows.filter((r) => r.status === "активный").length,
+    potential: rows.filter((r) => r.status === "потенциальный").length,
+    attention: rows.filter((r) => dealerNeedsAttention(r)).length,
+    outlets: rows.reduce((a, r) => a + r.outlets, 0),
+    topSegmentLabel: "—",
+    rows,
+    isExternal: true,
+    externalTeamName: null,
+  };
+}
+
+/**
+ * Родный менеджер из ropGroups или синтетический контекст для РОП-наблюдателя (внешний менеджер по грантам).
+ */
+export function resolveManagerDetailObservationCtx(args: {
+  managerCtx: ManagerDetailObservationCtx | null;
+  viewingOtherUserScope: boolean;
+  targetScopeReady: boolean;
+  managerId: string;
+  scopedRows: DealerRow[];
+  managerDisplayName: string;
+  observerRopName: string;
+}): ManagerDetailObservationCtx | null {
+  if (args.managerCtx) return args.managerCtx;
+  if (args.viewingOtherUserScope && args.targetScopeReady) {
+    return {
+      manager: buildManagerRowModelFromDealerRows(
+        args.managerId,
+        args.managerDisplayName,
+        args.scopedRows,
+      ),
+      ropName: args.observerRopName,
+      teamId: "",
+    };
+  }
+  return null;
+}
+
 export type ManagerCitySummary = {
   cityKey: string;
   displayName: string;
