@@ -15,7 +15,11 @@ import {
   normalizeTradePointId,
 } from "./dealer-base-mock-data.js";
 import { getCatalogDealerById, getCatalogDealerRows } from "./dealer-base-source.js";
-import { isDealerTrashedInRuntime, isTradePointTrashedInRuntime } from "./dealer-overrides-runtime.js";
+import {
+  isDealerOverridesHydrated,
+  isDealerTrashedInRuntime,
+  isTradePointTrashedInRuntime,
+} from "./dealer-overrides-runtime.js";
 import { getDealerRowWithProfileOverrides } from "./dealer-profile-overrides.js";
 import {
   getMergedDealerTradePoints,
@@ -767,7 +771,11 @@ export function buildDealerBaseRowsWithActualization(
   opts?: BuildDealerBaseRowsOptions,
 ): DealerRow[] {
   const trashedListMode = opts?.includeTrashedDealers === true;
-  const isTrashedForList = (id: string) => isDealerTrashedInRuntime(id, act);
+  const isTrashedForList = (id: string) => {
+    if (isDealerTrashedInRuntime(id, act)) return true;
+    if (!isDealerOverridesHydrated() && act.trashedDealersById[id]) return true;
+    return false;
+  };
   const includeId = (id: string) => {
     const isTrashed = isTrashedForList(id);
     if (trashedListMode) return isTrashed;
@@ -797,7 +805,11 @@ export function excludeTrashedDealersFromWorkingRows(
   act: ActualizationState | null | undefined,
 ): DealerRow[] {
   if (!act) return rows;
-  return rows.filter((r) => !isDealerTrashedInRuntime(r.id, act));
+  return rows.filter((r) => {
+    if (isDealerTrashedInRuntime(r.id, act)) return false;
+    if (!isDealerOverridesHydrated() && act.trashedDealersById[r.id]) return false;
+    return true;
+  });
 }
 
 /** Строки рабочей базы для подписей событий активности по id клиента. */

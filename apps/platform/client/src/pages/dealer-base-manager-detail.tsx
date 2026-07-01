@@ -24,6 +24,7 @@ import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
+import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import {
   buildRopGroups,
   mergeResponsibleByCodeMaps,
@@ -135,6 +136,16 @@ export default function DealerBaseManagerDetailPage() {
   });
   const viewingOtherUserScope = Boolean(managerApiUserId && me?.id && managerApiUserId !== me.id);
 
+  const { plane: actualizationPlaneForRows } = useSubjectScopeActualizationState({
+    viewingOtherUserScope,
+    scopeUserId: managerApiUserId,
+    scopeSubjectRole: targetScopeQ.scopeSubject.role,
+    scopeReady: targetScopeQ.ready,
+    teamMergedState: teamCtx.mergedState,
+    teamParts: teamCtx.teamParts,
+    actEnabled: actx.enabled,
+  });
+
   const scopeOptions = useMemo((): RoleScopedDealerRowsForRealOptions | undefined => {
     if (managerApiUserId && !viewingOtherUserScope) return { managerUserId: managerApiUserId };
     return undefined;
@@ -145,7 +156,7 @@ export default function DealerBaseManagerDetailPage() {
     if (useReal && snap && visPayload) {
       const releaseRows = getVisibleDealerRows(catalogRows, visPayload.all, visPayload.codes);
       merged = actx.enabled
-        ? buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile, {
+        ? buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile, {
                         releaseDealerRows: releaseRows,
           })
         : releaseRows;
@@ -163,7 +174,7 @@ export default function DealerBaseManagerDetailPage() {
     if (isRealUser && !authLoading && !authError && (!snap || !visPayload)) return [];
     if (!actx.enabled) return roleScopedDealerRows(catalogRows, profile);
     return roleScopedDealerRows(
-      buildDealerBaseRowsWithActualization(teamCtx.mergedState, profile),
+      buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile),
       profile,
     );
   }, [
@@ -171,7 +182,7 @@ export default function DealerBaseManagerDetailPage() {
     snap,
     visPayload,
     actx.enabled,
-    teamCtx.mergedState,
+    actualizationPlaneForRows,
     profile,
     access,
     assignmentsScope,
