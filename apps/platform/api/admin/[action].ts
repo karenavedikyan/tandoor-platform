@@ -37,6 +37,7 @@ import {
   type ClientBaseActualizationClient,
   type ClientBaseCatalogDealerMeta,
 } from "../../shared/client-base-clients-list-merge.js";
+import { filterManagerDetailByRopViewerScope, shouldIntersectManagerDetailWithRopViewerScope } from "../../shared/trade-points-manager-detail-scope.js";
 
 type UserRole =
   | "director"
@@ -3943,7 +3944,30 @@ async function handleTradePointsManagerDetail(
     if (owner === managerUserId) states.push(coerceActualizationState(row.state));
   }
 
-  const { tradePoints: aggTps, clientsById } = collectTradePointsForUser(managerUserId, states);
+  const { tradePoints: aggTpsRaw, clientsById: clientsByIdRaw } = collectTradePointsForUser(managerUserId, states);
+
+  let aggTps = aggTpsRaw;
+  let clientsById = clientsByIdRaw;
+  if (me.role === "rop" && shouldIntersectManagerDetailWithRopViewerScope(me.role, me.id, managerUserId)) {
+    try {
+      const viewerScope = await computeDbScopeForUser(pool, me.id, "rop");
+      const filtered = filterManagerDetailByRopViewerScope({
+        clientsById,
+        tradePoints: aggTps,
+        viewerScopeExternalKeys: viewerScope.active_dealer_external_keys,
+      });
+      clientsById = filtered.clientsById;
+      aggTps = filtered.tradePoints;
+    } catch (err) {
+      console.warn("[trade-points-manager-detail] rop viewer scope filter failed", {
+        ropUserId: me.id,
+        managerUserId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      clientsById = new Map();
+      aggTps = [];
+    }
+  }
 
   const tpCountByClient = new Map<string, number>();
   for (const tp of aggTps) {
