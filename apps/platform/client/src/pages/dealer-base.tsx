@@ -4110,7 +4110,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           tradePointIds={scopeTradePointIds}
           testIdPrefix="manager-home"
           showTradePointsCount={false}
-          loading={!kpisReady || !scopeTradePointIdsReady || scopeDistribution.loading}
+          loading={
+            !kpisReady ||
+            scopeDistribution.loading ||
+            (!scopeTradePointIdsReady && scopeDistribution.tradePointsCount === 0)
+          }
         />
       ) : null}
 

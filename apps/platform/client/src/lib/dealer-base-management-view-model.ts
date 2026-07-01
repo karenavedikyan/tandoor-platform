@@ -985,9 +985,10 @@ export function resolveCockpitDistributionBar(
   scopeTradePointIdsReady?: boolean,
 ): { distribution: TradePointDistributionAggregateResult; loading: boolean } {
   const distribution = scopeDistribution ?? cockpitDistribution;
+  const distributionLoading = scopeDistribution ? scopeDistribution.loading : cockpitDistribution.loading;
   const loading =
-    scopeTradePointIdsReady === false ||
-    (scopeDistribution ? scopeDistribution.loading : cockpitDistribution.loading);
+    distributionLoading ||
+    (scopeTradePointIdsReady === false && distribution.tradePointsCount === 0);
   return { distribution, loading };
 }
 

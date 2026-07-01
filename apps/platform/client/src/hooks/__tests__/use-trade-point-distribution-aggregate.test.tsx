@@ -5,25 +5,12 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { __clearDistributionScopePrefetchKeys } from "@/lib/distribution-scope-prefetch-guard";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
-import { emptyDistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
-import type { DistributionAnalyticsData } from "@/lib/distribution-analytics/distribution-analytics-view-models";
-import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
-import type { TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
-import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
-
-const emptyAggregate = {
-  byType: {
-    entrance: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
-    interior: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
-    hardware: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
-  },
-  averagePercent: null,
-  rotationPotentialPercent: null,
-  totalLegacyOurs: 0,
-  tradePointsCount: 0,
-};
+import {
+  hasMatrixCacheForTradePointIds,
+  useTradePointDistributionAggregate,
+} from "@/hooks/use-trade-point-distribution-aggregate";
 
 const fetchShowcaseMatrixScopeMock = vi.hoisted(() => vi.fn(async () => [] as ShowcaseMatrixEntryDto[]));
 const loadCachedMatrixMock = vi.hoisted(() => vi.fn((_tradePointId?: string) => [] as ShowcaseMatrixEntryDto[]));
@@ -33,15 +20,65 @@ vi.mock("@/lib/showcase-matrix-api", () => ({
   fetchShowcaseMatrixScope: fetchShowcaseMatrixScopeMock,
 }));
 
-vi.mock("@/lib/showcase-matrix-store", () => ({
-  applyScopeEntriesToMatrixCache: applyScopeEntriesToMatrixCacheMock,
-  loadCachedMatrix: loadCachedMatrixMock,
-  SHOWCASE_MATRIX_STORE_CHANGED_EVENT: "showcase-matrix-store-changed",
-}));
+vi.mock("@/lib/showcase-matrix-store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/showcase-matrix-store")>();
+  return {
+    ...actual,
+    applyScopeEntriesToMatrixCache: applyScopeEntriesToMatrixCacheMock,
+    loadCachedMatrix: loadCachedMatrixMock,
+    SHOWCASE_MATRIX_STORE_CHANGED_EVENT: "showcase-matrix-store-changed",
+  };
+});
+
+function makePlacement(tradePointId: string, capacity = 10): ShowcaseMatrixEntryDto {
+  return {
+    id: `p-vh-${tradePointId}`,
+    dealerId: "d1",
+    tradePointId,
+    targetKind: "placement",
+    targetId: "placement-vh",
+    status: "installed",
+    comment: null,
+    updatedAt: new Date().toISOString(),
+    updatedBy: null,
+    updatedByName: null,
+    placementType: "book",
+    placementSegment: "vh",
+    placementCapacity: capacity,
+    placementActual: null,
+    placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
+    placementLegacyOurs: null,
+  };
+}
+
+function makeInstalledModel(tradePointId: string): ShowcaseMatrixEntryDto {
+  return {
+    id: `m-${tradePointId}`,
+    dealerId: "d1",
+    tradePointId,
+    targetKind: "model",
+    targetId: "tc-vh-model-1",
+    status: "installed",
+    comment: null,
+    updatedAt: new Date().toISOString(),
+    updatedBy: null,
+    updatedByName: null,
+    placementType: null,
+    placementSegment: "vh",
+    placementCapacity: null,
+    placementActual: null,
+    placementRef: null,
+    placementOurModels: [],
+    placementCompetitors: [],
+    placementLegacyOurs: null,
+  };
+}
 
 function makeAct(tradePointId = "tp-1"): ActualizationState {
-  const act = createEmptyActualizationState();
-  act.tradePointShowcaseActualizationById[tradePointId] = {
+  const state = createEmptyActualizationState();
+  state.tradePointShowcaseActualizationById[tradePointId] = {
     tradePointId,
     dealerId: "d1",
     hasShowcase: true,
@@ -66,7 +103,7 @@ function makeAct(tradePointId = "tp-1"): ActualizationState {
     updatedBy: "",
     updatedByName: "",
   };
-  return act;
+  return state;
 }
 
 describe("useTradePointDistributionAggregate scope prefetch", () => {
@@ -75,7 +112,9 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
     fetchShowcaseMatrixScopeMock.mockClear();
     loadCachedMatrixMock.mockClear();
     applyScopeEntriesToMatrixCacheMock.mockClear();
-    fetchShowcaseMatrixScopeMock.mockResolvedValue([]);
+    fetchShowcaseMatrixScopeMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve([]), 50)),
+    );
     loadCachedMatrixMock.mockReturnValue([]);
   });
 
@@ -88,9 +127,7 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
   });
 
   it("prefetches once for small scope and ignores store changed event", async () => {
-    const { rerender } = renderHook(() =>
-      useTradePointDistributionAggregate(["tp-1"], makeAct()),
-    );
+    const { rerender } = renderHook(() => useTradePointDistributionAggregate(["tp-1"], makeAct()));
 
     await waitFor(() => {
       expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalledTimes(1);
@@ -107,46 +144,8 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
   });
 
   it("aggregates from cache without network for large scope", () => {
-    const placementEntry: ShowcaseMatrixEntryDto = {
-      id: "p1",
-      dealerId: "d1",
-      tradePointId: "tp-0",
-      targetKind: "placement",
-      targetId: "placement-vh",
-      status: "installed",
-      comment: null,
-      updatedAt: new Date().toISOString(),
-      updatedBy: null,
-      updatedByName: null,
-      placementType: "book",
-      placementSegment: "vh",
-      placementCapacity: 10,
-      placementActual: null,
-      placementRef: null,
-      placementOurModels: [],
-      placementCompetitors: [],
-      placementLegacyOurs: null,
-    };
-    const installedEntry: ShowcaseMatrixEntryDto = {
-      id: "e1",
-      dealerId: "d1",
-      tradePointId: "tp-0",
-      targetKind: "model",
-      targetId: "tc-vh-model-1",
-      status: "installed",
-      comment: null,
-      updatedAt: new Date().toISOString(),
-      updatedBy: null,
-      updatedByName: null,
-      placementType: null,
-      placementSegment: "vh",
-      placementCapacity: null,
-      placementActual: null,
-      placementRef: null,
-      placementOurModels: [],
-      placementCompetitors: [],
-      placementLegacyOurs: null,
-    };
+    const placementEntry = makePlacement("tp-0");
+    const installedEntry = makeInstalledModel("tp-0");
     loadCachedMatrixMock.mockImplementation((tpId?: string) =>
       tpId === "tp-0" ? [placementEntry, installedEntry] : [],
     );
@@ -155,6 +154,95 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
     const { result } = renderHook(() => useTradePointDistributionAggregate(ids, makeAct("tp-0")));
 
     expect(fetchShowcaseMatrixScopeMock).not.toHaveBeenCalled();
+    expect(result.current.loading).toBe(false);
     expect(result.current.aggregate.byType.entrance.tandoorOnShelf).toBeGreaterThan(0);
+  });
+});
+
+describe("useTradePointDistributionAggregate SWR", () => {
+  beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
+    fetchShowcaseMatrixScopeMock.mockClear();
+    loadCachedMatrixMock.mockClear();
+    applyScopeEntriesToMatrixCacheMock.mockClear();
+    fetchShowcaseMatrixScopeMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve([]), 50)),
+    );
+    loadCachedMatrixMock.mockReturnValue([]);
+  });
+
+  it("shows cached aggregate immediately with loading=false while prefetch runs", async () => {
+    const placementEntry = makePlacement("tp-1", 12);
+    const installedEntry = makeInstalledModel("tp-1");
+    loadCachedMatrixMock.mockImplementation((tpId?: string) =>
+      tpId === "tp-1" ? [placementEntry, installedEntry] : [],
+    );
+
+    expect(hasMatrixCacheForTradePointIds(["tp-1"])).toBe(true);
+
+    const { result } = renderHook(() => useTradePointDistributionAggregate(["tp-1"], makeAct()));
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.aggregate.byType.entrance.capacity).toBe(12);
+    expect(fetchShowcaseMatrixScopeMock).toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(result.current.revalidating).toBe(false);
+    });
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("cold load shows loading=true until prefetch completes", async () => {
+    const { result } = renderHook(() => useTradePointDistributionAggregate(["tp-cold"], makeAct("tp-cold")));
+
+    expect(result.current.loading).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+  });
+
+  it("cache-changed event keeps loading=false when data was already shown", async () => {
+    const placementEntry = makePlacement("tp-1", 8);
+    loadCachedMatrixMock.mockImplementation((tpId?: string) => (tpId === "tp-1" ? [placementEntry] : []));
+
+    const { result, rerender } = renderHook(() => useTradePointDistributionAggregate(["tp-1"], makeAct()));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    loadCachedMatrixMock.mockImplementation((tpId?: string) =>
+      tpId === "tp-1" ? [placementEntry, makeInstalledModel("tp-1")] : [],
+    );
+
+    act(() => {
+      window.dispatchEvent(new Event(SHOWCASE_MATRIX_STORE_CHANGED_EVENT));
+    });
+    rerender();
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.aggregate.byType.entrance.tandoorOnShelf).toBeGreaterThan(0);
+  });
+
+  it("scope change with cache does not reset to cold loading", async () => {
+    loadCachedMatrixMock.mockImplementation((tpId?: string) => {
+      if (tpId === "tp-a" || tpId === "tp-b") return [makePlacement(tpId!, 5)];
+      return [];
+    });
+
+    const { result, rerender } = renderHook(
+      ({ ids }) => useTradePointDistributionAggregate(ids, makeAct(ids[0])),
+      { initialProps: { ids: ["tp-a"] as string[] } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    rerender({ ids: ["tp-b"] });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.aggregate.byType.entrance.capacity).toBe(5);
   });
 });
