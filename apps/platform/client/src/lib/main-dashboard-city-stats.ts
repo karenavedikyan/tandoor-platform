@@ -5,6 +5,8 @@
 import type { ActualizationState } from "./client-base-actualization-state.js";
 import { cityKeyForDealerRow } from "./city-concentration.js";
 import type { DealerRow } from "./dealer-base-mock-data.js";
+import type { ScopedTradePointDto } from "./trade-points-scoped-api.js";
+import { normalizeTerritoryCityName } from "./territory-city-normalize.js";
 
 export type MainDashboardCityTile = {
   city: string;
@@ -12,6 +14,16 @@ export type MainDashboardCityTile = {
   activeTradePoints: number;
   isNoCity: boolean;
 };
+
+/** Единая нормализация подписи города для плиток (клиенты и ТТ из БД). */
+export function displayCityLabelFromRawCity(
+  rawCity: string | null | undefined,
+  addressHint?: string | null,
+): string {
+  const raw = rawCity?.trim();
+  if (!raw || raw === "—" || raw === "-") return "Без города";
+  return normalizeTerritoryCityName(rawCity!, addressHint ?? undefined);
+}
 
 export function displayCityForDealerRow(row: DealerRow): string {
   const key = cityKeyForDealerRow(row);
@@ -22,15 +34,44 @@ export function dealerRowMatchesCityFilter(row: DealerRow, selectedCity: string)
   return displayCityForDealerRow(row) === selectedCity;
 }
 
-export function buildMainDashboardCityTiles(rows: DealerRow[], act: ActualizationState): MainDashboardCityTile[] {
+function cityKeyForScopedTp(tp: ScopedTradePointDto): string {
+  return displayCityLabelFromRawCity(tp.dealerCity ?? tp.city, tp.address);
+}
+
+/** Кол-во активных ТТ по городам из БД-источника (scoped). */
+export function buildTradePointCountByCityFromScopedDb(
+  tradePoints: ScopedTradePointDto[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const city = cityKeyForScopedTp(tp);
+    map.set(city, (map.get(city) ?? 0) + 1);
+  }
+  return map;
+}
+
+export function buildMainDashboardCityTiles(
+  rows: DealerRow[],
+  act: ActualizationState,
+  tradePointCountByCity?: Map<string, number>,
+): MainDashboardCityTile[] {
   void act;
   const map = new Map<string, { activeClients: number; activeTradePoints: number }>();
   for (const r of rows) {
     const city = displayCityForDealerRow(r);
     const cur = map.get(city) ?? { activeClients: 0, activeTradePoints: 0 };
     cur.activeClients += 1;
-    cur.activeTradePoints += (r.tradePoints ?? []).length;
+    if (!tradePointCountByCity) {
+      cur.activeTradePoints += (r.tradePoints ?? []).length;
+    }
     map.set(city, cur);
+  }
+
+  if (tradePointCountByCity) {
+    map.forEach((entry, city) => {
+      entry.activeTradePoints = tradePointCountByCity.get(city) ?? 0;
+    });
   }
 
   const tiles: MainDashboardCityTile[] = Array.from(map.entries()).map(([city, v]) => ({
