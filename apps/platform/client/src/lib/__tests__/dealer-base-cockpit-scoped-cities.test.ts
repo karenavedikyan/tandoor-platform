@@ -6,8 +6,10 @@ import {
   buildOverviewCityCardsFromDb,
   buildOverviewCityCardsFromScopedDb,
   overviewWithoutCityFromScopedDb,
+  resolveCockpitDistributionBar,
 } from "../dealer-base-management-view-model.js";
 import type { ClientBaseOverview } from "../client-base-overview-api.js";
+import type { TradePointDistributionAggregateResult } from "@/hooks/use-trade-point-distribution-aggregate";
 
 const overviewFromActualization: ClientBaseOverview = {
   success: true,
@@ -60,6 +62,44 @@ const overviewFromActualization: ClientBaseOverview = {
   assert.ok(noCity);
   assert.equal(noCity!.activeClients, 2);
   assert.equal(noCity!.tradePoints, 2);
+}
+
+const emptyAggregate = {
+  byType: {
+    entrance: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
+    interior: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
+    hardware: { capacity: 0, tandoorOnShelf: 0, legacyOurs: 0, percent: null, rotationPotentialPercent: null },
+  },
+  averagePercent: null,
+  rotationPotentialPercent: null,
+  totalLegacyOurs: 0,
+  tradePointsCount: 0,
+};
+
+function distResult(
+  tradePointsCount: number,
+  loading: boolean,
+): TradePointDistributionAggregateResult {
+  return { aggregate: { ...emptyAggregate, tradePointsCount }, tradePointsCount, loading };
+}
+
+{
+  const scoped = distResult(458, false);
+  const local = distResult(0, false);
+  const fromScoped = resolveCockpitDistributionBar(scoped, local, true);
+  assert.equal(fromScoped.distribution.tradePointsCount, 458);
+  assert.equal(fromScoped.loading, false);
+
+  const fromLocal = resolveCockpitDistributionBar(undefined, local, true);
+  assert.equal(fromLocal.distribution.tradePointsCount, 0);
+  assert.equal(fromLocal.loading, false);
+
+  const idsNotReady = resolveCockpitDistributionBar(scoped, local, false);
+  assert.equal(idsNotReady.distribution.tradePointsCount, 458);
+  assert.equal(idsNotReady.loading, true);
+
+  const scopedLoading = resolveCockpitDistributionBar(distResult(458, true), local, true);
+  assert.equal(scopedLoading.loading, true);
 }
 
 console.log("dealer-base-cockpit-scoped-cities: ok");

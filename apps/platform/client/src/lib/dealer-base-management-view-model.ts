@@ -30,6 +30,7 @@ import type { OrgSnapshot } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import type { MemberTotals, TeamTotals, OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
 import type { ClientBaseOverview } from "./client-base-overview-api.js";
+import type { TradePointDistributionAggregateResult } from "@/hooks/use-trade-point-distribution-aggregate";
 
 export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;
 
@@ -975,6 +976,19 @@ export function computeUnstatusedCatalogClients(
   potential: number,
 ): number {
   return Math.max(0, totalCatalog - active - potential);
+}
+
+/** Приоритет scoped-агрегата дистрибуции из dealer-base над локальным cockpit-хуком. */
+export function resolveCockpitDistributionBar(
+  scopeDistribution: TradePointDistributionAggregateResult | undefined,
+  cockpitDistribution: TradePointDistributionAggregateResult,
+  scopeTradePointIdsReady?: boolean,
+): { distribution: TradePointDistributionAggregateResult; loading: boolean } {
+  const distribution = scopeDistribution ?? cockpitDistribution;
+  const loading =
+    scopeTradePointIdsReady === false ||
+    (scopeDistribution ? scopeDistribution.loading : cockpitDistribution.loading);
+  return { distribution, loading };
 }
 
 export function buildOverviewCityCardsFromDb(overview: ClientBaseOverview): OverviewCityCardModel[] {

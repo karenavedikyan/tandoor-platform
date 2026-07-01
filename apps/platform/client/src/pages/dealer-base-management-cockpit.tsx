@@ -75,6 +75,7 @@ import {
   buildStructureInfographic,
   buildOverviewCityCardsFromDb,
   buildOverviewCityCardsFromScopedDb,
+  resolveCockpitDistributionBar,
   overviewWithoutCityFromScopedDb,
   computeUnstatusedCatalogClients,
   dealerMatchesClientListFilter,
@@ -389,10 +390,11 @@ export function DealerBaseManagementCockpit({
     teamCtx.mergedState,
   );
 
-  const distributionForBar = scopeDistribution ?? cockpitDistribution;
-  const cockpitDistributionLoading = scopeDistribution
-    ? scopeTradePointIdsReady === false || scopeDistribution.loading
-    : scopeTradePointIdsReady === false || cockpitDistribution.loading;
+  const { distribution: distributionForBar, loading: cockpitDistributionLoading } = resolveCockpitDistributionBar(
+    scopeDistribution,
+    cockpitDistribution,
+    scopeTradePointIdsReady,
+  );
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
