@@ -4,8 +4,15 @@
  * Промт 423: team_lead/sales_director через DB hooks; catalog helpers — только подписи/drilldown.
  */
 import assert from "node:assert/strict";
+import type { DealerRow } from "../dealer-base-mock-data";
 import { buildDealerRowsFromReleaseClients } from "../dealer-base-mock-data";
-import { roleScopedDealerRowsForReal, catalogTeamIdForRealTeamLead, realRowsForManagerByUUID, realRowsForRopTeam } from "../dealer-base-real-scope";
+import {
+  filterRowsByDbScopeExternalKeys,
+  roleScopedDealerRowsForReal,
+  catalogTeamIdForRealTeamLead,
+  realRowsForManagerByUUID,
+  realRowsForRopTeam,
+} from "../dealer-base-real-scope";
 import { getReleaseClients } from "../release-client-data";
 import type { OrgSnapshot } from "../use-org-snapshot";
 
@@ -76,6 +83,66 @@ function directorSnap(): OrgSnapshot {
   const viaOption = roleScopedDealerRowsForReal(allRows, snap, "sales_director", { ropUserId: ROP_KUPIANSKY });
   assert.equal(teamScoped.length, viaOption.length);
   assert.ok(teamScoped.length >= 640, `Kupiansky team >= 640, got ${teamScoped.length}`);
+}
+
+// Штаб менеджера: строгий DB-scope отсекает клиента, даже если снимок каталога матчит ФИО менеджера
+{
+  const YAKUBOVA_UUID = "0481a81d-160b-422e-8257-cf21d134cd42";
+  const BARANOVA_CODE = "MA0002241";
+  const baranovaRow = {
+    id: "client-ma0002241",
+    releaseCode: BARANOVA_CODE,
+    name: "ИП Баранова Татьяна Игоревна",
+    manager: "Якубова Юлия Сергеевна",
+    city: "Москва",
+    status: "активный",
+    outlets: 1,
+    distribution: 50,
+    hasProblem: false,
+    hasRecentActivity: true,
+    clientCategory: "B",
+    releaseTeamId: "team-kupiansky",
+    releaseManagerId: "mgr-yakubova-ys",
+  } as DealerRow;
+  const inScopeRow = {
+    id: "client-ma0001001",
+    releaseCode: "MA0001001",
+    name: "Клиент в scope Якубовой",
+    manager: "Якубова Юлия Сергеевна",
+    city: "Москва",
+    status: "активный",
+    outlets: 1,
+    distribution: 50,
+    hasProblem: false,
+    hasRecentActivity: true,
+    clientCategory: "B",
+    releaseTeamId: "team-kupiansky",
+    releaseManagerId: "mgr-yakubova-ys",
+  } as DealerRow;
+  const rows = [baranovaRow, inScopeRow];
+  const snap = {
+    me: { id: ROP_KUPIANSKY, role: "rop", fullName: "Купянский", teamId: TEAM_KUPIANSKY_UUID },
+    visibility: { all: true, clientCodes: null, teamIds: [], visibleUserIds: [] },
+    teams: [{ id: TEAM_KUPIANSKY_UUID, name: "Купянский", ropUserId: ROP_KUPIANSKY, ropName: "Купянский" }],
+    users: [
+      {
+        id: YAKUBOVA_UUID,
+        fullName: "Якубова Юлия Сергеевна",
+        role: "manager",
+        teamId: TEAM_KUPIANSKY_UUID,
+        status: "active",
+      },
+    ],
+  } as unknown as OrgSnapshot;
+  const fioLeak = realRowsForManagerByUUID(rows, snap, YAKUBOVA_UUID);
+  assert.ok(
+    fioLeak.some((r) => r.releaseCode === BARANOVA_CODE),
+    "deprecated FIO/catalog match would include Baranova MA0002241",
+  );
+  const strict = filterRowsByDbScopeExternalKeys(rows, ["client-ma0001001"]);
+  assert.equal(strict.length, 1);
+  assert.equal(strict[0]!.releaseCode, "MA0001001");
+  assert.ok(!strict.some((r) => r.releaseCode === BARANOVA_CODE), "DB scope must exclude Baranova");
 }
 
 console.log("dealer-base-real-scope: ok");

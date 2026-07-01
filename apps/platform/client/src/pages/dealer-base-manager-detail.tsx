@@ -33,6 +33,7 @@ import {
 } from "@/lib/dealer-base-management-view-model";
 import {
   assignmentsScopeIsActive,
+  filterRowsByDbScopeExternalKeys,
   safeRoleScopedDealerRowsForReal,
   type RoleScopedDealerRowsForRealOptions,
 } from "@/lib/dealer-base-real-scope";
@@ -127,10 +128,16 @@ export default function DealerBaseManagerDetailPage() {
 
   const managerApiUserId = useMemo(() => resolveManagerApiUserId(managerId), [managerId]);
 
+  const targetScopeQ = useMyScopeFromDB({
+    enabled: Boolean(managerApiUserId) && Boolean(me?.id),
+    forUserId: managerApiUserId && me?.id && managerApiUserId !== me.id ? managerApiUserId : undefined,
+  });
+  const viewingOtherUserScope = Boolean(managerApiUserId && me?.id && managerApiUserId !== me.id);
+
   const scopeOptions = useMemo((): RoleScopedDealerRowsForRealOptions | undefined => {
-    if (managerApiUserId) return { managerUserId: managerApiUserId };
+    if (managerApiUserId && !viewingOtherUserScope) return { managerUserId: managerApiUserId };
     return undefined;
-  }, [managerApiUserId]);
+  }, [managerApiUserId, viewingOtherUserScope]);
 
   const scopedRows = useMemo(() => {
     let merged: DealerRow[];
@@ -141,6 +148,9 @@ export default function DealerBaseManagerDetailPage() {
                         releaseDealerRows: releaseRows,
           })
         : releaseRows;
+      if (viewingOtherUserScope && targetScopeQ.ready) {
+        return filterRowsByDbScopeExternalKeys(merged, targetScopeQ.active_dealer_external_keys);
+      }
       return safeRoleScopedDealerRowsForReal(
         merged,
         snap,
@@ -169,7 +179,9 @@ export default function DealerBaseManagerDetailPage() {
     authError,
     catalogRows,
     scopeOptions,
-    managerApiUserId,
+    viewingOtherUserScope,
+    targetScopeQ.ready,
+    targetScopeQ.active_dealer_external_keys,
   ]);
 
   const teams = useMemo(
@@ -185,12 +197,6 @@ export default function DealerBaseManagerDetailPage() {
   );
 
   const managerCtx = useMemo(() => findManagerInRopGroups(managerId, ropGroups), [managerId, ropGroups]);
-
-  const targetScopeQ = useMyScopeFromDB({
-    enabled: Boolean(managerApiUserId) && Boolean(me?.id),
-    forUserId: managerApiUserId && me?.id && managerApiUserId !== me.id ? managerApiUserId : undefined,
-  });
-  const viewingOtherUserScope = Boolean(managerApiUserId && me?.id && managerApiUserId !== me.id);
 
   const tradePointsOverviewQ = useQuery({
     queryKey: ["trade-points-overview"],

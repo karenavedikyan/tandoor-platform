@@ -84,7 +84,7 @@ import {
   shouldUseServerKpiAggregates,
 } from "@/lib/server-kpi-aggregates-flag";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
-import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
+import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, filterRowsByDbScopeExternalKeys, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import {
   buildDayPlanTeamRows,
@@ -1843,6 +1843,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const scopedRows = useMemo(() => {
     if (viewingOtherUserScope && targetScopeQ.ready) {
+      const role = targetScopeQ.scopeSubject.role;
+      if (role === "manager" || role === "regional_manager") {
+        return filterRowsByDbScopeExternalKeys(
+          mergedRowsForDealerBase,
+          targetScopeQ.active_dealer_external_keys,
+        );
+      }
       return mergedRowsForDealerBase;
     }
     // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
@@ -1873,6 +1880,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [
     viewingOtherUserScope,
     targetScopeQ.ready,
+    targetScopeQ.scopeSubject.role,
+    targetScopeQ.active_dealer_external_keys,
     useReal,
     snap,
     access,
@@ -1929,6 +1938,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const scopedActivePortfolioRows = useMemo(() => {
     if (viewingOtherUserScope && targetScopeQ.ready) {
+      const role = targetScopeQ.scopeSubject.role;
+      if (role === "manager" || role === "regional_manager") {
+        return filterRowsByDbScopeExternalKeys(
+          mergedRowsActivePortfolio,
+          targetScopeQ.active_dealer_external_keys,
+        );
+      }
       return mergedRowsActivePortfolio;
     }
     // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
@@ -1958,6 +1974,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [
     viewingOtherUserScope,
     targetScopeQ.ready,
+    targetScopeQ.scopeSubject.role,
+    targetScopeQ.active_dealer_external_keys,
     useReal,
     snap,
     access,

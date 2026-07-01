@@ -77,6 +77,16 @@ export function rowInAssignmentsScope(r: DealerRow, scope: AssignmentsScope | un
   return false;
 }
 
+/** Строгий фильтр строк по external_key / release_code из GET /api/dealers/my-scope (без матчинга по ФИО). */
+export function filterRowsByDbScopeExternalKeys(
+  rows: DealerRow[],
+  externalKeys: Iterable<string>,
+): DealerRow[] {
+  const normalized = normalizedAssignmentCodeSet(new Set(externalKeys));
+  if (normalized.size === 0) return [];
+  return rows.filter((r) => rowMatchesNormalizedCodes(r, normalized));
+}
+
 /** Собрать assignmentsScope из my-codes или my-visible-codes (пока my-codes грузится). */
 export function buildAssignmentsScopeFromSources(input: {
   ownCodes?: Set<string>;
