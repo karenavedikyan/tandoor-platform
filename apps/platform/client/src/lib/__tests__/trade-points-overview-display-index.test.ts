@@ -4,6 +4,7 @@ import {
   buildTradePointsOverviewDisplayIndex,
   filterManagersToTradePointsOverview,
   formatOverviewScopedCount,
+  splitManagersByRegionalRole,
   unionCatalogManagersWithOverviewCards,
 } from "@/lib/trade-points-overview-view-model";
 import type { ManagerRowModel } from "@/lib/dealer-base-management-view-model";
@@ -82,6 +83,83 @@ describe("trade-points overview display index", () => {
     const cards = index.managerCardsByTeamKey.get(TEAM_ID);
     expect(cards?.some((c) => c.userId === "0481a81d-160b-422e-8257-cf21d134cd42")).toBe(true);
     expect(cards?.find((c) => c.userId === "0481a81d-160b-422e-8257-cf21d134cd42")?.clientsWithTp).toBe(82);
+  });
+
+  it("filterManagersToTradePointsOverview keeps regional managers present in overview", () => {
+    const managers = [
+      { managerId: "mgr-yak-catalog", name: "Якубова" },
+      { managerId: "rm-melnik", name: "Мельник", isRegional: true },
+    ];
+    const ids = new Set(["mgr-yak-catalog", "rm-melnik"]);
+
+    expect(filterManagersToTradePointsOverview(managers, ids, true)).toEqual(managers);
+  });
+
+  it("splitManagersByRegionalRole separates sales and regional sections", () => {
+    const managers: ManagerRowModel[] = [
+      {
+        managerId: "mgr-a",
+        name: "Продажник",
+        teamId: TEAM_ID,
+        active: 1,
+        potential: 0,
+        attention: 0,
+        outlets: 1,
+        topSegmentLabel: "—",
+        rows: [],
+        isExternal: false,
+      },
+      {
+        managerId: "rm-b",
+        name: "Региональный",
+        teamId: TEAM_ID,
+        active: 5,
+        potential: 0,
+        attention: 0,
+        outlets: 2,
+        topSegmentLabel: "—",
+        rows: [],
+        isExternal: false,
+        isRegional: true,
+      },
+    ];
+    const split = splitManagersByRegionalRole(managers);
+    expect(split.salesManagers.map((m) => m.managerId)).toEqual(["mgr-a"]);
+    expect(split.regionalManagers.map((m) => m.managerId)).toEqual(["rm-b"]);
+  });
+
+  it("unionCatalogManagersWithOverviewCards adds regional overview manager with isRegional", () => {
+    const catalogManagers: ManagerRowModel[] = [];
+    const index = buildTradePointsOverviewDisplayIndex(
+      [
+        {
+          ...overviewGroup,
+          managers: [
+            {
+              userId: "rm-drogo",
+              fullName: "Дрогобицкий",
+              tradePoints: 10,
+              clientsWithTp: 799,
+              cities: 3,
+              withoutPhoto: 0,
+              notFilled: 0,
+              isRegional: true,
+            },
+          ],
+          managerCount: 1,
+        },
+      ],
+      null,
+      () => undefined,
+    );
+    const merged = unionCatalogManagersWithOverviewCards(catalogManagers, TEAM_ID, {
+      overviewReady: true,
+      overviewManagerIds: index.managerIdsByTeamKey.get(TEAM_ID),
+      managerCardsByTeamKey: index.managerCardsByTeamKey,
+    });
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.isRegional).toBe(true);
+    expect(merged[0]?.active).toBe(799);
   });
 
   it("filterManagersToTradePointsOverview hides regional managers absent from overview", () => {

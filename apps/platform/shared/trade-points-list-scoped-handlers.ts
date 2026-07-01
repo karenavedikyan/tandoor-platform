@@ -35,6 +35,8 @@ export type ScopedTradePointDto = {
   dealerClientCategory: string | null;
   managerUserId: string | null;
   managerFullName: string | null;
+  regionalManagerUserId: string | null;
+  regionalManagerFullName: string | null;
   teamId: string | null;
   teamName: string | null;
   ropUserId: string | null;
@@ -59,6 +61,8 @@ type ScopedTradePointSqlRow = {
   dealer_client_category: string | null;
   manager_user_id: string | null;
   manager_full_name: string | null;
+  regional_manager_user_id: string | null;
+  regional_manager_full_name: string | null;
   team_id: string | null;
   team_name: string | null;
   rop_user_id: string | null;
@@ -98,6 +102,8 @@ const SCOPED_TP_SELECT = `
   d.client_category AS dealer_client_category,
   ca.responsible_user_id::text AS manager_user_id,
   mu.full_name AS manager_full_name,
+  d_ov.regional_manager_id::text AS regional_manager_user_id,
+  rmu.full_name AS regional_manager_full_name,
   ca.team_id::text AS team_id,
   t.name AS team_name,
   t.rop_user_id::text AS rop_user_id,
@@ -123,6 +129,8 @@ export function mapScopedTradePointRow(row: ScopedTradePointSqlRow): ScopedTrade
     dealerClientCategory: row.dealer_client_category,
     managerUserId: row.manager_user_id,
     managerFullName: row.manager_full_name,
+    regionalManagerUserId: row.regional_manager_user_id,
+    regionalManagerFullName: row.regional_manager_full_name,
     teamId: row.team_id,
     teamName: row.team_name,
     ropUserId: row.rop_user_id,
@@ -185,6 +193,7 @@ export async function fetchScopedTradePointsRows(
          LEFT JOIN teams t ON t.id = ca.team_id
          LEFT JOIN users ru ON ru.id = t.rop_user_id
          ${DEALER_OVERRIDE_JOIN}
+         LEFT JOIN users rmu ON rmu.id = d_ov.regional_manager_id
          ${TRADE_POINT_OVERRIDE_JOIN}
         WHERE ${baseWhere}
         ORDER BY d.name, tp.name`,
@@ -205,6 +214,7 @@ export async function fetchScopedTradePointsRows(
        LEFT JOIN teams t ON t.id = ca.team_id
        LEFT JOIN users ru ON ru.id = t.rop_user_id
        ${DEALER_OVERRIDE_JOIN}
+       LEFT JOIN users rmu ON rmu.id = d_ov.regional_manager_id
        ${TRADE_POINT_OVERRIDE_JOIN}
       WHERE d.external_key = ANY($1::text[])
         AND ${baseWhere}

@@ -24,6 +24,7 @@ export type TradePointsOverviewRopManager = {
   cities: number;
   withoutPhoto: number;
   notFilled: number;
+  isRegional?: boolean;
 };
 
 export type TradePointsOverviewRopGroup = {

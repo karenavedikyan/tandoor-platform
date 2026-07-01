@@ -12,7 +12,7 @@ import {
 } from "./client-category.js";
 import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "./dealer-base-role-views.js";
 import { normalizeAssignmentLookupCode } from "./dealer-base-real-scope.js";
-import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
+import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
 import {
   getRopOptions,
   managerDisplayMatchesCatalogName,
@@ -114,6 +114,8 @@ export type ManagerRowModel = {
   externalTeamName?: string | null;
   /** Серверные member-totals из team-scope/org-scope — не перезаписывать overview. */
   countsFromServerTotals?: boolean;
+  /** Региональный менеджер (роль regional_manager в org snapshot). */
+  isRegional?: boolean;
 };
 
 export type RopGroupModel = {
@@ -252,9 +254,13 @@ function buildDbAwareManagerMatcherForPreGroupedTeamRows(
   managerCatalogId: string,
   managerCatalogName: string,
   responsibleByCode?: ResponsibleByCodeMap,
+  isRegional = false,
 ): (r: DealerRow) => boolean {
   const catalogMgrId = catalogManagerIdFromUserRef(managerCatalogId);
-  return (r: DealerRow) => matchesManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode);
+  return (r: DealerRow) =>
+    isRegional
+      ? matchesRegionalManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode)
+      : matchesManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode);
 }
 
 export function matchesManagerForDealerRow(
@@ -278,6 +284,28 @@ export function matchesManagerForDealerRow(
     return catalogManagerIdFromUserRef(releaseMgr) === catalogMgrId;
   }
   return managerDisplayMatchesCatalogNameStrict(getDealerManagerDisplay(r), managerCatalogName);
+}
+
+/** Матч клиента региональному менеджеру (dealer_overrides.regional_manager_id / имя в строке). */
+export function matchesRegionalManagerForDealerRow(
+  r: DealerRow,
+  catalogMgrId: string,
+  managerCatalogName: string,
+  responsibleByCode?: ResponsibleByCodeMap,
+): boolean {
+  if (responsibleByCode) {
+    const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
+    if (uuid) {
+      const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
+      return catalogMgr === catalogMgrId;
+    }
+  }
+  return managerDisplayMatchesCatalogName(getDealerRegionalManagerDisplay(r), managerCatalogName);
+}
+
+function isRegionalCatalogManager(managerUserId: string, orgSnap?: OrgSnapshot | null): boolean {
+  if (!orgSnap) return false;
+  return orgSnap.users.some((u) => u.id === managerUserId && u.role === "regional_manager");
 }
 
 function groupRowsByResolvedTeamId(rows: DealerRow[]): Map<string, DealerRow[]> {
@@ -408,7 +436,13 @@ export function aggregateManagersForTeam(
   const managers = managersCatalogForTeam(catalogTeamId, orgSnap);
   const catalogResults = managers.map((m) => {
     const mgrCatalogId = catalogManagerIdFromUserRef(m.id);
-    const match = buildDbAwareManagerMatcherForPreGroupedTeamRows(mgrCatalogId, m.name, responsibleByCode);
+    const isRegional = isRegionalCatalogManager(m.id, orgSnap);
+    const match = buildDbAwareManagerMatcherForPreGroupedTeamRows(
+      mgrCatalogId,
+      m.name,
+      responsibleByCode,
+      isRegional,
+    );
     const rows = teamRows.filter(match);
     const dbTotals = membersTotalsById?.get(m.id) ?? membersTotalsById?.get(mgrCatalogId);
     if (dbTotals) {
@@ -425,6 +459,7 @@ export function aggregateManagersForTeam(
         isExternal: false,
         externalTeamName: null,
         countsFromServerTotals: true,
+        isRegional,
       };
     }
     const active = rows.filter((r) => r.status === "активный").length;
@@ -443,6 +478,7 @@ export function aggregateManagersForTeam(
       rows,
       isExternal: false,
       externalTeamName: null,
+      isRegional,
     };
   });
 
