@@ -3,6 +3,7 @@
  */
 
 import type { UserRole } from "@shared/auth";
+import type { OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
 import type { DealerRow } from "./dealer-base-mock-data.js";
 import { getCatalogDealerRows, getVisibleDealerRows } from "./dealer-base-source.js";
 import { mapUserRoleToDealerBaseAccess } from "./auth-user-dealer-access.js";
@@ -20,6 +21,10 @@ export type SidebarNavRealScope = {
   assignmentsScope?: AssignmentsScope;
   /** Промт 410: releaseDealerRows уже отфильтрованы по my-scope; не применять roleScopedDealerRowsForReal. */
   dbScopeDirect?: boolean;
+  /** Платформенная роль — для выбора team/org DB scope (director, rop). */
+  platformRole?: UserRole;
+  teamScope?: TeamScopePayload | null;
+  orgScopeData?: OrgScopePayload | null;
 };
 
 export type BuildSidebarNavRealScopeInput = {
@@ -40,6 +45,8 @@ export type BuildSidebarNavRealScopeInput = {
   dbScopedExternalKeys?: Set<string>;
   /** Промт 441-fix5: scope_explanation.full_catalog — у admin/sales_director весь каталог. */
   dbFullCatalog?: boolean;
+  teamScope?: TeamScopePayload | null;
+  orgScopeData?: OrgScopePayload | null;
 };
 
 export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): SidebarNavRealScope {
@@ -100,5 +107,8 @@ export function buildSidebarNavRealScope(input: BuildSidebarNavRealScopeInput): 
     orgScope: { snap: snap!, access },
     assignmentsScope: assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
     dbScopeDirect,
+    platformRole: role ?? undefined,
+    teamScope: input.teamScope ?? null,
+    orgScopeData: input.orgScopeData ?? null,
   };
 }

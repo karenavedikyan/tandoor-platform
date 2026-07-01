@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
+import { useMyTeamScope } from "@/hooks/use-my-team-scope";
+import { useOrgScope } from "@/hooks/use-org-scope";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { useDealerBaseRows } from "@/lib/dealer-base-source";
 import { buildSidebarNavRealScope, type SidebarNavRealScope } from "@/lib/sidebar-nav-real-scope";
@@ -17,6 +19,8 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const orgSnapQ = useOrgSnapshot({ enabled: enabled && isRealUser });
   const catalogQ = useDealerBaseRows();
   const dbScope = useMyScopeFromDB(enabled && isRealUser);
+  const teamScopeQ = useMyTeamScope({ enabled: enabled && isRealUser && me?.role === "rop" });
+  const orgScopeQ = useOrgScope({ enabled: enabled && isRealUser && me?.role === "director" });
 
   const catalogStable = useStableArrayByIds(catalogQ.data ?? []);
   const dbExtKeysStable = useStableSet(
@@ -51,6 +55,8 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
         catalogRows: catalogStable,
         dbScopedExternalKeys: dbScope.ready ? dbExtKeysStable : undefined,
         dbFullCatalog: dbScope.ready ? dbFullCatalog : false,
+        teamScope: teamScopeQ.data,
+        orgScopeData: orgScopeQ.data,
       }),
     [
       isRealUser,
@@ -66,6 +72,8 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
       dbScope.error,
       dbFullCatalog,
       dbExtKeysStable,
+      teamScopeQ.data,
+      orgScopeQ.data,
     ],
   );
 
