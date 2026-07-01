@@ -2966,13 +2966,41 @@ async function handleClientBaseClientsList(
       city: string | null;
       manager_user_id: string | null;
       manager_full_name: string | null;
+      regional_manager_id: string | null;
+      dealer_rop_id: string | null;
+      team_rop_user_id: string | null;
+      has_assignment_manager: boolean;
+      has_assignment_regional: boolean;
+      has_assignment_rop: boolean;
     }>(
       `SELECT d.external_key, d.name, d.city,
               ca.responsible_user_id::text AS manager_user_id,
-              mu.full_name AS manager_full_name
+              mu.full_name AS manager_full_name,
+              d_ov.regional_manager_id::text AS regional_manager_id,
+              d_ov.rop_id::text AS dealer_rop_id,
+              t.rop_user_id::text AS team_rop_user_id,
+              EXISTS (
+                SELECT 1 FROM responsibility_assignments ra
+                WHERE ra.scope_kind = 'dealer'
+                  AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+                  AND ra.responsible_role IN ('manager', 'sales_manager')
+              ) AS has_assignment_manager,
+              EXISTS (
+                SELECT 1 FROM responsibility_assignments ra
+                WHERE ra.scope_kind = 'dealer'
+                  AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+                  AND ra.responsible_role = 'regional_manager'
+              ) AS has_assignment_regional,
+              EXISTS (
+                SELECT 1 FROM responsibility_assignments ra
+                WHERE ra.scope_kind = 'dealer'
+                  AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+                  AND ra.responsible_role = 'rop'
+              ) AS has_assignment_rop
          FROM dealers d
          LEFT JOIN client_assignments ca ON ca.client_code = d.release_code
          LEFT JOIN users mu ON mu.id = ca.responsible_user_id
+         LEFT JOIN teams t ON t.id = ca.team_id
          ${DEALER_OVERRIDE_JOIN}
         WHERE d.external_key = ANY($1::text[])
           AND ${dealerJoinStatusActive("d_ov")}`,
@@ -3010,6 +3038,11 @@ async function handleClientBaseClientsList(
         legalEntity: false,
         tradePointIds: tpIds,
         tradePointsCount: tpIds.length,
+        hasManager: Boolean(row.manager_user_id) || row.has_assignment_manager === true,
+        hasRegional: Boolean(row.regional_manager_id) || row.has_assignment_regional === true,
+        hasRop:
+          Boolean(row.dealer_rop_id?.trim() || row.team_rop_user_id?.trim()) ||
+          row.has_assignment_rop === true,
       });
     }
     for (const key of keysArr) {
@@ -3025,6 +3058,9 @@ async function handleClientBaseClientsList(
           legalEntity: false,
           tradePointIds: tpByDealer.get(key) ?? [],
           tradePointsCount: (tpByDealer.get(key) ?? []).length,
+          hasManager: false,
+          hasRegional: false,
+          hasRop: false,
         });
       }
     }

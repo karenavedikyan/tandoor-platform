@@ -11,6 +11,7 @@ import {
   type ClientCategoryId,
 } from "./client-category.js";
 import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { isUnassigned, toResponsibleFlagsFromDealerRow } from "./unassigned-responsible.js";
 import { normalizeAssignmentLookupCode } from "./dealer-base-real-scope.js";
 import { getDealerManagerDisplay, getDealerRegionalManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
 import {
@@ -785,7 +786,7 @@ export function buildStructureInfographic(rows: DealerRow[], teamIds: string[]):
   };
 }
 
-export type ClientListFilter = "all" | "active" | "potential" | "attention" | "noTp" | "no_status";
+export type ClientListFilter = "all" | "active" | "potential" | "attention" | "noTp" | "no_status" | "no_responsible";
 
 export function dealerMatchesClientListFilter(row: DealerRow, f: ClientListFilter): boolean {
   if (f === "all") return true;
@@ -794,6 +795,7 @@ export function dealerMatchesClientListFilter(row: DealerRow, f: ClientListFilte
   if (f === "attention") return dealerNeedsAttention(row);
   if (f === "noTp") return row.status === "активный" && row.outlets === 0;
   if (f === "no_status") return row.status !== "активный" && row.status !== "потенциальный";
+  if (f === "no_responsible") return isUnassigned(toResponsibleFlagsFromDealerRow(row));
   return true;
 }
 
@@ -836,6 +838,9 @@ export function mapClientsListItemToDealerRow(
       importanceTier: null,
     })),
     inCatalog: item.inCatalog,
+    hasManager: item.hasManager,
+    hasRegional: item.hasRegional,
+    hasRop: item.hasRop,
   } as unknown as KpiDealerRow;
 }
 

@@ -23,6 +23,9 @@ describe("client-base-clients-list merge", () => {
         legalEntity: false,
         tradePointIds: [],
         tradePointsCount: 0,
+        hasManager: false,
+        hasRegional: false,
+        hasRop: false,
       },
     ],
     [
@@ -38,6 +41,9 @@ describe("client-base-clients-list merge", () => {
         legalEntity: false,
         tradePointIds: [],
         tradePointsCount: 0,
+        hasManager: false,
+        hasRegional: false,
+        hasRop: false,
       },
     ],
     [
@@ -53,6 +59,9 @@ describe("client-base-clients-list merge", () => {
         legalEntity: false,
         tradePointIds: [],
         tradePointsCount: 0,
+        hasManager: false,
+        hasRegional: false,
+        hasRop: false,
       },
     ],
   ]);

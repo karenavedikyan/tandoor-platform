@@ -117,6 +117,9 @@ export type ClientBaseClientsListClient = {
   tradePointsCount: number;
   updatedAt: string | null;
   inCatalog: boolean;
+  hasManager: boolean;
+  hasRegional: boolean;
+  hasRop: boolean;
 };
 
 export type ClientBaseClientsList = {

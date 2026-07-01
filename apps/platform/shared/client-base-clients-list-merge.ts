@@ -15,6 +15,9 @@ export type ClientBaseCatalogDealerMeta = {
   legalEntity: boolean;
   tradePointIds: string[];
   tradePointsCount: number;
+  hasManager: boolean;
+  hasRegional: boolean;
+  hasRop: boolean;
 };
 
 export type ClientBaseActualizationClient = {
@@ -45,6 +48,9 @@ export type ClientBaseClientsListClient = {
   tradePointsCount: number;
   updatedAt: string | null;
   inCatalog: boolean;
+  hasManager: boolean;
+  hasRegional: boolean;
+  hasRop: boolean;
 };
 
 export function resolveClientExternalKey(id: string, catalogKeys: Set<string>): string {
@@ -97,6 +103,7 @@ export function mergeClientBaseClientsList(params: {
     if (status === "skip") continue;
     const tpIds = new Set<string>([...(meta?.tradePointIds ?? []), ...(ac?.tradePointIds ?? [])]);
     const tpIdList = Array.from(tpIds);
+    const managerUserId = ac?.managerUserId ?? meta?.managerUserId ?? null;
     out.set(key, {
       id: key,
       fullName: ac?.fullName ?? meta?.fullName ?? key,
@@ -105,12 +112,15 @@ export function mergeClientBaseClientsList(params: {
       legalEntity: ac?.legalEntity ?? meta?.legalEntity ?? false,
       city: ac?.city ?? meta?.city ?? null,
       status,
-      managerUserId: ac?.managerUserId ?? meta?.managerUserId ?? null,
+      managerUserId,
       managerFullName: ac?.managerFullName ?? meta?.managerFullName ?? null,
       tradePointIds: tpIdList,
       tradePointsCount: tpIdList.length || meta?.tradePointsCount || ac?.tradePointIds.length || 0,
       updatedAt: ac?.updatedAt ?? null,
       inCatalog: true,
+      hasManager: Boolean(managerUserId) || (meta?.hasManager ?? false),
+      hasRegional: meta?.hasRegional ?? false,
+      hasRop: meta?.hasRop ?? false,
     });
   }
 
@@ -133,6 +143,9 @@ export function mergeClientBaseClientsList(params: {
       tradePointsCount: ac.tradePointIds.length,
       updatedAt: ac.updatedAt,
       inCatalog: catalogKeys.has(key),
+      hasManager: Boolean(ac.managerUserId),
+      hasRegional: false,
+      hasRop: false,
     });
   }
 

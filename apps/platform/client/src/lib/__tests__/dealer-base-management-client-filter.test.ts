@@ -6,6 +6,27 @@ function row(status: DealerRow["status"], outlets = 1): DealerRow {
   return { status, outlets } as unknown as DealerRow;
 }
 
+describe("dealerMatchesClientListFilter no_responsible", () => {
+  it("включает клиентов без ответственного по флагам БД", () => {
+    const unassigned = {
+      status: "активный",
+      outlets: 1,
+      hasManager: false,
+      hasRegional: false,
+      hasRop: false,
+    } as unknown as DealerRow;
+    const assigned = {
+      status: "активный",
+      outlets: 1,
+      hasManager: true,
+      hasRegional: true,
+      hasRop: true,
+    } as unknown as DealerRow;
+    expect(dealerMatchesClientListFilter(unassigned, "no_responsible")).toBe(true);
+    expect(dealerMatchesClientListFilter(assigned, "no_responsible")).toBe(false);
+  });
+});
+
 describe("dealerMatchesClientListFilter no_status", () => {
   it("включает приостановленных и требующих внимания", () => {
     expect(dealerMatchesClientListFilter(row("приостановлен"), "no_status")).toBe(true);
