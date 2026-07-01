@@ -23,6 +23,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
+import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import type { UserRole } from "@shared/auth";
 import { useGlobalSearch } from "@/lib/search/use-global-search";
 
@@ -32,12 +33,18 @@ type GlobalSearchDialogProps = {
   role?: UserRole | null;
 };
 
-function ResultSublabel({ text }: { text?: string }): ReactElement | null {
-  if (!text) return null;
-  return <span className="ml-2 truncate text-xs text-muted-foreground">{text}</span>;
+function GlobalSearchErrorFallback(): ReactElement {
+  return (
+    <div
+      className="px-4 py-8 text-center text-sm text-muted-foreground"
+      data-testid="global-search-error-fallback"
+    >
+      Поиск временно недоступен
+    </div>
+  );
 }
 
-export function GlobalSearchDialog({ open, onOpenChange, role }: GlobalSearchDialogProps): ReactElement {
+function GlobalSearchDialogContent({ open, onOpenChange, role }: GlobalSearchDialogProps): ReactElement {
   const [, setLocation] = useLocation();
   const { query, setQuery, quickLinks, results, isServerLoading, hasContentQuery, isEmpty } = useGlobalSearch(
     open,
@@ -60,7 +67,7 @@ export function GlobalSearchDialog({ open, onOpenChange, role }: GlobalSearchDia
       results.assignments.length > 0);
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <>
       <CommandInput
         placeholder="Поиск по платформе..."
         value={query}
@@ -165,6 +172,21 @@ export function GlobalSearchDialog({ open, onOpenChange, role }: GlobalSearchDia
           </div>
         ) : null}
       </CommandList>
+    </>
+  );
+}
+
+function ResultSublabel({ text }: { text?: string }): ReactElement | null {
+  if (!text) return null;
+  return <span className="ml-2 truncate text-xs text-muted-foreground">{text}</span>;
+}
+
+export function GlobalSearchDialog({ open, onOpenChange, role }: GlobalSearchDialogProps): ReactElement {
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange}>
+      <DealerBaseErrorBoundary renderError={() => <GlobalSearchErrorFallback />}>
+        <GlobalSearchDialogContent open={open} onOpenChange={onOpenChange} role={role} />
+      </DealerBaseErrorBoundary>
     </CommandDialog>
   );
 }
