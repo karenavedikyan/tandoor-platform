@@ -15,8 +15,9 @@ import { searchGlobal } from "../search/global-search-api.js";
 import { filterQuickLinks, type GlobalSearchQuickLink } from "../search/global-search-quick-links.js";
 import {
   buildDefaultLocalSearchContext,
-  buildLocalGlobalSearch,
+  buildScopedDealerRowsForSearch,
   emptyGlobalSearchResult,
+  matchLocalGlobalSearch,
 } from "../search/local-global-search.js";
 import {
   dedupeById,
@@ -27,6 +28,7 @@ import type { AssignmentDto } from "../showcase-assignments-api.js";
 import { assignmentsScopeIsActive, type AssignmentsScope } from "../dealer-base-real-scope.js";
 
 const SERVER_DEBOUNCE_MS = 280;
+const LOCAL_DEBOUNCE_MS = 180;
 
 function mergeSearchResults(local: GlobalSearchResult, remote: GlobalSearchResult): GlobalSearchResult {
   const limit = GLOBAL_SEARCH_LIMIT_PER_TYPE;
@@ -125,10 +127,42 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
 
   const hasContentQuery = isContentSearchQuery(query);
 
+  const scopedRows = useMemo(
+    () => (open ? buildScopedDealerRowsForSearch(localContext) : []),
+    [open, localContext],
+  );
+
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const localDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setDebouncedQuery("");
+      if (localDebounceRef.current) clearTimeout(localDebounceRef.current);
+      localDebounceRef.current = null;
+      return;
+    }
+    if (!hasContentQuery) {
+      setDebouncedQuery("");
+      if (localDebounceRef.current) clearTimeout(localDebounceRef.current);
+      localDebounceRef.current = null;
+      return;
+    }
+    if (localDebounceRef.current) clearTimeout(localDebounceRef.current);
+    localDebounceRef.current = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, LOCAL_DEBOUNCE_MS);
+    return () => {
+      if (localDebounceRef.current) clearTimeout(localDebounceRef.current);
+    };
+  }, [open, hasContentQuery, query]);
+
+  const hasDebouncedContentQuery = isContentSearchQuery(debouncedQuery);
+
   const localResults = useMemo(() => {
-    if (!open || !hasContentQuery) return emptyGlobalSearchResult();
-    return buildLocalGlobalSearch(localContext, query);
-  }, [open, hasContentQuery, localContext, query]);
+    if (!open || !hasDebouncedContentQuery) return emptyGlobalSearchResult();
+    return matchLocalGlobalSearch(localContext, scopedRows, debouncedQuery);
+  }, [open, hasDebouncedContentQuery, localContext, scopedRows, debouncedQuery]);
 
   const [serverResults, setServerResults] = useState<GlobalSearchResult>(emptyGlobalSearchResult());
   const [isServerLoading, setIsServerLoading] = useState(false);
@@ -138,11 +172,14 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setDebouncedQuery("");
       setServerResults(emptyGlobalSearchResult());
       setIsServerLoading(false);
       abortRef.current?.abort();
       abortRef.current = null;
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (localDebounceRef.current) clearTimeout(localDebounceRef.current);
+      localDebounceRef.current = null;
     }
   }, [open]);
 
