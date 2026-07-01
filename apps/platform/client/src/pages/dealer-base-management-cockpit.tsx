@@ -516,7 +516,9 @@ export function DealerBaseManagementCockpit({
   const clientsListQ = useQuery({
     queryKey: ["client-base-clients-list"],
     queryFn: () => fetchClientBaseClientsList({}),
-    enabled: Boolean(overview),
+    enabled:
+      Boolean(overview) &&
+      (detail?.kind === "kpi-clients" || detail?.kind === "kpi-trade-points"),
     staleTime: 30_000,
   });
   const overviewTradePointsCount = tradePointsOverviewQ.data?.structure.activeTradePoints ?? null;

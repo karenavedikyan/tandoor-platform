@@ -37,6 +37,14 @@ import {
   type ClientBaseActualizationClient,
   type ClientBaseCatalogDealerMeta,
 } from "../../shared/client-base-clients-list-merge.js";
+import {
+  clientBaseOverviewCacheKey,
+  getClientBaseOverviewCached,
+  setClientBaseOverviewCached,
+  getTradePointsOverviewCached,
+  setTradePointsOverviewCached,
+  tradePointsOverviewCacheKey,
+} from "../../shared/client-base-overview-cache.js";
 import { filterManagerDetailByRopViewerScope, shouldIntersectManagerDetailWithRopViewerScope } from "../../shared/trade-points-manager-detail-scope.js";
 
 type UserRole =
@@ -2717,6 +2725,13 @@ async function handleClientBaseOverview(
     allowed = new Set([managerFilter]);
   }
 
+  const overviewCacheKey = clientBaseOverviewCacheKey(me.role, me.id, teamIdFilter, managerFilter);
+  const cachedOverview = getClientBaseOverviewCached<Record<string, unknown>>(overviewCacheKey);
+  if (cachedOverview) {
+    sendJson(res, 200, cachedOverview);
+    return;
+  }
+
   const rows = await pool.query<ActualizationDedupeStateRow>(
     `SELECT scope_key, user_id, role, state, updated_at
        FROM client_base_actualization_state
@@ -2874,31 +2889,35 @@ async function handleClientBaseOverview(
     });
   }
 
-  sendJson(res, 200, {
-    success: true,
-    generatedAt: new Date().toISOString(),
-    structure: {
-      activeClients: activeClients.length,
-      tradePoints: visibleTradePoints.length,
-      potentialClients: potentialClients.length,
-      attentionClients: attentionClients.length,
-      averageDistributionPct: nonArchivedClients.length ? Math.round((clientsWithTp.size / nonArchivedClients.length) * 100) : 0,
-      avgTpPerClient: activeClients.length ? Number((visibleTradePoints.length / activeClients.length).toFixed(2)) : 0,
-      managersWithClientsWithoutTp: byManager.filter((m) => nonArchivedClients.some((c) => c.managerUserId === m.userId && !clientsWithTp.has(c.id))).length,
-      citiesWithClientsWithoutTp: new Set(nonArchivedClients.filter((c) => !clientsWithTp.has(c.id)).map((c) => c.city || "__without__")).size,
-    },
-    topActiveClients: [...activeClients].map((c) => ({
-      clientId: c.id,
-      fullName: c.fullName,
-      tradePointsCount: visibleTradePoints.filter((tp) => tp.clientId === c.id).length,
-      managerUserId: c.managerUserId,
-      managerFullName: c.managerFullName,
-      city: c.city,
-    })).sort((a, b) => b.tradePointsCount - a.tradePointsCount).slice(0, 10),
-    cities,
-    withoutCity,
-    ropGroups,
-  });
+  sendJson(res, 200, (() => {
+    const payload = {
+      success: true as const,
+      generatedAt: new Date().toISOString(),
+      structure: {
+        activeClients: activeClients.length,
+        tradePoints: visibleTradePoints.length,
+        potentialClients: potentialClients.length,
+        attentionClients: attentionClients.length,
+        averageDistributionPct: nonArchivedClients.length ? Math.round((clientsWithTp.size / nonArchivedClients.length) * 100) : 0,
+        avgTpPerClient: activeClients.length ? Number((visibleTradePoints.length / activeClients.length).toFixed(2)) : 0,
+        managersWithClientsWithoutTp: byManager.filter((m) => nonArchivedClients.some((c) => c.managerUserId === m.userId && !clientsWithTp.has(c.id))).length,
+        citiesWithClientsWithoutTp: new Set(nonArchivedClients.filter((c) => !clientsWithTp.has(c.id)).map((c) => c.city || "__without__")).size,
+      },
+      topActiveClients: [...activeClients].map((c) => ({
+        clientId: c.id,
+        fullName: c.fullName,
+        tradePointsCount: visibleTradePoints.filter((tp) => tp.clientId === c.id).length,
+        managerUserId: c.managerUserId,
+        managerFullName: c.managerFullName,
+        city: c.city,
+      })).sort((a, b) => b.tradePointsCount - a.tradePointsCount).slice(0, 10),
+      cities,
+      withoutCity,
+      ropGroups,
+    };
+    setClientBaseOverviewCached(overviewCacheKey, payload);
+    return payload;
+  })());
 }
 
 async function handleClientBaseClientsList(
@@ -3771,6 +3790,13 @@ async function handleTradePointsOverview(
       return;
     }
 
+    const tpOverviewCacheKey = tradePointsOverviewCacheKey(me.role, me.id);
+    const cachedTpOverview = getTradePointsOverviewCached<Record<string, unknown>>(tpOverviewCacheKey);
+    if (cachedTpOverview) {
+      sendJson(res, 200, cachedTpOverview);
+      return;
+    }
+
     let showcaseMap = new Map<string, { withoutPhoto: boolean; notFilled: boolean }>();
     try {
       showcaseMap = await loadShowcaseStatsForOverview(pool);
@@ -3787,6 +3813,7 @@ async function handleTradePointsOverview(
       showcaseMap,
       viewerTeam,
     );
+    setTradePointsOverviewCached(tpOverviewCacheKey, payload);
     sendJson(res, 200, payload);
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
