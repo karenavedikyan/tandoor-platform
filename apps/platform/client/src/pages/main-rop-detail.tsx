@@ -59,6 +59,11 @@ import { DistributionBreakdownRow } from "@/components/distribution-analytics/di
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
 import {
+  activeTradePointIdsFromScopedResponse,
+  buildTradePointIdsByCityFromScopedDb,
+  buildTradePointIdsByManagerNameFromScopedDb,
+} from "@/lib/trade-points-scoped-ids";
+import {
   buildClientCountByCityFromScopedDb,
   buildTradePointCountByCityFromScopedDb,
 } from "@/lib/main-dashboard-city-stats";
@@ -206,14 +211,14 @@ export default function MainRopDetailPage() {
 
   const teamTradePointIds = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    const ids: string[] = [];
-    for (const row of clientRows) {
-      for (const e of mergeTradePointsForActualization(row, managementPlane.mergedState)) {
-        if (!e.isArchived) ids.push(e.point.id);
-      }
-    }
-    return ids;
-  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
+    const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
+    return fromScoped ?? [];
+  }, [actx.enabled, allowed, scopedTpQ.data]);
+
+  const teamScopeTpReady = useMemo(() => {
+    if (!actx.enabled || !allowed) return true;
+    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+  }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const teamDistribution = useTradePointDistributionAggregate(
     actx.enabled && allowed ? teamTradePointIds : [],
@@ -221,39 +226,14 @@ export default function MainRopDetailPage() {
   );
 
   const tradePointIdsByManagerName = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!actx.enabled || !allowed) return map;
-    for (const row of clientRows) {
-      const key = (row.manager || "").trim();
-      if (!key) continue;
-      const pointIds = mergeTradePointsForActualization(row, managementPlane.mergedState)
-        .filter((e) => !e.isArchived)
-        .map((e) => e.point.id);
-      if (pointIds.length === 0) continue;
-      const arr = map.get(key);
-      if (arr) arr.push(...pointIds);
-      else map.set(key, [...pointIds]);
-    }
-    return map;
-  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
+    if (!actx.enabled || !allowed || scopedTpQ.data?.success !== true) return new Map<string, string[]>();
+    return buildTradePointIdsByManagerNameFromScopedDb(scopedTpQ.data.tradePoints);
+  }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const tradePointIdsByCity = useMemo(() => {
-    const map = new Map<string, string[]>();
-    if (!actx.enabled || !allowed) return map;
-    for (const row of clientRows) {
-      const key = (row.city || "").trim() || "Без города";
-      const pointIds = mergeTradePointsForActualization(row, managementPlane.mergedState)
-        .filter((e) => !e.isArchived)
-        .map((e) => e.point.id);
-      if (pointIds.length === 0) continue;
-      const arr = map.get(key);
-      if (arr) arr.push(...pointIds);
-      else map.set(key, [...pointIds]);
-    }
-    return new Map(
-      Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "ru")),
-    );
-  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
+    if (!actx.enabled || !allowed || scopedTpQ.data?.success !== true) return new Map<string, string[]>();
+    return buildTradePointIdsByCityFromScopedDb(scopedTpQ.data.tradePoints);
+  }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const loading =
     authLoading ||
@@ -316,16 +296,29 @@ export default function MainRopDetailPage() {
       {scopeMetrics ? (
         <section className="min-w-0" data-testid="section-main-rop-distribution">
           <h2 className="mb-2 text-sm font-semibold text-foreground">Дистрибуция команды</h2>
-          <DistributionAnalyticsKpiTiles
-            aggregate={teamDistribution.aggregate}
-            tradePointsCount={teamDistribution.tradePointsCount}
-            showTradePointsCount={false}
-            tileTestIdByType={{
-              entrance: "tile-rop-distribution-entrance",
-              interior: "tile-rop-distribution-interior",
-              hardware: "tile-rop-distribution-hardware",
-            }}
-          />
+          {!teamScopeTpReady || teamDistribution.loading ? (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="section-main-rop-distribution-loading">
+              {["ВХ", "МК", "Фурнитура"].map((label) => (
+                <div key={label} className="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Средняя дистрибуция {label}
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <DistributionAnalyticsKpiTiles
+              aggregate={teamDistribution.aggregate}
+              tradePointsCount={teamDistribution.tradePointsCount}
+              showTradePointsCount={false}
+              tileTestIdByType={{
+                entrance: "tile-rop-distribution-entrance",
+                interior: "tile-rop-distribution-interior",
+                hardware: "tile-rop-distribution-hardware",
+              }}
+            />
+          )}
         </section>
       ) : null}
 

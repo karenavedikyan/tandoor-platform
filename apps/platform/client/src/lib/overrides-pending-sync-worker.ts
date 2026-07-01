@@ -46,6 +46,8 @@ import {
   type PendingSyncItem,
 } from "./overrides-pending-sync.js";
 import { refreshDbCommentsForClient } from "./client-comments-db-cache.js";
+import { invalidateTradePointsScopedQueries } from "./trade-points-scoped-api.js";
+import { refreshMatrixFromServer } from "./showcase-matrix-store.js";
 
 const INTERVAL_MS = 15_000;
 const PURGE_INTERVAL_MS = 60 * 60 * 1000;
@@ -65,6 +67,26 @@ function isPermanentApiFailure(result: { ok: false; status?: number; code?: stri
   if (code === "INVALID_UUID_FIELD") return true;
   const msg = (result.message ?? "").toLowerCase();
   return msg.includes("invalid input syntax for type uuid");
+}
+
+function rollbackShowcaseMatrixOptimistic(payload: Record<string, unknown>): void {
+  const tradePointId = typeof payload.tradePointId === "string" ? payload.tradePointId : "";
+  const dealerId = typeof payload.dealerId === "string" ? payload.dealerId : undefined;
+  if (!tradePointId) return;
+  void refreshMatrixFromServer(tradePointId, dealerId);
+}
+
+function notifyShowcaseMatrixSyncDead(err: string): void {
+  if (typeof window === "undefined") return;
+  void import("../hooks/use-toast.js")
+    .then(({ toast }) => {
+      toast({
+        variant: "destructive",
+        title: "Не удалось сохранить витрину",
+        description: err === "network" ? "Проверьте соединение и попробуйте снова." : err,
+      });
+    })
+    .catch(() => undefined);
 }
 
 async function processItem(item: PendingSyncItem): Promise<void> {
@@ -176,6 +198,12 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         placementCompetitors: Array.isArray(p.placementCompetitors) ? p.placementCompetitors : undefined,
         placementLegacyOurs: typeof p.placementLegacyOurs === "number" ? p.placementLegacyOurs : null,
       });
+      if (result.ok) {
+        dequeuePendingSync(item.id);
+        invalidateTradePointsScopedQueries();
+        return;
+      }
+      rollbackShowcaseMatrixOptimistic(p);
       break;
     }
     case "showcase-matrix-catalog-upsert": {
@@ -213,10 +241,15 @@ async function processItem(item: PendingSyncItem): Promise<void> {
   const err = failureMessage(result as { ok: false; message?: string; code?: string; status?: number });
   if (isPermanentApiFailure(result as { ok: false; status?: number; code?: string; message?: string })) {
     markPendingSyncDead(item.id, err);
+    if (item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead(err);
   } else if ("network" in result && result.network) {
     markPendingSyncFailed(item.id, "network");
+    const still = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
+    if (still?.dead && item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead("network");
   } else {
     markPendingSyncFailed(item.id, err);
+    const still = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
+    if (still?.dead && item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead(err);
   }
 }
 

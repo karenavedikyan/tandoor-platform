@@ -42,6 +42,7 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { activeTradePointIdsFromScopedResponse } from "@/lib/trade-points-scoped-ids";
 import {
   buildClientCountByCityFromScopedDb,
   buildTradePointCountByCityFromScopedDb,
@@ -187,20 +188,19 @@ function MainManagerDetailContent() {
 
   const managerTradePointIds = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    const ids: string[] = [];
-    for (const row of clientRows) {
-      for (const e of mergeTradePointsForActualization(row, managementPlane.mergedState)) {
-        if (!e.isArchived) ids.push(e.point.id);
-      }
-    }
-    return ids;
-  }, [actx.enabled, allowed, clientRows, managementPlane.mergedState]);
+    const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
+    return fromScoped ?? [];
+  }, [actx.enabled, allowed, scopedTpQ.data]);
+
+  const managerScopeTpReady = useMemo(() => {
+    if (!actx.enabled || !allowed) return true;
+    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+  }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const managerDistribution = useTradePointDistributionAggregate(
     actx.enabled && allowed ? managerTradePointIds : [],
     managementPlane.mergedState,
   );
-
 
   const showCityCoverage = actx.enabled && allowed && clientRows.length > 0;
 
@@ -275,16 +275,29 @@ function MainManagerDetailContent() {
       </section>
 
       <section className="min-w-0" data-testid="section-main-manager-distribution">
-        <DistributionAnalyticsKpiTiles
-          aggregate={managerDistribution.aggregate}
-          tradePointsCount={managerDistribution.tradePointsCount}
-          showTradePointsCount={false}
-          tileTestIdByType={{
-            entrance: "tile-manager-distribution-entrance",
-            interior: "tile-manager-distribution-interior",
-            hardware: "tile-manager-distribution-hardware",
-          }}
-        />
+        {!managerScopeTpReady || managerDistribution.loading ? (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="section-main-manager-distribution-loading">
+            {["ВХ", "МК", "Фурнитура"].map((label) => (
+              <div key={label} className="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Средняя дистрибуция {label}
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <DistributionAnalyticsKpiTiles
+            aggregate={managerDistribution.aggregate}
+            tradePointsCount={managerDistribution.tradePointsCount}
+            showTradePointsCount={false}
+            tileTestIdByType={{
+              entrance: "tile-manager-distribution-entrance",
+              interior: "tile-manager-distribution-interior",
+              hardware: "tile-manager-distribution-hardware",
+            }}
+          />
+        )}
       </section>
 
       {showCityCoverage ? (

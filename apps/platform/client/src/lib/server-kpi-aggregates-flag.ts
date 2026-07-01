@@ -18,17 +18,17 @@ export async function shouldUseServerKpiAggregates(): Promise<boolean> {
   try {
     const res = await fetch("/api/config/feature-flags", { credentials: "include" });
     if (!res.ok) {
-      cached = false;
-      return false;
+      cached = true;
+      return true;
     }
     const body = (await res.json()) as { flags?: { USE_SERVER_KPI_AGGREGATES?: boolean } };
-    cached = body.flags?.USE_SERVER_KPI_AGGREGATES === true;
+    cached = body.flags?.USE_SERVER_KPI_AGGREGATES !== false;
   } catch {
-    cached = false;
+    cached = true;
   }
   return cached;
 }
 
 export function getServerKpiAggregatesFlagSync(): boolean {
-  return cached === true;
+  return cached !== false;
 }

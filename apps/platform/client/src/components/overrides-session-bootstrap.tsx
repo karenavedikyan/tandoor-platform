@@ -12,6 +12,11 @@ import {
 import { hydrateShipmentRoutesFromServer, setShipmentRoutesSessionKeys } from "@/lib/dealer-shipment-route-definitions";
 import { runPendingSyncUuidCleanupOnLogin } from "@/lib/overrides-pending-uuid-cleanup";
 import { startOverridesPendingSyncWorker } from "@/lib/overrides-pending-sync-worker";
+import { queryClient } from "@/lib/queryClient";
+import {
+  TRADE_POINTS_LIST_SCOPED_QUERY_KEY,
+  TRADE_POINTS_SCOPED_INVALIDATE_EVENT,
+} from "@/lib/trade-points-scoped-api";
 
 export function OverridesSessionBootstrap({
   userId,
@@ -24,6 +29,14 @@ export function OverridesSessionBootstrap({
 
   useEffect(() => {
     startOverridesPendingSyncWorker();
+  }, []);
+
+  useEffect(() => {
+    const onScopedTpInvalidate = () => {
+      void queryClient.invalidateQueries({ queryKey: TRADE_POINTS_LIST_SCOPED_QUERY_KEY });
+    };
+    window.addEventListener(TRADE_POINTS_SCOPED_INVALIDATE_EVENT, onScopedTpInvalidate);
+    return () => window.removeEventListener(TRADE_POINTS_SCOPED_INVALIDATE_EVENT, onScopedTpInvalidate);
   }, []);
 
   useEffect(() => {
