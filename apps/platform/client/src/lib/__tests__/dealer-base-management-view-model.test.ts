@@ -16,6 +16,7 @@ import {
   buildDbAwareManagerMatcher,
   buildRopGroups,
   findManagerInRopGroups,
+  matchesManagerForDealerRow,
 } from "../dealer-base-management-view-model";
 
 const TEAM = "team-kupiansky";
@@ -269,4 +270,85 @@ const teamRows = [
   assert.equal(rows[0]!.status, "активный");
 }
 
+// --- Штаб: назначение важнее текстового имени менеджера ---
+
+{
+  const r = row("client-ma-ma143380", {
+    releaseCode: "MA-MA143380",
+    releaseManagerId: MGR_BOYKO,
+    manager: "Понкратова Василиса Владимировна",
+  });
+  const responsibleByCode: Record<string, string> = {
+    "MA-MA143380": UUID_YAKUBOVA,
+  };
+  assert.equal(matchesManagerForDealerRow(r, MGR_BOYKO, "Бойко", responsibleByCode), false);
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", responsibleByCode), true);
+  const managers = aggregateManagersForTeam(TEAM, [r], null, responsibleByCode, userIdToCatalogMgrId);
+  const withClient = managers.filter((m) => m.rows.some((x) => x.id === r.id));
+  assert.equal(withClient.length, 1, "client under exactly one manager");
+  assert.equal(withClient[0]!.managerId, MGR_YAKUBOVA);
+}
+
+{
+  const r = row("client-ma-ma141249", {
+    releaseCode: "MA-MA141249",
+    id: "client-ma-ma141249",
+    releaseManagerId: "",
+    manager: "Понкратова Василиса Владимировна",
+  });
+  const responsibleByCode: Record<string, string> = {
+    "MA-MA141249": UUID_YAKUBOVA,
+  };
+  assert.equal(matchesManagerForDealerRow(r, MGR_BOYKO, "Бойко", responsibleByCode), false);
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", responsibleByCode), true);
+}
+
+{
+  const r = row("client-ma-ma141249", {
+    releaseCode: "MA-MA141249",
+    id: "client-ma-ma141249",
+    releaseManagerId: "",
+    manager: "Понкратова Василиса Владимировна",
+  });
+  const responsibleByCode: Record<string, string> = {
+    "client-ma-ma141249": UUID_YAKUBOVA,
+  };
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", responsibleByCode), true);
+}
+
+{
+  const r = row("client-release-mgr", {
+    releaseCode: "MA-REL-1",
+    releaseManagerId: MGR_BOYKO,
+    manager: "Якубова Юлия Сергеевна",
+  });
+  assert.equal(matchesManagerForDealerRow(r, MGR_BOYKO, "Бойко", {}), true);
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", {}), false);
+}
+
+{
+  const r = row("client-orphan-name", {
+    releaseCode: "MA-ORPHAN",
+    releaseManagerId: "",
+    manager: "Бойко Екатерина Михайловна",
+  });
+  assert.equal(matchesManagerForDealerRow(r, MGR_BOYKO, "Бойко Екатерина Михайловна", {}), true);
+  assert.equal(matchesManagerForDealerRow(r, MGR_YAKUBOVA, "Якубова", {}), false);
+}
+
+{
+  const teams = [{ teamId: TEAM, ropName: "Купянский" }];
+  const r = row("client-dup", {
+    releaseCode: "MA-DUP",
+    releaseManagerId: MGR_BOYKO,
+    manager: "Понкратова Василиса Владимировна",
+  });
+  const responsibleByCode: Record<string, string> = { "MA-DUP": UUID_YAKUBOVA };
+  const groups = buildRopGroups([r], teams, null, responsibleByCode, userIdToCatalogMgrId);
+  const holders = groups.flatMap((g) => g.managers).filter((m) => m.rows.some((x) => x.id === r.id));
+  assert.equal(holders.length, 1);
+  assert.equal(holders[0]!.managerId, MGR_YAKUBOVA);
+}
+
 console.log("dealer-base-management-view-model.test.ts: OK");
+

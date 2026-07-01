@@ -47,9 +47,6 @@ export function normalizePersonTokens(s: string): string[] {
   return t.split(" ").filter(Boolean);
 }
 
-/**
- * Сопоставление отображаемого ФИО (Excel, моки) с именем в справочнике sales-control.
- */
 export function managerDisplayMatchesCatalogName(displayName: string, catalogName: string): boolean {
   const a = normalizePersonTokens(displayName);
   const b = normalizePersonTokens(catalogName);
@@ -74,6 +71,14 @@ export function managerDisplayMatchesCatalogName(displayName: string, catalogNam
     if (setA.has(x)) overlap += 1;
   }
   return overlap >= 2;
+}
+
+/** Строгое совпадение нормализованного ФИО (без частичных совпадений). */
+export function managerDisplayMatchesCatalogNameStrict(displayName: string, catalogName: string): boolean {
+  const a = normalizePersonTokens(displayName);
+  const b = normalizePersonTokens(catalogName);
+  if (a.length === 0 || b.length === 0) return false;
+  return a.join(" ") === b.join(" ");
 }
 
 export function resolveManagerUserFromDisplayName(displayName: string): SalesUser | undefined {

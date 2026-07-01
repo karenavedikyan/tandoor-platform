@@ -11,8 +11,14 @@ import {
   type ClientCategoryId,
 } from "./client-category.js";
 import { dealerNeedsAttention, mapSalesRoleToDealerBaseAccess, type DealerBaseAccessRole } from "./dealer-base-role-views.js";
+import { normalizeAssignmentLookupCode } from "./dealer-base-real-scope.js";
 import { getDealerManagerDisplay, getDealerRopDisplay, type DealerRow } from "./dealer-base-mock-data.js";
-import { getRopOptions, managerDisplayMatchesCatalogName, resolveTeamIdFromRopDisplayName } from "./rop-manager-filters.js";
+import {
+  getRopOptions,
+  managerDisplayMatchesCatalogName,
+  managerDisplayMatchesCatalogNameStrict,
+  resolveTeamIdFromRopDisplayName,
+} from "./rop-manager-filters.js";
 import { getTeamLeadForTeam, getTeamManagers, type SalesUser } from "./sales-control-data.js";
 import { normalizeTerritoryCityName } from "./territory-city-normalize.js";
 import type { ReleaseDemoProfile } from "./release-demo-profile.js";
@@ -21,7 +27,7 @@ import { realEffectiveTeamLeadTeamId, realRopOptions, realTeamManagers } from ".
 import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
-import type { MemberTotals, TeamTotals } from "@shared/dealers-scope-types";
+import type { MemberTotals, TeamTotals, OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
 import type { ClientBaseOverview } from "./client-base-overview-api.js";
 
 export type ResponsibleByCodeMap = Record<string, string> | Map<string, string>;
@@ -34,8 +40,8 @@ function lookupResponsibleByCode(map: ResponsibleByCodeMap | undefined, code: st
 
 function hasResponsibleByCode(map: ResponsibleByCodeMap | undefined, code: string): boolean {
   if (!map || !code) return false;
-  if (map instanceof Map) return map.has(code);
-  return Object.prototype.hasOwnProperty.call(map, code);
+  if (lookupResponsibleByCodeNormalized(map, code)) return true;
+  return false;
 }
 
 /** Catalog managerId (`mgr-*`) из UUID org snapshot или уже catalog id. */
@@ -133,11 +139,76 @@ export function dealerRowClientCodeForAssignments(row: DealerRow): string {
   return row.releaseCode?.trim() || row.id;
 }
 
+function lookupResponsibleByCodeNormalized(map: ResponsibleByCodeMap, code: string): string | undefined {
+  const direct = lookupResponsibleByCode(map, code);
+  if (direct) return direct;
+  const norm = normalizeAssignmentLookupCode(code);
+  if (!norm) return undefined;
+  if (map instanceof Map) {
+    for (const [k, v] of Array.from(map.entries())) {
+      if (normalizeAssignmentLookupCode(k) === norm) return v;
+    }
+    return undefined;
+  }
+  for (const [k, v] of Object.entries(map)) {
+    if (normalizeAssignmentLookupCode(k) === norm) return v;
+  }
+  return undefined;
+}
+
+export function mergeResponsibleByCodeMaps(
+  ...sources: Array<ResponsibleByCodeMap | undefined | null>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const src of sources) {
+    if (!src) continue;
+    if (src instanceof Map) {
+      for (const [k, v] of Array.from(src.entries())) {
+        if (k && v) out[k] = v;
+      }
+    } else {
+      for (const [k, v] of Object.entries(src)) {
+        if (k && v) out[k] = v;
+      }
+    }
+  }
+  return out;
+}
+
+export function responsibleByCodeFromTeamScopePayload(ts: TeamScopePayload): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of ts.members) {
+    for (const key of [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]) {
+      if (key) out[key] = m.user.id;
+    }
+  }
+  return out;
+}
+
+export function responsibleByCodeFromOrgScopePayload(os: OrgScopePayload): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const block of os.teams) {
+    for (const m of block.members) {
+      for (const key of [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]) {
+        if (key) out[key] = m.user.id;
+      }
+    }
+  }
+  for (const m of os.orphan.members) {
+    for (const key of [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]) {
+      if (key) out[key] = m.user.id;
+    }
+  }
+  return out;
+}
+
 /** Кандидаты client_code для lookup в `responsibleByCode` (БД / my-codes). */
 export function clientAssignmentCodeCandidates(row: DealerRow): string[] {
   const out: string[] = [];
   const release = row.releaseCode?.trim();
   if (release) out.push(release);
+  const external = row.external1cCode?.trim();
+  if (external && !out.includes(external)) out.push(external);
   const id = row.id?.trim();
   if (id && !out.includes(id)) out.push(id);
   return out;
@@ -145,7 +216,7 @@ export function clientAssignmentCodeCandidates(row: DealerRow): string[] {
 
 function lookupResponsibleForDealerRow(map: ResponsibleByCodeMap, row: DealerRow): string | undefined {
   for (const code of clientAssignmentCodeCandidates(row)) {
-    const hit = lookupResponsibleByCode(map, code);
+    const hit = lookupResponsibleByCodeNormalized(map, code);
     if (hit) return hit;
   }
   return undefined;
@@ -153,7 +224,7 @@ function lookupResponsibleForDealerRow(map: ResponsibleByCodeMap, row: DealerRow
 
 function hasResponsibleEntryForDealerRow(map: ResponsibleByCodeMap, row: DealerRow): boolean {
   for (const code of clientAssignmentCodeCandidates(row)) {
-    if (hasResponsibleByCode(map, code)) return true;
+    if (lookupResponsibleByCodeNormalized(map, code)) return true;
   }
   return false;
 }
@@ -186,26 +257,27 @@ function buildDbAwareManagerMatcherForPreGroupedTeamRows(
   return (r: DealerRow) => matchesManagerForDealerRow(r, catalogMgrId, managerCatalogName, responsibleByCode);
 }
 
-function matchesManagerForDealerRow(
+export function matchesManagerForDealerRow(
   r: DealerRow,
   catalogMgrId: string,
   managerCatalogName: string,
   responsibleByCode?: ResponsibleByCodeMap,
 ): boolean {
   if (responsibleByCode) {
+    const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
+    if (uuid) {
+      const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
+      return catalogMgr === catalogMgrId;
+    }
     if (hasResponsibleEntryForDealerRow(responsibleByCode, r)) {
-      const uuid = lookupResponsibleForDealerRow(responsibleByCode, r);
-      if (uuid) {
-        const catalogMgr = UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE[uuid] ?? uuid;
-        return catalogMgr === catalogMgrId;
-      }
       return false;
     }
   }
-  return (
-    r.releaseManagerId === catalogMgrId ||
-    managerDisplayMatchesCatalogName(getDealerManagerDisplay(r), managerCatalogName)
-  );
+  const releaseMgr = r.releaseManagerId?.trim();
+  if (releaseMgr) {
+    return catalogManagerIdFromUserRef(releaseMgr) === catalogMgrId;
+  }
+  return managerDisplayMatchesCatalogNameStrict(getDealerManagerDisplay(r), managerCatalogName);
 }
 
 function groupRowsByResolvedTeamId(rows: DealerRow[]): Map<string, DealerRow[]> {
