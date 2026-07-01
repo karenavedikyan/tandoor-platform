@@ -21,9 +21,17 @@ type Props = {
   heatLevel: ManagerHeatLevel;
   /** When set, shown instead of manager.outlets (e.g. loading gate "…"). */
   tpCountDisplay?: string;
+  /** When set, shown instead of manager.active for clients count. */
+  clientsCountDisplay?: string;
 };
 
-export const ManagerTeamCard = memo(function ManagerTeamCard({ manager, ropName, heatLevel, tpCountDisplay }: Props) {
+export const ManagerTeamCard = memo(function ManagerTeamCard({
+  manager,
+  ropName,
+  heatLevel,
+  tpCountDisplay,
+  clientsCountDisplay,
+}: Props) {
   const dashboard = buildManagerDashboardModel(manager, ropName, heatLevel);
   const topCities = dashboard.cities.slice(0, 3);
   const totalForBar = dashboard.rows.length;
@@ -57,7 +65,7 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({ manager, ropName,
               ) : null}
             </div>
             <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-              <span className="text-base font-semibold text-foreground">{manager.active}</span> · {tpCountDisplay ?? manager.outlets} ТТ
+              <span className="text-base font-semibold text-foreground">{clientsCountDisplay ?? manager.active}</span> · {tpCountDisplay ?? manager.outlets} ТТ
             </p>
           </div>
           <ManagerSegmentMiniBar
