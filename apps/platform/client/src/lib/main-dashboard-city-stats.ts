@@ -2,7 +2,6 @@
  * Города для блока «География покрытия» на главной (только активные клиенты и ТТ).
  */
 
-import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
 import type { ActualizationState } from "./client-base-actualization-state.js";
 import { cityKeyForDealerRow } from "./city-concentration.js";
 import type { DealerRow } from "./dealer-base-mock-data.js";
@@ -24,12 +23,13 @@ export function dealerRowMatchesCityFilter(row: DealerRow, selectedCity: string)
 }
 
 export function buildMainDashboardCityTiles(rows: DealerRow[], act: ActualizationState): MainDashboardCityTile[] {
+  void act;
   const map = new Map<string, { activeClients: number; activeTradePoints: number }>();
   for (const r of rows) {
     const city = displayCityForDealerRow(r);
     const cur = map.get(city) ?? { activeClients: 0, activeTradePoints: 0 };
     cur.activeClients += 1;
-    cur.activeTradePoints += mergeTradePointsForActualization(r, act).filter((e) => !e.isArchived).length;
+    cur.activeTradePoints += (r.tradePoints ?? []).length;
     map.set(city, cur);
   }
 

@@ -6,7 +6,7 @@ import {
   displayCityForDealerRow,
   filterCityTilesBySearch,
 } from "../main-dashboard-city-stats";
-import type { DealerRow } from "../dealer-base-mock-data";
+import type { DealerRow, DealerTradePoint } from "../dealer-base-mock-data";
 
 const act = createEmptyActualizationState();
 
@@ -39,6 +39,30 @@ function row(partial: Partial<DealerRow> & { id: string; city?: string }): Deale
   } as DealerRow;
 }
 
+function tp(id: string): DealerTradePoint {
+  return {
+    id,
+    name: "ТТ",
+    city: "Краснодар",
+    address: "ул. 1",
+    format: "магазин",
+    status: "активная",
+    equipment: "",
+    hardwareStockStatus: "",
+    doorsStockStatus: "",
+    distribution: { mk: 0, vh: 0, total: 0 },
+    showcaseStatus: "",
+    showcaseNeeds: "",
+    lastVisitDate: "",
+    nextVisitDate: "",
+    responsibleRegionalManager: "",
+    issues: "",
+    tasks: [],
+    activityHistory: [],
+    photos: { attached: false },
+  };
+}
+
 {
   const tiles = buildMainDashboardCityTiles(
     [row({ id: "a", city: "Краснодар" }), row({ id: "b", city: "Краснодар" }), row({ id: "c", city: "" })],
@@ -61,6 +85,21 @@ function row(partial: Partial<DealerRow> & { id: string; city?: string }): Deale
   const tiles = buildMainDashboardCityTiles([row({ id: "a", city: "Краснодар" }), row({ id: "b", city: "Красноярск" })], act);
   const found = filterCityTilesBySearch(tiles, "крас");
   assert.equal(found.length, 2);
+}
+
+// ТТ на плитке — из row.tradePoints (БД-scope), а не из пустого runtime act.
+{
+  const emptyAct = createEmptyActualizationState();
+  const tiles = buildMainDashboardCityTiles(
+    [
+      row({ id: "a", city: "Воронеж", tradePoints: [tp("tp-a")] }),
+      row({ id: "b", city: "Воронеж", tradePoints: [tp("tp-b")] }),
+    ],
+    emptyAct,
+  );
+  const voronezh = tiles.find((t) => t.city === "Воронеж");
+  assert.equal(voronezh?.activeClients, 2);
+  assert.equal(voronezh?.activeTradePoints, 2, "TP count from row.tradePoints even when act is empty");
 }
 
 console.log("main-dashboard-city-stats: ok");
