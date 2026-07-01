@@ -59,7 +59,8 @@ import { DistributionBreakdownRow } from "@/components/distribution-analytics/di
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
 import {
-  activeTradePointIdsFromScopedResponse,
+  activeTradePointExternalKeysFromScopedResponse,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
 } from "@/lib/trade-points-scoped-ids";
@@ -209,20 +210,26 @@ export default function MainRopDetailPage() {
     return list.filter((r) => dealerIds.has(r.dealerId));
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, clientRows]);
 
-  const teamTradePointIds = useMemo(() => {
+  const teamTradePointExternalKeys = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
+    const fromScoped = activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data);
     return fromScoped ?? [];
+  }, [actx.enabled, allowed, scopedTpQ.data]);
+
+  const teamShowcaseUuidByMatrixKey = useMemo(() => {
+    if (!actx.enabled || !allowed || scopedTpQ.data?.success !== true) return undefined;
+    return buildShowcaseUuidByMatrixKeyFromScopedTradePoints(scopedTpQ.data.tradePoints);
   }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const teamScopeTpReady = useMemo(() => {
     if (!actx.enabled || !allowed) return true;
-    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+    return activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data) !== undefined;
   }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const teamDistribution = useTradePointDistributionAggregate(
-    actx.enabled && allowed ? teamTradePointIds : [],
+    actx.enabled && allowed ? teamTradePointExternalKeys : [],
     managementPlane.mergedState,
+    teamShowcaseUuidByMatrixKey,
   );
 
   const tradePointIdsByManagerName = useMemo(() => {

@@ -80,7 +80,11 @@ import { useMyScopeFromDB, sidebarCountsFromDbScope, kpiCountsFromDbScope } from
 import { useMyTeamScope, useMyTeamScopeTotals, sidebarCountsFromTeamScope, kpiCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope, kpiCountsFromOrgScope } from "@/hooks/use-org-scope";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
-import { activeTradePointIdsFromScopedResponse } from "@/lib/trade-points-scoped-ids";
+import {
+  activeTradePointExternalKeysFromScopedResponse,
+  activeTradePointIdsFromScopedResponse,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+} from "@/lib/trade-points-scoped-ids";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, filterRowsByDbScopeExternalKeys, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
@@ -1925,12 +1929,27 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return fromScoped ?? [];
   }, [useReal, scopedTpQ.data]);
 
-  const scopeTradePointIdsReady = useMemo(() => {
-    if (!useReal) return true;
-    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+  const scopeTradePointExternalKeys = useMemo(() => {
+    if (!useReal) return [] as string[];
+    const fromScoped = activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data);
+    return fromScoped ?? [];
   }, [useReal, scopedTpQ.data]);
 
-  const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, actualizationPlaneForRows);
+  const scopeShowcaseUuidByMatrixKey = useMemo(() => {
+    if (!useReal || scopedTpQ.data?.success !== true) return undefined;
+    return buildShowcaseUuidByMatrixKeyFromScopedTradePoints(scopedTpQ.data.tradePoints);
+  }, [useReal, scopedTpQ.data]);
+
+  const scopeTradePointIdsReady = useMemo(() => {
+    if (!useReal) return true;
+    return activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data) !== undefined;
+  }, [useReal, scopedTpQ.data]);
+
+  const scopeDistribution = useTradePointDistributionAggregate(
+    scopeTradePointExternalKeys,
+    actualizationPlaneForRows,
+    scopeShowcaseUuidByMatrixKey,
+  );
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {

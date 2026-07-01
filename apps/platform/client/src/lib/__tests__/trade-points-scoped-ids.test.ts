@@ -4,15 +4,19 @@
 import assert from "node:assert/strict";
 import type { ScopedTradePointDto } from "../trade-points-scoped-api.js";
 import {
+  activeTradePointExternalKeysFromScopedResponse,
+  activeTradePointExternalKeysFromScopedTradePoints,
   activeTradePointIdsFromScopedResponse,
   activeTradePointIdsFromScopedTradePoints,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
+  matrixKeyForScopedTradePoint,
 } from "../trade-points-scoped-ids.js";
 
 function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "id">): ScopedTradePointDto {
   return {
-    externalKey: partial.id,
+    externalKey: partial.externalKey ?? partial.id,
     name: "TP",
     city: "Москва",
     address: null,
@@ -88,6 +92,30 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
     ? (activeTradePointIdsFromScopedResponse(scoped) ?? [])
     : [];
   assert.deepEqual(scopeTradePointIds, ["tp-scope-1", "tp-scope-2"]);
+}
+
+{
+  const scopedTp = tp({
+    id: "d162e083-8aa2-45a8-9500-8080eca725e6",
+    externalKey: "client-ma-ma132519-01",
+  });
+  assert.equal(matrixKeyForScopedTradePoint(scopedTp), "client-ma-ma132519-01");
+  assert.deepEqual(activeTradePointExternalKeysFromScopedTradePoints([scopedTp]), ["client-ma-ma132519-01"]);
+  assert.deepEqual(activeTradePointIdsFromScopedTradePoints([scopedTp]), ["d162e083-8aa2-45a8-9500-8080eca725e6"]);
+  assert.equal(activeTradePointExternalKeysFromScopedResponse(undefined), undefined);
+  assert.deepEqual(
+    activeTradePointExternalKeysFromScopedResponse({
+      success: true,
+      source: "db",
+      tradePoints: [scopedTp],
+      meta: { total: 1, scope: "team" },
+    }),
+    ["client-ma-ma132519-01"],
+  );
+  const inactive = tp({ id: "uuid-inactive", externalKey: "client-inactive", isActive: false });
+  assert.deepEqual(activeTradePointExternalKeysFromScopedTradePoints([scopedTp, inactive]), ["client-ma-ma132519-01"]);
+  const uuidByKey = buildShowcaseUuidByMatrixKeyFromScopedTradePoints([scopedTp]);
+  assert.equal(uuidByKey.get("client-ma-ma132519-01"), "d162e083-8aa2-45a8-9500-8080eca725e6");
 }
 
 console.log("trade-points-scoped-ids: ok");

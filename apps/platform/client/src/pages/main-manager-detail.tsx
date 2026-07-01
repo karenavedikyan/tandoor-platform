@@ -42,7 +42,10 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
-import { activeTradePointIdsFromScopedResponse } from "@/lib/trade-points-scoped-ids";
+import {
+  activeTradePointExternalKeysFromScopedResponse,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+} from "@/lib/trade-points-scoped-ids";
 import {
   buildClientCountByCityFromScopedDb,
   buildTradePointCountByCityFromScopedDb,
@@ -186,20 +189,26 @@ function MainManagerDetailContent() {
     return tradePointRows.filter((r) => dealerIds.has(r.dealerId));
   }, [tradePointRows, selectedCity, displayedClientRows]);
 
-  const managerTradePointIds = useMemo(() => {
+  const managerTradePointExternalKeys = useMemo(() => {
     if (!actx.enabled || !allowed) return [];
-    const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
+    const fromScoped = activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data);
     return fromScoped ?? [];
+  }, [actx.enabled, allowed, scopedTpQ.data]);
+
+  const managerShowcaseUuidByMatrixKey = useMemo(() => {
+    if (!actx.enabled || !allowed || scopedTpQ.data?.success !== true) return undefined;
+    return buildShowcaseUuidByMatrixKeyFromScopedTradePoints(scopedTpQ.data.tradePoints);
   }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const managerScopeTpReady = useMemo(() => {
     if (!actx.enabled || !allowed) return true;
-    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+    return activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data) !== undefined;
   }, [actx.enabled, allowed, scopedTpQ.data]);
 
   const managerDistribution = useTradePointDistributionAggregate(
-    actx.enabled && allowed ? managerTradePointIds : [],
+    actx.enabled && allowed ? managerTradePointExternalKeys : [],
     managementPlane.mergedState,
+    managerShowcaseUuidByMatrixKey,
   );
 
   const showCityCoverage = actx.enabled && allowed && clientRows.length > 0;

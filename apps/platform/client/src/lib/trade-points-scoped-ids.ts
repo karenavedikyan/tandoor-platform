@@ -9,6 +9,12 @@ function cityKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
   return displayCityLabelFromRawCity(tp.dealerCity ?? tp.city, tp.address);
 }
 
+/** Ключ ТТ для showcase_matrix_entries / tradePointShowcaseActualizationById (external_key). */
+export function matrixKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
+  const key = tp.externalKey?.trim();
+  return key || tp.id;
+}
+
 export function activeTradePointIdsFromScopedTradePoints(
   tradePoints: readonly ScopedTradePointDto[],
 ): string[] {
@@ -26,6 +32,37 @@ export function activeTradePointIdsFromScopedResponse(
 ): string[] | undefined {
   if (!data || data.success !== true) return undefined;
   return activeTradePointIdsFromScopedTradePoints(data.tradePoints);
+}
+
+export function activeTradePointExternalKeysFromScopedTradePoints(
+  tradePoints: readonly ScopedTradePointDto[],
+): string[] {
+  const keys: string[] = [];
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    keys.push(matrixKeyForScopedTradePoint(tp));
+  }
+  return keys;
+}
+
+/** undefined — scoped-ответ ещё не готов; [] — готов, но пустой. */
+export function activeTradePointExternalKeysFromScopedResponse(
+  data: TradePointsListScopedResponse | undefined,
+): string[] | undefined {
+  if (!data || data.success !== true) return undefined;
+  return activeTradePointExternalKeysFromScopedTradePoints(data.tradePoints);
+}
+
+/** UUID по matrix-key для fallback lookup в tradePointShowcaseActualizationById. */
+export function buildShowcaseUuidByMatrixKeyFromScopedTradePoints(
+  tradePoints: readonly ScopedTradePointDto[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    map.set(matrixKeyForScopedTradePoint(tp), tp.id);
+  }
+  return map;
 }
 
 /** ID активных ТТ по имени менеджера (scoped БД). */
