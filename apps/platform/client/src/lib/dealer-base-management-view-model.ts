@@ -384,11 +384,58 @@ function resolveExternalTeamName(userKey: string, orgSnap?: OrgSnapshot | null):
   return team?.name?.trim() || null;
 }
 
+function rowHasGrantForTeam(row: DealerRow, grantedCodes?: Set<string>): boolean {
+  if (!grantedCodes?.size) return false;
+  const code = dealerRowClientCodeForAssignments(row);
+  return grantedCodes.has(code) || grantedCodes.has(row.id);
+}
+
+function rowHomeCatalogTeamId(row: DealerRow, orgSnap?: OrgSnapshot | null): string | undefined {
+  const tid = resolveDealerRowTeamId(row);
+  if (!tid) return undefined;
+  return resolveManagementCatalogTeamId(tid, orgSnap);
+}
+
+function managerHasMembershipInTeam(
+  managerUserKey: string,
+  teamCatalogId: string,
+  orgSnap?: OrgSnapshot | null,
+): boolean {
+  if (!orgSnap) return false;
+  const orgTeamUuid = resolveManagementOrgTeamUuid(teamCatalogId, orgSnap);
+  const catalogKey = catalogManagerIdFromUserRef(managerUserKey);
+  const user =
+    orgSnap.users.find((u) => u.id === managerUserKey) ??
+    orgSnap.users.find((u) => catalogManagerIdFromUserRef(u.id) === catalogKey);
+  if (!user?.teamId) return false;
+  const userTeamCatalog = resolveManagementCatalogTeamId(user.teamId, orgSnap);
+  return user.teamId === orgTeamUuid || userTeamCatalog === teamCatalogId;
+}
+
+/** Скрыть «фантомную» внешнюю карточку из-за рассинхрона assignment.team vs override.rop без гранта. */
+export function shouldSuppressPhantomExternalManager(
+  rows: DealerRow[],
+  teamCatalogId: string,
+  managerUserKey: string,
+  orgSnap?: OrgSnapshot | null,
+  grantedCodes?: Set<string>,
+): boolean {
+  if (rows.length === 0) return true;
+  if (managerHasMembershipInTeam(managerUserKey, teamCatalogId, orgSnap)) return false;
+  if (rows.some((r) => rowHasGrantForTeam(r, grantedCodes))) return false;
+  return rows.every((r) => {
+    const home = rowHomeCatalogTeamId(r, orgSnap);
+    if (!home) return true;
+    return home !== teamCatalogId;
+  });
+}
+
 function buildExternalManagerModelsFromRows(
   teamRows: DealerRow[],
   matchedRowIds: Set<string>,
   teamId: string,
   orgSnap?: OrgSnapshot | null,
+  grantedCodes?: Set<string>,
 ): ManagerRowModel[] {
   const unmatched = teamRows.filter((r) => !matchedRowIds.has(r.id));
   if (unmatched.length === 0) return [];
@@ -401,8 +448,12 @@ function buildExternalManagerModelsFromRows(
     else byKey.set(key, [r]);
   }
 
+  const teamCatalogId = resolveManagementCatalogTeamId(teamId, orgSnap);
   const out: ManagerRowModel[] = [];
   for (const [key, rows] of Array.from(byKey.entries())) {
+    if (shouldSuppressPhantomExternalManager(rows, teamCatalogId, key, orgSnap, grantedCodes)) {
+      continue;
+    }
     const mgrCatalogId = catalogManagerIdFromUserRef(key);
     const fromSnap = orgSnap?.users.find((u) => u.id === key)?.fullName?.trim();
     const name = fromSnap || getDealerManagerDisplay(rows[0]!) || key;
@@ -430,6 +481,7 @@ export function aggregateManagersForTeam(
   responsibleByCode?: ResponsibleByCodeMap,
   _userIdToCatalogMgrId?: Map<string, string>,
   membersTotalsById?: Map<string, MemberTotals>,
+  grantedCodes?: Set<string>,
 ): ManagerRowModel[] {
   void _userIdToCatalogMgrId;
   const catalogTeamId = resolveManagementCatalogTeamId(teamId, orgSnap);
@@ -486,7 +538,13 @@ export function aggregateManagersForTeam(
   for (const m of catalogResults) {
     for (const r of m.rows) matchedRowIds.add(r.id);
   }
-  const external = buildExternalManagerModelsFromRows(teamRows, matchedRowIds, teamId, orgSnap);
+  const external = buildExternalManagerModelsFromRows(
+    teamRows,
+    matchedRowIds,
+    teamId,
+    orgSnap,
+    grantedCodes,
+  );
   return [...catalogResults, ...external];
 }
 
@@ -682,6 +740,7 @@ export function buildRopGroups(
       responsibleByCode,
       userIdToCatalogMgrId,
       membersTotals,
+      grantedCodes,
     );
     const mgrCatalog = managersCatalogForTeam(t.teamId, orgSnap);
     const statusLine = buildRopStatusLine(

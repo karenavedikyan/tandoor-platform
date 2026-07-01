@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "../admin/actualization-dedupe.js";
 import type { DealerRow } from "../../client/src/lib/dealer-base-mock-data.js";
-import { aggregateManagersForTeam } from "../../client/src/lib/dealer-base-management-view-model.js";
+import { aggregateManagersForTeam, shouldSuppressPhantomExternalManager } from "../../client/src/lib/dealer-base-management-view-model.js";
 import type { OrgSnapshot } from "../../client/src/lib/use-org-snapshot.js";
 
 const TEAM_A = "cfa2ab87-9fe9-4068-a0e4-347ddad7a5fa";
@@ -112,5 +112,86 @@ const yakubovaNoName = managersNoTeamName.find((m) => m.managerId === MGR_YAKUBO
 assert.ok(yakubovaNoName);
 assert.equal(yakubovaNoName!.isExternal, true);
 assert.equal(yakubovaNoName!.externalTeamName ?? null, null);
+
+// phantom-desync: override-scope клиент с assignment team A в штабе B — без гранта карточка скрыта
+{
+  const TEAM_SAPOZH = "3d48d79a-38f3-49c1-ba7d-75bb5ba187dc";
+  const MGR_AGADZ = "mgr-agadzhanian-uuid";
+  const desyncRow = dealerRow("client-100004", {
+    releaseCode: "100004",
+    releaseTeamId: TEAM_A,
+    releaseManagerId: MGR_AGADZ,
+    manager: "Агаджанян",
+    ropName: "Сапожков",
+  });
+  const snapSapozh: OrgSnapshot = {
+    ...orgSnap,
+    teams: [
+      ...orgSnap.teams,
+      {
+        id: TEAM_SAPOZH,
+        name: "Команда Сапожков",
+        ropUserId: "rop-sapozhkov",
+        ropName: "Сапожков",
+      },
+    ],
+    users: [
+      ...orgSnap.users,
+      {
+        id: MGR_AGADZ,
+        fullName: "Агаджанян",
+        role: "manager",
+        teamId: TEAM_A,
+        status: "active",
+      },
+    ],
+  };
+  assert.equal(
+    shouldSuppressPhantomExternalManager([desyncRow], TEAM_SAPOZH, MGR_AGADZ, snapSapozh, new Set()),
+    true,
+  );
+  const phantomManagers = aggregateManagersForTeam(
+    TEAM_SAPOZH,
+    [desyncRow],
+    snapSapozh,
+    { "100004": MGR_AGADZ },
+    userIdToCatalogMgrId,
+    undefined,
+    new Set(),
+  );
+  assert.equal(phantomManagers.find((m) => m.managerId === MGR_AGADZ), undefined);
+}
+
+// grant-external: Якубова по гранту в команде A — карточка остаётся
+{
+  const grantRow = dealerRow("client-yak-grant", {
+    releaseCode: "MA-YAK-GRANT",
+    releaseTeamId: TEAM_B,
+    releaseManagerId: MGR_YAKUBOVA,
+    manager: "Якубова",
+  });
+  assert.equal(
+    shouldSuppressPhantomExternalManager(
+      [grantRow],
+      TEAM_A,
+      UUID_YAKUBOVA,
+      orgSnap,
+      new Set(["MA-YAK-GRANT"]),
+    ),
+    false,
+  );
+  const grantManagers = aggregateManagersForTeam(
+    TEAM_A,
+    [grantRow],
+    orgSnap,
+    { "MA-YAK-GRANT": UUID_YAKUBOVA },
+    userIdToCatalogMgrId,
+    undefined,
+    new Set(["MA-YAK-GRANT"]),
+  );
+  const yakGrant = grantManagers.find((m) => m.managerId === MGR_YAKUBOVA);
+  assert.ok(yakGrant, "грантовый внешний менеджер остаётся");
+  assert.equal(yakGrant!.isExternal, true);
+}
 
 console.log("external-managers-view.test.ts: ok");
