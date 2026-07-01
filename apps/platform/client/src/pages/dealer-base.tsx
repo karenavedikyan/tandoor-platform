@@ -138,6 +138,7 @@ import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { useHashQuery } from "@/lib/hash-location-router";
 import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import {
   clientNextStepActionLabel,
@@ -1730,10 +1731,21 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const [, setLocation] = useLocation();
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
+  const teamActualizationPlane = teamCtx.mergedState;
+  const { plane: actualizationPlaneForRows, subjectLoading: subjectActLoading } =
+    useSubjectScopeActualizationState({
+      viewingOtherUserScope,
+      scopeUserId: scopeUserIdResolved,
+      scopeSubjectRole: targetScopeQ.scopeSubject.role,
+      scopeReady: targetScopeQ.ready,
+      teamMergedState: teamActualizationPlane,
+      teamParts: teamCtx.teamParts,
+      actEnabled: actx.enabled,
+    });
 
   const isPageInitialLoading = useMemo(
     () =>
-      (viewingOtherUserScope && targetScopeQ.loading) ||
+      (viewingOtherUserScope && (targetScopeQ.loading || subjectActLoading)) ||
       (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
       (catalogQ.isPending && !catalogQ.data) ||
       (actx.enabled && actx.loading && !actx.meta.updatedAt),
@@ -1749,12 +1761,12 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
       actx.enabled,
       actx.loading,
       actx.meta.updatedAt,
+      subjectActLoading,
     ],
   );
 
   useScrollRestoration({ enabled: !isPageInitialLoading });
 
-  const teamActualizationPlane = teamCtx.mergedState;
   const { publishDashboardRopTeamId } = teamCtx;
   const overviewTeamId = access === "sales_director" && ropTeam !== "all" ? ropTeam : undefined;
   const overviewManagerId = access === "sales_manager" && me?.id ? me.id : undefined;
@@ -1786,13 +1798,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
-      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+      return buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile, {
         releaseDealerRows: releaseRows,
       });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile);
+    return buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile);
   }, [
     isRealUser,
     authLoading,
@@ -1802,7 +1814,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     orgSnapQ.isError,
     visCodesQ.isError,
     actx.enabled,
-    teamActualizationPlane,
+    actualizationPlaneForRows,
     profile,
     hydrationVersion,
     catalogRows,
@@ -1900,27 +1912,27 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     if (!useReal || !actx.enabled) return [] as string[];
     const ids: string[] = [];
     for (const row of scopedRows) {
-      for (const e of mergeTradePointsForActualization(row, teamActualizationPlane)) {
+      for (const e of mergeTradePointsForActualization(row, actualizationPlaneForRows)) {
         if (!e.isArchived) ids.push(e.point.id);
       }
     }
     return ids;
-  }, [useReal, actx.enabled, scopedRows, teamActualizationPlane]);
+  }, [useReal, actx.enabled, scopedRows, actualizationPlaneForRows]);
 
-  const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, teamActualizationPlane);
+  const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, actualizationPlaneForRows);
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */
   const mergedRowsActivePortfolio = useMemo(() => {
     if (isRealUser && !authLoading && !authError && snap && effectiveVisPayload && !orgSnapQ.isError && !visCodesQ.isError) {
       const releaseRows = releaseDealerRowsForScope;
       if (!actx.enabled) return releaseRows;
-      return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile, {
+      return buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile, {
         releaseDealerRows: releaseRows,
       });
     }
     if (isRealUser && !authLoading && !authError && (!snap || !effectiveVisPayload)) return [];
     if (!actx.enabled) return catalogRows;
-    return buildDealerBaseRowsWithActualization(teamActualizationPlane, profile);
+    return buildDealerBaseRowsWithActualization(actualizationPlaneForRows, profile);
   }, [
     isRealUser,
     authLoading,
@@ -1930,7 +1942,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     orgSnapQ.isError,
     visCodesQ.isError,
     actx.enabled,
-    teamActualizationPlane,
+    actualizationPlaneForRows,
     profile,
     catalogRows,
     releaseDealerRowsForScope,

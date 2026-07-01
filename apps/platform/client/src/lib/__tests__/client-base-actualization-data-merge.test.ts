@@ -75,3 +75,14 @@ function stateWithReleaseTrashed(): ReturnType<typeof createEmptyActualizationSt
 }
 
 console.log("client-base-actualization-data-merge: ok (3 cases)");
+
+// Промт: до гидрации overrides — trashedDealersById в act скрывает клиента из рабочего списка.
+{
+  const state = stateWithReleaseTrashed();
+  const rows = buildDealerBaseRowsWithActualization(state, profile, {
+    releaseDealerRows: releaseRows,
+  });
+  assert.ok(!rows.some((r) => r.id === releaseVictim.id), "pre-hydration: act.trashedDealersById excludes from working list");
+}
+
+console.log("client-base-actualization-data-merge: ok (4 cases)");

@@ -60,6 +60,7 @@ import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-h
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
   mapSalesRoleToDealerBaseAccess,
@@ -398,11 +399,20 @@ export default function TradePointsPage({
   }, [viewingOtherUserScope, targetScopeQ.ready, targetScopeQ.scopeSubject.role, isRealUser, me?.role, profile.role]);
   const isMobile = useIsMobile();
   const teamCtx = useClientBaseTeamActualization();
-  const actState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
+  const teamMergedState = actx.enabled ? teamCtx.mergedState : createEmptyActualizationState();
+  const { plane: actState, subjectLoading: subjectActLoading } = useSubjectScopeActualizationState({
+    viewingOtherUserScope,
+    scopeUserId: scopeUserIdResolved,
+    scopeSubjectRole: targetScopeQ.scopeSubject.role,
+    scopeReady: targetScopeQ.ready,
+    teamMergedState,
+    teamParts: teamCtx.teamParts,
+    actEnabled: actx.enabled,
+  });
 
   const isPageInitialLoading = useMemo(
     () =>
-      (viewingOtherUserScope && targetScopeQ.loading) ||
+      (viewingOtherUserScope && (targetScopeQ.loading || subjectActLoading)) ||
       (isRealUser && (authLoading || orgSnapQ.isLoading || visCodesQ.isLoading)) ||
       (catalogQ.isPending && !catalogQ.data) ||
       (actx.enabled && actx.loading && !actx.meta.updatedAt),
@@ -418,6 +428,7 @@ export default function TradePointsPage({
       actx.enabled,
       actx.loading,
       actx.meta.updatedAt,
+      subjectActLoading,
     ],
   );
 
