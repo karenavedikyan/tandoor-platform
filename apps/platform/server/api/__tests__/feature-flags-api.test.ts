@@ -12,6 +12,12 @@ const prevDistributionDbPrimary = process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY;
 const prevCatalogLazy = process.env.CATALOG_LAZY_LOAD;
 
 try {
+  delete process.env.USE_SERVER_KPI_AGGREGATES;
+  delete process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY;
+  const defaults = getFeatureFlags();
+  assert.equal(defaults.flags.USE_SERVER_KPI_AGGREGATES, true);
+  assert.equal(defaults.flags.DISTRIBUTION_DB_PRIMARY_CAPACITY, true);
+
   process.env.USE_DB_DEALERS = "true";
   process.env.SHADOW_DIFF_ENABLED = "false";
   process.env.USE_SERVER_KPI_AGGREGATES = "true";

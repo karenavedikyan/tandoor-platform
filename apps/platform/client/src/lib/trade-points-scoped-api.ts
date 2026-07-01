@@ -39,6 +39,14 @@ export type TradePointsListScopedResponse =
 
 export const TRADE_POINTS_LIST_SCOPED_QUERY_KEY = ["trade-points", "list-scoped"] as const;
 
+export const TRADE_POINTS_SCOPED_INVALIDATE_EVENT = "tandoor:trade-points-scoped:invalidate";
+
+/** Сигнал для React Query (слушатель в overrides-session-bootstrap). */
+export function invalidateTradePointsScopedQueries(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(TRADE_POINTS_SCOPED_INVALIDATE_EVENT));
+}
+
 export function tradePointsListScopedQueryKey(forUserId?: string): readonly [string, string, string] {
   return [...TRADE_POINTS_LIST_SCOPED_QUERY_KEY, forUserId ?? "self"] as const;
 }

@@ -79,10 +79,8 @@ import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyScopeFromDB, sidebarCountsFromDbScope, kpiCountsFromDbScope } from "@/hooks/use-my-scope-from-db";
 import { useMyTeamScope, useMyTeamScopeTotals, sidebarCountsFromTeamScope, kpiCountsFromTeamScope } from "@/hooks/use-my-team-scope";
 import { useOrgScope, sidebarCountsFromOrgScope, kpiCountsFromOrgScope } from "@/hooks/use-org-scope";
-import {
-  getServerKpiAggregatesFlagSync,
-  shouldUseServerKpiAggregates,
-} from "@/lib/server-kpi-aggregates-flag";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { activeTradePointIdsFromScopedResponse } from "@/lib/trade-points-scoped-ids";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 import { assignmentsScopeIsActive, buildAssignmentsScopeFromSources, filterRowsByDbScopeExternalKeys, type AssignmentsScope } from "@/lib/dealer-base-real-scope";
 import { roleScopedDealerRowsForReal, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
@@ -1502,10 +1500,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const catalogQ = useDealerBaseRows();
   const catalogRows = catalogQ.data ?? [];
-  const [useServerKpiAggregates, setUseServerKpiAggregates] = useState(() => getServerKpiAggregatesFlagSync());
-  useEffect(() => {
-    void shouldUseServerKpiAggregates().then(setUseServerKpiAggregates);
-  }, []);
   const { hydrationVersion } = useDealerTpOverridesHydration(true);
   const { profile } = useReleaseDemoProfile();
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
@@ -1911,16 +1905,22 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     assignmentsScope,
   ]);
 
+  const scopedTpQ = useTradePointsScoped({
+    forUserId: viewingOtherUserScope ? scopeUserIdResolved : undefined,
+    enabled: isRealUser && !authLoading && useReal,
+  });
+
   const scopeTradePointIds = useMemo(() => {
     if (!useReal || !actx.enabled) return [] as string[];
-    const ids: string[] = [];
-    for (const row of scopedRows) {
-      for (const e of mergeTradePointsForActualization(row, actualizationPlaneForRows)) {
-        if (!e.isArchived) ids.push(e.point.id);
-      }
-    }
-    return ids;
-  }, [useReal, actx.enabled, scopedRows, actualizationPlaneForRows]);
+    const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
+    if (fromScoped !== undefined) return fromScoped;
+    return [];
+  }, [useReal, actx.enabled, scopedTpQ.data]);
+
+  const scopeTradePointIdsReady = useMemo(() => {
+    if (!useReal || !actx.enabled) return true;
+    return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
+  }, [useReal, actx.enabled, scopedTpQ.data]);
 
   const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, actualizationPlaneForRows);
 
@@ -2269,7 +2269,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [pickerFiltered]);
 
   const serverKpiFromScope = useMemo(() => {
-    if (!useReal || !useServerKpiAggregates) return null;
+    if (!useReal) return null;
     if (viewingOtherUserScope) return kpiCountsFromDbScope(targetScopeQ);
     if (me?.role === "director") return kpiCountsFromOrgScope(orgScopeQ);
     if (me?.role === "rop") return kpiCountsFromTeamScope(teamScopeTotalsQ);
@@ -2279,7 +2279,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return null;
   }, [
     useReal,
-    useServerKpiAggregates,
     viewingOtherUserScope,
     targetScopeQ,
     me?.role,
@@ -2292,7 +2291,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const kpis = serverKpiFromScope ?? clientKpis;
 
   const kpisReady = useMemo(() => {
-    if (!useReal || !useServerKpiAggregates) return true;
+    if (!useReal) return true;
     if (viewingOtherUserScope) return targetScopeQ.ready;
     if (me?.role === "director") return orgScopeQ.ready && Boolean(orgScopeQ.data);
     if (me?.role === "rop") return teamScopeTotalsQ.ready && Boolean(teamScopeTotalsQ.data);
@@ -2302,7 +2301,6 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return true;
   }, [
     useReal,
-    useServerKpiAggregates,
     viewingOtherUserScope,
     targetScopeQ.ready,
     me?.role,
@@ -3854,6 +3852,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         orgTeamCtx={orgTeamCtxForCockpit}
         overview={overviewQ.data ?? null}
         scopeTotalDealers={scopeTotalDealers}
+        scopeAvgDistribution={kpisReady ? kpis.avgDist : null}
+        scopeTradePointIds={scopeTradePointIds}
+        scopeTradePointIdsReady={scopeTradePointIdsReady}
         teamTotalsById={managementScopeTotals?.teamTotalsById}
         membersTotalsByTeamId={managementScopeTotals?.membersTotalsByTeamId}
         teamScopeForDiag={teamScopeQ.ready ? teamScopeQ.data : null}
@@ -4061,7 +4062,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           tradePointIds={scopeTradePointIds}
           testIdPrefix="manager-home"
           showTradePointsCount={false}
-          loading={!kpisReady}
+          loading={!kpisReady || !scopeTradePointIdsReady || scopeDistribution.loading}
         />
       ) : null}
 

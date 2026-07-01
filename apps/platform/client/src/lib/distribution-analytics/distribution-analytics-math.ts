@@ -175,7 +175,7 @@ export function computeDistributionForTradePoint(
         ? dbCapacity
         : sh
           ? getShowcaseTypeCapacity(sh, type)
-          : null;
+          : dbCapacity;
     const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
     const legacyOurs = countLegacyOursOfType(installedEntries, type);
     const percent = distributionPercentFromCounts(onShelf, capacity);

@@ -80,7 +80,7 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
   });
 
   it("does not prefetch when scope exceeds threshold", async () => {
-    const ids = Array.from({ length: 801 }, (_, i) => `tp-${i}`);
+    const ids = Array.from({ length: 2501 }, (_, i) => `tp-${i}`);
     renderHook(() => useTradePointDistributionAggregate(ids, makeAct()));
     await waitFor(() => {
       expect(fetchShowcaseMatrixScopeMock).not.toHaveBeenCalled();
@@ -107,6 +107,26 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
   });
 
   it("aggregates from cache without network for large scope", () => {
+    const placementEntry: ShowcaseMatrixEntryDto = {
+      id: "p1",
+      dealerId: "d1",
+      tradePointId: "tp-0",
+      targetKind: "placement",
+      targetId: "placement-vh",
+      status: "installed",
+      comment: null,
+      updatedAt: new Date().toISOString(),
+      updatedBy: null,
+      updatedByName: null,
+      placementType: "book",
+      placementSegment: "vh",
+      placementCapacity: 10,
+      placementActual: null,
+      placementRef: null,
+      placementOurModels: [],
+      placementCompetitors: [],
+      placementLegacyOurs: null,
+    };
     const installedEntry: ShowcaseMatrixEntryDto = {
       id: "e1",
       dealerId: "d1",
@@ -127,9 +147,11 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
       placementCompetitors: [],
       placementLegacyOurs: null,
     };
-    loadCachedMatrixMock.mockImplementation((tpId?: string) => (tpId === "tp-0" ? [installedEntry] : []));
+    loadCachedMatrixMock.mockImplementation((tpId?: string) =>
+      tpId === "tp-0" ? [placementEntry, installedEntry] : [],
+    );
 
-    const ids = Array.from({ length: 801 }, (_, i) => `tp-${i}`);
+    const ids = Array.from({ length: 2501 }, (_, i) => `tp-${i}`);
     const { result } = renderHook(() => useTradePointDistributionAggregate(ids, makeAct("tp-0")));
 
     expect(fetchShowcaseMatrixScopeMock).not.toHaveBeenCalled();

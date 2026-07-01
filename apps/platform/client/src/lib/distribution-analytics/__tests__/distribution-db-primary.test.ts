@@ -125,7 +125,10 @@ function withFlag(on: boolean, fn: () => void): void {
 {
   withFlag(true, () => {
     const sh = baseShowcase({ entrancePortals: 30, interiorPortals: null });
-    const entries = Array.from({ length: 5 }, (_, i) => makeInstalledModel(`tc-vh-e-${i}`));
+    const entries = [
+      makePlacementBlock("vh", { placementCapacity: 30 }),
+      ...Array.from({ length: 5 }, (_, i) => makeInstalledModel(`tc-vh-e-${i}`)),
+    ];
     const m = computeDistributionForTradePoint(sh, entries);
     assert.equal(m.byType.entrance.capacity, 30);
     assert.equal(m.byType.entrance.percent, (5 / 30) * 100);
@@ -150,7 +153,10 @@ function withFlag(on: boolean, fn: () => void): void {
 {
   withFlag(true, () => {
     const sh = baseShowcase({ hasShowcase: false, entrancePortals: 10 });
-    const entries = [makeInstalledModel("tc-vh-x")];
+    const entries = [
+      makePlacementBlock("vh", { placementCapacity: 10 }),
+      makeInstalledModel("tc-vh-x"),
+    ];
     const m = computeDistributionForTradePoint(sh, entries);
     assert.equal(m.hasShowcase, true);
     assert.ok(m.byType.entrance.percent != null);
@@ -168,13 +174,33 @@ function withFlag(on: boolean, fn: () => void): void {
     );
     const tpBlob = computeDistributionForTradePoint(
       baseShowcase({ tradePointId: "tp-blob", entrancePortals: 20 }),
-      Array.from({ length: 5 }, (_, i) => makeInstalledModel(`tc-vh-bl-${i}`, "tp-blob")),
+      [
+        makePlacementBlock("vh", { placementCapacity: 20, tradePointId: "tp-blob" }),
+        ...Array.from({ length: 5 }, (_, i) => makeInstalledModel(`tc-vh-bl-${i}`, "tp-blob")),
+      ],
     );
     const agg = aggregateDistribution([tpDb, tpBlob]);
     assert.equal(agg.byType.entrance.capacity, 30);
     assert.equal(agg.byType.entrance.tandoorOnShelf, 10);
     assert.ok(Math.abs((agg.byType.entrance.percent ?? 0) - (10 / 30) * 100) < 0.001);
   });
+}
+
+{
+  resetDistributionDbPrimaryFlagCache();
+  seedDistributionDbPrimaryFromBootstrap({ flags: {} });
+  try {
+    const sh = baseShowcase({ entrancePortals: 50, interiorPortals: 100 });
+    const entries = [
+      makePlacementBlock("vh", { placementCapacity: 20 }),
+      ...Array.from({ length: 10 }, (_, i) => makeInstalledModel(`tc-vh-def-${i}`)),
+    ];
+    const m = computeDistributionForTradePoint(sh, entries);
+    assert.equal(m.byType.entrance.capacity, 20);
+    assert.equal(m.byType.interior.capacity, 100);
+  } finally {
+    resetDistributionDbPrimaryFlagCache();
+  }
 }
 
 console.log("distribution-db-primary: ok");

@@ -10,6 +10,10 @@ import {
   computeModelCoverage,
   distributionPercentTone,
 } from "../distribution-analytics/distribution-analytics-math";
+import {
+  resetDistributionDbPrimaryFlagCache,
+  seedDistributionDbPrimaryFromBootstrap,
+} from "../distribution-db-primary-flag";
 
 function makeInstalledModel(targetId: string, tradePointId = "tp-1"): ShowcaseMatrixEntryDto {
   return {
@@ -150,12 +154,18 @@ function baseShowcase(partial: Partial<TradePointShowcaseActualization>): TradeP
 }
 
 {
-  const sh = baseShowcase({ hasShowcase: false, entrancePortals: 10 });
-  const m = computeDistributionForTradePoint(sh, [makeInstalledModel("tc-vh-x")]);
-  assert.equal(m.hasShowcase, false);
-  assert.equal(m.averagePercent, null);
-  const agg = aggregateDistribution([m]);
-  assert.equal(agg.tradePointsCount, 0);
+  resetDistributionDbPrimaryFlagCache();
+  seedDistributionDbPrimaryFromBootstrap({ flags: { DISTRIBUTION_DB_PRIMARY_CAPACITY: false } });
+  try {
+    const sh = baseShowcase({ hasShowcase: false, entrancePortals: 10 });
+    const m = computeDistributionForTradePoint(sh, [makeInstalledModel("tc-vh-x")]);
+    assert.equal(m.hasShowcase, false);
+    assert.equal(m.averagePercent, null);
+    const agg = aggregateDistribution([m]);
+    assert.equal(agg.tradePointsCount, 0);
+  } finally {
+    resetDistributionDbPrimaryFlagCache();
+  }
 }
 
 {

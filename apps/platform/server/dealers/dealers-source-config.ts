@@ -11,7 +11,7 @@ export function shadowDiffEnabled(): boolean {
 }
 
 export function useServerKpiAggregates(): boolean {
-  return process.env.USE_SERVER_KPI_AGGREGATES === "true";
+  return process.env.USE_SERVER_KPI_AGGREGATES !== "false";
 }
 
 export function useTpHydrationNoWriteback(): boolean {
@@ -19,7 +19,7 @@ export function useTpHydrationNoWriteback(): boolean {
 }
 
 export function useDistributionDbPrimary(): boolean {
-  return process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY === "true";
+  return process.env.DISTRIBUTION_DB_PRIMARY_CAPACITY !== "false";
 }
 
 export function catalogLazyLoadEnabled(): boolean {

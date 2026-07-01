@@ -22,17 +22,17 @@ export async function shouldUseDistributionDbPrimary(): Promise<boolean> {
   try {
     const res = await fetch("/api/config/feature-flags", { credentials: "include" });
     if (!res.ok) {
-      cached = false;
-      return false;
+      cached = true;
+      return true;
     }
     const body = (await res.json()) as { flags?: { DISTRIBUTION_DB_PRIMARY_CAPACITY?: boolean } };
-    cached = body.flags?.DISTRIBUTION_DB_PRIMARY_CAPACITY === true;
+    cached = body.flags?.DISTRIBUTION_DB_PRIMARY_CAPACITY !== false;
   } catch {
-    cached = false;
+    cached = true;
   }
   return cached;
 }
 
 export function getDistributionDbPrimaryFlagSync(): boolean {
-  return cached === true;
+  return cached !== false;
 }
