@@ -34,9 +34,19 @@ const EMPTY_AGGREGATE: DistributionGroupMetrics = {
 export type TradePointDistributionAggregateResult = {
   aggregate: DistributionGroupMetrics;
   tradePointsCount: number;
-  /** Матрица витрины из БД ещё не готова — не показывать локальные seed-значения. */
+  /** true только при холодной загрузке: кэша матрицы нет и префетч ещё не завершён. */
   loading: boolean;
+  /** Фоновая ревалидация поверх уже показанных данных (SWR). */
+  revalidating?: boolean;
 };
+
+/** Есть ли в клиентском кэше хотя бы одна запись матрицы по scope ТТ. */
+export function hasMatrixCacheForTradePointIds(tradePointIds: readonly string[]): boolean {
+  for (const id of tradePointIds) {
+    if (loadCachedMatrix(id).length > 0) return true;
+  }
+  return false;
+}
 
 function lookupShowcaseRecord(
   shById: ActualizationState["tradePointShowcaseActualizationById"],
@@ -50,6 +60,22 @@ function lookupShowcaseRecord(
   return undefined;
 }
 
+function computeAggregateFromInstalledEntries(
+  tradePointIds: string[],
+  act: ActualizationState,
+  installedEntriesByTradePointId: Record<string, ReturnType<typeof loadCachedMatrix>>,
+  showcaseUuidByMatrixKey?: ReadonlyMap<string, string>,
+): DistributionGroupMetrics {
+  const shById = act.tradePointShowcaseActualizationById;
+  const metrics = tradePointIds.map((tradePointId) =>
+    computeDistributionForTradePoint(
+      lookupShowcaseRecord(shById, tradePointId, showcaseUuidByMatrixKey),
+      installedEntriesByTradePointId[tradePointId] ?? [],
+    ),
+  );
+  return aggregateDistribution(metrics);
+}
+
 /** Агрегат дистрибуции по списку ТТ: installed-модели матрицы + ёмкость из БД. */
 export function useTradePointDistributionAggregate(
   tradePointIds: string[],
@@ -58,6 +84,7 @@ export function useTradePointDistributionAggregate(
 ): TradePointDistributionAggregateResult {
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const [matrixPrefetchDone, setMatrixPrefetchDone] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
   const lastPrefetchedScopeKeyRef = useRef("");
   const tradePointIdsRef = useRef(tradePointIds);
   const prevTradePointIdsKeyRef = useRef("");
@@ -69,7 +96,9 @@ export function useTradePointDistributionAggregate(
   if (prevTradePointIdsKeyRef.current !== tradePointIdsKey) {
     prevTradePointIdsKeyRef.current = tradePointIdsKey;
     tradePointIdsRef.current = tradePointIds;
-    setMatrixPrefetchDone(false);
+    const hasCache = hasMatrixCacheForTradePointIds(tradePointIds);
+    setMatrixPrefetchDone(hasCache);
+    setRevalidating(false);
   }
 
   useEffect(() => {
@@ -81,18 +110,27 @@ export function useTradePointDistributionAggregate(
   useEffect(() => {
     if (!dbPrimary || scopeTooLarge || tradePointIdsKey === "") {
       setMatrixPrefetchDone(true);
+      setRevalidating(false);
       return;
     }
     if (hasScopePrefetchCompleted(tradePointIdsKey) && matrixPrefetchDone) return;
     if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey && matrixPrefetchDone) return;
 
-    lastPrefetchedScopeKeyRef.current = tradePointIdsKey;
-    markScopePrefetchCompleted(tradePointIdsKey);
-    setMatrixPrefetchDone(false);
     const ids = tradePointIdsRef.current;
     if (ids.length === 0) {
       setMatrixPrefetchDone(true);
+      setRevalidating(false);
       return;
+    }
+
+    const hasCache = hasMatrixCacheForTradePointIds(ids);
+    lastPrefetchedScopeKeyRef.current = tradePointIdsKey;
+    markScopePrefetchCompleted(tradePointIdsKey);
+    if (hasCache) {
+      setRevalidating(true);
+    } else {
+      setMatrixPrefetchDone(false);
+      setRevalidating(false);
     }
 
     let cancelled = false;
@@ -103,6 +141,7 @@ export function useTradePointDistributionAggregate(
         applyScopeEntriesToMatrixCache(entries);
       }
       setMatrixPrefetchDone(true);
+      setRevalidating(false);
     })();
 
     return () => {
@@ -121,30 +160,41 @@ export function useTradePointDistributionAggregate(
 
   return useMemo(() => {
     if (tradePointIds.length === 0) {
-      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: 0, loading: false };
+      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: 0, loading: false, revalidating: false };
     }
 
-    const loading = dbPrimary && !scopeTooLarge && !matrixPrefetchDone;
-    if (loading) {
-      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: tradePointIds.length, loading: true };
-    }
-
-    const shById = act.tradePointShowcaseActualizationById;
-    const metrics = tradePointIds.map((tradePointId) =>
-      computeDistributionForTradePoint(
-        lookupShowcaseRecord(shById, tradePointId, showcaseUuidByMatrixKey),
-        installedEntriesByTradePointId[tradePointId] ?? [],
-      ),
+    const hasCache = hasMatrixCacheForTradePointIds(tradePointIds);
+    const coldLoading = dbPrimary && !scopeTooLarge && !matrixPrefetchDone && !hasCache;
+    const aggregate = computeAggregateFromInstalledEntries(
+      tradePointIds,
+      act,
+      installedEntriesByTradePointId,
+      showcaseUuidByMatrixKey,
     );
-    const aggregate = aggregateDistribution(metrics);
-    return { aggregate, tradePointsCount: aggregate.tradePointsCount, loading: false };
+
+    if (coldLoading) {
+      return {
+        aggregate: EMPTY_AGGREGATE,
+        tradePointsCount: tradePointIds.length,
+        loading: true,
+        revalidating: false,
+      };
+    }
+
+    return {
+      aggregate,
+      tradePointsCount: aggregate.tradePointsCount,
+      loading: false,
+      revalidating: revalidating && dbPrimary && !scopeTooLarge,
+    };
   }, [
     tradePointIds,
-    act.tradePointShowcaseActualizationById,
+    act,
     installedEntriesByTradePointId,
     dbPrimary,
     scopeTooLarge,
     matrixPrefetchDone,
+    revalidating,
     showcaseUuidByMatrixKey,
   ]);
 }

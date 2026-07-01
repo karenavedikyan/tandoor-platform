@@ -96,7 +96,10 @@ function distResult(
 
   const idsNotReady = resolveCockpitDistributionBar(scoped, local, false);
   assert.equal(idsNotReady.distribution.tradePointsCount, 458);
-  assert.equal(idsNotReady.loading, true);
+  assert.equal(idsNotReady.loading, false);
+
+  const idsNotReadyEmpty = resolveCockpitDistributionBar(distResult(0, true), local, false);
+  assert.equal(idsNotReadyEmpty.loading, true);
 
   const scopedLoading = resolveCockpitDistributionBar(distResult(458, true), local, true);
   assert.equal(scopedLoading.loading, true);
