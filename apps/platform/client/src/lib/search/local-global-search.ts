@@ -27,6 +27,7 @@ import {
 } from "../search/search-query-utils.js";
 import type { ActualizationState } from "../client-base-actualization-state.js";
 import type { UserRole } from "@shared/auth";
+import type { OrgScopePayload, TeamScopePayload } from "@shared/dealers-scope-types";
 
 export type LocalGlobalSearchContext = {
   role: UserRole | null | undefined;
@@ -34,6 +35,8 @@ export type LocalGlobalSearchContext = {
   isRealUser: boolean;
   snap: OrgSnapshot | null;
   visPayload: MyVisibleCodesResult | null;
+  teamScope: TeamScopePayload | null;
+  orgScope: OrgScopePayload | null;
   assignmentsScope: AssignmentsScope | undefined;
   actState: ActualizationState;
   actEnabled: boolean;
@@ -41,11 +44,32 @@ export type LocalGlobalSearchContext = {
   outgoingAssignments: AssignmentDto[];
 };
 
+function dealerExternalKeysFromTeamScope(ts: TeamScopePayload): Set<string> {
+  return new Set(
+    ts.members.flatMap((m) => [...m.active_dealer_external_keys, ...m.trashed_dealer_external_keys]),
+  );
+}
+
+function dealerExternalKeysFromOrgScope(os: OrgScopePayload): Set<string> {
+  const keys = new Set<string>();
+  for (const block of os.teams) {
+    for (const m of block.members) {
+      for (const k of m.active_dealer_external_keys) keys.add(k);
+      for (const k of m.trashed_dealer_external_keys) keys.add(k);
+    }
+  }
+  for (const m of os.orphan.members) {
+    for (const k of m.active_dealer_external_keys) keys.add(k);
+    for (const k of m.trashed_dealer_external_keys) keys.add(k);
+  }
+  return keys;
+}
+
 function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
   const access = ctx.role ? mapUserRoleToDealerBaseAccess(ctx.role) : mapSalesRoleToDealerBaseAccess(ctx.profile.role);
 
   let rows: DealerRow[];
-  if (ctx.isRealUser && ctx.snap && ctx.visPayload) {
+  if (ctx.isRealUser && ctx.visPayload) {
     const releaseRows = getVisibleDealerRows(
       getCatalogDealerRows(),
       ctx.visPayload.all,
@@ -56,13 +80,26 @@ function buildScopedDealerRows(ctx: LocalGlobalSearchContext): DealerRow[] {
                     releaseDealerRows: releaseRows,
         })
       : releaseRows;
-    return roleScopedDealerRowsForReal(
-      rows,
-      ctx.snap,
-      access,
-      undefined,
-      assignmentsScopeIsActive(ctx.assignmentsScope) ? ctx.assignmentsScope : undefined,
-    );
+    if (ctx.role === "rop" && access === "team_lead") {
+      if (!ctx.teamScope) return [];
+      const keys = dealerExternalKeysFromTeamScope(ctx.teamScope);
+      return rows.filter((r) => keys.has(r.id));
+    }
+    if (ctx.role === "director" && access === "sales_director") {
+      if (!ctx.orgScope) return [];
+      const keys = dealerExternalKeysFromOrgScope(ctx.orgScope);
+      return rows.filter((r) => keys.has(r.id));
+    }
+    if (ctx.snap) {
+      return roleScopedDealerRowsForReal(
+        rows,
+        ctx.snap,
+        access,
+        undefined,
+        assignmentsScopeIsActive(ctx.assignmentsScope) ? ctx.assignmentsScope : undefined,
+      );
+    }
+    return [];
   }
 
   rows = ctx.actEnabled
@@ -208,6 +245,8 @@ export function buildDefaultLocalSearchContext(profile: ReleaseDemoProfile): Loc
     isRealUser: false,
     snap: null,
     visPayload: null,
+    teamScope: null,
+    orgScope: null,
     assignmentsScope: undefined,
     actState: createEmptyActualizationState(),
     actEnabled: false,

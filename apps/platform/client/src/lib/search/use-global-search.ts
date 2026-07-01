@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UserRole } from "@shared/auth";
 import { useAuthUser } from "../../hooks/use-auth-user.js";
+import { useMyTeamScope } from "../../hooks/use-my-team-scope.js";
+import { useOrgScope } from "../../hooks/use-org-scope.js";
 import { useReleaseDemoProfile } from "../../hooks/use-release-demo-profile.js";
 import { useOrgSnapshot } from "../use-org-snapshot.js";
 import { useMyVisibleClientCodes } from "../use-my-visible-client-codes.js";
@@ -67,9 +69,12 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
   const isRealUser = Boolean(user?.id);
+  const effectiveRole = role ?? user?.role ?? null;
   const orgSnapQ = useOrgSnapshot({ enabled: isRealUser });
   const visCodesQ = useMyVisibleClientCodes({ enabled: isRealUser });
   const myCodesQ = useMyClientCodes({ enabled: isRealUser });
+  const teamScopeQ = useMyTeamScope({ enabled: isRealUser && effectiveRole === "rop" });
+  const orgScopeQ = useOrgScope({ enabled: isRealUser && effectiveRole === "director" });
 
   const assignmentsScope = useMemo((): AssignmentsScope | undefined => {
     if (!myCodesQ.data) return undefined;
@@ -90,11 +95,13 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
   const localContext = useMemo(() => {
     if (!open) return buildDefaultLocalSearchContext(profile);
     return {
-      role: role ?? user?.role ?? null,
+      role: effectiveRole,
       profile,
       isRealUser,
       snap: orgSnapQ.data ?? null,
       visPayload: visCodesQ.data ?? null,
+      teamScope: teamScopeQ.data ?? null,
+      orgScope: orgScopeQ.data ?? null,
       assignmentsScope: assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
       actState,
       actEnabled: actx.enabled,
@@ -103,12 +110,13 @@ export function useGlobalSearch(open: boolean, role: UserRole | null | undefined
     };
   }, [
     open,
-    role,
-    user?.role,
+    effectiveRole,
     profile,
     isRealUser,
     orgSnapQ.data,
     visCodesQ.data,
+    teamScopeQ.data,
+    orgScopeQ.data,
     assignmentsScope,
     actState,
     actx.enabled,
