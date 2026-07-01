@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
 import {
   buildMainDashboardCityTiles,
+  buildTradePointCountByCityFromScopedDb,
   dealerRowMatchesCityFilter,
   displayCityForDealerRow,
   filterCityTilesBySearch,
 } from "../main-dashboard-city-stats";
+import type { ScopedTradePointDto } from "../trade-points-scoped-api";
 import type { DealerRow, DealerTradePoint } from "../dealer-base-mock-data";
 
 const act = createEmptyActualizationState();
@@ -100,6 +102,59 @@ function tp(id: string): DealerTradePoint {
   const voronezh = tiles.find((t) => t.city === "Воронеж");
   assert.equal(voronezh?.activeClients, 2);
   assert.equal(voronezh?.activeTradePoints, 2, "TP count from row.tradePoints even when act is empty");
+}
+
+// ТТ на плитке — из БД-карты scoped API, а не из row.tradePoints.
+{
+  const dbTpMap = new Map([["Воронеж", 5]]);
+  const tiles = buildMainDashboardCityTiles(
+    [
+      row({ id: "a", city: "Воронеж", tradePoints: [tp("tp-a")] }),
+      row({ id: "b", city: "Воронеж", tradePoints: [tp("tp-b")] }),
+    ],
+    act,
+    dbTpMap,
+  );
+  const voronezh = tiles.find((t) => t.city === "Воронеж");
+  assert.equal(voronezh?.activeClients, 2);
+  assert.equal(voronezh?.activeTradePoints, 5, "TP count from scoped DB map overrides row.tradePoints");
+}
+
+// buildTradePointCountByCityFromScopedDb: активные ТТ, неактивные не считаются.
+{
+  const dto = (partial: Partial<ScopedTradePointDto> & { externalKey: string }): ScopedTradePointDto => ({
+    id: partial.id ?? partial.externalKey,
+    externalKey: partial.externalKey,
+    name: "ТТ",
+    city: partial.city ?? null,
+    address: null,
+    format: null,
+    isActive: partial.isActive ?? true,
+    isPrimary: false,
+    importanceTier: null,
+    dealerId: "d1",
+    dealerExternalKey: "d1",
+    dealerName: "Клиент",
+    dealerReleaseCode: null,
+    dealerCity: partial.dealerCity ?? partial.city ?? null,
+    dealerClientCategory: null,
+    managerUserId: null,
+    managerFullName: null,
+    regionalManagerUserId: null,
+    regionalManagerFullName: null,
+    teamId: null,
+    teamName: null,
+    ropUserId: null,
+    ropFullName: null,
+  });
+  const map = buildTradePointCountByCityFromScopedDb([
+    dto({ externalKey: "tp-1", dealerCity: "Новороссийск" }),
+    dto({ externalKey: "tp-2", dealerCity: "Новороссийск" }),
+    dto({ externalKey: "tp-3", dealerCity: "Геленджик" }),
+    dto({ externalKey: "tp-off", dealerCity: "Новороссийск", isActive: false }),
+  ]);
+  assert.equal(map.get("Новороссийск"), 2);
+  assert.equal(map.get("Геленджик"), 1);
 }
 
 console.log("main-dashboard-city-stats: ok");

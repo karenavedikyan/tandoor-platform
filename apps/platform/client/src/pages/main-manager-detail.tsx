@@ -40,12 +40,13 @@ import {
   ropUserForManager,
 } from "@/lib/dealer-base-real-scope";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
-import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { buildTradePointCountByCityFromScopedDb, dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
 import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
-import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 
 function countTradePointsForDealer(row: DealerRow, act: ReturnType<typeof useClientBaseTeamActualization>["mergedState"]): number {
   return mergeTradePointsForActualization(row, act).filter((e) => !e.isArchived).length;
@@ -142,6 +143,18 @@ function MainManagerDetailContent() {
     const built = buildDealerBaseRowsWithActualization(managementPlane.mergedState, profile);
     return managerScope(built);
   }, [actx.enabled, allowed, managementPlane.mergedState, profile, managerScope]);
+
+  const scopedTpQ = useTradePointsScoped({
+    forUserId: managerId,
+    enabled: Boolean(actx.enabled && allowed && isRealUser),
+  });
+  const tradePointCountByCity = useMemo(
+    () =>
+      scopedTpQ.data?.success === true
+        ? buildTradePointCountByCityFromScopedDb(scopedTpQ.data.tradePoints)
+        : undefined,
+    [scopedTpQ.data],
+  );
 
   const displayedClientRows = useMemo(() => {
     if (!selectedCity) return clientRows;
@@ -266,6 +279,7 @@ function MainManagerDetailContent() {
         <MainDashboardCityCoverage
           rows={clientRows}
           act={managementPlane.mergedState}
+          tradePointCountByCity={tradePointCountByCity}
           testId="section-main-manager-city-coverage"
         />
       ) : null}
