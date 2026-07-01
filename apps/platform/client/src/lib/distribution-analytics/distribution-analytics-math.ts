@@ -171,11 +171,11 @@ export function computeDistributionForTradePoint(
   for (const type of ALL_EQUIPMENT_TYPES) {
     const dbCapacity = capacityFromMatrixEntries(installedEntries, type);
     const capacity =
-      dbPrimary
+      dbPrimary && dbCapacity != null
         ? dbCapacity
         : sh
           ? getShowcaseTypeCapacity(sh, type)
-          : null;
+          : dbCapacity;
     const onShelf = installedBySegment[SEGMENT_BY_TYPE[type]];
     const legacyOurs = countLegacyOursOfType(installedEntries, type);
     const percent = distributionPercentFromCounts(onShelf, capacity);

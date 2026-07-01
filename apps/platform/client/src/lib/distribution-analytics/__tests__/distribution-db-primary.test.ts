@@ -197,7 +197,7 @@ function withFlag(on: boolean, fn: () => void): void {
     ];
     const m = computeDistributionForTradePoint(sh, entries);
     assert.equal(m.byType.entrance.capacity, 20);
-    assert.equal(m.byType.interior.capacity, null);
+    assert.equal(m.byType.interior.capacity, 100);
   } finally {
     resetDistributionDbPrimaryFlagCache();
   }
