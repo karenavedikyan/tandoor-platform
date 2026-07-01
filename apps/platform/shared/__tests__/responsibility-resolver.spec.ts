@@ -23,6 +23,9 @@ const U_MGR_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const U_DEALER_MGR = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const U_DEALER_RM = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const U_DEALER_ROP = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const DEALER_EXTERNAL = "client-ma0002126";
+const DEALER_UUID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const TP_CATALOG_ONLY = "client-ma0002126-01";
 
 type TpRow = {
   tp_id: string;
@@ -46,6 +49,8 @@ type AssignmentRow = {
 
 class MockResponsibilityDb implements PoolLike {
   tradePoints = new Map<string, TpRow>();
+  catalogTradePoints = new Map<string, TpRow>();
+  dealerExternalKeys = new Map<string, string>();
   assignments: AssignmentRow[] = [];
   dealerOverrides = new Map<
     string,
@@ -58,9 +63,23 @@ class MockResponsibilityDb implements PoolLike {
   query<T = Record<string, unknown>>(text: string, params: unknown[] = []): Promise<{ rows: T[] }> {
     const sql = text.replace(/\s+/g, " ").trim();
 
-    if (sql.startsWith("SELECT tp_id, dealer_id, name, city, address")) {
+    if (sql.includes("FROM trade_point_overrides")) {
       const tpId = String(params[0]);
       const row = this.tradePoints.get(tpId);
+      if (!row) return Promise.resolve({ rows: [] });
+      let dealerId = row.dealer_id;
+      if (dealerId) {
+        const external = this.dealerExternalKeys.get(dealerId);
+        if (external) dealerId = external;
+      }
+      return Promise.resolve({
+        rows: [{ ...row, dealer_id: dealerId } as unknown as T],
+      });
+    }
+
+    if (sql.includes("FROM trade_points tp")) {
+      const tpId = String(params[0]);
+      const row = this.catalogTradePoints.get(tpId);
       return Promise.resolve({ rows: row ? [row as unknown as T] : [] });
     }
 
@@ -445,6 +464,60 @@ describe("responsibility-resolver", () => {
       source: "assignment",
       sourceLevel: "trade_point",
     });
+  });
+
+  it("resolves dealer assignments for catalog TP without trade_point_overrides row", async () => {
+    const db = new MockResponsibilityDb();
+    db.catalogTradePoints.set(TP_CATALOG_ONLY, {
+      tp_id: TP_CATALOG_ONLY,
+      dealer_id: DEALER_EXTERNAL,
+      name: "Catalog TP",
+      city: "Москва",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.assignments.push(
+      { scope_kind: "dealer", scope_key: DEALER_EXTERNAL, responsible_role: "manager", user_id: U_DEALER_MGR, user_name: "Manager Avdeeva" },
+      { scope_kind: "dealer", scope_key: DEALER_EXTERNAL, responsible_role: "regional_manager", user_id: U_DEALER_RM, user_name: "Мельник Виктор Викторович" },
+      { scope_kind: "dealer", scope_key: DEALER_EXTERNAL, responsible_role: "rop", user_id: U_DEALER_ROP, user_name: "Купянский Родион" },
+    );
+
+    const resolved = await resolveResponsiblesForTradePoint(db, TP_CATALOG_ONLY);
+    expect(resolved.manager).toEqual({
+      userId: U_DEALER_MGR,
+      userName: "Manager Avdeeva",
+      source: "assignment",
+      sourceLevel: "client",
+    });
+    expect(resolved.regional_manager.userId).toBe(U_DEALER_RM);
+    expect(resolved.rop.userId).toBe(U_DEALER_ROP);
+  });
+
+  it("normalizes override dealer UUID to external_key for dealer-scope assignments", async () => {
+    const db = new MockResponsibilityDb();
+    db.dealerExternalKeys.set(DEALER_UUID, DEALER_EXTERNAL);
+    db.tradePoints.set("tp-uuid-dealer", {
+      tp_id: "tp-uuid-dealer",
+      dealer_id: DEALER_UUID,
+      name: "Override UUID dealer",
+      city: "Москва",
+      address: null,
+      regional_manager_id: null,
+      regional_manager_name: null,
+      rop_id: null,
+      rop_name: null,
+    });
+    db.assignments.push(
+      { scope_kind: "dealer", scope_key: DEALER_EXTERNAL, responsible_role: "manager", user_id: U_DEALER_MGR, user_name: "Dealer Manager" },
+    );
+
+    const resolved = await resolveResponsiblesForTradePoint(db, "tp-uuid-dealer");
+    expect(resolved.manager.userId).toBe(U_DEALER_MGR);
+    expect(resolved.manager.source).toBe("assignment");
+    expect(resolved.manager.sourceLevel).toBe("client");
   });
 
   it("sharedByRole is true when trade points have different responsible users", async () => {
