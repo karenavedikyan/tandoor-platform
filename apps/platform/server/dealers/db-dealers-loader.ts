@@ -34,6 +34,13 @@ function mapDealerRow(row: typeof dealers.$inferSelect): DbDealerRow & { source:
     client_type_label: row.clientTypeLabel,
     release_team_id: row.releaseTeamId,
     release_manager_id: row.releaseManagerId,
+    manager_user_id: null,
+    regional_manager_id: null,
+    dealer_rop_id: null,
+    team_rop_user_id: null,
+    has_assignment_manager: false,
+    has_assignment_regional: false,
+    has_assignment_rop: false,
     source: row.source,
   };
 }
