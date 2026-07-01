@@ -42,7 +42,11 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
-import { buildTradePointCountByCityFromScopedDb, dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
+import {
+  buildClientCountByCityFromScopedDb,
+  buildTradePointCountByCityFromScopedDb,
+  dealerRowMatchesCityFilter,
+} from "@/lib/main-dashboard-city-stats";
 import { computeMainDashboardScopeMetrics } from "@/lib/main-dashboard-scope-metrics";
 import { buildTradePointListForActualization, type TradePointListRow } from "@/lib/trade-point-list-for-actualization";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
@@ -155,6 +159,13 @@ function MainManagerDetailContent() {
         : undefined,
     [scopedTpQ.data],
   );
+  const clientCountByCity = useMemo(
+    () =>
+      scopedTpQ.data?.success === true
+        ? buildClientCountByCityFromScopedDb(scopedTpQ.data.tradePoints)
+        : undefined,
+    [scopedTpQ.data],
+  );
 
   const displayedClientRows = useMemo(() => {
     if (!selectedCity) return clientRows;
@@ -189,6 +200,7 @@ function MainManagerDetailContent() {
     actx.enabled && allowed ? managerTradePointIds : [],
     managementPlane.mergedState,
   );
+
 
   const showCityCoverage = actx.enabled && allowed && clientRows.length > 0;
 
@@ -280,6 +292,7 @@ function MainManagerDetailContent() {
           rows={clientRows}
           act={managementPlane.mergedState}
           tradePointCountByCity={tradePointCountByCity}
+          clientCountByCity={clientCountByCity}
           testId="section-main-manager-city-coverage"
         />
       ) : null}

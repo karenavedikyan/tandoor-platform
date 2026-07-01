@@ -51,12 +51,60 @@ export function buildTradePointCountByCityFromScopedDb(
   return map;
 }
 
+/** Кол-во активных клиентов (уникальных дилеров) по городам из scoped БД. */
+export function buildClientCountByCityFromScopedDb(
+  tradePoints: ScopedTradePointDto[],
+): Map<string, number> {
+  const byCity = new Map<string, Set<string>>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const city = cityKeyForScopedTp(tp);
+    let set = byCity.get(city);
+    if (!set) {
+      set = new Set();
+      byCity.set(city, set);
+    }
+    set.add(tp.dealerId);
+  }
+  const map = new Map<string, number>();
+  byCity.forEach((set, city) => map.set(city, set.size));
+  return map;
+}
+
+function sortCityTiles(tiles: MainDashboardCityTile[]): MainDashboardCityTile[] {
+  return tiles.sort((a, b) => {
+    if (a.isNoCity && !b.isNoCity) return 1;
+    if (!a.isNoCity && b.isNoCity) return -1;
+    return b.activeClients - a.activeClients || a.city.localeCompare(b.city, "ru");
+  });
+}
+
 export function buildMainDashboardCityTiles(
   rows: DealerRow[],
   act: ActualizationState,
   tradePointCountByCity?: Map<string, number>,
+  clientCountByCity?: Map<string, number>,
 ): MainDashboardCityTile[] {
   void act;
+
+  // При заданном clientCountByCity плитки строятся ТОЛЬКО из БД:
+  // набор городов = объединение ключей обеих карт, rows игнорируются.
+  if (clientCountByCity) {
+    const cityKeys = new Set<string>();
+    clientCountByCity.forEach((_, key) => cityKeys.add(key));
+    if (tradePointCountByCity) {
+      tradePointCountByCity.forEach((_, key) => cityKeys.add(key));
+    }
+
+    const tiles: MainDashboardCityTile[] = Array.from(cityKeys).map((city) => ({
+      city,
+      activeClients: clientCountByCity.get(city) ?? 0,
+      activeTradePoints: tradePointCountByCity?.get(city) ?? 0,
+      isNoCity: city === "Без города",
+    }));
+    return sortCityTiles(tiles);
+  }
+
   const map = new Map<string, { activeClients: number; activeTradePoints: number }>();
   for (const r of rows) {
     const city = displayCityForDealerRow(r);
@@ -81,11 +129,7 @@ export function buildMainDashboardCityTiles(
     isNoCity: city === "Без города",
   }));
 
-  return tiles.sort((a, b) => {
-    if (a.isNoCity && !b.isNoCity) return 1;
-    if (!a.isNoCity && b.isNoCity) return -1;
-    return b.activeClients - a.activeClients || a.city.localeCompare(b.city, "ru");
-  });
+  return sortCityTiles(tiles);
 }
 
 export function filterCityTilesBySearch(tiles: MainDashboardCityTile[], search: string): MainDashboardCityTile[] {
