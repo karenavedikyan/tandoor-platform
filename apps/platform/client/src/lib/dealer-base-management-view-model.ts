@@ -989,6 +989,51 @@ export function buildOverviewCityCardsFromDb(overview: ClientBaseOverview): Over
     .sort((a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru"));
 }
 
+/** Плитки городов из scoped-БД (те же ключи, что buildClientCountByCityFromScopedDb). */
+export function buildOverviewCityCardsFromScopedDb(
+  clientCountByCity: Map<string, number>,
+  tradePointCountByCity?: Map<string, number>,
+): OverviewCityCardModel[] {
+  const cityKeys = new Set<string>();
+  clientCountByCity.forEach((_, key) => cityKeys.add(key));
+  if (tradePointCountByCity) {
+    tradePointCountByCity.forEach((_, key) => cityKeys.add(key));
+  }
+
+  const cards: OverviewCityCardModel[] = [];
+  cityKeys.forEach((city) => {
+    if (city === "Без города") return;
+    const activeClients = clientCountByCity.get(city) ?? 0;
+    const tradePoints = tradePointCountByCity?.get(city) ?? 0;
+    if (activeClients <= 0 && tradePoints <= 0) return;
+    cards.push({
+      cityKey: city,
+      displayName: city,
+      activeClients,
+      tradePoints,
+    });
+  });
+
+  return cards.sort(
+    (a, b) => b.activeClients - a.activeClients || a.displayName.localeCompare(b.displayName, "ru"),
+  );
+}
+
+export function overviewWithoutCityFromScopedDb(
+  clientCountByCity: Map<string, number>,
+  tradePointCountByCity?: Map<string, number>,
+): OverviewCityCardModel | undefined {
+  const activeClients = clientCountByCity.get("Без города") ?? 0;
+  const tradePoints = tradePointCountByCity?.get("Без города") ?? 0;
+  if (activeClients <= 0 && tradePoints <= 0) return undefined;
+  return {
+    cityKey: "__no_city__",
+    displayName: "Без города",
+    activeClients,
+    tradePoints,
+  };
+}
+
 function collectOverviewTeamLookupKeys(
   g: ClientBaseOverview["ropGroups"][number],
   orgSnap?: OrgSnapshot | null,
