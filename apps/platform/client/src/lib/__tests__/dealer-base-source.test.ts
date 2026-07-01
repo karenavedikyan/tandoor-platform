@@ -10,6 +10,7 @@ import {
   getCatalogDealerRows,
   getVisibleDealerRows,
   resetDealerBaseSourceCache,
+  seedFeatureFlagsFromBootstrap,
   setDealerBaseRowsCache,
   shouldUseDbDealers,
 } from "../dealer-base-source";
@@ -129,6 +130,15 @@ await withMockFetch(
   async () => {
     const rows = await fetchDealerBaseRows();
     assert.deepEqual(rows, []);
+  },
+);
+
+// seedFeatureFlagsFromBootstrap → без запроса /api/config/feature-flags
+await withMockFetch(
+  () => null,
+  async () => {
+    seedFeatureFlagsFromBootstrap({ flags: { USE_DB_DEALERS: true } });
+    assert.equal(await shouldUseDbDealers(), true);
   },
 );
 
