@@ -248,7 +248,7 @@ import { DealerBaseFocusViewBanner } from "@/components/dealer-base-focus-view-b
 import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useMainDashboardCityFilterOptional } from "@/context/main-dashboard-city-filter-context";
-import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
+import { dealerRowMatchesCityFilter, buildClientCountByCityFromScopedDb, buildTradePointCountByCityFromScopedDb } from "@/lib/main-dashboard-city-stats";
 import { isUnassigned, toResponsibleFlagsFromDealerRow } from "@/lib/unassigned-responsible";
 import { UnassignedResponsibleIndicator } from "@/components/unassigned-responsible-indicator";
 import { SHOWCASE_DISTRIBUTION_CHANGED_EVENT } from "@/lib/showcase-distribution-data";
@@ -1910,6 +1910,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     enabled: isRealUser && !authLoading && useReal,
   });
 
+  const cityClientCountFromDb = useMemo(() => {
+    if (!useReal || scopedTpQ.data?.success !== true) return undefined;
+    return buildClientCountByCityFromScopedDb(scopedTpQ.data.tradePoints);
+  }, [useReal, scopedTpQ.data]);
+  const cityTpCountFromDb = useMemo(() => {
+    if (!useReal || scopedTpQ.data?.success !== true) return undefined;
+    return buildTradePointCountByCityFromScopedDb(scopedTpQ.data.tradePoints);
+  }, [useReal, scopedTpQ.data]);
+
   const scopeTradePointIds = useMemo(() => {
     if (!useReal || !actx.enabled) return [] as string[];
     const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
@@ -2691,16 +2700,34 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const cityRowsDept = useMemo(
-    () => buildCityConcentrationRows(pickerFiltered, actx.enabled ? teamActualizationPlane : undefined),
-    [pickerFiltered, actx.enabled, teamActualizationPlane],
+    () =>
+      buildCityConcentrationRows(
+        pickerFiltered,
+        actx.enabled ? teamActualizationPlane : undefined,
+        cityClientCountFromDb,
+        cityTpCountFromDb,
+      ),
+    [pickerFiltered, actx.enabled, teamActualizationPlane, cityClientCountFromDb, cityTpCountFromDb],
   );
   const cityRowsTeam = useMemo(
-    () => buildCityConcentrationRows(teamTablePickerRows, actx.enabled ? teamActualizationPlane : undefined),
-    [teamTablePickerRows, actx.enabled, teamActualizationPlane],
+    () =>
+      buildCityConcentrationRows(
+        teamTablePickerRows,
+        actx.enabled ? teamActualizationPlane : undefined,
+        cityClientCountFromDb,
+        cityTpCountFromDb,
+      ),
+    [teamTablePickerRows, actx.enabled, teamActualizationPlane, cityClientCountFromDb, cityTpCountFromDb],
   );
   const cityRowsManager = useMemo(
-    () => buildCityConcentrationRows(managerScopedRows, actx.enabled ? teamActualizationPlane : undefined),
-    [managerScopedRows, actx.enabled, teamActualizationPlane],
+    () =>
+      buildCityConcentrationRows(
+        managerScopedRows,
+        actx.enabled ? teamActualizationPlane : undefined,
+        cityClientCountFromDb,
+        cityTpCountFromDb,
+      ),
+    [managerScopedRows, actx.enabled, teamActualizationPlane, cityClientCountFromDb, cityTpCountFromDb],
   );
 
   const allCitiesHref = useMemo(() => buildDealerBaseAllCitiesHref(profile.role, profile), [profile]);
