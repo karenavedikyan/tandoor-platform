@@ -2,8 +2,12 @@
  * ID активных ТТ из scoped-ответа БД (единый набор для дистрибуции и счётчиков).
  */
 
-import { cityKeyForScopedTp, displayCityLabelFromRawCity } from "./main-dashboard-city-stats.js";
+import { displayCityLabelFromRawCity } from "./main-dashboard-city-stats.js";
 import type { ScopedTradePointDto, TradePointsListScopedResponse } from "./trade-points-scoped-api.js";
+
+function cityKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
+  return displayCityLabelFromRawCity(tp.dealerCity ?? tp.city, tp.address);
+}
 
 export function activeTradePointIdsFromScopedTradePoints(
   tradePoints: readonly ScopedTradePointDto[],
@@ -47,7 +51,7 @@ export function buildTradePointIdsByCityFromScopedDb(
   const map = new Map<string, string[]>();
   for (const tp of tradePoints) {
     if (tp.isActive === false) continue;
-    const key = displayCityLabelFromRawCity(cityKeyForScopedTp(tp));
+    const key = cityKeyForScopedTradePoint(tp);
     const arr = map.get(key);
     if (arr) arr.push(tp.id);
     else map.set(key, [tp.id]);
