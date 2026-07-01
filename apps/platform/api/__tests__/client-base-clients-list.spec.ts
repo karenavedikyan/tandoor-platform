@@ -23,6 +23,9 @@ describe("client-base-clients-list merge invariants", () => {
           legalEntity: false,
           tradePointIds: [],
           tradePointsCount: 0,
+          hasManager: false,
+          hasRegional: false,
+          hasRop: false,
         },
       ]),
     );

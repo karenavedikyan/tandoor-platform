@@ -58,6 +58,7 @@ import type { ClientBaseOverview } from "@/lib/client-base-overview-api";
 import { fetchClientBaseClientsList } from "@/lib/client-base-overview-api";
 import { ClientAvatar } from "@/components/ui/client-avatar";
 import { DealerActualizationCreateDialog } from "@/components/client-base-actualization-dealer-forms";
+import { UnassignedResponsibleIndicator } from "@/components/unassigned-responsible-indicator";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
@@ -94,6 +95,7 @@ import {
   type ManagerRowModel,
   type RopGroupModel,
 } from "@/lib/dealer-base-management-view-model";
+import { isUnassigned, toResponsibleFlagsFromDealerRow } from "@/lib/unassigned-responsible";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import { useLocation } from "wouter";
@@ -150,6 +152,7 @@ const FILTER_LABELS: Record<ClientListFilter, string> = {
   attention: "Внимание",
   noTp: "Без ТТ",
   no_status: "Без статуса",
+  no_responsible: "Без ответственного",
 };
 
 function readMode(): DirectorClientBaseMode {
@@ -712,6 +715,11 @@ export function DealerBaseManagementCockpit({
     return detailSourceRows.filter((r) => match(r, clientFilter));
   }, [detailSourceRows, clientFilter, useKpiDbList]);
 
+  const unassignedClientCount = useMemo(
+    () => detailSourceRows.filter((r) => isUnassigned(toResponsibleFlagsFromDealerRow(r))).length,
+    [detailSourceRows],
+  );
+
   const tradePointRows = useMemo(() => {
     if (detail?.kind === "kpi-trade-points" && clientsListQ.data) {
       return mapClientsListTradePointsToListRows(clientsListQ.data.tradePoints, kpiDbClientsById);
@@ -933,7 +941,13 @@ export function DealerBaseManagementCockpit({
       ) : (
         <>
       {detailTab === "clients" ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <UnassignedResponsibleIndicator
+            count={unassignedClientCount}
+            active={clientFilter === "no_responsible"}
+            onToggle={() => setClientFilter((prev) => (prev === "no_responsible" ? "all" : "no_responsible"))}
+            testId="badge-cockpit-unassigned-responsible"
+          />
           {(Object.keys(FILTER_LABELS) as ClientListFilter[]).map((f) => (
             <Button
               key={f}
