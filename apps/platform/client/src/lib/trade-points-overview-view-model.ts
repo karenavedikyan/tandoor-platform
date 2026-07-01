@@ -7,8 +7,15 @@ import { buildHashPath } from "./hash-route-utils.js";
 import type { ManagerHeatLevel } from "./manager-load-heat.js";
 import type {
   TradePointsOverview,
+  TradePointsOverviewRopGroup,
   TradePointsOverviewRopManager,
 } from "./trade-points-overview-api.js";
+import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
+import {
+  resolveManagementCatalogTeamId,
+  resolveManagementOrgTeamUuid,
+} from "./dealer-base-management-view-model.js";
+import type { OrgSnapshot } from "./use-org-snapshot.js";
 
 export type TpStateSegmentKey = "with_photo" | "no_photo" | "unfilled";
 
@@ -138,4 +145,93 @@ export function managerCardFromOverview(m: TradePointsOverviewRopManager) {
     segments: buildTpStateSegments(withPhoto, m.withoutPhoto, m.notFilled),
     shellHref: managerShellHref(m.userId),
   };
+}
+
+export function collectTradePointsOverviewTeamLookupKeys(
+  g: Pick<TradePointsOverviewRopGroup, "teamId" | "ropUserId">,
+  orgSnap?: OrgSnapshot | null,
+): string[] {
+  const keys = new Set<string>();
+  if (g.teamId) keys.add(String(g.teamId));
+  if (g.ropUserId) keys.add(String(g.ropUserId));
+  keys.add(String(g.teamId ?? g.ropUserId ?? "__no_rop__"));
+  if (g.teamId && orgSnap) {
+    keys.add(resolveManagementCatalogTeamId(g.teamId, orgSnap));
+    keys.add(resolveManagementOrgTeamUuid(g.teamId, orgSnap));
+  }
+  if (g.ropUserId && orgSnap) {
+    const fromRop = catalogTeamIdForRopUserId(orgSnap, g.ropUserId);
+    if (fromRop) keys.add(fromRop);
+  }
+  return Array.from(keys);
+}
+
+export type TradePointsOverviewDisplayIndex = {
+  tradePointsByManagerId: Map<string, number>;
+  clientsByManagerId: Map<string, number>;
+  tradePointsByTeamKey: Map<string, number>;
+  clientsByTeamKey: Map<string, number>;
+  managerCountByTeamKey: Map<string, number>;
+  managerIdsByTeamKey: Map<string, Set<string>>;
+};
+
+export function buildTradePointsOverviewDisplayIndex(
+  ropGroups: TradePointsOverviewRopGroup[],
+  orgSnap: OrgSnapshot | null | undefined,
+  managerCatalogIdForUserId: (userId: string) => string | undefined,
+): TradePointsOverviewDisplayIndex {
+  const tradePointsByManagerId = new Map<string, number>();
+  const clientsByManagerId = new Map<string, number>();
+  const tradePointsByTeamKey = new Map<string, number>();
+  const clientsByTeamKey = new Map<string, number>();
+  const managerCountByTeamKey = new Map<string, number>();
+  const managerIdsByTeamKey = new Map<string, Set<string>>();
+
+  for (const g of ropGroups) {
+    const managerIds = new Set<string>();
+    for (const m of g.managers) {
+      managerIds.add(m.userId);
+      tradePointsByManagerId.set(m.userId, m.tradePoints);
+      clientsByManagerId.set(m.userId, m.clientsWithTp);
+      const catalogId = managerCatalogIdForUserId(m.userId);
+      if (catalogId) {
+        managerIds.add(catalogId);
+        tradePointsByManagerId.set(catalogId, m.tradePoints);
+        clientsByManagerId.set(catalogId, m.clientsWithTp);
+      }
+    }
+    for (const key of collectTradePointsOverviewTeamLookupKeys(g, orgSnap)) {
+      tradePointsByTeamKey.set(key, g.tradePoints);
+      clientsByTeamKey.set(key, g.clientsWithTp);
+      managerCountByTeamKey.set(key, g.managers.length);
+      managerIdsByTeamKey.set(key, managerIds);
+    }
+  }
+
+  return {
+    tradePointsByManagerId,
+    clientsByManagerId,
+    tradePointsByTeamKey,
+    clientsByTeamKey,
+    managerCountByTeamKey,
+    managerIdsByTeamKey,
+  };
+}
+
+export function filterManagersToTradePointsOverview<T extends { managerId: string }>(
+  managers: T[],
+  overviewManagerIds: Set<string> | undefined,
+  overviewReady: boolean,
+): T[] {
+  if (!overviewReady || !overviewManagerIds) return managers;
+  return managers.filter((m) => overviewManagerIds.has(m.managerId));
+}
+
+export function formatOverviewScopedCount(
+  value: number | null,
+  opts: { loading: boolean; ready: boolean; fallback?: number },
+): string {
+  if (opts.loading) return "…";
+  if (!opts.ready) return String(opts.fallback ?? "—");
+  return String(value ?? 0);
 }
