@@ -38,10 +38,23 @@ export type TradePointDistributionAggregateResult = {
   loading: boolean;
 };
 
+function lookupShowcaseRecord(
+  shById: ActualizationState["tradePointShowcaseActualizationById"],
+  matrixKey: string,
+  showcaseUuidByMatrixKey?: ReadonlyMap<string, string>,
+) {
+  const direct = shById[matrixKey];
+  if (direct) return direct;
+  const uuid = showcaseUuidByMatrixKey?.get(matrixKey);
+  if (uuid) return shById[uuid];
+  return undefined;
+}
+
 /** Агрегат дистрибуции по списку ТТ: installed-модели матрицы + ёмкость из БД. */
 export function useTradePointDistributionAggregate(
   tradePointIds: string[],
   act: ActualizationState,
+  showcaseUuidByMatrixKey?: ReadonlyMap<string, string>,
 ): TradePointDistributionAggregateResult {
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const [matrixPrefetchDone, setMatrixPrefetchDone] = useState(false);
@@ -119,7 +132,7 @@ export function useTradePointDistributionAggregate(
     const shById = act.tradePointShowcaseActualizationById;
     const metrics = tradePointIds.map((tradePointId) =>
       computeDistributionForTradePoint(
-        shById[tradePointId],
+        lookupShowcaseRecord(shById, tradePointId, showcaseUuidByMatrixKey),
         installedEntriesByTradePointId[tradePointId] ?? [],
       ),
     );
@@ -132,5 +145,6 @@ export function useTradePointDistributionAggregate(
     dbPrimary,
     scopeTooLarge,
     matrixPrefetchDone,
+    showcaseUuidByMatrixKey,
   ]);
 }
