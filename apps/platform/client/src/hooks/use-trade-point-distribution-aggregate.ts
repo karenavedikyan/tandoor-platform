@@ -6,6 +6,7 @@ import {
   type DistributionGroupMetrics,
 } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD } from "@/lib/distribution-analytics/distribution-analytics-filters";
+import { getDistributionDbPrimaryFlagSync } from "@/lib/distribution-db-primary-flag";
 import { scopedTradePointIdsStableKey } from "@/lib/distribution-entry-tradepoint-view-model";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
 import {
@@ -30,22 +31,32 @@ const EMPTY_AGGREGATE: DistributionGroupMetrics = {
   tradePointsCount: 0,
 };
 
-/** Агрегат дистрибуции по списку ТТ: installed-модели матрицы + ёмкость из актуализации. */
+export type TradePointDistributionAggregateResult = {
+  aggregate: DistributionGroupMetrics;
+  tradePointsCount: number;
+  /** Матрица витрины из БД ещё не готова — не показывать локальные seed-значения. */
+  loading: boolean;
+};
+
+/** Агрегат дистрибуции по списку ТТ: installed-модели матрицы + ёмкость из БД. */
 export function useTradePointDistributionAggregate(
   tradePointIds: string[],
   act: ActualizationState,
-): { aggregate: DistributionGroupMetrics; tradePointsCount: number } {
+): TradePointDistributionAggregateResult {
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
+  const [matrixPrefetchDone, setMatrixPrefetchDone] = useState(false);
   const lastPrefetchedScopeKeyRef = useRef("");
   const tradePointIdsRef = useRef(tradePointIds);
   const prevTradePointIdsKeyRef = useRef("");
 
   const tradePointIdsKey = useMemo(() => scopedTradePointIdsStableKey(tradePointIds), [tradePointIds]);
   const scopeTooLarge = tradePointIds.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD;
+  const dbPrimary = getDistributionDbPrimaryFlagSync();
 
   if (prevTradePointIdsKeyRef.current !== tradePointIdsKey) {
     prevTradePointIdsKeyRef.current = tradePointIdsKey;
     tradePointIdsRef.current = tradePointIds;
+    setMatrixPrefetchDone(false);
   }
 
   useEffect(() => {
@@ -55,22 +66,36 @@ export function useTradePointDistributionAggregate(
   }, []);
 
   useEffect(() => {
-    if (scopeTooLarge || tradePointIdsKey === "") return;
-    if (hasScopePrefetchCompleted(tradePointIdsKey)) return;
-    if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey) return;
+    if (!dbPrimary || scopeTooLarge || tradePointIdsKey === "") {
+      setMatrixPrefetchDone(true);
+      return;
+    }
+    if (hasScopePrefetchCompleted(tradePointIdsKey) && matrixPrefetchDone) return;
+    if (lastPrefetchedScopeKeyRef.current === tradePointIdsKey && matrixPrefetchDone) return;
 
     lastPrefetchedScopeKeyRef.current = tradePointIdsKey;
     markScopePrefetchCompleted(tradePointIdsKey);
+    setMatrixPrefetchDone(false);
     const ids = tradePointIdsRef.current;
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      setMatrixPrefetchDone(true);
+      return;
+    }
 
+    let cancelled = false;
     void (async () => {
       const entries = await fetchShowcaseMatrixScope({ tradePointIds: ids, statuses: ["installed"] });
+      if (cancelled) return;
       if (entries != null && entries.length > 0) {
         applyScopeEntriesToMatrixCache(entries);
       }
+      setMatrixPrefetchDone(true);
     })();
-  }, [scopeTooLarge, tradePointIdsKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dbPrimary, scopeTooLarge, tradePointIdsKey, matrixPrefetchDone]);
 
   const installedEntriesByTradePointId = useMemo(() => {
     void matrixCacheBump;
@@ -83,7 +108,12 @@ export function useTradePointDistributionAggregate(
 
   return useMemo(() => {
     if (tradePointIds.length === 0) {
-      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: 0 };
+      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: 0, loading: false };
+    }
+
+    const loading = dbPrimary && !scopeTooLarge && !matrixPrefetchDone;
+    if (loading) {
+      return { aggregate: EMPTY_AGGREGATE, tradePointsCount: tradePointIds.length, loading: true };
     }
 
     const shById = act.tradePointShowcaseActualizationById;
@@ -94,6 +124,13 @@ export function useTradePointDistributionAggregate(
       ),
     );
     const aggregate = aggregateDistribution(metrics);
-    return { aggregate, tradePointsCount: aggregate.tradePointsCount };
-  }, [tradePointIds, act.tradePointShowcaseActualizationById, installedEntriesByTradePointId]);
+    return { aggregate, tradePointsCount: aggregate.tradePointsCount, loading: false };
+  }, [
+    tradePointIds,
+    act.tradePointShowcaseActualizationById,
+    installedEntriesByTradePointId,
+    dbPrimary,
+    scopeTooLarge,
+    matrixPrefetchDone,
+  ]);
 }

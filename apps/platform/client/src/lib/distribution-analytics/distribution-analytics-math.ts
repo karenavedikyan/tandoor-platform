@@ -171,7 +171,7 @@ export function computeDistributionForTradePoint(
   for (const type of ALL_EQUIPMENT_TYPES) {
     const dbCapacity = capacityFromMatrixEntries(installedEntries, type);
     const capacity =
-      dbPrimary && dbCapacity != null
+      dbPrimary
         ? dbCapacity
         : sh
           ? getShowcaseTypeCapacity(sh, type)

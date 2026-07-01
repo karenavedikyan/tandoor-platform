@@ -125,6 +125,7 @@
     "test:dealer-base-effective-vis-payload": "vitest run client/src/pages/__tests__/dealer-base-effective-vis-payload.test.ts client/src/lib/__tests__/dealer-base-source-codes-format.test.ts client/src/lib/__tests__/dealer-base-source-external-key.test.ts",
     "test:trade-points-effective-vis-payload": "vitest run client/src/pages/__tests__/trade-points-effective-vis-payload.test.ts client/src/lib/__tests__/dealer-base-source-external-key.test.ts",
     "test:trade-points-list-scoped": "tsx shared/__tests__/trade-points-list-scoped.test.ts",
+    "test:trade-points-scoped-ids": "tsx client/src/lib/__tests__/trade-points-scoped-ids.test.ts",
     "test:external-managers-view": "tsx shared/__tests__/external-managers-view.test.ts",
     "test:manager-scope-full-pipeline": "tsx client/src/lib/__tests__/dealer-base-manager-scope-full-pipeline.test.ts",
     "test:dealer-base-renders-without-crash": "vitest run __tests__/dealer-base-renders-without-crash.test.tsx",

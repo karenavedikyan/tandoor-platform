@@ -62,7 +62,7 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
-import { buildDealerBaseRowsWithActualization, mergeTradePointsForActualization } from "@/lib/client-base-actualization-data-merge";
+import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { getCatalogDealerRows } from "@/lib/dealer-base-source";
 import { canCreateDealerDuringActualization } from "@/lib/client-base-actualization-permissions";
 import {
@@ -336,6 +336,9 @@ export function DealerBaseManagementCockpit({
   orgTeamCtx,
   overview,
   scopeTotalDealers,
+  scopeAvgDistribution,
+  scopeTradePointIds,
+  scopeTradePointIdsReady,
   mergedDealerRowsForCreate,
   teamTotalsById,
   membersTotalsByTeamId,
@@ -347,6 +350,11 @@ export function DealerBaseManagementCockpit({
   orgTeamCtx?: { snap: OrgSnapshot; access: DealerBaseAccessRole } | null;
   overview?: ClientBaseOverview | null;
   scopeTotalDealers?: number | null;
+  /** Средняя дистрибуция из scoped-БД; null — загрузка. */
+  scopeAvgDistribution?: number | null;
+  /** ID активных ТТ из scoped-БД (единый набор с счётчиками). */
+  scopeTradePointIds?: string[];
+  scopeTradePointIdsReady?: boolean;
   mergedDealerRowsForCreate?: DealerRow[] | null;
   teamTotalsById?: Map<string, TeamTotals>;
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
@@ -362,21 +370,15 @@ export function DealerBaseManagementCockpit({
     return mapSalesRoleToDealerBaseAccess(profile.role);
   }, [orgTeamCtx, profile.role]);
 
-  const cockpitScopeTradePointIds = useMemo(() => {
-    if (!actx.enabled) return [] as string[];
-    const ids: string[] = [];
-    for (const row of rows) {
-      for (const e of mergeTradePointsForActualization(row, teamCtx.mergedState)) {
-        if (!e.isArchived) ids.push(e.point.id);
-      }
-    }
-    return ids;
-  }, [actx.enabled, rows, teamCtx.mergedState]);
+  const cockpitScopeTradePointIds = scopeTradePointIds ?? [];
 
   const cockpitDistribution = useTradePointDistributionAggregate(
     cockpitScopeTradePointIds,
     teamCtx.mergedState,
   );
+
+  const cockpitDistributionLoading =
+    scopeTradePointIdsReady === false || cockpitDistribution.loading;
 
   const [mode, setMode] = useState<DirectorClientBaseMode>(() => readMode());
   const [openRops, setOpenRops] = useState<string[]>(() => readOpenRops());
@@ -503,6 +505,12 @@ export function DealerBaseManagementCockpit({
 
   const cities = useMemo(() => buildCityModels(rows), [rows]);
   const structure = useMemo(() => buildStructureInfographic(rows, teamIds), [rows, teamIds]);
+  const cockpitAvgDistDisplay =
+    scopeAvgDistribution != null
+      ? `${scopeAvgDistribution}%`
+      : scopeAvgDistribution === null
+        ? "…"
+        : `${structure.avgDist}%`;
   const cityChart = useMemo(() => topCitiesForChart(cities, 5), [cities]);
 
   const tradePointsOverviewQ = useQuery({
@@ -1042,6 +1050,7 @@ export function DealerBaseManagementCockpit({
               tradePointIds={cockpitScopeTradePointIds}
               testIdPrefix="cockpit-clients"
               showTradePointsCount={false}
+              loading={cockpitDistributionLoading}
             />
             <section data-testid="section-client-base-cities">
               <Card className="rounded-xl border border-border bg-card text-card-foreground">
@@ -1371,7 +1380,7 @@ export function DealerBaseManagementCockpit({
               </div>
             </div>
             <p className="text-xs text-[#8F96B0]">
-              Средняя дистрибуция: <span className="font-semibold text-[#222631]">{structure.avgDist}%</span>
+              Средняя дистрибуция: <span className="font-semibold text-[#222631]">{cockpitAvgDistDisplay}</span>
               {" · "}
               ТТ на клиента:{" "}
               <span className="font-semibold text-[#222631]">
@@ -1682,6 +1691,7 @@ export function DealerBaseManagementCockpit({
             tradePointIds={cockpitScopeTradePointIds}
             testIdPrefix="cockpit-clients"
             showTradePointsCount={false}
+            loading={cockpitDistributionLoading}
           />
 
           <div

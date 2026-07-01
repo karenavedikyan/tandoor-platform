@@ -22,7 +22,7 @@ export type DistributionAnalyticsFilters = {
   modelIds: string[];
 };
 
-export const DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD = 800;
+export const DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD = 2500;
 
 export function hasAnyDistributionAnalyticsFilters(filters: DistributionAnalyticsFilters): boolean {
   return (
