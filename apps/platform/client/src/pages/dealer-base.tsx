@@ -1920,16 +1920,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   }, [useReal, scopedTpQ.data]);
 
   const scopeTradePointIds = useMemo(() => {
-    if (!useReal || !actx.enabled) return [] as string[];
+    if (!useReal) return [] as string[];
     const fromScoped = activeTradePointIdsFromScopedResponse(scopedTpQ.data);
-    if (fromScoped !== undefined) return fromScoped;
-    return [];
-  }, [useReal, actx.enabled, scopedTpQ.data]);
+    return fromScoped ?? [];
+  }, [useReal, scopedTpQ.data]);
 
   const scopeTradePointIdsReady = useMemo(() => {
-    if (!useReal || !actx.enabled) return true;
+    if (!useReal) return true;
     return activeTradePointIdsFromScopedResponse(scopedTpQ.data) !== undefined;
-  }, [useReal, actx.enabled, scopedTpQ.data]);
+  }, [useReal, scopedTpQ.data]);
 
   const scopeDistribution = useTradePointDistributionAggregate(scopeTradePointIds, actualizationPlaneForRows);
 

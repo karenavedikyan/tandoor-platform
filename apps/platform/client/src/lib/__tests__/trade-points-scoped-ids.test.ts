@@ -74,4 +74,20 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   assert.deepEqual(byCity.get("Москва"), ["tp-3"]);
 }
 
+{
+  const scoped = {
+    success: true as const,
+    source: "db" as const,
+    tradePoints: [tp({ id: "tp-scope-1" }), tp({ id: "tp-scope-2" })],
+    meta: { total: 2, scope: "team" as const },
+  };
+  const useReal = true;
+  const actEnabled = false;
+  void actEnabled;
+  const scopeTradePointIds = useReal
+    ? (activeTradePointIdsFromScopedResponse(scoped) ?? [])
+    : [];
+  assert.deepEqual(scopeTradePointIds, ["tp-scope-1", "tp-scope-2"]);
+}
+
 console.log("trade-points-scoped-ids: ok");
