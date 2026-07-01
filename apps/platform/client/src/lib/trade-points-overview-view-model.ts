@@ -14,6 +14,7 @@ import { catalogTeamIdForRopUserId } from "./dealer-base-real-scope.js";
 import {
   resolveManagementCatalogTeamId,
   resolveManagementOrgTeamUuid,
+  type ManagerRowModel,
 } from "./dealer-base-management-view-model.js";
 import type { OrgSnapshot } from "./use-org-snapshot.js";
 
@@ -166,6 +167,8 @@ export function collectTradePointsOverviewTeamLookupKeys(
   return Array.from(keys);
 }
 
+export type OverviewManagerCard = ReturnType<typeof managerCardFromOverview>;
+
 export type TradePointsOverviewDisplayIndex = {
   tradePointsByManagerId: Map<string, number>;
   clientsByManagerId: Map<string, number>;
@@ -173,6 +176,7 @@ export type TradePointsOverviewDisplayIndex = {
   clientsByTeamKey: Map<string, number>;
   managerCountByTeamKey: Map<string, number>;
   managerIdsByTeamKey: Map<string, Set<string>>;
+  managerCardsByTeamKey: Map<string, OverviewManagerCard[]>;
 };
 
 export function buildTradePointsOverviewDisplayIndex(
@@ -186,9 +190,11 @@ export function buildTradePointsOverviewDisplayIndex(
   const clientsByTeamKey = new Map<string, number>();
   const managerCountByTeamKey = new Map<string, number>();
   const managerIdsByTeamKey = new Map<string, Set<string>>();
+  const managerCardsByTeamKey = new Map<string, OverviewManagerCard[]>();
 
   for (const g of ropGroups) {
     const managerIds = new Set<string>();
+    const cards = g.managers.map((m) => managerCardFromOverview(m));
     for (const m of g.managers) {
       managerIds.add(m.userId);
       tradePointsByManagerId.set(m.userId, m.tradePoints);
@@ -205,6 +211,7 @@ export function buildTradePointsOverviewDisplayIndex(
       clientsByTeamKey.set(key, g.clientsWithTp);
       managerCountByTeamKey.set(key, g.managers.length);
       managerIdsByTeamKey.set(key, managerIds);
+      managerCardsByTeamKey.set(key, cards);
     }
   }
 
@@ -215,6 +222,7 @@ export function buildTradePointsOverviewDisplayIndex(
     clientsByTeamKey,
     managerCountByTeamKey,
     managerIdsByTeamKey,
+    managerCardsByTeamKey,
   };
 }
 
@@ -225,6 +233,78 @@ export function filterManagersToTradePointsOverview<T extends { managerId: strin
 ): T[] {
   if (!overviewReady || !overviewManagerIds) return managers;
   return managers.filter((m) => overviewManagerIds.has(m.managerId));
+}
+
+function managerIdentityKeys(managerId: string): Set<string> {
+  const keys = new Set<string>();
+  keys.add(managerId);
+  keys.add(resolveManagerApiUserId(managerId));
+  keys.add(managerCatalogIdFromUserId(managerId));
+  return keys;
+}
+
+function managersShareIdentity(a: string, b: string): boolean {
+  const keysA = managerIdentityKeys(a);
+  for (const k of Array.from(managerIdentityKeys(b))) {
+    if (keysA.has(k)) return true;
+  }
+  return false;
+}
+
+export function lookupOverviewManagerCardsForTeam(
+  managerCardsByTeamKey: Map<string, OverviewManagerCard[]>,
+  teamId: string,
+  orgSnap?: OrgSnapshot | null,
+): OverviewManagerCard[] | undefined {
+  const candidates = [teamId, String(teamId ?? "__no_rop__")];
+  if (orgSnap) {
+    candidates.push(resolveManagementCatalogTeamId(teamId, orgSnap));
+    candidates.push(resolveManagementOrgTeamUuid(teamId, orgSnap));
+  }
+  for (const key of candidates) {
+    const cards = managerCardsByTeamKey.get(key);
+    if (cards) return cards;
+  }
+  return undefined;
+}
+
+/** Каталожные менеджеры ∪ overview-менеджеры по грантам (которых нет в каталоге команды). */
+export function unionCatalogManagersWithOverviewCards(
+  managers: ManagerRowModel[],
+  teamId: string,
+  opts: {
+    overviewReady: boolean;
+    overviewManagerIds: Set<string> | undefined;
+    managerCardsByTeamKey: Map<string, OverviewManagerCard[]>;
+    orgSnap?: OrgSnapshot | null;
+  },
+): ManagerRowModel[] {
+  const base = filterManagersToTradePointsOverview(managers, opts.overviewManagerIds, opts.overviewReady);
+  if (!opts.overviewReady) return base;
+
+  const overviewCards = lookupOverviewManagerCardsForTeam(opts.managerCardsByTeamKey, teamId, opts.orgSnap);
+  if (!overviewCards?.length) return base;
+
+  const added: ManagerRowModel[] = [];
+  for (const card of overviewCards) {
+    if (base.some((m) => managersShareIdentity(m.managerId, card.userId))) continue;
+    if (added.some((m) => managersShareIdentity(m.managerId, card.userId))) continue;
+    added.push({
+      managerId: card.userId,
+      name: card.fullName,
+      teamId,
+      active: card.clientsWithTp,
+      outlets: card.tradePoints,
+      potential: 0,
+      attention: 0,
+      topSegmentLabel: "—",
+      rows: [],
+      isExternal: true,
+      externalTeamName: null,
+      countsFromServerTotals: true,
+    });
+  }
+  return [...base, ...added];
 }
 
 export function formatOverviewScopedCount(

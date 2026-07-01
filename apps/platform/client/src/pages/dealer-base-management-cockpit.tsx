@@ -109,9 +109,9 @@ import { fetchTradePointsOverview, fetchTradePointsManagerDetail } from "@/lib/t
 import type { TradePointsManagerDetailClient } from "@/lib/trade-points-overview-api";
 import {
   buildTradePointsOverviewDisplayIndex,
-  filterManagersToTradePointsOverview,
   formatOverviewScopedCount,
   resolveManagerApiUserId,
+  unionCatalogManagersWithOverviewCards,
 } from "@/lib/trade-points-overview-view-model";
 import type { MemberTotals, OrgScopePayload, TeamScopePayload, TeamTotals } from "@shared/dealers-scope-types";
 
@@ -578,8 +578,13 @@ export function DealerBaseManagementCockpit({
 
   const managersForTeamDisplay = useCallback(
     (managers: ManagerRowModel[], teamId: string): ManagerRowModel[] =>
-      filterManagersToTradePointsOverview(managers, overviewManagerIdsForTeam(teamId), overviewTpReady),
-    [overviewManagerIdsForTeam, overviewTpReady],
+      unionCatalogManagersWithOverviewCards(managers, teamId, {
+        overviewReady: overviewTpReady,
+        overviewManagerIds: overviewManagerIdsForTeam(teamId),
+        managerCardsByTeamKey: tpOverviewIndex.managerCardsByTeamKey,
+        orgSnap: orgTeamCtx?.snap,
+      }),
+    [overviewManagerIdsForTeam, overviewTpReady, tpOverviewIndex.managerCardsByTeamKey, orgTeamCtx?.snap],
   );
 
   const resolveTeamTp = useCallback(
