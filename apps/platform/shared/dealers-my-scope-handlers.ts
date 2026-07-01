@@ -11,6 +11,10 @@ import {
   fetchScopeTargetUser,
   type ScopeTargetUser,
 } from "./scope-for-user-access.js";
+import {
+  intersectExternalKeyLists,
+  intersectTargetDealerScopeWithViewerZone,
+} from "./dealer-scope-rop-intersection.js";
 
 export type MyDealerScopeUser = {
   id: string;
@@ -130,13 +134,46 @@ export async function fetchMyDealerScopeForRequest(
     return fetchMyDealerScope(pool, viewer);
   }
 
-  const allowed = await canViewerAccessUserScope(pool, viewer.id, viewer.role, targetId);
-  if (!allowed) return { forbidden: true };
-
   const target = await fetchScopeTargetUser(pool, targetId);
   if (!target || target.status !== "active") return { notFound: true };
 
-  const scope = await computeDbScopeForUser(pool, target.id, target.role);
-  const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
-  return buildPayload(viewer, scope, activeTradePoints, target);
+  let allowed = await canViewerAccessUserScope(pool, viewer.id, viewer.role, targetId);
+  const targetScope = await computeDbScopeForUser(pool, target.id, target.role);
+  let effectiveScope = targetScope;
+
+  if (viewer.role === "rop" && viewer.id !== target.id && !allowed) {
+    try {
+      const viewerScope = await computeDbScopeForUser(pool, viewer.id, "rop");
+      const interKeys = intersectExternalKeyLists(
+        targetScope.active_dealer_external_keys,
+        viewerScope.active_dealer_external_keys,
+      );
+      if (interKeys.length > 0) {
+        allowed = true;
+        effectiveScope = intersectTargetDealerScopeWithViewerZone(targetScope, viewerScope.active_dealer_external_keys);
+      }
+    } catch (err) {
+      console.warn("[dealers/my-scope] rop viewer scope intersection failed", {
+        viewerId: viewer.id,
+        targetId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  if (!allowed) return { forbidden: true };
+
+  const activeTradePoints = await fetchActiveTradePointsForScope(pool, effectiveScope);
+  if (effectiveScope !== targetScope) {
+    effectiveScope = {
+      ...effectiveScope,
+      totals: {
+        ...effectiveScope.totals,
+        active_dealers: effectiveScope.active_dealer_external_keys.length,
+        active_trade_points: activeTradePoints.length,
+      },
+    };
+  }
+
+  return buildPayload(viewer, effectiveScope, activeTradePoints, target);
 }
