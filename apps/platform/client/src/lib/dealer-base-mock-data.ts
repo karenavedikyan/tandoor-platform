@@ -198,6 +198,18 @@ export type DealerRow = {
   releaseTeamId?: string;
   /** Менеджер (id из sales-control) из Release 1 — для фильтров. */
   releaseManagerId?: string;
+  /** UUID менеджера из client_assignments / responsibility_assignments (БД). */
+  managerUserId?: string | null;
+  /** UUID регионального менеджера из dealer_overrides (БД). */
+  regionalManagerId?: string | null;
+  /** UUID РОП из dealer_overrides / teams (БД). */
+  ropId?: string | null;
+  /** Назначен менеджер по данным БД. */
+  hasManager?: boolean;
+  /** Назначен региональный менеджер по данным БД. */
+  hasRegional?: boolean;
+  /** Назначен РОП по данным БД. */
+  hasRop?: boolean;
   /** Дни отгрузки (Excel / актуализация); строки — id дня (`monday` … `saturday`). */
   releaseShipmentDayIds?: string[];
   lastActivity: string;

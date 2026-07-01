@@ -140,6 +140,7 @@
     "test:data-merge-trash": "tsx client/src/lib/__tests__/data-merge-trash.test.ts",
     "test:client-base-actualization-data-merge": "tsx client/src/lib/__tests__/client-base-actualization-data-merge.test.ts",
     "test:main-dashboard-city-stats": "tsx client/src/lib/__tests__/main-dashboard-city-stats.test.ts",
+    "test:unassigned-responsible": "tsx client/src/lib/__tests__/unassigned-responsible.test.ts",
     "test:trash": "npm run test:trash-protection && npm run test:trash-purge && npm run test:trash-merge && npm run test:trash-helper && npm run test:data-merge-trash",
     "test:category-tier-edit": "tsx client/src/__tests__/client-category-tier-edit.test.ts",
     "test:impersonation-quick-switch": "tsx client/src/lib/__tests__/impersonation-quick-switch.test.ts",

@@ -36,6 +36,13 @@ export type DbDealerRow = {
   client_type_label: string | null;
   release_team_id: string | null;
   release_manager_id: string | null;
+  manager_user_id: string | null;
+  regional_manager_id: string | null;
+  dealer_rop_id: string | null;
+  team_rop_user_id: string | null;
+  has_assignment_manager: boolean;
+  has_assignment_regional: boolean;
+  has_assignment_rop: boolean;
 };
 
 export type DbTradePointRow = {
@@ -91,6 +98,12 @@ export function mapDbRowsToDealerRow(dealer: DbDealerRow, tradePoints: DbTradePo
   const city = dealer.city?.trim() || "—";
   const rop = dealer.region?.trim() || "";
   const mgr = dealer.manager_name?.trim() || "—";
+  const managerUserId = dealer.manager_user_id?.trim() || null;
+  const regionalManagerId = dealer.regional_manager_id?.trim() || null;
+  const ropId = dealer.dealer_rop_id?.trim() || dealer.team_rop_user_id?.trim() || null;
+  const hasManager = Boolean(managerUserId) || dealer.has_assignment_manager;
+  const hasRegional = Boolean(regionalManagerId) || dealer.has_assignment_regional;
+  const hasRop = Boolean(ropId) || dealer.has_assignment_rop;
   const mappedTradePoints = tradePoints.map((tp) => mapTradePoint(tp, dealer.is_active));
   const hasProblem = dealer.client_type === "nonTarget" || dealer.is_closed;
 
@@ -112,6 +125,12 @@ export function mapDbRowsToDealerRow(dealer: DbDealerRow, tradePoints: DbTradePo
     ropName: rop,
     releaseTeamId: dealer.release_team_id?.trim() || undefined,
     releaseManagerId: dealer.release_manager_id?.trim() || undefined,
+    managerUserId,
+    regionalManagerId,
+    ropId,
+    hasManager,
+    hasRegional,
+    hasRop,
     lastActivity: "—",
     nextAction: "Актуализация данных в учётных системах (после интеграции).",
     distribution: 0,

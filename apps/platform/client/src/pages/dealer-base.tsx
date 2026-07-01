@@ -251,6 +251,8 @@ import { DealerFocusHierarchy } from "@/components/dealer-focus-hierarchy";
 import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-hydration";
 import { useMainDashboardCityFilterOptional } from "@/context/main-dashboard-city-filter-context";
 import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
+import { isUnassigned, toResponsibleFlagsFromDealerRow } from "@/lib/unassigned-responsible";
+import { UnassignedResponsibleIndicator } from "@/components/unassigned-responsible-indicator";
 import { SHOWCASE_DISTRIBUTION_CHANGED_EVENT } from "@/lib/showcase-distribution-data";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DealerBulkDeleteCheckbox } from "@/components/dealer-bulk-delete-checkbox";
@@ -1676,6 +1678,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const [workView, setWorkView] = useState<DealerBaseWorkView>(() => defaultWorkViewForAccess(access));
   const [search, setSearch] = useState("");
+  const [showOnlyUnassigned, setShowOnlyUnassigned] = useState(false);
   const deferredSearch = useDeferredValue(search);
   const searchFilterPending = search !== deferredSearch;
   const [searchIndicatorVisible, setSearchIndicatorVisible] = useState(false);
@@ -3020,6 +3023,16 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return rowsAfterUrlFocus.filter((r) => dealerRowMatchesCityFilter(r, city));
   }, [rowsAfterUrlFocus, mainCityFilter?.selectedCity]);
 
+  const unassignedDealerCount = useMemo(
+    () => rowsAfterCityFilter.filter((r) => isUnassigned(toResponsibleFlagsFromDealerRow(r))).length,
+    [rowsAfterCityFilter],
+  );
+
+  const rowsAfterUnassignedFilter = useMemo(() => {
+    if (!showOnlyUnassigned) return rowsAfterCityFilter;
+    return rowsAfterCityFilter.filter((r) => isUnassigned(toResponsibleFlagsFromDealerRow(r)));
+  }, [rowsAfterCityFilter, showOnlyUnassigned]);
+
   const programCounts = useMemo(() => {
     let special = 0;
     let franchise = 0;
@@ -3243,6 +3256,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         onRemove: () => setManager(defaultRopManager.manager),
       });
     }
+    if (showOnlyUnassigned) {
+      chips.push({
+        key: "unassigned",
+        label: "Без ответственного",
+        onRemove: () => setShowOnlyUnassigned(false),
+      });
+    }
     return chips;
   }, [
     search,
@@ -3264,6 +3284,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     defaultRopManager,
     managerCatalogForRop,
     hideManagerFilterInTeamView,
+    showOnlyUnassigned,
   ]);
 
   const dealerBaseActiveFilterCount = dealerBaseActiveFilterChips.length;
@@ -3285,13 +3306,14 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     userTouchedPickerRef.current = false;
     setRopTeam(defaultRopManager.ropTeam);
     setManager(defaultRopManager.manager);
+    setShowOnlyUnassigned(false);
   }, [profile.role, defaultRopManager]);
 
   const rowsFinalForList = useMemo(() => {
     return stockListFilter === "all"
-      ? rowsAfterCityFilter
-      : rowsAfterCityFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
-  }, [rowsAfterCityFilter, stockListFilter]);
+      ? rowsAfterUnassignedFilter
+      : rowsAfterUnassignedFilter.filter((r) => dealerRowMatchesStockFilter(r, stockListFilter));
+  }, [rowsAfterUnassignedFilter, stockListFilter]);
 
   const isFocusView = useMemo(() => isDealerBaseFocusViewParams(routeQs), [routeQs, routeKey]);
 
@@ -4064,6 +4086,12 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 />
               ) : null}
             </div>
+            <UnassignedResponsibleIndicator
+              count={unassignedDealerCount}
+              active={showOnlyUnassigned}
+              onToggle={() => setShowOnlyUnassigned((prev) => !prev)}
+              testId="badge-dealer-base-unassigned-responsible"
+            />
             <div
               className="flex min-w-0 shrink-0 flex-col gap-2 sm:ml-auto sm:items-end"
               data-testid="section-dealer-showcase-mode-toolbar"

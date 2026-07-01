@@ -60,7 +60,9 @@ import { useDealerTpOverridesHydration } from "@/hooks/use-dealer-tp-overrides-h
 import { useIsMobile } from "@/hooks/use-mobile";
 import { mergeActualizationState, createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { UnassignedResponsibleIndicator } from "@/components/unassigned-responsible-indicator";
 import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
+import { isUnassigned, toResponsibleFlagsFromDealerRow } from "@/lib/unassigned-responsible";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import {
   mapSalesRoleToDealerBaseAccess,
@@ -282,8 +284,8 @@ function staffDisplayForDetail(s: string): string {
   return isMeaningfulStaffName(s) ? s.trim() : "Не назначен";
 }
 
-function rowHasNoResponsible(r: TradePointListRow): boolean {
-  return !isMeaningfulStaffName(r.manager) && !isMeaningfulStaffName(r.regionalManager) && !isMeaningfulStaffName(r.rop);
+function tradePointRowIsUnassigned(r: TradePointListRow): boolean {
+  return isUnassigned(toResponsibleFlagsFromDealerRow(r.dealer));
 }
 
 function rowHasNoAddress(r: TradePointListRow): boolean {
@@ -619,6 +621,11 @@ export default function TradePointsPage({
 
   const baseRows = workingRows;
 
+  const unassignedTradePointCount = useMemo(
+    () => baseRows.filter((r) => tradePointRowIsUnassigned(r)).length,
+    [baseRows],
+  );
+
   const summary = useMemo(() => {
     let filled = 0;
     let missing = 0;
@@ -708,7 +715,7 @@ export default function TradePointsPage({
     } else if (quickPreset === "no_address") {
       list = list.filter((r) => rowHasNoAddress(r));
     } else if (quickPreset === "no_responsible") {
-      list = list.filter((r) => rowHasNoResponsible(r));
+      list = list.filter((r) => tradePointRowIsUnassigned(r));
     }
 
     const dir = sortDir === "asc" ? 1 : -1;
@@ -1669,8 +1676,14 @@ export default function TradePointsPage({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/30 p-3">
         <span className="w-full text-xs font-semibold uppercase tracking-wide text-muted-foreground md:w-auto md:py-1.5">Быстрые фильтры</span>
+        <UnassignedResponsibleIndicator
+          count={unassignedTradePointCount}
+          active={quickPreset === "no_responsible"}
+          onToggle={() => setQuickPreset((prev) => (prev === "no_responsible" ? "all" : "no_responsible"))}
+          testId="badge-trade-points-unassigned-responsible"
+        />
         {quickPresetButton("all", "Все")}
         {quickPresetButton("unfilled_showcase", "Не заполнена витрина")}
         {quickPresetButton("deficit", "Есть дефицит")}
