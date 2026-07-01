@@ -4,7 +4,10 @@
 import assert from "node:assert/strict";
 import type { DealerRow } from "../dealer-base-mock-data";
 import type { ManagerRowModel } from "../dealer-base-management-view-model";
-import { buildManagerDashboardModel } from "../dealer-base-manager-dashboard-view-model";
+import {
+  buildManagerDashboardModel,
+  resolveManagerDetailObservationCtx,
+} from "../dealer-base-manager-dashboard-view-model";
 
 function row(partial: Partial<DealerRow> & Pick<DealerRow, "id" | "name" | "city">): DealerRow {
   return {
@@ -59,6 +62,48 @@ const manager: ManagerRowModel = {
   assert.ok(dash.cities.some((c) => c.displayName === "Ростов"));
   assert.equal(dash.attentionRows.length, 1);
   assert.ok(dash.segments.length > 0);
+}
+
+{
+  const scopedRows = [
+    row({ id: "ext-1", name: "Клиент 1", city: "Ростов", status: "активный" }),
+    row({ id: "ext-2", name: "Клиент 2", city: "Ростов", status: "активный" }),
+    row({ id: "ext-3", name: "Клиент 3", city: "Москва", status: "потенциальный" }),
+  ];
+  const nativeCtx = {
+    manager,
+    ropName: "Купянский",
+    teamId: "team-a",
+  };
+  const fallbackCtx = resolveManagerDetailObservationCtx({
+    managerCtx: null,
+    viewingOtherUserScope: true,
+    targetScopeReady: true,
+    managerId: "0481a81d-160b-422e-8257-cf21d134cd42",
+    scopedRows,
+    managerDisplayName: "Якубова Юлия Сергеевна",
+    observerRopName: "Скалабан",
+  });
+  assert.ok(fallbackCtx, "fallback ctx for external manager");
+  assert.equal(fallbackCtx!.manager.rows.length, scopedRows.length);
+  assert.equal(fallbackCtx!.manager.active, 2);
+  assert.equal(fallbackCtx!.manager.name, "Якубова Юлия Сергеевна");
+  assert.equal(fallbackCtx!.ropName, "Скалабан");
+
+  const dash = buildManagerDashboardModel(fallbackCtx!.manager, fallbackCtx!.ropName, "medium");
+  assert.equal(dash.rows.length, scopedRows.length);
+  assert.equal(dash.kpis.activeClients, 2);
+
+  const nativeResolved = resolveManagerDetailObservationCtx({
+    managerCtx: nativeCtx,
+    viewingOtherUserScope: true,
+    targetScopeReady: true,
+    managerId: "mgr-test",
+    scopedRows,
+    managerDisplayName: "ignored",
+    observerRopName: "ignored",
+  });
+  assert.equal(nativeResolved, nativeCtx, "native managerCtx wins over fallback");
 }
 
 console.log("dealer-base-manager-dashboard-view-model.test.ts: ok");
