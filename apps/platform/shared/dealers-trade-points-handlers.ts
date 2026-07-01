@@ -3,7 +3,7 @@
  */
 
 import type { PoolLike } from "./admin/admin-auth.js";
-import { TRADE_POINT_OVERRIDE_JOIN } from "./db-scope-formula.js";
+import { DEALER_OVERRIDE_JOIN, TRADE_POINT_OVERRIDE_JOIN } from "./db-scope-formula.js";
 import {
   mapDbRowsToDealerRow,
   type DbDealerRow,
@@ -52,7 +52,29 @@ const DEALER_SELECT = `
   d.release_address,
   d.client_type_label,
   d.release_team_id,
-  d.release_manager_id
+  d.release_manager_id,
+  ca.responsible_user_id::text AS manager_user_id,
+  d_ov.regional_manager_id::text AS regional_manager_id,
+  d_ov.rop_id::text AS dealer_rop_id,
+  t.rop_user_id::text AS team_rop_user_id,
+  EXISTS (
+    SELECT 1 FROM responsibility_assignments ra
+    WHERE ra.scope_kind = 'dealer'
+      AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+      AND ra.responsible_role IN ('manager', 'sales_manager')
+  ) AS has_assignment_manager,
+  EXISTS (
+    SELECT 1 FROM responsibility_assignments ra
+    WHERE ra.scope_kind = 'dealer'
+      AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+      AND ra.responsible_role = 'regional_manager'
+  ) AS has_assignment_regional,
+  EXISTS (
+    SELECT 1 FROM responsibility_assignments ra
+    WHERE ra.scope_kind = 'dealer'
+      AND (ra.scope_key = d.external_key OR ra.scope_key = d.id::text)
+      AND ra.responsible_role = 'rop'
+  ) AS has_assignment_rop
 `;
 
 function buildDealerFilterSql(
@@ -175,6 +197,9 @@ export async function handleDealersTradePointsList(
   const r = await pool.query<DbDealerRow>(
     `SELECT ${DEALER_SELECT}
        FROM dealers d
+       LEFT JOIN client_assignments ca ON ca.client_code = d.release_code
+       LEFT JOIN teams t ON t.id = ca.team_id
+       ${DEALER_OVERRIDE_JOIN}
        ${where}
        ORDER BY d.name`,
     params,
@@ -205,6 +230,9 @@ export async function handleDealersTradePointsGet(
   const r = await pool.query<DbDealerRow>(
     `SELECT ${DEALER_SELECT}
        FROM dealers d
+       LEFT JOIN client_assignments ca ON ca.client_code = d.release_code
+       LEFT JOIN teams t ON t.id = ca.team_id
+       ${DEALER_OVERRIDE_JOIN}
       WHERE d.external_key = $1
       LIMIT 1`,
     [key],

@@ -22,6 +22,27 @@ import type { ScopedTradePointDto } from "./trade-points-scoped-api.js";
 import { mergeTradePointsForActualization } from "./client-base-actualization-data-merge.js";
 import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 
+function dealerResponsibilityFromScopedTp(tp: ScopedTradePointDto): {
+  managerUserId: string | null;
+  regionalManagerId: string | null;
+  ropId: string | null;
+  hasManager: boolean;
+  hasRegional: boolean;
+  hasRop: boolean;
+} {
+  const managerUserId = tp.managerUserId?.trim() || null;
+  const regionalManagerId = tp.regionalManagerUserId?.trim() || null;
+  const ropId = tp.ropUserId?.trim() || null;
+  return {
+    managerUserId,
+    regionalManagerId,
+    ropId,
+    hasManager: Boolean(managerUserId),
+    hasRegional: Boolean(regionalManagerId),
+    hasRop: Boolean(ropId),
+  };
+}
+
 function buildHaystack(parts: (string | null | undefined)[]): string {
   return parts
     .filter((x) => x != null && String(x).trim() !== "")
@@ -30,8 +51,24 @@ function buildHaystack(parts: (string | null | undefined)[]): string {
 }
 
 function stubDealerRow(tp: ScopedTradePointDto, catalog?: DealerRow): DealerRow {
-  if (catalog) return catalog;
+  if (catalog) {
+    const responsibility = dealerResponsibilityFromScopedTp(tp);
+    return {
+      ...catalog,
+      manager: tp.managerFullName?.trim() || catalog.manager,
+      regionalManager: tp.regionalManagerFullName?.trim() || catalog.regionalManager,
+      ropName: tp.ropFullName?.trim() || catalog.ropName,
+      ...responsibility,
+      hasManager: responsibility.hasManager || catalog.hasManager === true,
+      hasRegional: responsibility.hasRegional || catalog.hasRegional === true,
+      hasRop: responsibility.hasRop || catalog.hasRop === true,
+      managerUserId: responsibility.managerUserId ?? catalog.managerUserId ?? null,
+      regionalManagerId: responsibility.regionalManagerId ?? catalog.regionalManagerId ?? null,
+      ropId: responsibility.ropId ?? catalog.ropId ?? null,
+    };
+  }
   const clientCategory = (tp.dealerClientCategory?.trim() || "new_client") as ClientCategoryId;
+  const responsibility = dealerResponsibilityFromScopedTp(tp);
   return {
     id: tp.dealerExternalKey,
     releaseCode: tp.dealerReleaseCode?.trim() || undefined,
@@ -44,8 +81,9 @@ function stubDealerRow(tp: ScopedTradePointDto, catalog?: DealerRow): DealerRow 
     format: "одиночный",
     outlets: 1,
     manager: tp.managerFullName?.trim() || "—",
-    regionalManager: "",
+    regionalManager: tp.regionalManagerFullName?.trim() || "",
     ropName: tp.ropFullName?.trim() || "—",
+    ...responsibility,
     lastActivity: "—",
     nextAction: "—",
     distribution: 0,
@@ -155,7 +193,7 @@ export function buildTradePointListFromDb(
     const dealerClientCode = tp.dealerReleaseCode?.trim() || "—";
     const tradePointDisplayCode = tp.externalKey;
     const mgr = tp.managerFullName?.trim() || dealer.manager?.trim() || "—";
-    const rm = dealer.regionalManager?.trim() || "—";
+    const rm = tp.regionalManagerFullName?.trim() || dealer.regionalManager?.trim() || "—";
     const rop = tp.ropFullName?.trim() || dealer.ropName?.trim() || "—";
 
     const mergedEntry = mergeTradePointsForActualization(dealer, act).find((e) => e.point.id === point.id);

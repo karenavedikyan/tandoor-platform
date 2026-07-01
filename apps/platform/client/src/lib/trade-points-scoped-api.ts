@@ -20,6 +20,8 @@ export type ScopedTradePointDto = {
   dealerClientCategory: string | null;
   managerUserId: string | null;
   managerFullName: string | null;
+  regionalManagerUserId: string | null;
+  regionalManagerFullName: string | null;
   teamId: string | null;
   teamName: string | null;
   ropUserId: string | null;
