@@ -10,6 +10,7 @@ import {
   activeTradePointIdsFromScopedTradePoints,
   buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
   buildTradePointExternalKeysByManagerFromScopedDb,
+  buildTradePointExternalKeysByRegionalManagerFromScopedDb,
   buildTradePointExternalKeysByRopFromScopedDb,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
@@ -158,6 +159,30 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   assert.deepEqual(byManager.get("mgr-uuid-b"), ["ek-3"]);
   assert.equal(byManager.has("mgr-uuid-c"), false);
   assert.equal(byManager.has("tp-no-mgr"), false);
+}
+
+{
+  const tradePoints = [
+    tp({
+      id: "tp-both",
+      externalKey: "ek-both",
+      managerUserId: "mgr-sales",
+      regionalManagerUserId: "mgr-regional-a",
+    }),
+    tp({ id: "tp-r1", externalKey: "ek-r1", managerUserId: "mgr-other", regionalManagerUserId: "mgr-regional-a" }),
+    tp({ id: "tp-r2", externalKey: "ek-r2", managerUserId: null, regionalManagerUserId: "mgr-regional-b" }),
+    tp({ id: "tp-r-dup", externalKey: "ek-r1", managerUserId: null, regionalManagerUserId: "mgr-regional-a" }),
+    tp({ id: "tp-r-inactive", externalKey: "ek-skip", regionalManagerUserId: "mgr-regional-c", isActive: false }),
+    tp({ id: "tp-no-reg", externalKey: "ek-no-reg", regionalManagerUserId: null }),
+  ];
+  const byRegional = buildTradePointExternalKeysByRegionalManagerFromScopedDb(tradePoints);
+  const byManager = buildTradePointExternalKeysByManagerFromScopedDb(tradePoints);
+  assert.deepEqual(byRegional.get("mgr-regional-a")?.sort(), ["ek-both", "ek-r1"]);
+  assert.deepEqual(byRegional.get("mgr-regional-b"), ["ek-r2"]);
+  assert.equal(byRegional.has("mgr-regional-c"), false);
+  assert.equal(byRegional.has("tp-no-reg"), false);
+  assert.deepEqual(byManager.get("mgr-sales"), ["ek-both"]);
+  assert.deepEqual(byManager.get("mgr-other"), ["ek-r1"]);
 }
 
 console.log("trade-points-scoped-ids: ok");

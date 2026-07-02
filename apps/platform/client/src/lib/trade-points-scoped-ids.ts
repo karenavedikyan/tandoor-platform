@@ -187,6 +187,27 @@ export function buildTradePointExternalKeysByManagerFromScopedDb(
   return map;
 }
 
+/** Map regionalManagerUserId → externalKeys (дедуп по ТТ). */
+export function buildTradePointExternalKeysByRegionalManagerFromScopedDb(
+  tradePoints: readonly ScopedTradePointDto[],
+): Map<string, string[]> {
+  const sets = new Map<string, Set<string>>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const regionalUserId = tp.regionalManagerUserId?.trim();
+    if (!regionalUserId) continue;
+    const externalKey = matrixKeyForScopedTradePoint(tp);
+    const bucket = sets.get(regionalUserId);
+    if (bucket) bucket.add(externalKey);
+    else sets.set(regionalUserId, new Set([externalKey]));
+  }
+  const map = new Map<string, string[]>();
+  sets.forEach((keys, id) => {
+    map.set(id, Array.from(keys));
+  });
+  return map;
+}
+
 /** Первое непустое совпадение по списку ключей lookup. */
 export function lookupExternalKeysInScopedMap(
   map: ReadonlyMap<string, string[]>,
