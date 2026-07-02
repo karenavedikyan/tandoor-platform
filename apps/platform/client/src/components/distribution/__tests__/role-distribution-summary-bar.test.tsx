@@ -118,6 +118,39 @@ describe("RoleDistributionSummaryBar", () => {
     expect(queryByTestId("tile-trade-points-rotation")).toBeNull();
   });
 
+  it("renders ROP progress in loader when progress prop is passed", () => {
+    const { getByTestId, getByText } = render(
+      <RoleDistributionSummaryBar
+        access="sales_director"
+        aggregate={aggregate}
+        tradePointsCount={0}
+        tradePointIds={[]}
+        testIdPrefix="trade-points"
+        showTradePointsCount={false}
+        loading
+        progress={{ loadedBuckets: 2, totalBuckets: 5, prefetching: true }}
+      />,
+    );
+    expect(getByTestId("section-trade-points-distribution-loading")).toBeTruthy();
+    expect(getByTestId("brand-distribution-loader-rop-progress")).toBeTruthy();
+    expect(getByText("РОПов 2 из 5")).toBeTruthy();
+  });
+
+  it("does not render ROP progress when totalBuckets is zero", () => {
+    const { queryByTestId } = render(
+      <RoleDistributionSummaryBar
+        access="team_lead"
+        aggregate={aggregate}
+        tradePointsCount={0}
+        tradePointIds={[]}
+        testIdPrefix="trade-points"
+        loading
+        progress={{ loadedBuckets: 0, totalBuckets: 0, prefetching: false }}
+      />,
+    );
+    expect(queryByTestId("brand-distribution-loader-rop-progress")).toBeNull();
+  });
+
   it("renders rotation tile with count and percent when legacy present", () => {
     mockSnapshotRange(null);
     const rotationAggregate: DistributionGroupMetrics = {

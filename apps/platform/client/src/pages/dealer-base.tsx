@@ -4132,6 +4132,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
             scopeDistribution.loading ||
             (!scopeTradePointIdsReady && scopeDistribution.tradePointsCount === 0)
           }
+          progress={access === "sales_director" ? progressiveRopMatrixPrefetch : undefined}
         />
       ) : null}
 

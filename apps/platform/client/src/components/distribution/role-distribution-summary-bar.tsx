@@ -1,6 +1,10 @@
 import { useState, type ReactElement } from "react";
 import { DistributionAnalyticsKpiTiles } from "@/components/distribution-analytics/distribution-analytics-kpi-tiles";
 import { DistributionRotationTile } from "@/components/distribution-analytics/distribution-rotation-tile";
+import {
+  BrandDistributionLoader,
+  type BrandDistributionLoaderProgress,
+} from "@/components/distribution/brand-distribution-loader";
 import type { DistributionGroupMetrics, EquipmentTypeKey } from "@/lib/distribution-analytics/distribution-analytics-math";
 import type { DealerBaseAccessRole } from "@/lib/dealer-base-role-views";
 import {
@@ -28,30 +32,8 @@ type Props = {
   showTradePointsCount?: boolean;
   /** Плейсхолдер загрузки вместо ложных Σ0/—. */
   loading?: boolean;
+  progress?: BrandDistributionLoaderProgress;
 };
-
-function DistributionSummaryLoadingTiles({ testIdPrefix }: { testIdPrefix: string }): ReactElement {
-  const titles = ["Средняя дистрибуция ВХ", "Средняя дистрибуция МК", "Средняя дистрибуция Фурнитура", "Ротация"];
-  return (
-    <>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid={`section-${testIdPrefix}-distribution-loading`}>
-        {titles.slice(0, 3).map((title) => (
-          <div key={title} className="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
-            <p className="mt-1 text-[10px] text-muted-foreground">Загрузка…</p>
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-border/70 bg-card p-3 shadow-xs" data-testid={`tile-${testIdPrefix}-rotation-loading`}>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{titles[3]}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-muted-foreground">…</p>
-        </div>
-      </div>
-    </>
-  );
-}
 
 export function RoleDistributionSummaryBar({
   access,
@@ -61,6 +43,7 @@ export function RoleDistributionSummaryBar({
   testIdPrefix,
   showTradePointsCount = false,
   loading = false,
+  progress,
 }: Props): ReactElement {
   const [periodDays, setPeriodDays] = useState<DistributionPeriodDays>(30);
   const { deltaByType } = useTradePointDistributionDynamics(tradePointIds, periodDays);
@@ -108,7 +91,7 @@ export function RoleDistributionSummaryBar({
         </div>
       </div>
       {loading ? (
-        <DistributionSummaryLoadingTiles testIdPrefix={testIdPrefix} />
+        <BrandDistributionLoader progress={progress} testIdPrefix={testIdPrefix} />
       ) : (
         <>
           <DistributionAnalyticsKpiTiles
