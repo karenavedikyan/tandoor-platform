@@ -109,6 +109,7 @@ import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ScopedTradePointDto } from "@/lib/trade-points-scoped-api";
 import {
   buildTradePointExternalKeysByManagerFromScopedDb,
+  buildTradePointExternalKeysByRegionalManagerFromScopedDb,
   buildTradePointExternalKeysByRopKeyMapFromScopedDb,
   lookupExternalKeysInScopedMap,
 } from "@/lib/trade-points-scoped-ids";
@@ -482,21 +483,33 @@ export function DealerBaseManagementCockpit({
     return lookup;
   }, [scopedTradePoints, userIdToCatalogMgrId]);
 
+  const regionalManagerExternalKeysLookup = useMemo(() => {
+    if (!scopedTradePoints?.length) return new Map<string, string[]>();
+    const byUserId = buildTradePointExternalKeysByRegionalManagerFromScopedDb(scopedTradePoints);
+    const lookup = new Map(byUserId);
+    userIdToCatalogMgrId.forEach((catalogId, uuid) => {
+      const keys = byUserId.get(uuid);
+      if (keys?.length) lookup.set(catalogId, keys);
+    });
+    return lookup;
+  }, [scopedTradePoints, userIdToCatalogMgrId]);
+
   const ropExternalKeysLookup = useMemo(() => {
     if (!scopedTradePoints?.length) return new Map<string, string[]>();
     return buildTradePointExternalKeysByRopKeyMapFromScopedDb(scopedTradePoints);
   }, [scopedTradePoints]);
 
   const resolveManagerDistributionKeys = useCallback(
-    (managerId: string): string[] => {
+    (managerId: string, isRegional = false): string[] => {
       if (!staffDistributionEnabled) return [];
       const candidates = [managerId];
       userIdToCatalogMgrId.forEach((catalogId, uuid) => {
         if (catalogId === managerId) candidates.push(uuid);
       });
-      return lookupExternalKeysInScopedMap(managerExternalKeysLookup, candidates);
+      const map = isRegional ? regionalManagerExternalKeysLookup : managerExternalKeysLookup;
+      return lookupExternalKeysInScopedMap(map, candidates);
     },
-    [staffDistributionEnabled, managerExternalKeysLookup, userIdToCatalogMgrId],
+    [staffDistributionEnabled, managerExternalKeysLookup, regionalManagerExternalKeysLookup, userIdToCatalogMgrId],
   );
 
   const resolveRopDistributionKeys = useCallback(
@@ -511,10 +524,10 @@ export function DealerBaseManagementCockpit({
   );
 
   const managerDistributionCardProps = useCallback(
-    (managerId: string) =>
+    (managerId: string, isRegional = false) =>
       staffDistributionEnabled && distributionAct
         ? {
-            distributionExternalKeys: resolveManagerDistributionKeys(managerId),
+            distributionExternalKeys: resolveManagerDistributionKeys(managerId, isRegional),
             distributionAct,
             distributionUuidMap: distributionShowcaseUuidByMatrixKey,
             distributionPrefetching: distributionPrefetching ?? false,
@@ -1324,7 +1337,7 @@ export function DealerBaseManagementCockpit({
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
-                                        {...managerDistributionCardProps(m.managerId)}
+                                        {...managerDistributionCardProps(m.managerId, m.isRegional)}
                                       />
                                     ))}
                                   </div>
@@ -1351,7 +1364,7 @@ export function DealerBaseManagementCockpit({
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
-                                        {...managerDistributionCardProps(m.managerId)}
+                                        {...managerDistributionCardProps(m.managerId, m.isRegional)}
                                       />
                                     ))}
                                   </div>
@@ -1683,7 +1696,7 @@ export function DealerBaseManagementCockpit({
                 {staffDistributionEnabled && distributionAct ? (
                   <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
                     <ManagerDistributionMiniBar
-                      externalKeys={resolveManagerDistributionKeys(m.managerId)}
+                      externalKeys={resolveManagerDistributionKeys(m.managerId, m.isRegional)}
                       act={distributionAct}
                       showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
                       prefetching={distributionPrefetching ?? false}

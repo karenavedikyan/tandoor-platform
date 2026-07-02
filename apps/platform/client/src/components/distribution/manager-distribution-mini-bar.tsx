@@ -73,11 +73,14 @@ function ManagerDistributionMiniBarBody({
           <DistributionPercentBadge value={aggregate.byType[type].percent} />
         </span>
       ))}
-      <DistributionRotationBadge
-        count={aggregate.totalLegacyOurs}
-        percent={aggregate.rotationPotentialPercent}
-        testId={testId ? `${testId}-rotation` : undefined}
-      />
+      <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+        <span>Ротация</span>
+        <DistributionRotationBadge
+          count={aggregate.totalLegacyOurs}
+          percent={aggregate.rotationPotentialPercent}
+          testId={testId ? `${testId}-rotation` : undefined}
+        />
+      </span>
     </div>
   );
 }

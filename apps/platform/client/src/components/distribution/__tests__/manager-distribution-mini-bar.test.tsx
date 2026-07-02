@@ -85,6 +85,7 @@ describe("ManagerDistributionMiniBar", () => {
     expect(getByText("ВХ")).toBeTruthy();
     expect(getByText("МК")).toBeTruthy();
     expect(getByText("Фурн")).toBeTruthy();
+    expect(getByText("Ротация")).toBeTruthy();
     expect(getByTestId("mgr-dist-rotation")).toBeTruthy();
   });
 });
