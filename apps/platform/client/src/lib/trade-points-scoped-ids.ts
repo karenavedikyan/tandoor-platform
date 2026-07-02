@@ -154,3 +154,47 @@ export function buildTradePointExternalKeysByRopFromScopedDb(
   }
   return result;
 }
+
+/** Map ropKey (teamId ?? ropUserId ?? __no_rop__) → externalKeys. */
+export function buildTradePointExternalKeysByRopKeyMapFromScopedDb(
+  tradePoints: readonly ScopedTradePointDto[],
+): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  for (const bucket of buildTradePointExternalKeysByRopFromScopedDb(tradePoints)) {
+    map.set(bucket.ropKey, bucket.externalKeys);
+  }
+  return map;
+}
+
+/** Map managerUserId → externalKeys (дедуп по ТТ). */
+export function buildTradePointExternalKeysByManagerFromScopedDb(
+  tradePoints: readonly ScopedTradePointDto[],
+): Map<string, string[]> {
+  const sets = new Map<string, Set<string>>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const managerUserId = tp.managerUserId?.trim();
+    if (!managerUserId) continue;
+    const externalKey = matrixKeyForScopedTradePoint(tp);
+    const bucket = sets.get(managerUserId);
+    if (bucket) bucket.add(externalKey);
+    else sets.set(managerUserId, new Set([externalKey]));
+  }
+  const map = new Map<string, string[]>();
+  sets.forEach((keys, managerUserId) => {
+    map.set(managerUserId, Array.from(keys));
+  });
+  return map;
+}
+
+/** Первое непустое совпадение по списку ключей lookup. */
+export function lookupExternalKeysInScopedMap(
+  map: ReadonlyMap<string, string[]>,
+  lookupKeys: readonly string[],
+): string[] {
+  for (const key of lookupKeys) {
+    const keys = map.get(key);
+    if (keys && keys.length > 0) return keys;
+  }
+  return [];
+}

@@ -13,7 +13,9 @@ import {
 } from "@/lib/manager-load-heat";
 import { buildManagerDashboardModel } from "@/lib/dealer-base-manager-dashboard-view-model";
 import type { ManagerRowModel } from "@/lib/dealer-base-management-view-model";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { ManagerSegmentMiniBar } from "@/components/dealer-base/manager-segment-mini-bar";
+import { ManagerDistributionMiniBar } from "@/components/distribution/manager-distribution-mini-bar";
 
 type Props = {
   manager: ManagerRowModel;
@@ -23,6 +25,10 @@ type Props = {
   tpCountDisplay?: string;
   /** When set, shown instead of manager.active for clients count. */
   clientsCountDisplay?: string;
+  distributionExternalKeys?: string[];
+  distributionAct?: ActualizationState;
+  distributionUuidMap?: ReadonlyMap<string, string>;
+  distributionPrefetching?: boolean;
 };
 
 export const ManagerTeamCard = memo(function ManagerTeamCard({
@@ -31,6 +37,10 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({
   heatLevel,
   tpCountDisplay,
   clientsCountDisplay,
+  distributionExternalKeys,
+  distributionAct,
+  distributionUuidMap,
+  distributionPrefetching = false,
 }: Props) {
   const dashboard = buildManagerDashboardModel(manager, ropName, heatLevel);
   const topCities = dashboard.cities.slice(0, 3);
@@ -73,6 +83,15 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({
             total={totalForBar}
             data-testid={`mgr-segment-bar-${manager.managerId}`}
           />
+          {distributionExternalKeys !== undefined && distributionAct ? (
+            <ManagerDistributionMiniBar
+              externalKeys={distributionExternalKeys}
+              act={distributionAct}
+              showcaseUuidByMatrixKey={distributionUuidMap}
+              prefetching={distributionPrefetching}
+              testId={`manager-distribution-mini-${manager.managerId}`}
+            />
+          ) : null}
         </div>
       </div>
 

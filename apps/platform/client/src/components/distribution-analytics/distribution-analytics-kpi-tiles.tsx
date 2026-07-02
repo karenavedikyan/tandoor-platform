@@ -15,6 +15,13 @@ const TYPE_LABEL: Record<EquipmentTypeKey, string> = {
   hardware: "Фурнитура",
 };
 
+/** Компактные метки типов для мини-баров (ВХ / МК / Фурн). */
+export const DISTRIBUTION_TYPE_MINI_LABEL: Record<EquipmentTypeKey, string> = {
+  entrance: "ВХ",
+  interior: "МК",
+  hardware: "Фурн",
+};
+
 type Props = {
   aggregate: DistributionGroupMetrics;
   tradePointsCount: number;

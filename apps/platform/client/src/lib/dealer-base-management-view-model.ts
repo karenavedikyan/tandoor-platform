@@ -1068,7 +1068,7 @@ function collectOverviewTeamLookupKeys(
   return Array.from(keys);
 }
 
-function collectCatalogTeamLookupKeys(teamId: string, orgSnap?: OrgSnapshot | null): string[] {
+export function collectCatalogTeamLookupKeys(teamId: string, orgSnap?: OrgSnapshot | null): string[] {
   const keys = new Set<string>([teamId, String(teamId ?? "__no_rop__")]);
   if (orgSnap) {
     keys.add(resolveManagementCatalogTeamId(teamId, orgSnap));

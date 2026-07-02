@@ -15,6 +15,7 @@ export type BrandDistributionLoaderProps = {
   className?: string;
   /** Для data-testid совместимости с прежним скелетоном: section-{prefix}-distribution-loading */
   testIdPrefix?: string;
+  size?: "sm" | "md";
 };
 
 function TandoorTriangleMark({ className }: { className?: string }): ReactElement {
@@ -59,11 +60,28 @@ export function BrandDistributionLoader({
   progress,
   className,
   testIdPrefix,
+  size = "md",
 }: BrandDistributionLoaderProps): ReactElement {
   const showProgress = Boolean(progress && progress.totalBuckets > 0);
   const progressPct = showProgress
     ? Math.min(100, Math.max(0, (progress!.loadedBuckets / progress!.totalBuckets) * 100))
     : 0;
+  const compact = size === "sm";
+
+  if (compact) {
+    return (
+      <div
+        className={cn("inline-flex h-5 items-center justify-center", className)}
+        data-testid={testIdPrefix ? `section-${testIdPrefix}-distribution-loading` : undefined}
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        aria-label="Загрузка дистрибуции"
+      >
+        <TandoorTriangleMark className="h-4 w-4 shrink-0" />
+      </div>
+    );
+  }
 
   return (
     <div

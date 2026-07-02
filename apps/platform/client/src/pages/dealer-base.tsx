@@ -3927,6 +3927,15 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
         mergedDealerRowsForCreate={
           useReal && snap && visPayload && !orgSnapQ.isError && !visCodesQ.isError ? mergedRowsActivePortfolio : undefined
         }
+        scopedTradePoints={scopedTpQ.data?.success === true ? scopedTpQ.data.tradePoints : undefined}
+        distributionPrefetching={
+          useDirectorProgressiveRopPrefetch
+            ? progressiveRopMatrixPrefetch.prefetching ||
+              progressiveRopMatrixPrefetch.loadedBuckets < progressiveRopMatrixPrefetch.totalBuckets
+            : false
+        }
+        distributionAct={actualizationPlaneForRows}
+        distributionShowcaseUuidByMatrixKey={scopeShowcaseUuidByMatrixKey}
       />
     );
   }
