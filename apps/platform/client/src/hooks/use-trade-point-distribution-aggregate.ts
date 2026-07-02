@@ -40,6 +40,13 @@ export type TradePointDistributionAggregateResult = {
   revalidating?: boolean;
 };
 
+export type UseTradePointDistributionAggregateOptions = {
+  /** Внешний оркестратор наполняет кэш — внутренний монолитный префетч не запускать. */
+  skipInternalPrefetch?: boolean;
+  /** Пока внешний оркестратор грузит бакеты (порции по РОПам). */
+  externalPrefetching?: boolean;
+};
+
 /** Есть ли в клиентском кэше хотя бы одна запись матрицы по scope ТТ. */
 export function hasMatrixCacheForTradePointIds(tradePointIds: readonly string[]): boolean {
   for (const id of tradePointIds) {
@@ -81,7 +88,10 @@ export function useTradePointDistributionAggregate(
   tradePointIds: string[],
   act: ActualizationState,
   showcaseUuidByMatrixKey?: ReadonlyMap<string, string>,
+  options?: UseTradePointDistributionAggregateOptions,
 ): TradePointDistributionAggregateResult {
+  const skipInternalPrefetch = options?.skipInternalPrefetch === true;
+  const externalPrefetching = options?.externalPrefetching === true;
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const [matrixPrefetchDone, setMatrixPrefetchDone] = useState(false);
   const [revalidating, setRevalidating] = useState(false);
@@ -108,6 +118,9 @@ export function useTradePointDistributionAggregate(
   }, []);
 
   useEffect(() => {
+    if (skipInternalPrefetch) {
+      return;
+    }
     if (!dbPrimary || scopeTooLarge || tradePointIdsKey === "") {
       setMatrixPrefetchDone(true);
       setRevalidating(false);
@@ -147,7 +160,23 @@ export function useTradePointDistributionAggregate(
     return () => {
       cancelled = true;
     };
-  }, [dbPrimary, scopeTooLarge, tradePointIdsKey, matrixPrefetchDone]);
+  }, [dbPrimary, scopeTooLarge, tradePointIdsKey, matrixPrefetchDone, skipInternalPrefetch]);
+
+  useEffect(() => {
+    if (!skipInternalPrefetch) return;
+    const ids = tradePointIdsRef.current;
+    if (ids.length === 0) {
+      setMatrixPrefetchDone(true);
+      setRevalidating(false);
+      return;
+    }
+    if (hasMatrixCacheForTradePointIds(ids)) {
+      setMatrixPrefetchDone(true);
+    }
+    if (!externalPrefetching) {
+      setRevalidating(false);
+    }
+  }, [skipInternalPrefetch, externalPrefetching, tradePointIdsKey, matrixCacheBump]);
 
   const installedEntriesByTradePointId = useMemo(() => {
     void matrixCacheBump;
@@ -164,7 +193,11 @@ export function useTradePointDistributionAggregate(
     }
 
     const hasCache = hasMatrixCacheForTradePointIds(tradePointIds);
-    const coldLoading = dbPrimary && !scopeTooLarge && !matrixPrefetchDone && !hasCache;
+    const coldLoading =
+      dbPrimary &&
+      !scopeTooLarge &&
+      !hasCache &&
+      (skipInternalPrefetch ? externalPrefetching : !matrixPrefetchDone);
     const aggregate = computeAggregateFromInstalledEntries(
       tradePointIds,
       act,
@@ -185,7 +218,9 @@ export function useTradePointDistributionAggregate(
       aggregate,
       tradePointsCount: aggregate.tradePointsCount,
       loading: false,
-      revalidating: revalidating && dbPrimary && !scopeTooLarge,
+      revalidating:
+        (revalidating && dbPrimary && !scopeTooLarge) ||
+        (skipInternalPrefetch && externalPrefetching && hasCache && dbPrimary && !scopeTooLarge),
     };
   }, [
     tradePointIds,
@@ -196,5 +231,7 @@ export function useTradePointDistributionAggregate(
     matrixPrefetchDone,
     revalidating,
     showcaseUuidByMatrixKey,
+    skipInternalPrefetch,
+    externalPrefetching,
   ]);
 }

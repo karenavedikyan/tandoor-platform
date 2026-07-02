@@ -142,6 +142,7 @@ import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-mov
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
 import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useProgressiveRopDistributionPrefetch } from "@/hooks/use-progressive-rop-distribution-prefetch";
 import {
   clientNextStepActionLabel,
   getClientNextStepForDealer,
@@ -1945,10 +1946,26 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return activeTradePointExternalKeysFromScopedResponse(scopedTpQ.data) !== undefined;
   }, [useReal, scopedTpQ.data]);
 
+  const useDirectorProgressiveRopPrefetch =
+    useReal && access === "sales_director" && scopeTradePointIdsReady;
+
+  const progressiveRopMatrixPrefetch = useProgressiveRopDistributionPrefetch(
+    scopedTpQ.data?.success === true ? scopedTpQ.data.tradePoints : undefined,
+    useDirectorProgressiveRopPrefetch,
+  );
+
   const scopeDistribution = useTradePointDistributionAggregate(
     scopeTradePointExternalKeys,
     actualizationPlaneForRows,
     scopeShowcaseUuidByMatrixKey,
+    useDirectorProgressiveRopPrefetch
+      ? {
+          skipInternalPrefetch: true,
+          externalPrefetching:
+            progressiveRopMatrixPrefetch.prefetching ||
+            progressiveRopMatrixPrefetch.loadedBuckets < progressiveRopMatrixPrefetch.totalBuckets,
+        }
+      : undefined,
   );
 
   /** Рабочая портфельная база (без архивных клиентов): KPI команд и карточки менеджеров всегда от неё, не от режима списка «архив». */

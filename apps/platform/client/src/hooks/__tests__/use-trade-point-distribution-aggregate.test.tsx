@@ -159,6 +159,66 @@ describe("useTradePointDistributionAggregate scope prefetch", () => {
   });
 });
 
+describe("useTradePointDistributionAggregate skipInternalPrefetch", () => {
+  beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
+    fetchShowcaseMatrixScopeMock.mockClear();
+    loadCachedMatrixMock.mockClear();
+    loadCachedMatrixMock.mockReturnValue([]);
+    fetchShowcaseMatrixScopeMock.mockResolvedValue([]);
+  });
+
+  it("does not call fetch when skipInternalPrefetch is true", async () => {
+    renderHook(() =>
+      useTradePointDistributionAggregate(["tp-1"], makeAct(), undefined, {
+        skipInternalPrefetch: true,
+        externalPrefetching: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(fetchShowcaseMatrixScopeMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it("shows loading on cold external prefetch without cache", () => {
+    const { result } = renderHook(() =>
+      useTradePointDistributionAggregate(["tp-ext"], makeAct("tp-ext"), undefined, {
+        skipInternalPrefetch: true,
+        externalPrefetching: true,
+      }),
+    );
+
+    expect(result.current.loading).toBe(true);
+  });
+
+  it("keeps loading=false after cache event when skipInternalPrefetch", async () => {
+    const { result, rerender } = renderHook(
+      ({ externalPrefetching }) =>
+        useTradePointDistributionAggregate(["tp-1"], makeAct(), undefined, {
+          skipInternalPrefetch: true,
+          externalPrefetching,
+        }),
+      { initialProps: { externalPrefetching: true } },
+    );
+
+    expect(result.current.loading).toBe(true);
+
+    loadCachedMatrixMock.mockImplementation((tpId?: string) =>
+      tpId === "tp-1" ? [makePlacement("tp-1", 6)] : [],
+    );
+
+    rerender({ externalPrefetching: false });
+    act(() => {
+      window.dispatchEvent(new Event(SHOWCASE_MATRIX_STORE_CHANGED_EVENT));
+    });
+    rerender({ externalPrefetching: false });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.aggregate.byType.entrance.capacity).toBe(6);
+  });
+});
+
 describe("useTradePointDistributionAggregate SWR", () => {
   beforeEach(() => {
     __clearDistributionScopePrefetchKeys();
