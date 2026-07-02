@@ -48,7 +48,7 @@ import {
 import { externalKeysToReleaseCodes, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
 import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
-import { DealerBaseSkeleton } from "@/components/skeletons/dealer-base-skeleton";
+import { DealerBaseFullscreenLoader } from "@/components/skeletons/dealer-base-fullscreen-loader";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
   getManagersForRopTeam,
@@ -3879,7 +3879,11 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   const bulkDeleteHasTargets = trashableDealerIdsInView.size > 0;
 
   if (!isTaskSelectMode && isPageInitialLoading) {
-    return <DealerBaseSkeleton />;
+    return (
+      <DealerBaseFullscreenLoader
+        progress={access === "sales_director" ? progressiveRopMatrixPrefetch : undefined}
+      />
+    );
   }
 
   if (viewingOtherUserScope && targetScopeQ.forbidden) {

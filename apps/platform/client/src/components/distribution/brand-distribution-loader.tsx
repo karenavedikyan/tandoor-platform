@@ -16,6 +16,8 @@ export type BrandDistributionLoaderProps = {
   /** Для data-testid совместимости с прежним скелетоном: section-{prefix}-distribution-loading */
   testIdPrefix?: string;
   size?: "sm" | "md";
+  /** Скрыть внутреннюю подпись (для обёрток со своим текстом). */
+  hideCaption?: boolean;
 };
 
 function TandoorTriangleMark({ className }: { className?: string }): ReactElement {
@@ -61,6 +63,7 @@ export function BrandDistributionLoader({
   className,
   testIdPrefix,
   size = "md",
+  hideCaption = false,
 }: BrandDistributionLoaderProps): ReactElement {
   const showProgress = Boolean(progress && progress.totalBuckets > 0);
   const progressPct = showProgress
@@ -93,9 +96,11 @@ export function BrandDistributionLoader({
     >
       <div className="flex min-h-[7.5rem] flex-col items-center justify-center gap-3 py-1 sm:min-h-[8rem]">
         <TandoorTriangleMark className="h-11 w-11 shrink-0 sm:h-14 sm:w-14" />
-        <p className="max-w-sm text-center text-[11px] leading-snug text-muted-foreground sm:text-xs">
-          Готовим точные данные по команде…
-        </p>
+        {hideCaption ? null : (
+          <p className="max-w-sm text-center text-[11px] leading-snug text-muted-foreground sm:text-xs">
+            Готовим точные данные по команде…
+          </p>
+        )}
         {showProgress ? (
           <div className="w-full max-w-xs space-y-1.5" data-testid="brand-distribution-loader-rop-progress">
             <p className="text-center text-[10px] tabular-nums text-muted-foreground">

@@ -14,7 +14,7 @@ function read(rel: string): string {
 }
 
 const P0_PAGES: Array<{ page: string; skeleton: string; loadingPattern: RegExp }> = [
-  { page: "pages/dealer-base.tsx", skeleton: "DealerBaseSkeleton", loadingPattern: /isPageInitialLoading/ },
+  { page: "pages/dealer-base.tsx", skeleton: "DealerBaseFullscreenLoader", loadingPattern: /isPageInitialLoading/ },
   { page: "pages/trade-points.tsx", skeleton: "TradePointsSkeleton", loadingPattern: /isPageInitialLoading/ },
   { page: "pages/dealer-card-foundation.tsx", skeleton: "DealerCardSkeleton", loadingPattern: /DealerCardSkeleton/ },
   {
