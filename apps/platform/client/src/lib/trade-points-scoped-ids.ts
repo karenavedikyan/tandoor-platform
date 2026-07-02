@@ -97,3 +97,60 @@ export function buildTradePointIdsByCityFromScopedDb(
     Array.from(map.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "ru")),
   );
 }
+
+export const NO_ROP_BUCKET_KEY = "__no_rop__";
+
+export type TradePointExternalKeysByRopBucket = {
+  ropKey: string;
+  ropName: string;
+  externalKeys: string[];
+};
+
+function ropBucketKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
+  return tp.teamId ?? tp.ropUserId ?? NO_ROP_BUCKET_KEY;
+}
+
+function ropBucketNameForScopedTradePoint(tp: ScopedTradePointDto, ropKey: string): string {
+  if (ropKey === NO_ROP_BUCKET_KEY) return "Без РОПа";
+  return (tp.ropFullName ?? tp.teamName ?? ropKey).trim() || ropKey;
+}
+
+/** External keys активных ТТ по РОПам (scoped БД), детерминированный порядок. */
+export function buildTradePointExternalKeysByRopFromScopedDb(
+  tradePoints: readonly ScopedTradePointDto[],
+): TradePointExternalKeysByRopBucket[] {
+  const buckets = new Map<string, { ropName: string; externalKeys: string[] }>();
+
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const ropKey = ropBucketKeyForScopedTradePoint(tp);
+    const externalKey = matrixKeyForScopedTradePoint(tp);
+    const existing = buckets.get(ropKey);
+    if (existing) {
+      existing.externalKeys.push(externalKey);
+    } else {
+      buckets.set(ropKey, {
+        ropName: ropBucketNameForScopedTradePoint(tp, ropKey),
+        externalKeys: [externalKey],
+      });
+    }
+  }
+
+  const result: TradePointExternalKeysByRopBucket[] = [];
+  const noRop = buckets.get(NO_ROP_BUCKET_KEY);
+  const others = Array.from(buckets.entries())
+    .filter(([key]) => key !== NO_ROP_BUCKET_KEY)
+    .sort((a, b) => a[1].ropName.localeCompare(b[1].ropName, "ru"));
+
+  for (const [ropKey, { ropName, externalKeys }] of others) {
+    result.push({ ropKey, ropName, externalKeys });
+  }
+  if (noRop) {
+    result.push({
+      ropKey: NO_ROP_BUCKET_KEY,
+      ropName: noRop.ropName,
+      externalKeys: noRop.externalKeys,
+    });
+  }
+  return result;
+}

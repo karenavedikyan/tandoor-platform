@@ -9,9 +9,11 @@ import {
   activeTradePointIdsFromScopedResponse,
   activeTradePointIdsFromScopedTradePoints,
   buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+  buildTradePointExternalKeysByRopFromScopedDb,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
   matrixKeyForScopedTradePoint,
+  NO_ROP_BUCKET_KEY,
 } from "../trade-points-scoped-ids.js";
 
 function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "id">): ScopedTradePointDto {
@@ -116,6 +118,29 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   assert.deepEqual(activeTradePointExternalKeysFromScopedTradePoints([scopedTp, inactive]), ["client-ma-ma132519-01"]);
   const uuidByKey = buildShowcaseUuidByMatrixKeyFromScopedTradePoints([scopedTp]);
   assert.equal(uuidByKey.get("client-ma-ma132519-01"), "d162e083-8aa2-45a8-9500-8080eca725e6");
+}
+
+{
+  const tradePoints = [
+    tp({ id: "tp-a1", externalKey: "ek-a1", teamId: "team-b", ropFullName: "Сапожков" }),
+    tp({ id: "tp-a2", externalKey: "ek-a2", teamId: "team-b", ropFullName: "Сапожков" }),
+    tp({ id: "tp-b1", externalKey: "ek-b1", teamId: "team-a", ropFullName: "Купянский" }),
+    tp({ id: "tp-n1", externalKey: "ek-n1", teamId: null, ropUserId: null }),
+    tp({ id: "tp-skip", externalKey: "ek-skip", teamId: "team-z", isActive: false }),
+  ];
+  const buckets = buildTradePointExternalKeysByRopFromScopedDb(tradePoints);
+  assert.equal(buckets.length, 3);
+  assert.equal(buckets[0]!.ropName, "Купянский");
+  assert.deepEqual(buckets[0]!.externalKeys, ["ek-b1"]);
+  assert.equal(buckets[1]!.ropName, "Сапожков");
+  assert.deepEqual(buckets[1]!.externalKeys, ["ek-a1", "ek-a2"]);
+  assert.equal(buckets[2]!.ropKey, NO_ROP_BUCKET_KEY);
+  assert.deepEqual(buckets[2]!.externalKeys, ["ek-n1"]);
+
+  const union = buckets.flatMap((b) => b.externalKeys).sort();
+  const full = activeTradePointExternalKeysFromScopedTradePoints(tradePoints).sort();
+  assert.deepEqual(union, full);
+  assert.equal(new Set(union).size, union.length);
 }
 
 console.log("trade-points-scoped-ids: ok");
