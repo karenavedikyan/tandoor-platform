@@ -86,6 +86,7 @@ import {
   mapManagerOverviewClients,
   mergeOverviewClientCountsIntoRopGroups,
   mergeResponsibleByCodeMaps,
+  collectCatalogTeamLookupKeys,
   responsibleByCodeFromOrgScopePayload,
   responsibleByCodeFromTeamScopePayload,
   resolveClientKpisFromOverview,
@@ -103,6 +104,14 @@ import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualization-dedupe";
 import { useLocation } from "wouter";
 import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
+import { ManagerDistributionMiniBar } from "@/components/distribution/manager-distribution-mini-bar";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
+import type { ScopedTradePointDto } from "@/lib/trade-points-scoped-api";
+import {
+  buildTradePointExternalKeysByManagerFromScopedDb,
+  buildTradePointExternalKeysByRopKeyMapFromScopedDb,
+  lookupExternalKeysInScopedMap,
+} from "@/lib/trade-points-scoped-ids";
 import { RopTeamTreeDiagPanel } from "@/components/dealer-base/rop-team-tree-diag-panel";
 import { buildRopTeamTreeDiagLines, isRopTreeDiagEnabled } from "@/lib/dealer-base-rop-tree-diag";
 import {
@@ -353,6 +362,10 @@ export function DealerBaseManagementCockpit({
   membersTotalsByTeamId,
   teamScopeForDiag,
   orgScopeForAssignments,
+  scopedTradePoints,
+  distributionPrefetching,
+  distributionAct,
+  distributionShowcaseUuidByMatrixKey,
 }: {
   rows: DealerRow[];
   profile: ReleaseDemoProfile;
@@ -373,6 +386,10 @@ export function DealerBaseManagementCockpit({
   membersTotalsByTeamId?: Map<string, Map<string, MemberTotals>>;
   teamScopeForDiag?: TeamScopePayload | null;
   orgScopeForAssignments?: OrgScopePayload | null;
+  scopedTradePoints?: readonly ScopedTradePointDto[];
+  distributionPrefetching?: boolean;
+  distributionAct?: ActualizationState;
+  distributionShowcaseUuidByMatrixKey?: ReadonlyMap<string, string>;
 }) {
   const actx = useClientBaseActualization();
   const teamCtx = useClientBaseTeamActualization();
@@ -450,6 +467,90 @@ export function DealerBaseManagementCockpit({
   const userIdToCatalogMgrId = useMemo(
     () => new Map(Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)),
     [],
+  );
+
+  const staffDistributionEnabled = Boolean(scopedTradePoints?.length && distributionAct);
+
+  const managerExternalKeysLookup = useMemo(() => {
+    if (!scopedTradePoints?.length) return new Map<string, string[]>();
+    const byUserId = buildTradePointExternalKeysByManagerFromScopedDb(scopedTradePoints);
+    const lookup = new Map(byUserId);
+    userIdToCatalogMgrId.forEach((catalogId, uuid) => {
+      const keys = byUserId.get(uuid);
+      if (keys?.length) lookup.set(catalogId, keys);
+    });
+    return lookup;
+  }, [scopedTradePoints, userIdToCatalogMgrId]);
+
+  const ropExternalKeysLookup = useMemo(() => {
+    if (!scopedTradePoints?.length) return new Map<string, string[]>();
+    return buildTradePointExternalKeysByRopKeyMapFromScopedDb(scopedTradePoints);
+  }, [scopedTradePoints]);
+
+  const resolveManagerDistributionKeys = useCallback(
+    (managerId: string): string[] => {
+      if (!staffDistributionEnabled) return [];
+      const candidates = [managerId];
+      userIdToCatalogMgrId.forEach((catalogId, uuid) => {
+        if (catalogId === managerId) candidates.push(uuid);
+      });
+      return lookupExternalKeysInScopedMap(managerExternalKeysLookup, candidates);
+    },
+    [staffDistributionEnabled, managerExternalKeysLookup, userIdToCatalogMgrId],
+  );
+
+  const resolveRopDistributionKeys = useCallback(
+    (teamId: string): string[] => {
+      if (!staffDistributionEnabled) return [];
+      return lookupExternalKeysInScopedMap(
+        ropExternalKeysLookup,
+        collectCatalogTeamLookupKeys(teamId, orgTeamCtx?.snap),
+      );
+    },
+    [staffDistributionEnabled, ropExternalKeysLookup, orgTeamCtx?.snap],
+  );
+
+  const managerDistributionCardProps = useCallback(
+    (managerId: string) =>
+      staffDistributionEnabled && distributionAct
+        ? {
+            distributionExternalKeys: resolveManagerDistributionKeys(managerId),
+            distributionAct,
+            distributionUuidMap: distributionShowcaseUuidByMatrixKey,
+            distributionPrefetching: distributionPrefetching ?? false,
+          }
+        : {},
+    [
+      staffDistributionEnabled,
+      distributionAct,
+      resolveManagerDistributionKeys,
+      distributionShowcaseUuidByMatrixKey,
+      distributionPrefetching,
+    ],
+  );
+
+  const ropDistributionMiniBar = useCallback(
+    (teamId: string, testId: string) => {
+      if (!staffDistributionEnabled || !distributionAct) return null;
+      const keys = resolveRopDistributionKeys(teamId);
+      if (keys.length === 0) return null;
+      return (
+        <ManagerDistributionMiniBar
+          externalKeys={keys}
+          act={distributionAct}
+          showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+          prefetching={distributionPrefetching ?? false}
+          testId={testId}
+        />
+      );
+    },
+    [
+      staffDistributionEnabled,
+      distributionAct,
+      resolveRopDistributionKeys,
+      distributionShowcaseUuidByMatrixKey,
+      distributionPrefetching,
+    ],
   );
   const responsibleByCode = useMemo(
     () =>
@@ -1175,6 +1276,7 @@ export function DealerBaseManagementCockpit({
                             {formatScopedOverviewCount(resolveTeamClients(g), g.active)} · ТТ{" "}
                             {formatScopedTpCount(resolveTeamTp(g), g.outlets)}
                           </span>
+                          {ropDistributionMiniBar(teamKey, `rop-distribution-mini-${teamKey}`)}
                         </div>
                       </AccordionTrigger>
                       <AccordionContent className="px-3 pb-3 pt-0">
@@ -1222,6 +1324,7 @@ export function DealerBaseManagementCockpit({
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
+                                        {...managerDistributionCardProps(m.managerId)}
                                       />
                                     ))}
                                   </div>
@@ -1248,6 +1351,7 @@ export function DealerBaseManagementCockpit({
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
+                                        {...managerDistributionCardProps(m.managerId)}
                                       />
                                     ))}
                                   </div>
@@ -1576,6 +1680,17 @@ export function DealerBaseManagementCockpit({
                 <p className="mt-0.5 text-[11px] text-[#8F96B0]">
                   потенц. {m.potential} · вним. {m.attention}
                 </p>
+                {staffDistributionEnabled && distributionAct ? (
+                  <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                    <ManagerDistributionMiniBar
+                      externalKeys={resolveManagerDistributionKeys(m.managerId)}
+                      act={distributionAct}
+                      showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+                      prefetching={distributionPrefetching ?? false}
+                      testId={`manager-distribution-mini-${m.managerId}`}
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
                   <div className="h-full rounded-full bg-[#9ACA3C]/75" style={{ width: `${share}%` }} />
                 </div>
@@ -1597,6 +1712,7 @@ export function DealerBaseManagementCockpit({
                     {formatScopedTpCount(resolveTeamTp(g), g.outlets)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
                     {formatScopedOverviewCount(resolveTeamManagerCount(g), g.managerCatalogCount)}
                   </span>
+                  {ropDistributionMiniBar(teamKey, `rop-distribution-mini-${teamKey}`)}
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3 pt-0">

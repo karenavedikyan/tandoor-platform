@@ -9,6 +9,7 @@ import {
   activeTradePointIdsFromScopedResponse,
   activeTradePointIdsFromScopedTradePoints,
   buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+  buildTradePointExternalKeysByManagerFromScopedDb,
   buildTradePointExternalKeysByRopFromScopedDb,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
@@ -141,6 +142,22 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   const full = activeTradePointExternalKeysFromScopedTradePoints(tradePoints).sort();
   assert.deepEqual(union, full);
   assert.equal(new Set(union).size, union.length);
+}
+
+{
+  const tradePoints = [
+    tp({ id: "tp-1", externalKey: "ek-1", managerUserId: "mgr-uuid-a" }),
+    tp({ id: "tp-2", externalKey: "ek-2", managerUserId: "mgr-uuid-a" }),
+    tp({ id: "tp-3", externalKey: "ek-3", managerUserId: "mgr-uuid-b" }),
+    tp({ id: "tp-dup", externalKey: "ek-1", managerUserId: "mgr-uuid-a" }),
+    tp({ id: "tp-inactive", externalKey: "ek-skip", managerUserId: "mgr-uuid-c", isActive: false }),
+    tp({ id: "tp-no-mgr", externalKey: "ek-no-mgr", managerUserId: null }),
+  ];
+  const byManager = buildTradePointExternalKeysByManagerFromScopedDb(tradePoints);
+  assert.deepEqual(byManager.get("mgr-uuid-a")?.sort(), ["ek-1", "ek-2"]);
+  assert.deepEqual(byManager.get("mgr-uuid-b"), ["ek-3"]);
+  assert.equal(byManager.has("mgr-uuid-c"), false);
+  assert.equal(byManager.has("tp-no-mgr"), false);
 }
 
 console.log("trade-points-scoped-ids: ok");
