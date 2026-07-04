@@ -9,6 +9,7 @@ import {
   activeTradePointIdsFromScopedResponse,
   activeTradePointIdsFromScopedTradePoints,
   buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+  buildTradePointExternalKeysByCityFromScopedDb,
   buildTradePointExternalKeysByManagerFromScopedDb,
   buildTradePointExternalKeysByRegionalManagerFromScopedDb,
   buildTradePointExternalKeysByRopFromScopedDb,
@@ -80,6 +81,17 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   ]);
   assert.deepEqual(byCity.get("Казань"), ["tp-1", "tp-2"]);
   assert.deepEqual(byCity.get("Москва"), ["tp-3"]);
+}
+
+{
+  const byCity = buildTradePointExternalKeysByCityFromScopedDb([
+    tp({ id: "tp-1", externalKey: "ek-1", city: "Казань" }),
+    tp({ id: "tp-2", externalKey: "ek-2", city: null, dealerCity: "Казань" }),
+    tp({ id: "tp-3", externalKey: "ek-3", city: "Москва" }),
+    tp({ id: "tp-4", externalKey: "ek-4", city: "Москва", isActive: false }),
+  ]);
+  assert.deepEqual(byCity.get("Казань")?.sort(), ["ek-1", "ek-2"]);
+  assert.deepEqual(byCity.get("Москва"), ["ek-3"]);
 }
 
 {

@@ -98,6 +98,26 @@ export function buildTradePointIdsByCityFromScopedDb(
   );
 }
 
+/** Map cityKey → externalKeys активных ТТ (дедуп по external_key). */
+export function buildTradePointExternalKeysByCityFromScopedDb(
+  tradePoints: readonly ScopedTradePointDto[],
+): Map<string, string[]> {
+  const sets = new Map<string, Set<string>>();
+  for (const tp of tradePoints) {
+    if (tp.isActive === false) continue;
+    const key = cityKeyForScopedTradePoint(tp);
+    const externalKey = matrixKeyForScopedTradePoint(tp);
+    const bucket = sets.get(key);
+    if (bucket) bucket.add(externalKey);
+    else sets.set(key, new Set([externalKey]));
+  }
+  const map = new Map<string, string[]>();
+  sets.forEach((keys, city) => {
+    map.set(city, Array.from(keys));
+  });
+  return map;
+}
+
 export const NO_ROP_BUCKET_KEY = "__no_rop__";
 
 export type TradePointExternalKeysByRopBucket = {
