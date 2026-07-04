@@ -78,6 +78,7 @@ import { saveTradePointTrainingField } from "@/lib/use-dealer-field-saver";
 import { handleOverridesStrictResult } from "@/lib/overrides-save-feedback";
 import { makePendingId } from "@/lib/overrides-pending-sync";
 import { DealerTpOverridesSyncStatus } from "@/components/dealer-tp-overrides-sync-status";
+import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
 import { patchTradePointTrashRuntime } from "@/lib/dealer-overrides-runtime";
 import { makeTrashedTradePointInfo, snapshotTradePointFromRow } from "@/lib/trash-dealer-helper";
 import {
@@ -861,6 +862,13 @@ function TradePointDetailContent({
             —
           </p>
         )}
+        <div className="mt-3">
+          <DistributionCardHeaderBlock
+            externalKeys={[point.id]}
+            act={actx.state}
+            testId="trade-point-header-distribution"
+          />
+        </div>
         <div className="mt-3">
           <Button asChild variant="outline" size="sm" className="min-h-9 w-full font-semibold sm:w-auto">
             {clientMapHref ? (

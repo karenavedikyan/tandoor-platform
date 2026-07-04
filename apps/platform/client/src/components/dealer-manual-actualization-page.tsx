@@ -90,6 +90,7 @@ import { useSectionSaveFeedback } from "@/hooks/use-section-save-feedback";
 import { SectionSaveButton } from "@/components/section-save-button";
 import { Bitrix24TasksPanel } from "@/components/bitrix24-tasks-panel";
 import { DealerTradePointsSection } from "@/components/dealer-trade-points-section";
+import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
 import { DealerLegalEntitiesSection } from "@/components/dealer-legal-entities-section";
 import { EntityActualizationPhotoGallery } from "@/components/entity-actualization-photo-gallery";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
@@ -382,6 +383,11 @@ export function DealerManualActualizationPage(props: {
     return mergeTradePointsActiveFromDbWithActualizationOverlay(row, actx.state, tpDbHydration.dbTradePoints);
   }, [row, actx.state, tpDbHydration.ready, tpDbHydration.dbTradePoints, tpDbHydration.hydrationVersion]);
 
+  const dealerDistributionExternalKeys = useMemo(
+    () => tps.map((entry) => entry.point.id),
+    [tps],
+  );
+
   const { filledShowcase, needShowcase } = useMemo(() => {
     let filled = 0;
     let need = 0;
@@ -661,6 +667,16 @@ export function DealerManualActualizationPage(props: {
             </div>
           </div>
         </section>
+
+        {dealerDistributionExternalKeys.length > 0 ? (
+          <div className="rounded-xl border border-border/60 bg-card px-4 py-2.5 sm:px-5">
+            <DistributionCardHeaderBlock
+              externalKeys={dealerDistributionExternalKeys}
+              act={actx.state}
+              testId="dealer-header-distribution"
+            />
+          </div>
+        ) : null}
 
         <div className="flex items-center justify-between gap-2 border-b border-border/30 pb-2">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Разделы анкеты</p>
