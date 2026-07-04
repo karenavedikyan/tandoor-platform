@@ -22,6 +22,7 @@ import {
   RU_PHONE_PLACEHOLDER,
 } from "@/lib/phone-format";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
+import { ManagerDistributionMiniBar } from "@/components/distribution/manager-distribution-mini-bar";
 import { AddressSuggestInput } from "@/components/address-suggest-input";
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import {
@@ -1387,6 +1388,12 @@ export function DealerTradePointsSection({
                         </Badge>
                       ) : null}
                     </div>
+                    <ManagerDistributionMiniBar
+                      externalKeys={[tp.id]}
+                      act={actx.state}
+                      prefetching={false}
+                      testId={`dealer-trade-point-distribution-${tp.id}`}
+                    />
                     <p className="text-xs text-muted-foreground">{tp.city}</p>
                     <p className="text-xs text-muted-foreground" data-testid={`text-trade-point-internal-code-${tp.id}`}>
                       Код ТТ: {getTradePointDisplayCodeForActualization(tp)}
