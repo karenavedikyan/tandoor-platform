@@ -15,13 +15,17 @@ import { DistributionFiltersBar } from "@/components/distribution/distribution-f
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import {
+  defaultDistributionEntryTradePointFilterState,
   defaultDistributionFilterState,
   extractCityOptions,
   extractRegionOptions,
   filterScopeDealers,
+  filterScopeDealersByEntryTradePointFilters,
   listActiveDistributionFilterChips,
   sanitizeDistributionFilterForScope,
+  sanitizeEntryTradePointFilterForScope,
   type DistributionFilterState,
+  type DistributionEntryTradePointFilterState,
 } from "@/lib/distribution-filters";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 
@@ -35,6 +39,9 @@ type DistributionEntryWizardProps = {
 export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSelect }: DistributionEntryWizardProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
+  const [ttFilter, setTtFilter] = useState<DistributionEntryTradePointFilterState>(
+    defaultDistributionEntryTradePointFilterState,
+  );
   const scoped = useDistributionScopedDealers(profile);
 
   useEffect(() => {
@@ -49,9 +56,15 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
 
   useEffect(() => {
     setFilter((prev) => sanitizeDistributionFilterForScope(prev, filterScope));
+    setTtFilter((prev) => sanitizeEntryTradePointFilterForScope(prev, filterScope));
   }, [filterScope]);
 
-  const filteredDealers = useMemo(() => filterScopeDealers(scoped, filter), [scoped, filter]);
+  const filteredDealers = useMemo(() => {
+    if (axis === "tradePoint") {
+      return filterScopeDealersByEntryTradePointFilters(scoped, ttFilter);
+    }
+    return filterScopeDealers(scoped, filter);
+  }, [axis, filter, scoped, ttFilter]);
 
   const regionOptions = useMemo(() => extractRegionOptions(scoped), [scoped]);
   const cityOptions = useMemo(() => extractCityOptions(scoped), [scoped]);
@@ -125,10 +138,9 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
         <DistributionEntryTradePointPanel
           profile={profile}
           dealers={filteredDealers}
-          filter={filter}
-          onFilterChange={setFilter}
-          regionOptions={regionOptions}
-          cityOptions={cityOptions}
+          scopedDealers={scoped}
+          filter={ttFilter}
+          onFilterChange={setTtFilter}
           hideRegion={filterScope.hideRegion}
         />
       ) : axis === "product" ? (
