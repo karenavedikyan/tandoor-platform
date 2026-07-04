@@ -66,7 +66,12 @@ import {
   persistEquipmentCapacityInputs,
   type EquipmentCapacityInputV2,
 } from "@/lib/showcase-capacity-by-equipment";
-import type { ShowcaseMatrixStatus } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixStatus, ShowcasePlacementSegment, ShowcasePlacementType } from "@/lib/showcase-matrix-api";
+import {
+  allowedTypesForSegment,
+  PLACEMENT_TYPE_LABEL_RU,
+} from "@/lib/showcase-placement-labels";
+import { segmentForModelTargetId } from "@/lib/showcase-model-segment";
 import { fetchActiveMatrixDef } from "@/lib/showcase-matrix-catalog-api";
 import {
   refreshMatrixDefFromServer,
@@ -129,6 +134,15 @@ function newTaskId(): string {
 
 function catalogLookup(id: string): CatalogProduct | undefined {
   return getProductById(id);
+}
+
+function placementSegmentForProduct(p: CatalogProduct): ShowcasePlacementSegment {
+  const fromId = segmentForModelTargetId(p.id);
+  if (fromId) return fromId;
+  const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
+  if (portalType === "entrance") return "vh";
+  if (portalType === "hardware") return "hardware";
+  return "mk";
 }
 
 /** Осмысленное имя ТТ или null (отсекает пустые и заглушки вроде "."). */
@@ -239,6 +253,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [matrixListMode, setMatrixListMode] = useState<"deficit" | "all">("deficit");
   const [jumpHighlightId, setJumpHighlightId] = useState<string | null>(null);
   const [pendingSelectionProductId, setPendingSelectionProductId] = useState<string | null>(null);
+  const [pendingPlacementProductId, setPendingPlacementProductId] = useState<string | null>(null);
+  const [pendingPlacementType, setPendingPlacementType] = useState<ShowcasePlacementType | null>(null);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [autogrowNotice, setAutogrowNotice] = useState<{
     grownTypes: ShowcaseCapacityGrownType[];
@@ -362,6 +378,9 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         selectedAt: entry.updatedAt ?? new Date(0).toISOString(),
         selectedBy: entry.updatedBy ?? "",
         selectedByName: entry.updatedByName ?? "",
+        portalType: product ? inferShowcasePortalTypeFromCatalogProduct(product) : undefined,
+        placementType: entry.placementType ?? undefined,
+        placementSegment: entry.placementSegment ?? undefined,
       });
     }
 
@@ -536,7 +555,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   );
 
   const performSelect = useCallback(
-    (p: CatalogProduct) => {
+    (p: CatalogProduct, placementType: ShowcasePlacementType, placementSegment: ShowcasePlacementSegment) => {
       setMatrixStatus({
         dealerId,
         tradePointId,
@@ -545,6 +564,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
         status: "installed",
         updatedBy: actorUserId,
         updatedByName: actorLabel,
+        placementType,
+        placementSegment,
       });
       const iso = new Date().toISOString();
       const portalType = inferShowcasePortalTypeFromCatalogProduct(p);
@@ -558,10 +579,42 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           selectedBy: actorUserId,
           selectedByName: actorLabel,
           portalType,
+          placementType,
+          placementSegment,
         },
       ]);
     },
     [actorLabel, actorUserId, dealerId, onChangeSelected, selectedShowcaseModels, tradePointId],
+  );
+
+  const cancelPlacementSelection = useCallback(() => {
+    setPendingPlacementProductId(null);
+    setPendingPlacementType(null);
+  }, []);
+
+  const beginPlacementSelection = useCallback(
+    (p: CatalogProduct) => {
+      const segment = placementSegmentForProduct(p);
+      const types = allowedTypesForSegment(segment);
+      if (types.length === 1) {
+        performSelect(p, types[0]!, segment);
+        return;
+      }
+      setPendingPlacementProductId(p.id);
+      setPendingPlacementType(null);
+    },
+    [performSelect],
+  );
+
+  const confirmPlacementForProduct = useCallback(
+    (p: CatalogProduct) => {
+      if (!pendingPlacementType) return;
+      const segment = placementSegmentForProduct(p);
+      performSelect(p, pendingPlacementType, segment);
+      setPendingPlacementProductId(null);
+      setPendingPlacementType(null);
+    },
+    [pendingPlacementType, performSelect],
   );
 
   const completeCapacityAndSelect = useCallback(
@@ -587,9 +640,9 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           nextCapacity: gate.nextCapacity,
         });
       }
-      performSelect(p);
+      beginPlacementSelection(p);
     },
-    [applyShowcasePatch, performSelect, selectedShowcaseModels, showcaseRec, tradePointId],
+    [applyShowcasePatch, beginPlacementSelection, selectedShowcaseModels, showcaseRec, tradePointId],
   );
 
   const toggleSelected = useCallback(
@@ -615,8 +668,15 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
             nextCapacity: gate.nextCapacity,
           });
         }
-        performSelect(p);
+        beginPlacementSelection(p);
       } else {
+        if (pendingPlacementProductId === p.id) {
+          setPendingPlacementProductId(null);
+          setPendingPlacementType(null);
+        }
+        if (pendingSelectionProductId === p.id) {
+          setPendingSelectionProductId(null);
+        }
         setMatrixStatus({
           dealerId,
           tradePointId,
@@ -633,11 +693,13 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       actorLabel,
       actorUserId,
       applyShowcasePatch,
+      beginPlacementSelection,
       canEdit,
       dealerId,
       onChangeSelected,
       onMarkDirty,
-      performSelect,
+      pendingPlacementProductId,
+      pendingSelectionProductId,
       selectedShowcaseModels,
       showcaseRec,
       tradePointId,
@@ -736,6 +798,57 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
       portalType === "entrance" ? "Вх." : portalType === "interior" ? "МК" : portalType === "hardware" ? "Фурн." : "—";
     const productTypeKey = inferShowcaseTypeKeyFromProduct(p);
     const pendingCapacity = pendingSelectionProductId === p.id && productTypeKey != null;
+    const pendingPlacement = pendingPlacementProductId === p.id;
+
+    const placementForm = (compact: boolean) =>
+      pendingPlacement ? (
+        <div
+          className="mt-1 space-y-1.5 rounded-md border border-border/70 bg-muted/20 p-2"
+          data-testid={`placement-select-${p.id}`}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <p className={cn("font-medium text-muted-foreground", compact ? "text-[9px]" : "text-[10px]")}>
+            Тип крепления
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {allowedTypesForSegment(placementSegmentForProduct(p)).map((t) => (
+              <Button
+                key={t}
+                type="button"
+                size="sm"
+                variant={pendingPlacementType === t ? "default" : "outline"}
+                className={cn("h-7 px-2", compact ? "text-[9px]" : "text-[10px]")}
+                onClick={() => setPendingPlacementType(t)}
+              >
+                {PLACEMENT_TYPE_LABEL_RU[t]}
+              </Button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={!pendingPlacementType}
+              data-testid={`button-showcase-placement-confirm-${p.id}`}
+              onClick={() => confirmPlacementForProduct(p)}
+            >
+              Добавить
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs"
+              data-testid={`button-showcase-placement-cancel-${p.id}`}
+              onClick={() => cancelPlacementSelection()}
+            >
+              Отмена
+            </Button>
+          </div>
+        </div>
+      ) : null;
 
     const imgBox = (opts: { maxH: string; rounded: string }) => (
       <div
@@ -848,6 +961,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
             className="mt-1"
           />
         ) : null}
+        {placementForm(false)}
       </div>
     );
 
@@ -888,6 +1002,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
             className="mt-1"
           />
         ) : null}
+        {placementForm(true)}
       </div>
     );
 
