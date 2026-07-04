@@ -4,6 +4,7 @@ import {
   buildTradePointsOverviewDisplayIndex,
   filterManagersToTradePointsOverview,
   formatOverviewScopedCount,
+  managerCardFromOverview,
   splitManagersByRegionalRole,
   unionCatalogManagersWithOverviewCards,
 } from "@/lib/trade-points-overview-view-model";
@@ -177,6 +178,36 @@ describe("trade-points overview display index", () => {
     expect(formatOverviewScopedCount(null, { loading: true, ready: false })).toBe("…");
     expect(formatOverviewScopedCount(177, { loading: false, ready: true })).toBe("177");
     expect(formatOverviewScopedCount(null, { loading: false, ready: false, fallback: 113 })).toBe("113");
+  });
+
+  it("managerCardFromOverview leaves shellHref empty for unassigned manager", () => {
+    const card = managerCardFromOverview({
+      userId: "",
+      fullName: "Без менеджера",
+      tradePoints: 5,
+      clientsWithTp: 5,
+      cities: 1,
+      withoutPhoto: 0,
+      notFilled: 0,
+      isRegional: false,
+    });
+    expect(card.shellHref).toBe("");
+    expect(card.isRegional).toBe(false);
+  });
+
+  it("managerCardFromOverview builds shellHref for regional manager", () => {
+    const card = managerCardFromOverview({
+      userId: "rm-drogo-uuid",
+      fullName: "Дрогобицкий",
+      tradePoints: 10,
+      clientsWithTp: 799,
+      cities: 3,
+      withoutPhoto: 0,
+      notFilled: 0,
+      isRegional: true,
+    });
+    expect(card.shellHref).toContain("/dealer-base/manager/rm-drogo-uuid");
+    expect(card.isRegional).toBe(true);
   });
 
   it("unionCatalogManagersWithOverviewCards adds overview-only managers without duplicates", () => {
