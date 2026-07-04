@@ -44,6 +44,7 @@ import {
 import {
   countSelectedByType,
   evaluateSelectionGate,
+  focusShowcaseCapacityField,
   getShowcaseTypeCapacity,
   inferShowcaseTypeKeyFromProduct,
   patchShowcaseTypeCapacity,
@@ -51,6 +52,12 @@ import {
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
 import { notifyShowcaseCapacityAutoGrow } from "@/lib/showcase-capacity-toast";
+import {
+  aggregateShowcaseCapacityGrownTypes,
+  planCategoryCapacityGrowthForMarked,
+  type ShowcaseCapacityGrownType,
+} from "@/lib/showcase-capacity-autogrow-on-save";
+import { ShowcaseCapacityAutogrowNoticeDialog } from "@/components/distribution/showcase-capacity-autogrow-notice-dialog";
 import { ShowcaseTypeCapacityInlineForm } from "@/components/showcase-type-capacity-inline-form";
 import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment-capacity-dialog";
 import {
@@ -233,6 +240,9 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [jumpHighlightId, setJumpHighlightId] = useState<string | null>(null);
   const [pendingSelectionProductId, setPendingSelectionProductId] = useState<string | null>(null);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [autogrowNotice, setAutogrowNotice] = useState<{
+    grownTypes: ShowcaseCapacityGrownType[];
+  } | null>(null);
   const [bump, setBump] = useState(0);
   const [catalogBump, setCatalogBump] = useState(0);
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -487,6 +497,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     },
     [onMarkDirty, onPatchShowcase],
   );
+
+  const reconcileCategoryCapacityWithSelection = useCallback(() => {
+    const markedByType = new Map<ShowcaseTypeKey, number>();
+    for (const type of ["entrance", "interior", "hardware"] as ShowcaseTypeKey[]) {
+      const count = countSelectedByType(effectiveSelectedModels, type, catalogLookup);
+      if (count > 0) markedByType.set(type, count);
+    }
+    const growths = planCategoryCapacityGrowthForMarked(showcaseRec, markedByType);
+    for (const { type, nextCapacity } of growths) {
+      applyShowcasePatch(patchShowcaseTypeCapacity(type, nextCapacity));
+    }
+    return aggregateShowcaseCapacityGrownTypes(markedByType, growths);
+  }, [applyShowcasePatch, effectiveSelectedModels, showcaseRec]);
 
   const handleEquipmentDialogConfirm = useCallback(
     (inputs: EquipmentCapacityInputV2) => {
@@ -1135,9 +1158,19 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           ) : null}
 
           {portalWarn ? (
-            <p className="text-xs font-medium text-amber-900 dark:text-amber-100" data-testid="text-showcase-portal-warning">
-              Выбрано моделей больше, чем порталов по типам. Проверьте цифры витрины.
-            </p>
+            <button
+              type="button"
+              className="w-full rounded-lg border border-amber-500/50 bg-amber-50 px-2.5 py-2 text-left text-xs font-semibold text-amber-950 shadow-sm dark:bg-amber-950/40 dark:text-amber-100"
+              data-testid="text-showcase-portal-warning"
+              onClick={() => {
+                const grownTypes = reconcileCategoryCapacityWithSelection();
+                if (grownTypes.length > 0) {
+                  setAutogrowNotice({ grownTypes });
+                }
+              }}
+            >
+              Выбрано моделей больше, чем порталов по типам. Нажмите, чтобы увеличить ёмкость автоматически.
+            </button>
           ) : null}
           <div className="space-y-1" data-testid="text-showcase-type-capacity-status">
             {typeStatusLine.map((row) => (
@@ -1157,15 +1190,24 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
                   <button
                     type="button"
                     className={cn(
-                      "text-left underline-offset-2 hover:underline",
-                      row.overfill ? "font-medium text-destructive" : "text-muted-foreground",
+                      "w-full text-left underline-offset-2 hover:underline rounded-md px-1.5 py-0.5",
+                      row.overfill
+                        ? "border border-destructive/45 bg-destructive/10 font-semibold text-destructive"
+                        : "text-muted-foreground",
                     )}
                     onClick={() => setEquipmentDialogOpen(true)}
                   >
                     {row.label}
                   </button>
                 ) : (
-                  <span className={row.overfill ? "font-medium text-destructive" : "text-muted-foreground"}>
+                  <span
+                    className={cn(
+                      "inline-block rounded-md px-1.5 py-0.5",
+                      row.overfill
+                        ? "border border-destructive/45 bg-destructive/10 font-semibold text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                  >
                     {row.label}
                   </span>
                 )}
@@ -1344,6 +1386,20 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
           ) : null}
         </SheetContent>
       </Sheet>
+
+      <ShowcaseCapacityAutogrowNoticeDialog
+        open={autogrowNotice != null}
+        grownTypes={autogrowNotice?.grownTypes ?? []}
+        onAcknowledge={() => setAutogrowNotice(null)}
+        onEditManually={() => {
+          const firstType = autogrowNotice?.grownTypes[0]?.type;
+          setAutogrowNotice(null);
+          setEquipmentDialogOpen(true);
+          if (firstType) {
+            requestAnimationFrame(() => focusShowcaseCapacityField(firstType));
+          }
+        }}
+      />
     </div>
   );
 }

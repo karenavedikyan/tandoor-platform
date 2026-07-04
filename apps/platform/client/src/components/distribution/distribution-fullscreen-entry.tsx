@@ -41,6 +41,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShowcaseSaveCompletenessGate } from "@/components/showcase-save-completeness-gate";
 import { ShowcaseEquipmentCapacityDialog } from "@/components/showcase-equipment-capacity-dialog";
+import { ShowcaseCapacityAutogrowNoticeDialog } from "@/components/distribution/showcase-capacity-autogrow-notice-dialog";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import {
   mergeActualizationState,
@@ -49,10 +50,16 @@ import {
 } from "@/lib/client-base-actualization-state";
 import {
   findShowcaseCapacityGaps,
-  neededCapacityGrowthByType,
+  focusShowcaseCapacityField,
   patchShowcaseTypeCapacity,
   type ShowcaseTypeKey,
 } from "@/lib/showcase-type-capacity";
+import {
+  aggregateShowcaseCapacityGrownTypes,
+  mergeMarkedCountsByType,
+  planCategoryCapacityGrowthForMarked,
+  type ShowcaseCapacityGrownType,
+} from "@/lib/showcase-capacity-autogrow-on-save";
 import {
   persistEquipmentCapacityInputs,
   categoryCapacityFieldsForPersist,
@@ -385,6 +392,9 @@ export function DistributionFullscreenEntry({
   const selectedShowcaseModels = showcaseRec?.selectedShowcaseModels ?? [];
   const [completenessGateOpen, setCompletenessGateOpen] = useState(false);
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [autogrowNotice, setAutogrowNotice] = useState<{
+    grownTypes: ShowcaseCapacityGrownType[];
+  } | null>(null);
   const [exitGateGaps, setExitGateGaps] = useState<ShowcaseTypeKey[]>([]);
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const [bump, setBump] = useState(0);
@@ -936,13 +946,13 @@ export function DistributionFullscreenEntry({
     [draft, baselines, placementSegmentContext, activePlacementType],
   );
 
-  const syncCategoryCapacityAfterPlacementChange = useCallback(() => {
+  const syncCategoryCapacityAfterPlacementChange = useCallback(async () => {
     const freshPlacements = loadCachedPlacements(point.id);
     const cats = categoryCapacityFromPlacements(freshPlacements);
     const uid = profile.personaUserId;
     const uname = userLabelFromProfile(profile);
     const iso = new Date().toISOString();
-    void actx.persist((prev) => {
+    await actx.persist((prev) => {
       const prevRec =
         prev.tradePointShowcaseActualizationById[point.id] ??
         emptyShowcase(dealer.id, point.id);
@@ -988,7 +998,7 @@ export function DistributionFullscreenEntry({
         updatedByName: uname,
       });
       if (!grown) return;
-      syncCategoryCapacityAfterPlacementChange();
+      void syncCategoryCapacityAfterPlacementChange();
       setBump((n) => n + 1);
       notifyShowcaseCapacityAutoGrow({
         tradePointId: point.id,
@@ -1009,13 +1019,28 @@ export function DistributionFullscreenEntry({
     ],
   );
 
+  const buildMarkedByTypeFromDraft = useCallback(
+    (nextDraft: FullscreenEntryDraftMap): Map<ShowcaseTypeKey, number> => {
+      const markedByType = new Map<ShowcaseTypeKey, number>();
+      for (const segment of SEGMENTS) {
+        for (const placementType of allowedTypesForSegment(segment)) {
+          const marked = countMarkedOursInPlacement(nextDraft, baselines, segment, placementType);
+          if (marked <= 0) continue;
+          const typeKey = PLACEMENT_SEGMENT_TO_TYPE_KEY[segment];
+          markedByType.set(typeKey, (markedByType.get(typeKey) ?? 0) + marked);
+        }
+      }
+      return markedByType;
+    },
+    [baselines],
+  );
+
   /** При сохранении: гарантировать, что ёмкость каждого (segment, placementType)
-   *  не меньше числа отмеченных «наших». Поднимает ёмкость и собирает уведомления по типу оборудования. */
+   *  не меньше числа отмеченных «наших». */
   const growAllPlacementsToFitMarksOnSave = useCallback(
-    (nextDraft: FullscreenEntryDraftMap) => {
+    (nextDraft: FullscreenEntryDraftMap): boolean => {
       const uid = profile.personaUserId;
       const uname = userLabelFromProfile(profile);
-      const growByType = new Map<ShowcaseTypeKey, { oldCapacity: number; nextCapacity: number }>();
       let changed = false;
 
       for (const segment of SEGMENTS) {
@@ -1034,62 +1059,42 @@ export function DistributionFullscreenEntry({
           });
           if (!grown) continue;
           changed = true;
-          const typeKey = PLACEMENT_SEGMENT_TO_TYPE_KEY[segment];
-          const acc = growByType.get(typeKey);
-          if (acc) {
-            growByType.set(typeKey, {
-              oldCapacity: acc.oldCapacity + grown.oldCapacity,
-              nextCapacity: acc.nextCapacity + grown.nextCapacity,
-            });
-          } else {
-            growByType.set(typeKey, { oldCapacity: grown.oldCapacity, nextCapacity: grown.nextCapacity });
-          }
         }
       }
 
-      if (!changed) return;
-      syncCategoryCapacityAfterPlacementChange();
+      if (!changed) return false;
       setBump((n) => n + 1);
-      for (const [type, agg] of Array.from(growByType.entries())) {
-        if (agg.nextCapacity === agg.oldCapacity) continue;
-        notifyShowcaseCapacityAutoGrow({
-          tradePointId: point.id,
-          type,
-          oldCapacity: agg.oldCapacity,
-          nextCapacity: agg.nextCapacity,
-        });
-      }
+      return true;
     },
-    [baselines, dealer.id, point.id, profile, syncCategoryCapacityAfterPlacementChange],
+    [baselines, dealer.id, point.id, profile],
   );
 
-  /** При сохранении: гарантировать, что ёмкость каждого типа в actualization-state
-   *  (entrancePortals/interiorPortals/hardwareSections) не меньше числа выбранных «наших».
-   *  Только рост, никогда не уменьшение. Сводный toast по типу. */
+  /** При сохранении: категорийная ёмкость ≥ отмеченных по типу (draft + selectedShowcaseModels). */
   const growActualizationCapacityToFitMarksOnSave = useCallback(
-    async (nextDraft: FullscreenEntryDraftMap) => {
+    async (nextDraft: FullscreenEntryDraftMap): Promise<ShowcaseCapacityGrownType[]> => {
+      const draftMarked = buildMarkedByTypeFromDraft(nextDraft);
+      const markedByType = mergeMarkedCountsByType(
+        draftMarked,
+        selectedShowcaseModels,
+        getProductById,
+      );
       const rec = getCandidateShowcaseRec();
-      const markedByType = new Map<ShowcaseTypeKey, number>();
-      for (const segment of SEGMENTS) {
-        for (const placementType of allowedTypesForSegment(segment)) {
-          const marked = countMarkedOursInPlacement(nextDraft, baselines, segment, placementType);
-          if (marked <= 0) continue;
-          const typeKey = PLACEMENT_SEGMENT_TO_TYPE_KEY[segment];
-          markedByType.set(typeKey, (markedByType.get(typeKey) ?? 0) + marked);
-        }
+      const planned = planCategoryCapacityGrowthForMarked(rec, markedByType);
+      const applied: Array<{ type: ShowcaseTypeKey; oldCapacity: number; nextCapacity: number }> = [];
+
+      for (const { type, oldCapacity, nextCapacity } of planned) {
+        await persistShowcaseCapacity(type, nextCapacity);
+        applied.push({ type, oldCapacity, nextCapacity });
       }
 
-      for (const { type, oldCapacity, nextCapacity } of neededCapacityGrowthByType(rec, markedByType)) {
-        await persistShowcaseCapacity(type, nextCapacity);
-        notifyShowcaseCapacityAutoGrow({
-          tradePointId: point.id,
-          type,
-          oldCapacity,
-          nextCapacity,
-        });
-      }
+      return aggregateShowcaseCapacityGrownTypes(markedByType, applied);
     },
-    [baselines, getCandidateShowcaseRec, persistShowcaseCapacity, point.id],
+    [
+      buildMarkedByTypeFromDraft,
+      getCandidateShowcaseRec,
+      persistShowcaseCapacity,
+      selectedShowcaseModels,
+    ],
   );
 
   const productsForList = useMemo(() => {
@@ -1254,6 +1259,7 @@ export function DistributionFullscreenEntry({
         );
     const shouldOpenAssignmentDialog = canCreateAssignment && needInstallSaveIds.length > 0;
     setSaving(true);
+    let grownTypesOnSave: ShowcaseCapacityGrownType[] = [];
     try {
       for (const productId of saveIds) {
         const baseline = baselines[productId];
@@ -1324,8 +1330,15 @@ export function DistributionFullscreenEntry({
       }
 
       if (!needInstallMode) {
-        growAllPlacementsToFitMarksOnSave(draft);
-        await growActualizationCapacityToFitMarksOnSave(draft);
+        const placementsChanged = growAllPlacementsToFitMarksOnSave(draft);
+        if (placementsChanged) {
+          await syncCategoryCapacityAfterPlacementChange();
+        }
+        const grownTypes = await growActualizationCapacityToFitMarksOnSave(draft);
+        grownTypesOnSave = grownTypes;
+        if (grownTypes.length > 0) {
+          setAutogrowNotice({ grownTypes });
+        }
       }
 
       setBump((n) => n + 1);
@@ -1381,6 +1394,7 @@ export function DistributionFullscreenEntry({
         setPendingAssignmentOpenIds([...needInstallSaveIds]);
       } else if (
         !needInstallMode &&
+        grownTypesOnSave.length === 0 &&
         normalizeHasShowcase(showcaseRec?.hasShowcase) !== false
       ) {
         setEquipmentDialogOpen(true);
@@ -2564,6 +2578,20 @@ export function DistributionFullscreenEntry({
           </div>
         </div>
       ) : null}
+
+      <ShowcaseCapacityAutogrowNoticeDialog
+        open={autogrowNotice != null}
+        grownTypes={autogrowNotice?.grownTypes ?? []}
+        onAcknowledge={() => setAutogrowNotice(null)}
+        onEditManually={() => {
+          const firstType = autogrowNotice?.grownTypes[0]?.type;
+          setAutogrowNotice(null);
+          setEquipmentDialogOpen(true);
+          if (firstType) {
+            requestAnimationFrame(() => focusShowcaseCapacityField(firstType));
+          }
+        }}
+      />
 
       <ShowcaseEquipmentCapacityDialog
         open={equipmentDialogOpen}
