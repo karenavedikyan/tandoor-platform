@@ -1,6 +1,8 @@
 import type { ClientCategoryId } from "./client-category.js";
 import type { CatalogProduct } from "./catalog-product-type.js";
 import type { ShowcaseSelectedPortalType, TradePointShowcaseSelectedModel } from "./client-base-actualization-state.js";
+import type { ShowcasePlacementSegment, ShowcasePlacementType } from "./showcase-matrix-api.js";
+import { LEGACY_FALLBACK_TYPE_BY_SEGMENT } from "./showcase-capacity-by-equipment.js";
 import type { ShowcaseMatrixModelDefinition } from "./trade-point-showcase-matrix-models.js";
 import {
   resolveRequiredTradePointMatrixModels,
@@ -50,6 +52,14 @@ export function effectivePortalTypeForSelectedModel(
 ): ShowcaseSelectedPortalType {
   if (m.portalType) return m.portalType;
   return inferShowcasePortalTypeFromCatalogProduct(catalogLookup(m.productId));
+}
+
+export function effectivePlacementTypeForSelectedModel(
+  m: TradePointShowcaseSelectedModel,
+  segment: ShowcasePlacementSegment,
+): ShowcasePlacementType {
+  if (m.placementType) return m.placementType;
+  return LEGACY_FALLBACK_TYPE_BY_SEGMENT[segment];
 }
 
 export type ShowcasePortalCaps = {
