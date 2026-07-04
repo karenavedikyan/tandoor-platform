@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, LayoutGrid, List, Loader2, Search, SlidersHorizontal, Square } from "lucide-react";
+import { ArrowLeft, LayoutGrid, List, Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
 import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
@@ -62,7 +62,6 @@ import {
   DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE,
   distributionEntryVirtualItemStyle,
   useDistributionEntryDesktopLayout,
-  useDistributionEntryTradepointGridLanes,
   useDistributionEntryVirtualizer,
 } from "@/lib/distribution-entry-element-virtualizer";
 
@@ -302,21 +301,17 @@ export function DistributionEntryTradePointPanel({
   }, [setSelectedTradePointId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const gridLanes = useDistributionEntryTradepointGridLanes();
   const displayRows = useMemo(
     () => sortedRows.filter((r) => rowRefs.has(r.tradePointId)),
     [sortedRows, rowRefs],
   );
 
-  const virtualRowCount =
-    tradePointView === "grid" ? Math.ceil(displayRows.length / gridLanes) : displayRows.length;
+  const virtualRowCount = displayRows.length;
 
   const listEstimateSize =
-    tradePointView === "large"
-      ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointLarge
-      : tradePointView === "grid"
-        ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointGridRow
-        : DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointList;
+    tradePointView === "detailed"
+      ? DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointDetailed
+      : DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE.tradepointCompact;
 
   const virtualizer = useDistributionEntryVirtualizer({
     count: virtualRowCount,
@@ -328,10 +323,9 @@ export function DistributionEntryTradePointPanel({
     if (!selectedTradePointId || displayRows.length === 0) return;
     const idx = displayRows.findIndex((r) => r.tradePointId === selectedTradePointId);
     if (idx < 0) return;
-    const virtualIndex = tradePointView === "grid" ? Math.floor(idx / gridLanes) : idx;
-    virtualizer.scrollToIndex(virtualIndex, { align: "auto" });
+    virtualizer.scrollToIndex(idx, { align: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll when selection/view changes only
-  }, [selectedTradePointId, displayRows.length, tradePointView, gridLanes]);
+  }, [selectedTradePointId, displayRows.length, tradePointView]);
 
   const renderTradePointCard = (row: DistributionEntryTradePointRow) => {
     const ref = rowRefs.get(row.tradePointId);
@@ -461,9 +455,8 @@ export function DistributionEntryTradePointPanel({
           >
             {(
               [
-                { id: "large" as const, label: "Крупные", icon: Square },
-                { id: "grid" as const, label: "Сетка", icon: LayoutGrid },
-                { id: "list" as const, label: "Список", icon: List },
+                { id: "compact" as const, label: "Компактно", icon: List },
+                { id: "detailed" as const, label: "Развёрнуто", icon: LayoutGrid },
               ] as const
             ).map((opt) => {
               const Icon = opt.icon;
@@ -559,36 +552,16 @@ export function DistributionEntryTradePointPanel({
           ref={scrollRef}
           className={cn(
             "max-h-[min(70vh,720px)] overflow-y-auto pr-0.5",
-            tradePointView === "list" &&
+            tradePointView === "compact" &&
               "rounded-xl border border-border/80 bg-card shadow-sm",
           )}
           data-testid="list-distribution-entry-tradepoints"
         >
           <div
-            className={cn(
-              "relative w-full",
-              tradePointView === "large" && "mx-auto max-w-4xl",
-            )}
+            className="relative w-full"
             style={{ height: virtualizer.getTotalSize() }}
           >
             {virtualizer.getVirtualItems().map((vi) => {
-              if (tradePointView === "grid") {
-                const startIdx = vi.index * gridLanes;
-                const slice = displayRows.slice(startIdx, startIdx + gridLanes);
-                return (
-                  <div
-                    key={vi.key}
-                    data-index={vi.index}
-                    ref={virtualizer.measureElement}
-                    className="pb-2"
-                    style={distributionEntryVirtualItemStyle(virtualizer, vi.start)}
-                  >
-                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
-                      {slice.map((row) => renderTradePointCard(row))}
-                    </div>
-                  </div>
-                );
-              }
               const row = displayRows[vi.index];
               if (!row) return null;
               return (
@@ -597,7 +570,7 @@ export function DistributionEntryTradePointPanel({
                   data-index={vi.index}
                   ref={virtualizer.measureElement}
                   className={cn(
-                    tradePointView === "large" ? "pb-3" : "border-b border-border/70 last:border-0",
+                    tradePointView === "detailed" ? "pb-3" : "border-b border-border/70 last:border-0",
                   )}
                   style={distributionEntryVirtualItemStyle(virtualizer, vi.start)}
                 >

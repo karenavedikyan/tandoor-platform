@@ -29,7 +29,9 @@ for (const [label, src] of [
 assert.ok(tpPanel.includes('data-testid="list-distribution-entry-tradepoints"'));
 assert.ok(!tpPanel.includes("rows.map((row) =>"), "tradepoint: no full rows.map");
 assert.ok(tpPanel.includes("virtualizer.scrollToIndex"), "tradepoint: scroll to selected");
-assert.ok(tpPanel.includes("grid grid-cols-2 gap-2 lg:grid-cols-1"), "tradepoint: grid layout preserved");
+assert.ok(!tpPanel.includes("grid grid-cols-2 gap-2 lg:grid-cols-1"), "tradepoint: no grid layout");
+assert.ok(tpPanel.includes('id: "compact"'), "tradepoint: compact toggle");
+assert.ok(tpPanel.includes('id: "detailed"'), "tradepoint: detailed toggle");
 
 assert.ok(productPanel.includes('data-testid="list-distribution-entry-product-models"'));
 assert.ok(!productPanel.includes("catalogProducts.map((p)"), "product models: no full map");
