@@ -123,6 +123,9 @@ import {
   VirtualizedStackList,
 } from "@/lib/window-list-virtualizer";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
+import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
+import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { TradePointsManagementCockpit } from "@/pages/trade-points-management-cockpit";
 
@@ -187,6 +190,18 @@ const TRADE_POINT_DENSITY_ESTIMATE: Record<TradePointShowcaseDensity, number> = 
   grid: 220,
   large: 320,
 };
+
+function TradePointTileDistributionBadge({
+  tradePointId,
+  act,
+  testId,
+}: {
+  tradePointId: string;
+  act: ActualizationState;
+  testId: string;
+}): ReactElement | null {
+  return <CompactDistributionBadge externalKeys={[tradePointId]} act={act} testId={testId} />;
+}
 
 function parseTradePointDensity(raw: string | null): TradePointShowcaseDensity | null {
   if (raw === "large" || raw === "grid" || raw === "list" || raw === "table") return raw;
@@ -2134,6 +2149,11 @@ export default function TradePointsPage({
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
+                      <TradePointTileDistributionBadge
+                        tradePointId={r.tradePointId}
+                        act={actState}
+                        testId={`trade-point-list-distribution-${r.tradePointId}`}
+                      />
                       </div>
                     {cleanContactDisplay(r.point.contactName) ? (
                       <p className="line-clamp-1 text-[11px] text-muted-foreground">{cleanContactDisplay(r.point.contactName)}</p>
@@ -2196,6 +2216,11 @@ export default function TradePointsPage({
                               Деф. {r.matrixDeficitCount}
                             </Badge>
                           ) : null}
+                          <TradePointTileDistributionBadge
+                            tradePointId={r.tradePointId}
+                            act={actState}
+                            testId={`trade-point-tile-distribution-${r.tradePointId}`}
+                          />
                         </div>
                         <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
                           {renderTpContactIcons(r, "compact")}
@@ -2244,6 +2269,11 @@ export default function TradePointsPage({
                           Деф. {r.matrixDeficitCount}
                         </Badge>
                       ) : null}
+                      <TradePointTileDistributionBadge
+                        tradePointId={r.tradePointId}
+                        act={actState}
+                        testId={`trade-point-tile-distribution-${r.tradePointId}`}
+                      />
                     </div>
                     <div className="mt-auto flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5">
                       {renderTpContactIcons(r, "compact")}
@@ -2347,6 +2377,13 @@ export default function TradePointsPage({
                         <p>
                           <span className="font-medium text-foreground">РОП:</span> {staffDisplayForDetail(r.rop)}
                         </p>
+                      </div>
+                      <div className="rounded-lg border border-border/60 bg-card/50 px-3 py-2">
+                        <DistributionCardHeaderBlock
+                          externalKeys={[r.tradePointId]}
+                          act={actState}
+                          testId={`trade-point-quick-card-distribution-${r.tradePointId}`}
+                        />
                       </div>
                       <div className="flex items-center gap-1.5 border-t border-border/60 pt-2">
                         {renderTpContactIcons(r, "default")}
