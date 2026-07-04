@@ -80,19 +80,17 @@ vi.mock("@/hooks/use-mobile", () => ({
 }));
 
 vi.mock("@/lib/distribution-entry-tradepoint-view", () => ({
-  readDistributionEntryTradePointView: () => "list",
+  readDistributionEntryTradePointView: () => "compact",
   writeDistributionEntryTradePointView: vi.fn(),
 }));
 
 vi.mock("@/lib/distribution-entry-element-virtualizer", () => ({
   DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE: {
-    tradepointLarge: 120,
-    tradepointGridRow: 100,
-    tradepointList: 72,
+    tradepointCompact: 68,
+    tradepointDetailed: 150,
   },
   distributionEntryVirtualItemStyle: () => ({}),
   useDistributionEntryDesktopLayout: () => mockDesktopLayout.value,
-  useDistributionEntryTradepointGridLanes: () => 2,
   useDistributionEntryVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
       count > 0 ? [{ key: "0", index: 0, start: 0, size: 72, lane: 0 }] : [],
