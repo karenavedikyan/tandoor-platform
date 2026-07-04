@@ -4,6 +4,7 @@
  */
 
 import type { ClientCategoryId } from "./client-category.js";
+import type { ShowcasePlacementSegment, ShowcasePlacementType } from "./showcase-matrix-api.js";
 
 export const ACTUALIZATION_STATE_VERSION = 1;
 
@@ -186,6 +187,8 @@ export type TradePointShowcaseSelectedModel = {
   selectedByName: string;
   quantity?: number;
   portalType?: ShowcaseSelectedPortalType;
+  placementType?: ShowcasePlacementType;
+  placementSegment?: ShowcasePlacementSegment;
   comment?: string;
 };
 
