@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
-import { defaultDistributionFilterState } from "@/lib/distribution-filters";
+import { defaultDistributionEntryTradePointFilterState } from "@/lib/distribution-filters";
 import * as hashLocationRouter from "@/lib/hash-location-router";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import {
@@ -33,7 +33,7 @@ const mockDesktopLayout = vi.hoisted(() => ({
 
 const profile: ReleaseDemoProfile = { role: "sales_director", personaUserId: "user-dir-goncharenko" };
 
-const filter = defaultDistributionFilterState();
+const filter = defaultDistributionEntryTradePointFilterState();
 
 function makeDealer(tradePointId: string, name: string): DealerRow {
   return {
@@ -120,6 +120,10 @@ vi.mock("@/lib/diag-distribution-refresh-enabled", () => ({
   useDistributionRefreshDiagEnabled: () => false,
 }));
 
+vi.mock("@/lib/use-org-snapshot", () => ({
+  useOrgSnapshot: () => ({ data: null }),
+}));
+
 function setHashRoute(hash: string): void {
   window.history.replaceState(null, "", `/${hash}`);
 }
@@ -136,8 +140,7 @@ function renderPanel(dealers: readonly DealerRow[]) {
       dealers={dealers}
       filter={filter}
       onFilterChange={() => {}}
-      regionOptions={[]}
-      cityOptions={[]}
+      hideRegion={false}
     />,
   );
 }
