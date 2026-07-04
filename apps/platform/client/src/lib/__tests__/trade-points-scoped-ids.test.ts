@@ -15,6 +15,7 @@ import {
   buildTradePointExternalKeysByRopFromScopedDb,
   buildTradePointIdsByCityFromScopedDb,
   buildTradePointIdsByManagerNameFromScopedDb,
+  cityKeyForScopedTradePoint,
   matrixKeyForScopedTradePoint,
   NO_ROP_BUCKET_KEY,
 } from "../trade-points-scoped-ids.js";
@@ -92,6 +93,17 @@ function tp(partial: Partial<ScopedTradePointDto> & Pick<ScopedTradePointDto, "i
   ]);
   assert.deepEqual(byCity.get("Казань")?.sort(), ["ek-1", "ek-2"]);
   assert.deepEqual(byCity.get("Москва"), ["ek-3"]);
+}
+
+{
+  assert.equal(
+    cityKeyForScopedTradePoint(tp({ id: "tp-x", city: null, dealerCity: "Казань" })),
+    "Казань",
+  );
+  assert.equal(
+    cityKeyForScopedTradePoint(tp({ id: "tp-y", city: null, dealerCity: null })),
+    "Без города",
+  );
 }
 
 {

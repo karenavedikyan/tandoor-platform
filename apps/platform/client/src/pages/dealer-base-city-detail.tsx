@@ -22,12 +22,14 @@ import {
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
+import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
-import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { assignmentsScopeIsActive, safeRoleScopedDealerRowsForReal } from "@/lib/dealer-base-real-scope";
 import { getDealerManagerDisplay, type DealerRow } from "@/lib/dealer-base-mock-data";
 import { getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
@@ -56,6 +58,13 @@ import { buildHashPath } from "@/lib/hash-route-utils";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { cn } from "@/lib/utils";
 import { useOrgSnapshot } from "@/lib/use-org-snapshot";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import {
+  activeTradePointExternalKeysFromScopedTradePoints,
+  activeTradePointIdsFromScopedTradePoints,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+  cityKeyForScopedTradePoint,
+} from "@/lib/trade-points-scoped-ids";
 
 function segmentBadgeClass(tone: string): string {
   if (tone === "destructive") return "border-destructive/40 bg-destructive/10 text-destructive";
@@ -105,6 +114,51 @@ export default function DealerBaseCityDetailPage() {
     if (access === "team_lead" && snap?.me?.id) return { ropUserId: snap.me.id };
     return undefined;
   }, [access, snap?.me?.id]);
+
+  const scopedTpQ = useTradePointsScoped({
+    enabled: isRealUser && !authLoading && useReal,
+  });
+
+  const { plane: cityActualizationPlane } = useSubjectScopeActualizationState({
+    viewingOtherUserScope: false,
+    scopeUserId: undefined,
+    scopeSubjectRole: undefined,
+    scopeReady: true,
+    teamMergedState: teamCtx.mergedState,
+    teamParts: teamCtx.teamParts,
+    actEnabled: actx.enabled,
+  });
+
+  const cityScopedTradePoints = useMemo(() => {
+    if (scopedTpQ.data?.success !== true) return undefined;
+    const targetKey = cityKey === "__no_city__" ? "Без города" : cityKey;
+    return scopedTpQ.data.tradePoints.filter((tp) => cityKeyForScopedTradePoint(tp) === targetKey);
+  }, [scopedTpQ.data, cityKey]);
+
+  const cityTradePointExternalKeys = useMemo(
+    () => (cityScopedTradePoints ? activeTradePointExternalKeysFromScopedTradePoints(cityScopedTradePoints) : []),
+    [cityScopedTradePoints],
+  );
+
+  const cityTradePointIds = useMemo(
+    () => (cityScopedTradePoints ? activeTradePointIdsFromScopedTradePoints(cityScopedTradePoints) : []),
+    [cityScopedTradePoints],
+  );
+
+  const cityShowcaseUuidByMatrixKey = useMemo(() => {
+    if (!cityScopedTradePoints) return undefined;
+    return buildShowcaseUuidByMatrixKeyFromScopedTradePoints(cityScopedTradePoints);
+  }, [cityScopedTradePoints]);
+
+  const cityDistribution = useTradePointDistributionAggregate(
+    cityTradePointExternalKeys,
+    cityActualizationPlane,
+    cityShowcaseUuidByMatrixKey,
+  );
+
+  const cityDistributionReady = scopedTpQ.data?.success === true;
+  const cityDistributionLoading =
+    cityDistribution.loading || (!cityDistributionReady && cityDistribution.tradePointsCount === 0);
 
   const scopedRows = useMemo(() => {
     let merged: DealerRow[];
@@ -246,7 +300,9 @@ export default function DealerBaseCityDetailPage() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && teamCtx.teamFetchLoading);
 
-  const managementPlane = shouldUseTeamMergedActualizationPlane(profile);
+  if (!loading && !actx.enabled) {
+    return <Redirect to={buildHashPath("/dealer-base")} />;
+  }
 
   if (!loading && catalogQ.isError) {
     return (
@@ -262,10 +318,6 @@ export default function DealerBaseCityDetailPage() {
         <DealerCatalogEmpty />
       </div>
     );
-  }
-
-  if (!loading && (!actx.enabled || !managementPlane)) {
-    return <Redirect to={buildHashPath("/dealer-base")} />;
   }
 
   if (!loading && !detail) {
@@ -321,6 +373,19 @@ export default function DealerBaseCityDetailPage() {
           </Button>
         </div>
       </div>
+
+      {actx.enabled ? (
+        <RoleDistributionSummaryBar
+          access={access}
+          aggregate={cityDistribution.aggregate}
+          tradePointsCount={cityDistribution.tradePointsCount}
+          tradePointIds={cityTradePointIds}
+          testIdPrefix="city-detail"
+          showTradePointsCount={false}
+          loading={cityDistributionLoading}
+          titleOverride="Дистрибуция по городу"
+        />
+      ) : null}
 
       <section data-testid="section-city-kpis">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
