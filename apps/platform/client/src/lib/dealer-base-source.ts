@@ -125,6 +125,46 @@ export function filterDealerRowsByExternalKeys(rows: DealerRow[], keys: Set<stri
   return rows.filter((r) => keys.has(r.id));
 }
 
+/** Минимальная строка каталога для external_key из scope, отсутствующего в релиз-каталоге. */
+export function createScopePlaceholderDealerRow(externalKey: string): DealerRow {
+  const releaseCode = externalKeyToReleaseCode(externalKey);
+  return {
+    id: externalKey,
+    name: releaseCode || externalKey,
+    city: "",
+    region: "",
+    clientCategory: "other",
+    importanceTier: "standard",
+    status: "активный",
+    format: "розница",
+    outlets: 1,
+    manager: "",
+    regionalManager: "",
+    ropName: "",
+    distribution: 0,
+    hasProblem: false,
+    hasRecentActivity: false,
+    releaseCode: releaseCode || undefined,
+    tradePoints: [],
+  } as unknown as DealerRow;
+}
+
+/** Добавляет плейсхолдеры для scope-ключей, которых нет в каталоге — витрина = полный scope. */
+export function augmentDealerRowsWithScopePlaceholders(
+  rows: DealerRow[],
+  scopeExternalKeys: Set<string> | null | undefined,
+): DealerRow[] {
+  if (!scopeExternalKeys || scopeExternalKeys.size === 0) return rows;
+  const existing = new Set(rows.map((r) => r.id));
+  const placeholders: DealerRow[] = [];
+  for (const key of Array.from(scopeExternalKeys)) {
+    if (existing.has(key)) continue;
+    placeholders.push(createScopePlaceholderDealerRow(key));
+    existing.add(key);
+  }
+  return placeholders.length > 0 ? [...rows, ...placeholders] : rows;
+}
+
 /** Видимые строки каталога для real-scope (замена buildDealerRowsFromReleaseClients + codes). */
 export function getVisibleDealerRows(
   catalogRows: DealerRow[],

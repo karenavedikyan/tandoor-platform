@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import type { DealerRow } from "../dealer-base-mock-data";
 import {
+  augmentDealerRowsWithScopePlaceholders,
   fetchDealerBaseRows,
   filterDealerRowsByVisibleCodes,
   getCatalogDealerById,
@@ -162,6 +163,14 @@ await withMockFetch(
   const visible = getVisibleDealerRows(FIXTURES, false, codes);
   assert.deepEqual(visible.map((r) => r.id).sort(), filtered.map((r) => r.id).sort());
   assert.equal(getVisibleDealerRows(FIXTURES, true, codes).length, FIXTURES.length);
+}
+
+{
+  const catalog = FIXTURES.slice(0, 2);
+  const scopeKeys = new Set(["fix-001", "fix-002", "fix-scope-only"]);
+  const augmented = augmentDealerRowsWithScopePlaceholders(catalog, scopeKeys);
+  assert.equal(augmented.length, 3);
+  assert.ok(augmented.some((r) => r.id === "fix-scope-only"));
 }
 
 console.log("dealer-base-source.test.ts: ok");

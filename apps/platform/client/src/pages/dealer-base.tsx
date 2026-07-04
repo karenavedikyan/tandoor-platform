@@ -45,8 +45,13 @@ import {
   type DealerStatus,
   type DealerTradePoint,
 } from "@/lib/dealer-base-mock-data";
-import { externalKeysToReleaseCodes, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
+import { externalKeysToReleaseCodes, augmentDealerRowsWithScopePlaceholders, getVisibleDealerRows, useDealerBaseRows } from "@/lib/dealer-base-source";
 import { DealerCatalogEmpty, DealerCatalogLoadError } from "@/components/dealer-catalog-query-ui";
+import {
+  resolveKpiAverageDistributionDisplay,
+  resolveKpiTradePointsDisplay,
+  resolveScopeTradePointsCount,
+} from "@/lib/dealer-base-scope-kpi";
 import { DealerBaseErrorBoundary } from "@/components/dealer-base-error-boundary";
 import { DealerBaseFullscreenLoader } from "@/components/skeletons/dealer-base-fullscreen-loader";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -1595,12 +1600,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const releaseDealerRowsForScope = useMemo(() => {
     if (!effectiveVisPayload) return [];
-    return getVisibleDealerRows(
+    const visible = getVisibleDealerRows(
       catalogRows,
       effectiveVisPayload.all,
       effectiveVisPayload.codes,
       dbScopedExternalKeys,
     );
+    return augmentDealerRowsWithScopePlaceholders(visible, dbScopedExternalKeys);
   }, [catalogRows, effectiveVisPayload, dbScopedExternalKeys]);
 
   const useReal = Boolean(
@@ -1665,6 +1671,28 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     teamScopeTotalsQ,
     selfDbScopeQ,
   ]);
+
+  const scopeTradePointsCount = useMemo(
+    () =>
+      resolveScopeTradePointsCount({
+        useReal,
+        viewingOtherUserScope,
+        role: me?.role,
+        targetScopeQ,
+        orgScopeQ,
+        teamScopeTotalsQ,
+        selfDbScopeQ,
+      }),
+    [
+      useReal,
+      viewingOtherUserScope,
+      me?.role,
+      targetScopeQ,
+      orgScopeQ,
+      teamScopeTotalsQ,
+      selfDbScopeQ,
+    ],
+  );
 
   const defaultRopManager = useMemo(() => {
     if (useReal && snap) {
@@ -2357,6 +2385,25 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
 
   const kpiValuePlaceholder = "…";
   const formatKpiCount = (n: number) => (kpisReady ? String(n) : kpiValuePlaceholder);
+
+  const kpiTradePointsDisplay = resolveKpiTradePointsDisplay({
+    scopeTradePointsCount,
+    kpisReady,
+    overviewTradePointsLoading,
+    overviewTradePointsCount,
+    placeholder: kpiValuePlaceholder,
+  });
+
+  const kpiAverageDistributionDisplay = resolveKpiAverageDistributionDisplay({
+    useReal,
+    kpisReady,
+    scopeDistributionLoading: scopeDistribution.loading,
+    scopeTradePointIdsReady,
+    scopeDistributionTradePointsCount: scopeDistribution.tradePointsCount,
+    aggregate: scopeDistribution.aggregate,
+    fallbackAvgDist: kpis.avgDist,
+    placeholder: kpiValuePlaceholder,
+  });
 
   const selectQuickAndScrollToList = useCallback((q: QuickFilter) => {
     setQuick(q);
@@ -4085,17 +4132,13 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
             { label: "Требуют внимания", value: formatKpiCount(kpis.attention), quick: "attention" as QuickFilter, testId: "kpi-card-attention" },
             {
               label: "Торговые точки",
-              value: overviewTradePointsLoading
-                ? kpiValuePlaceholder
-                : overviewTradePointsCount != null
-                  ? String(overviewTradePointsCount)
-                  : "—",
+              value: kpiTradePointsDisplay,
               quick: "all" as QuickFilter,
               testId: "kpi-card-trade-points",
             },
             {
               label: "Средняя дистрибуция",
-              value: kpisReady ? `${kpis.avgDist}%` : kpiValuePlaceholder,
+              value: kpiAverageDistributionDisplay,
               quick: null,
               testId: "kpi-card-avg-dist",
             },
