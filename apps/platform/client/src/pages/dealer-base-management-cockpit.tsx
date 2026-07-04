@@ -105,9 +105,11 @@ import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualizatio
 import { useLocation } from "wouter";
 import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
 import { ManagerDistributionMiniBar } from "@/components/distribution/manager-distribution-mini-bar";
+import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ScopedTradePointDto } from "@/lib/trade-points-scoped-api";
 import {
+  buildTradePointExternalKeysByCityFromScopedDb,
   buildTradePointExternalKeysByManagerFromScopedDb,
   buildTradePointExternalKeysByRegionalManagerFromScopedDb,
   buildTradePointExternalKeysByRopKeyMapFromScopedDb,
@@ -497,6 +499,11 @@ export function DealerBaseManagementCockpit({
   const ropExternalKeysLookup = useMemo(() => {
     if (!scopedTradePoints?.length) return new Map<string, string[]>();
     return buildTradePointExternalKeysByRopKeyMapFromScopedDb(scopedTradePoints);
+  }, [scopedTradePoints]);
+
+  const cityExternalKeysMap = useMemo(() => {
+    if (!scopedTradePoints?.length) return new Map<string, string[]>();
+    return buildTradePointExternalKeysByCityFromScopedDb(scopedTradePoints);
   }, [scopedTradePoints]);
 
   const resolveManagerDistributionKeys = useCallback(
@@ -1241,6 +1248,13 @@ export function DealerBaseManagementCockpit({
                                 <span>ТТ</span>
                               </span>
                             </div>
+                            {staffDistributionEnabled && distributionAct ? (
+                              <CompactDistributionBadge
+                                externalKeys={cityExternalKeysMap.get(c.cityKey) ?? []}
+                                act={distributionAct}
+                                testId={`city-distribution-badge-${c.cityKey}`}
+                              />
+                            ) : null}
                           </Link>
                         ))}
                       </div>
@@ -1263,6 +1277,15 @@ export function DealerBaseManagementCockpit({
                       Без города: клиенты{" "}
                       <span className="font-semibold text-foreground">{overviewWithoutCity.activeClients}</span>
                       {" · "}ТТ <span className="font-semibold text-foreground">{resolveCityTp(overviewWithoutCity)}</span>
+                      {staffDistributionEnabled && distributionAct ? (
+                        <span className="ml-2 inline-flex align-baseline">
+                          <CompactDistributionBadge
+                            externalKeys={cityExternalKeysMap.get("Без города") ?? []}
+                            act={distributionAct}
+                            testId="city-distribution-badge-no-city"
+                          />
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                 </CardContent>
