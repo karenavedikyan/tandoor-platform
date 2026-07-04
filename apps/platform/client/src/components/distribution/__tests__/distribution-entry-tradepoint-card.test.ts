@@ -51,9 +51,9 @@ function renderRow(view: DistributionEntryTradePointView, row = baseRow, tradePo
 }
 
 function classListForTestId(html: string, testId: string): string {
-  const re = new RegExp(`data-testid="${testId}"[^>]*class="([^"]*)"`);
-  const match = html.match(re);
-  return match?.[1] ?? "";
+  const testIdFirst = new RegExp(`data-testid="${testId}"[^>]*class="([^"]*)"`);
+  const classFirst = new RegExp(`class="([^"]*)"[^>]*data-testid="${testId}"`);
+  return html.match(testIdFirst)?.[1] ?? html.match(classFirst)?.[1] ?? "";
 }
 
 describe("DistributionEntryTradePointCard", () => {
@@ -73,19 +73,26 @@ describe("DistributionEntryTradePointCard", () => {
     expect(html).not.toContain("На витрине:");
   });
 
-  it("compact mode avoids truncate on trade point name and client", () => {
+  it("compact mode uses single-row layout with truncate on name and client", () => {
     const html = renderRow("compact");
-    expect(classListForTestId(html, "distribution-entry-tradepoint-name-tp-1")).not.toContain("truncate");
-    expect(classListForTestId(html, "distribution-entry-tradepoint-client-tp-1")).not.toContain("truncate");
+    expect(classListForTestId(html, "distribution-entry-tradepoint-name-tp-1")).toContain("truncate");
+    expect(classListForTestId(html, "distribution-entry-tradepoint-client-tp-1")).toContain("truncate");
+    expect(html).toContain("h-[60px]");
+    expect(html).toContain("items-center");
+    expect(html).not.toContain("sm:hidden");
     expect(html).toContain("Клиент ООО");
     expect(html).toContain("ТТ Центральная");
   });
 
-  it("detailed mode renders city and address from point", () => {
+  it("detailed mode renders city and address without large avatar", () => {
     const html = renderRow("detailed");
     expect(html).toContain("Казань, ул. Баумана, 12");
     expect(html).toContain("Клиент ООО");
     expect(html).toContain("ТТ Центральная");
+    expect(html).not.toContain("sm:max-w-[14rem]");
+    expect(html).toContain("h-16 w-16");
+    expect(classListForTestId(html, "distribution-entry-tradepoint-location-tp-1")).toContain("line-clamp-2");
+    expect(classListForTestId(html, "distribution-entry-tradepoint-location-tp-1")).not.toContain("break-all");
     expect(classListForTestId(html, "distribution-entry-tradepoint-name-tp-1")).not.toContain("truncate");
     expect(classListForTestId(html, "distribution-entry-tradepoint-client-tp-1")).not.toContain("truncate");
   });
