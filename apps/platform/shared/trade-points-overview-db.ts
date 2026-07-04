@@ -231,10 +231,7 @@ export async function buildTradePointsOverviewFromDb(
   viewerTeam?: TradePointsOverviewViewerTeam | null,
 ): Promise<TradePointsOverviewDbPayload> {
   const scope = await computeDbScopeForUser(pool, userId, role);
-  const sqlRows =
-    role === "regional_manager"
-      ? []
-      : await fetchScopedTradePointsRows(pool, scope, { activeOnly: true });
+  const sqlRows = await fetchScopedTradePointsRows(pool, scope, { activeOnly: true });
   const tradePoints = sqlRows.map((r) => mapScopedTradePointRow(r));
 
   const clientsWithTpSet = new Set(tradePoints.map((tp) => tp.dealerExternalKey));

@@ -212,6 +212,14 @@ function mockPoolForOverview(role: string): PoolLike {
         return { rows: MIXED_SCOPE_TPS };
       }
 
+      if (s.includes("dealer_overrides") && s.includes("regional_manager_id") && s.includes("regexp_replace")) {
+        const rmId = params?.[0] as string;
+        if (rmId === RM_DROGO) {
+          return { rows: [{ client_code: "C001" }, { client_code: "C002" }, { client_code: "C003" }] };
+        }
+        return { rows: [] };
+      }
+
       if (s.includes("d_ov.regional_manager_id") && s.includes("GROUP BY")) {
         return { rows: REGIONAL_DEALER_STATS };
       }
@@ -323,6 +331,13 @@ function mockPoolForOverview(role: string): PoolLike {
   assert.ok(drogoSap?.isRegional);
   assert.equal(drogoSap!.clientsWithTp, 1);
   assert.notEqual(drogoSk!.clientsWithTp, drogoSap!.clientsWithTp, "territorial counts differ per team");
+}
+
+// regional_manager overview: scoped trade points, not hardcoded empty list
+{
+  const pool = mockPoolForOverview("regional_manager");
+  const overview = await buildTradePointsOverviewFromDb(pool, RM_DROGO, "regional_manager");
+  assert.equal(overview.structure.activeTradePoints, 3);
 }
 
 console.log("trade-points-overview-grouping.test.ts: ok");
