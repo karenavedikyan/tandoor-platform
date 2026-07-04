@@ -6,6 +6,7 @@ import {
   SHOWCASE_TYPE_LABEL_RU,
   type ShowcaseTypeKey,
 } from "./showcase-type-capacity.js";
+import { formatShowcaseCapacityAutoGrowToastDescription } from "./showcase-capacity-autogrow-on-save.js";
 
 const DEBOUNCE_MS = 2000;
 
@@ -26,14 +27,16 @@ export function notifyShowcaseCapacityAutoGrow(params: {
   type: ShowcaseTypeKey;
   oldCapacity: number;
   nextCapacity: number;
+  suppress?: boolean;
 }): void {
-  const { tradePointId, type, oldCapacity, nextCapacity } = params;
+  const { tradePointId, type, oldCapacity, nextCapacity, suppress } = params;
+  if (suppress) return;
   const key = toastKey(tradePointId, type);
   const now = Date.now();
   const existing = recentByKey.get(key);
 
   const title = `Моделей ${SHOWCASE_TYPE_LABEL_RU[type]} больше, чем витрин`;
-  const description = `Количество витрин этого типа увеличено с ${oldCapacity} до ${nextCapacity}. Уточните фактическое значение, чтобы дистрибуция считалась корректно.`;
+  const description = formatShowcaseCapacityAutoGrowToastDescription(type, oldCapacity, nextCapacity);
   const action = (
     <ToastAction altText="Уточнить" onClick={() => focusShowcaseCapacityField(type)}>
       Уточнить
