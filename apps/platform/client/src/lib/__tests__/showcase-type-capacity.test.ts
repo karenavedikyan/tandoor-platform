@@ -2,9 +2,10 @@
  * Запуск: `npm run test:showcase-type-capacity` из каталога apps/platform.
  */
 import assert from "node:assert/strict";
-import type { TradePointShowcaseActualization } from "../client-base-actualization-state";
+import type { TradePointShowcaseActualization, TradePointShowcaseSelectedModel } from "../client-base-actualization-state";
 import type { CatalogProduct } from "../catalog-product-type";
 import {
+  countSelectedByPlacement,
   evaluateSelectionGate,
   getShowcaseTypeCapacity,
   neededCapacityGrowthByType,
@@ -135,6 +136,61 @@ const catalogLookup = () => undefined;
   assert.equal(entrance?.nextCapacity, 14);
   assert.equal(hardware?.oldCapacity, 2);
   assert.equal(hardware?.nextCapacity, 8);
+}
+
+function selectedModel(
+  productId: string,
+  portalType: "entrance" | "interior" | "hardware",
+  placementType?: TradePointShowcaseSelectedModel["placementType"],
+): TradePointShowcaseSelectedModel {
+  return {
+    productId,
+    productName: productId,
+    productType: "Модель",
+    selectedAt: new Date().toISOString(),
+    selectedBy: "u",
+    selectedByName: "U",
+    portalType,
+    placementType,
+    placementSegment:
+      portalType === "entrance" ? "vh" : portalType === "interior" ? "mk" : "hardware",
+  };
+}
+
+{
+  const entranceLookup = (id: string): CatalogProduct | undefined =>
+    id.startsWith("vh-")
+      ? ({ id, name: id, doorKind: "Входная" } as CatalogProduct)
+      : id.startsWith("mk-")
+        ? ({ id, name: id, doorKind: "Межкомнатная" } as CatalogProduct)
+        : undefined;
+
+  const selected = [
+    selectedModel("vh-portal", "entrance", "portal"),
+    selectedModel("vh-cube", "entrance", "cube"),
+    selectedModel("mk-1", "interior", "portal_second"),
+  ];
+
+  assert.equal(countSelectedByPlacement(selected, "vh", "portal", entranceLookup), 1);
+  assert.equal(countSelectedByPlacement(selected, "vh", "cube", entranceLookup), 1);
+  assert.equal(countSelectedByPlacement(selected, "mk", "portal_second", entranceLookup), 1);
+  assert.equal(countSelectedByPlacement(selected, "vh", "portal_second", entranceLookup), 0);
+}
+
+{
+  const lookup = () => undefined;
+  const legacyVh = selectedModel("legacy-vh", "entrance");
+  delete (legacyVh as { placementType?: string }).placementType;
+  assert.equal(countSelectedByPlacement([legacyVh], "vh", "unmounted", lookup), 1);
+  assert.equal(countSelectedByPlacement([legacyVh], "vh", "portal", lookup), 0);
+}
+
+{
+  const lookup = (id: string): CatalogProduct | undefined =>
+    ({ id, name: id, doorKind: "Межкомнатная" } as CatalogProduct);
+  const mkModel = selectedModel("mk-only", "interior", "portal_second");
+  assert.equal(countSelectedByPlacement([mkModel], "vh", "unmounted", lookup), 0);
+  assert.equal(countSelectedByPlacement([mkModel], "mk", "portal_second", lookup), 1);
 }
 
 console.log("showcase-type-capacity: ok");

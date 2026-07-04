@@ -3,7 +3,9 @@ import type {
   TradePointShowcaseSelectedModel,
 } from "./client-base-actualization-state.js";
 import type { CatalogProduct } from "./catalog-product-type.js";
+import type { ShowcasePlacementSegment, ShowcasePlacementType } from "./showcase-matrix-api.js";
 import {
+  effectivePlacementTypeForSelectedModel,
   effectivePortalTypeForSelectedModel,
   inferShowcasePortalTypeFromCatalogProduct,
 } from "./trade-point-showcase-matrix-required.js";
@@ -63,6 +65,36 @@ export function countSelectedByType(
   for (const m of selected) {
     const t = effectivePortalTypeForSelectedModel(m, catalogLookup);
     if (t === type) n += 1;
+  }
+  return n;
+}
+
+/** Сегмент размещения выбранной модели (vh/mk/hardware). */
+export function segmentForSelectedModel(
+  m: TradePointShowcaseSelectedModel,
+  catalogLookup: (id: string) => CatalogProduct | undefined,
+): ShowcasePlacementSegment | null {
+  if (m.placementSegment) return m.placementSegment;
+  const portalType = effectivePortalTypeForSelectedModel(m, catalogLookup);
+  if (portalType === "entrance") return "vh";
+  if (portalType === "interior") return "mk";
+  if (portalType === "hardware") return "hardware";
+  return null;
+}
+
+/** Сколько моделей выбрано по конкретному типу крепления внутри сегмента. */
+export function countSelectedByPlacement(
+  selected: readonly TradePointShowcaseSelectedModel[],
+  segment: ShowcasePlacementSegment,
+  placementType: ShowcasePlacementType,
+  catalogLookup: (id: string) => CatalogProduct | undefined,
+): number {
+  let n = 0;
+  for (const m of selected) {
+    const modelSegment = segmentForSelectedModel(m, catalogLookup);
+    if (modelSegment !== segment) continue;
+    const pt = effectivePlacementTypeForSelectedModel(m, segment);
+    if (pt === placementType) n += 1;
   }
   return n;
 }
