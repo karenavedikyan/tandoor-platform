@@ -223,27 +223,30 @@ export function ShowcaseEquipmentCapacityDialog({
                 ) : null}
                 {minCapacityError ? (
                   <p
-                    className="text-xs text-destructive"
+                    className="text-xs font-medium text-red-600 dark:text-red-400"
                     data-testid={`text-equipment-capacity-min-error-${segment}`}
                   >
-                    Общее количество витрин по типу «{SHOWCASE_TYPE_LABEL_RU[typeKey]}» (введено{" "}
-                    {segmentTotals[segment]}) не может быть меньше количества выбранных моделей этого типа (
-                    {selectedCount}).
+                    Витрин меньше, чем выбрано моделей:{" "}
+                    <span className="tabular-nums">
+                      {segmentTotals[segment]} {"<"} {selectedCount}
+                    </span>
+                    .
                   </p>
                 ) : null}
                 {legacyOverflowError ? (
                   <p
-                    className="text-xs text-destructive"
+                    className="text-xs font-medium text-red-600 dark:text-red-400"
                     data-testid={`text-equipment-legacy-overflow-${segment}`}
                   >
-                    Неактуальные ({legacyForSegment}) и выбранные из каталога ({selectedCount}) вместе
-                    превышают общее количество витрин ({segmentTotals[segment]}) по типу «
-                    {SHOWCASE_TYPE_LABEL_RU[typeKey]}».
+                    Превышение ёмкости: неактуальные{" "}
+                    <span className="tabular-nums">{legacyForSegment}</span> + каталог{" "}
+                    <span className="tabular-nums">{selectedCount}</span> {">"} витрин{" "}
+                    <span className="tabular-nums">{segmentTotals[segment]}</span>.
                   </p>
                 ) : null}
                 {segment === "mk" && !mkPortalSecondValidation.valid ? (
                   <p
-                    className="text-xs text-destructive"
+                    className="text-xs font-medium text-red-600 dark:text-red-400"
                     data-testid="text-equipment-mk-portal-second-overflow"
                   >
                     {mkPortalSecondValidation.message}
@@ -276,7 +279,7 @@ export function ShowcaseEquipmentCapacityDialog({
                             "h-9 tabular-nums",
                             categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60",
                             (minCapacityError || legacyOverflowError || portalSecondFieldError) &&
-                              "border-destructive/60",
+                              "border-red-500/60",
                           )}
                           inputMode="numeric"
                           data-testid={`input-equipment-capacity-${segment}-${placementType}`}
@@ -287,7 +290,7 @@ export function ShowcaseEquipmentCapacityDialog({
                         <Input
                           className={cn(
                             "h-9 tabular-nums",
-                            legacyOverflowError && "border-destructive/60",
+                            legacyOverflowError && "border-red-500/60",
                           )}
                           inputMode="numeric"
                           data-testid={`input-equipment-legacy-ours-${segment}-${placementType}`}
