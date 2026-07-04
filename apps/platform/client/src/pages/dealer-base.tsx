@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
@@ -145,6 +145,7 @@ import { isDealerTrashedInRuntime } from "@/lib/dealer-overrides-runtime";
 import { useHashQuery } from "@/lib/hash-location-router";
 import { toastBulkTrashMoveResult, toastTrashMoveSuccess } from "@/lib/trash-move-feedback";
 import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
 import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useProgressiveRopDistributionPrefetch } from "@/hooks/use-progressive-rop-distribution-prefetch";
@@ -728,6 +729,11 @@ function ClientCompactGridBlock({
                     </Badge>
                   ) : null}
                 </div>
+                <ClientTileDistributionBadge
+                  row={row}
+                  act={actualizationState}
+                  testId={`dealer-tile-distribution-${row.id}`}
+                />
               </div>
             </CardContent>
           </Card>
@@ -744,6 +750,21 @@ function ClientCompactGridBlock({
 function innCell(row: DealerRow): string {
   const t = (row.actualizationInn ?? "").trim();
   return t || "—";
+}
+
+function ClientTileDistributionBadge({
+  row,
+  act,
+  testId,
+}: {
+  row: DealerRow;
+  act: ActualizationState;
+  testId: string;
+}): ReactElement | null {
+  const externalKeys = mergeTradePointsForActualization(row, act)
+    .filter((e) => !e.isArchived)
+    .map((e) => e.point.id);
+  return <CompactDistributionBadge externalKeys={externalKeys} act={act} testId={testId} />;
 }
 
 function showcaseClientCode(row: DealerRow, act: ActualizationState): string {
@@ -933,7 +954,13 @@ function ClientListRowsBlock({
                 {nextLine ? <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{nextLine}</p> : null}
               </div>
             </Link>
-            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 flex-col items-end justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <ClientTileDistributionBadge
+                row={row}
+                act={actualizationState}
+                testId={`dealer-list-distribution-${row.id}`}
+              />
+              <div className="flex items-center gap-0.5 sm:gap-1">
               {tel ? (
                 <a href={tel} className={iconBtnClass} data-testid={`link-dealer-list-call-${row.id}`} aria-label="Позвонить" onClick={(e) => e.stopPropagation()}>
                   <Phone className="h-4 w-4 text-primary" />
@@ -968,6 +995,7 @@ function ClientListRowsBlock({
                   Открыть
                 </Link>
               </Button>
+              </div>
             </div>
           </div>
         );

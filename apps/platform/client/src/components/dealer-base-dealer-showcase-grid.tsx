@@ -45,6 +45,8 @@ import {
   whatsAppHref,
 } from "@/lib/dealer-contact-links";
 import { ShowcaseCoverPhotoSlot } from "@/components/showcase-cover-photo-slot";
+import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
+import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
 import {
   DEALER_BASE_VIRTUAL_ESTIMATE,
   dealerBaseVirtualItemStyle,
@@ -301,6 +303,11 @@ const TradePointShowcaseRow = memo(function TradePointShowcaseRow({
                 Открыть ТТ
               </Link>
             </Button>
+            <CompactDistributionBadge
+              externalKeys={[tp.id]}
+              act={act}
+              testId={`dealer-showcase-trade-point-distribution-${tp.id}`}
+            />
           </div>
           <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
             {[tp.city?.trim(), tp.address?.trim()].filter(Boolean).join(" · ")}
@@ -630,6 +637,16 @@ const DealerShowcaseCard = memo(function DealerShowcaseCard({
             {email ? <p className="line-clamp-1 text-xs text-muted-foreground">{email}</p> : null}
           </div>
         )}
+
+        {merged.length > 0 ? (
+          <div className="rounded-lg border border-border/60 bg-card/50 px-3 py-2">
+            <DistributionCardHeaderBlock
+              externalKeys={merged.map((e) => e.point.id)}
+              act={act}
+              testId="dealer-quick-card-distribution"
+            />
+          </div>
+        ) : null}
 
         {merged.length > 0 ? (
           <section
