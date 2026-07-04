@@ -142,9 +142,11 @@ function formatClientSuffix(dealerName?: string | null, dealerId?: string | null
 
 /** Автоназвание: «Город, улица — тел. (Клиент, #id)». */
 export function computeTradePointAutoDisplayName(ctx: TradePointDisplayNameContext): string | null {
-  const city = cleanPart(ctx.city);
+  const cityRaw = cleanPart(ctx.city);
+  const city = isPlaceholderTradePointNameToken(cityRaw) ? "" : cityRaw;
   const street = extractStreetAndHouseFromAddress(ctx.address, city);
-  const phone = cleanPart(ctx.contactPhone);
+  const phoneRaw = cleanPart(ctx.contactPhone);
+  const phone = isPlaceholderTradePointNameToken(phoneRaw) ? "" : phoneRaw;
   const client = formatClientSuffix(ctx.dealerName, ctx.dealerId);
 
   const location = [city, street].filter(Boolean).join(", ");
