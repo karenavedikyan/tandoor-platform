@@ -324,6 +324,26 @@ function normalizePlacementFields(input: ShowcaseMatrixUpsertInput): ShowcaseMat
     };
   }
 
+  if (input.targetKind === "model" && input.status === "installed") {
+    if (!input.placementType || !input.placementSegment) {
+      throw new ShowcaseMatrixValidationError(
+        "Для установленной модели обязателен тип крепления (placementType) и сегмент (placementSegment).",
+      );
+    }
+    assertPlacementTypeMatchesSegment(input.placementType, input.placementSegment);
+    return {
+      ...input,
+      placementType: input.placementType,
+      placementSegment: input.placementSegment,
+      placementCapacity: null,
+      placementActual: null,
+      placementRef: input.placementRef ?? null,
+      placementOurModels: [],
+      placementCompetitors: [],
+      placementLegacyOurs: null,
+    };
+  }
+
   return {
     ...input,
     placementType: null,
