@@ -33,6 +33,8 @@ type Props = {
   /** Плейсхолдер загрузки вместо ложных Σ0/—. */
   loading?: boolean;
   progress?: BrandDistributionLoaderProgress;
+  /** Переопределяет заголовок по access. Используется в штабе менеджера/регионала. */
+  titleOverride?: string;
 };
 
 export function RoleDistributionSummaryBar({
@@ -44,6 +46,7 @@ export function RoleDistributionSummaryBar({
   showTradePointsCount = false,
   loading = false,
   progress,
+  titleOverride,
 }: Props): ReactElement {
   const [periodDays, setPeriodDays] = useState<DistributionPeriodDays>(30);
   const { deltaByType } = useTradePointDistributionDynamics(tradePointIds, periodDays);
@@ -62,7 +65,9 @@ export function RoleDistributionSummaryBar({
   return (
     <section className="space-y-2" data-testid={`section-${testIdPrefix}-distribution`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">{TITLE_BY_ACCESS[access]}</h2>
+        <h2 className="text-sm font-semibold text-foreground">
+          {titleOverride ?? TITLE_BY_ACCESS[access]}
+        </h2>
         <div
           className="flex items-center gap-0.5 rounded-lg border border-border bg-card p-0.5"
           role="group"

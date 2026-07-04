@@ -16,6 +16,8 @@ import { useClientBaseActualization } from "@/context/client-base-actualization-
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { useMyScopeFromDB } from "@/hooks/use-my-scope-from-db";
+import { useTradePointsScoped } from "@/hooks/use-trade-points-scoped";
+import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { useMyClientCodes } from "@/hooks/use-my-client-codes";
 import { useMyTeamScope } from "@/hooks/use-my-team-scope";
@@ -59,6 +61,12 @@ import {
 } from "@/lib/manager-load-heat";
 import DealerBase from "@/pages/dealer-base";
 import TradePoints from "@/pages/trade-points";
+import { RoleDistributionSummaryBar } from "@/components/distribution/role-distribution-summary-bar";
+import {
+  activeTradePointExternalKeysFromScopedResponse,
+  activeTradePointIdsFromScopedResponse,
+  buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
+} from "@/lib/trade-points-scoped-ids";
 import { buildHashPath } from "@/lib/hash-route-utils";
 import { resolveManagerApiUserId } from "@/lib/trade-points-overview-view-model";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
@@ -136,6 +144,11 @@ export default function DealerBaseManagerDetailPage() {
   });
   const viewingOtherUserScope = Boolean(managerApiUserId && me?.id && managerApiUserId !== me.id);
 
+  const subjectScopedTpQ = useTradePointsScoped({
+    forUserId: viewingOtherUserScope ? managerApiUserId ?? undefined : undefined,
+    enabled: isRealUser && !authLoading && useReal && Boolean(managerApiUserId),
+  });
+
   const { plane: actualizationPlaneForRows } = useSubjectScopeActualizationState({
     viewingOtherUserScope,
     scopeUserId: managerApiUserId,
@@ -145,6 +158,37 @@ export default function DealerBaseManagerDetailPage() {
     teamParts: teamCtx.teamParts,
     actEnabled: actx.enabled,
   });
+
+  const subjectTradePointExternalKeys = useMemo(() => {
+    const fromScoped = activeTradePointExternalKeysFromScopedResponse(subjectScopedTpQ.data);
+    return fromScoped ?? [];
+  }, [subjectScopedTpQ.data]);
+
+  const subjectTradePointIds = useMemo(() => {
+    const fromScoped = activeTradePointIdsFromScopedResponse(subjectScopedTpQ.data);
+    return fromScoped ?? [];
+  }, [subjectScopedTpQ.data]);
+
+  const subjectShowcaseUuidByMatrixKey = useMemo(() => {
+    if (subjectScopedTpQ.data?.success !== true) return undefined;
+    return buildShowcaseUuidByMatrixKeyFromScopedTradePoints(subjectScopedTpQ.data.tradePoints);
+  }, [subjectScopedTpQ.data]);
+
+  const subjectDistribution = useTradePointDistributionAggregate(
+    subjectTradePointExternalKeys,
+    actualizationPlaneForRows,
+    subjectShowcaseUuidByMatrixKey,
+  );
+
+  const subjectDistributionReady = subjectScopedTpQ.data?.success === true;
+  const subjectDistributionLoading =
+    subjectDistribution.loading || (!subjectDistributionReady && subjectDistribution.tradePointsCount === 0);
+
+  const subjectRole = viewingOtherUserScope ? targetScopeQ.scopeSubject.role : me?.role;
+  const subjectDistributionTitle = useMemo(() => {
+    if (subjectRole === "regional_manager") return "Дистрибуция регионала";
+    return "Дистрибуция менеджера";
+  }, [subjectRole]);
 
   const scopeOptions = useMemo((): RoleScopedDealerRowsForRealOptions | undefined => {
     if (managerApiUserId && !viewingOtherUserScope) return { managerUserId: managerApiUserId };
@@ -436,6 +480,19 @@ export default function DealerBaseManagerDetailPage() {
           ))}
         </div>
       </section>
+
+      {actx.enabled ? (
+        <RoleDistributionSummaryBar
+          access={access}
+          aggregate={subjectDistribution.aggregate}
+          tradePointsCount={subjectDistribution.tradePointsCount}
+          tradePointIds={subjectTradePointIds}
+          testIdPrefix="manager-detail"
+          showTradePointsCount={false}
+          loading={subjectDistributionLoading}
+          titleOverride={subjectDistributionTitle}
+        />
+      ) : null}
 
       {dashboard.attentionRows.length > 0 ? (
         <section data-testid="section-manager-attention">
