@@ -2,8 +2,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { buildTradePointExternalKeysByRopFromScopedDb } from "@/lib/trade-points-scoped-ids";
 import { scopedTradePointIdsStableKey } from "@/lib/distribution-entry-tradepoint-view-model";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
+import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import { applyScopeEntriesToMatrixCache } from "@/lib/showcase-matrix-store";
 import type { ScopedTradePointDto } from "@/lib/trade-points-scoped-api";
+
+export const BUCKET_TIMEOUT_MS = 25_000;
+
+async function fetchBucketWithTimeout(externalKeys: string[]): Promise<ShowcaseMatrixEntryDto[] | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      fetchShowcaseMatrixScope({ tradePointIds: externalKeys, statuses: ["installed"] }),
+      new Promise<null>((resolve) => {
+        timeoutId = setTimeout(() => resolve(null), BUCKET_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
 
 export type ProgressiveRopDistributionPrefetchState = {
   /** Идёт последовательная загрузка бакетов по РОПам. */
@@ -54,10 +71,7 @@ export function useProgressiveRopDistributionPrefetch(
       for (const bucket of buckets) {
         if (runIdRef.current !== runId) return;
         if (bucket.externalKeys.length > 0) {
-          const entries = await fetchShowcaseMatrixScope({
-            tradePointIds: bucket.externalKeys,
-            statuses: ["installed"],
-          });
+          const entries = await fetchBucketWithTimeout(bucket.externalKeys);
           if (runIdRef.current !== runId) return;
           if (entries != null && entries.length > 0) {
             applyScopeEntriesToMatrixCache(entries);

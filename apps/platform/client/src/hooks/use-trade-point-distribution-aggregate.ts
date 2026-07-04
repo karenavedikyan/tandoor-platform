@@ -47,6 +47,8 @@ export type UseTradePointDistributionAggregateOptions = {
   externalPrefetching?: boolean;
 };
 
+export const LOADING_DEADLINE_MS = 25_000;
+
 /** Есть ли в клиентском кэше хотя бы одна запись матрицы по scope ТТ. */
 export function hasMatrixCacheForTradePointIds(tradePointIds: readonly string[]): boolean {
   for (const id of tradePointIds) {
@@ -95,6 +97,7 @@ export function useTradePointDistributionAggregate(
   const [matrixCacheBump, setMatrixCacheBump] = useState(0);
   const [matrixPrefetchDone, setMatrixPrefetchDone] = useState(false);
   const [revalidating, setRevalidating] = useState(false);
+  const [loadingDeadlineReached, setLoadingDeadlineReached] = useState(false);
   const lastPrefetchedScopeKeyRef = useRef("");
   const tradePointIdsRef = useRef(tradePointIds);
   const prevTradePointIdsKeyRef = useRef("");
@@ -178,6 +181,28 @@ export function useTradePointDistributionAggregate(
     }
   }, [skipInternalPrefetch, externalPrefetching, tradePointIdsKey, matrixCacheBump]);
 
+  const hasCacheNow = useMemo(
+    () => hasMatrixCacheForTradePointIds(tradePointIds),
+    [tradePointIds, matrixCacheBump],
+  );
+
+  const coldLoadingBase =
+    dbPrimary &&
+    !scopeTooLarge &&
+    !hasCacheNow &&
+    (skipInternalPrefetch ? externalPrefetching : !matrixPrefetchDone);
+
+  useEffect(() => {
+    if (!coldLoadingBase) {
+      setLoadingDeadlineReached(false);
+      return;
+    }
+
+    setLoadingDeadlineReached(false);
+    const timer = setTimeout(() => setLoadingDeadlineReached(true), LOADING_DEADLINE_MS);
+    return () => clearTimeout(timer);
+  }, [coldLoadingBase, tradePointIdsKey]);
+
   const installedEntriesByTradePointId = useMemo(() => {
     void matrixCacheBump;
     const map: Record<string, ReturnType<typeof loadCachedMatrix>> = {};
@@ -192,12 +217,8 @@ export function useTradePointDistributionAggregate(
       return { aggregate: EMPTY_AGGREGATE, tradePointsCount: 0, loading: false, revalidating: false };
     }
 
-    const hasCache = hasMatrixCacheForTradePointIds(tradePointIds);
-    const coldLoading =
-      dbPrimary &&
-      !scopeTooLarge &&
-      !hasCache &&
-      (skipInternalPrefetch ? externalPrefetching : !matrixPrefetchDone);
+    const hasCache = hasCacheNow;
+    const coldLoading = coldLoadingBase && !loadingDeadlineReached;
     const aggregate = computeAggregateFromInstalledEntries(
       tradePointIds,
       act,
@@ -233,5 +254,8 @@ export function useTradePointDistributionAggregate(
     showcaseUuidByMatrixKey,
     skipInternalPrefetch,
     externalPrefetching,
+    hasCacheNow,
+    coldLoadingBase,
+    loadingDeadlineReached,
   ]);
 }

@@ -160,6 +160,7 @@ export async function fetchShowcaseMatrixList(opts: {
 }
 
 const SCOPE_CHUNK_SIZE = 500;
+export const SCOPE_FETCH_TIMEOUT_MS = 20_000;
 export const SCOPE_RESULT_TTL_MS = 15_000;
 
 const scopeInFlight = new Map<string, Promise<ShowcaseMatrixEntryDto[] | null>>();
@@ -192,6 +193,8 @@ async function fetchShowcaseMatrixScopeChunk(
   if (inflight) return inflight;
 
   const promise = (async (): Promise<ShowcaseMatrixEntryDto[] | null> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SCOPE_FETCH_TIMEOUT_MS);
     try {
       const res = await fetch("/api/showcase-matrix/scope", {
         method: "POST",
@@ -199,6 +202,7 @@ async function fetchShowcaseMatrixScopeChunk(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tradePointIds: chunk, statuses }),
         cache: "no-store",
+        signal: controller.signal,
       });
       const data = await parseJson<ApiOk<{ entries: ShowcaseMatrixEntryDto[] }> | ApiErr>(res);
       if (!res.ok || !data.success) return null;
@@ -210,6 +214,7 @@ async function fetchShowcaseMatrixScopeChunk(
     } catch {
       return null;
     } finally {
+      clearTimeout(timeoutId);
       scopeInFlight.delete(key);
     }
   })();
