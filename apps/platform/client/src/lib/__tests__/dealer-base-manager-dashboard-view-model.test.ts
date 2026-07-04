@@ -106,4 +106,24 @@ const manager: ManagerRowModel = {
   assert.equal(nativeResolved, nativeCtx, "native managerCtx wins over fallback");
 }
 
+{
+  const scopedRows = [
+    row({ id: "reg-1", name: "Клиент Р", city: "Львов", status: "активный" }),
+  ];
+  const regionalCtx = resolveManagerDetailObservationCtx({
+    managerCtx: null,
+    viewingOtherUserScope: true,
+    targetScopeReady: true,
+    managerId: "rm-drogo-uuid",
+    scopedRows,
+    managerDisplayName: "Дрогобицкий",
+    observerRopName: "Директор",
+  });
+  assert.ok(regionalCtx, "synthetic ctx for regional manager absent from ropGroups");
+  assert.equal(regionalCtx!.manager.managerId, "rm-drogo-uuid");
+  assert.equal(regionalCtx!.manager.name, "Дрогобицкий");
+  assert.equal(regionalCtx!.manager.rows.length, scopedRows.length);
+  assert.equal(regionalCtx!.ropName, "Директор");
+}
+
 console.log("dealer-base-manager-dashboard-view-model.test.ts: ok");

@@ -145,7 +145,7 @@ export function managerCardFromOverview(m: TradePointsOverviewRopManager) {
     withPhoto,
     isRegional: m.isRegional === true,
     segments: buildTpStateSegments(withPhoto, m.withoutPhoto, m.notFilled),
-    shellHref: managerShellHref(m.userId),
+    shellHref: m.userId ? managerShellHref(m.userId) : "",
   };
 }
 

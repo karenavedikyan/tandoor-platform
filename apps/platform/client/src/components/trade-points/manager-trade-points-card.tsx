@@ -21,6 +21,7 @@ export type ManagerTradePointsCardModel = {
   notFilled: number;
   segments: TpStateSegmentRow[];
   shellHref: string;
+  isRegional?: boolean;
 };
 
 type Props = {
@@ -76,12 +77,26 @@ export function ManagerTradePointsCard({ manager, heatLevel }: Props) {
         ) : null}
       </div>
 
-      <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs" asChild>
-        <Link href={manager.shellHref} data-testid={`button-manager-tp-open-hq-${manager.userId}`}>
+      {manager.shellHref ? (
+        <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs" asChild>
+          <Link href={manager.shellHref} data-testid={`button-manager-tp-open-hq-${manager.userId}`}>
+            Открыть штаб
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          </Link>
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-full cursor-not-allowed justify-between text-xs opacity-50"
+          disabled
+          aria-disabled
+          data-testid={`button-manager-tp-open-hq-${manager.userId}`}
+        >
           Открыть штаб
           <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        </Link>
-      </Button>
+        </Button>
+      )}
     </div>
   );
 }

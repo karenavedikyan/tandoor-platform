@@ -365,7 +365,7 @@ export default function DealerBaseManagerDetailPage() {
     );
   }
 
-  if (!loading && (!actx.enabled || (!managementPlane && !viewingOtherUserScope))) {
+  if (!loading && !viewingOtherUserScope && (!actx.enabled || !managementPlane)) {
     return <Redirect to={buildHashPath("/dealer-base")} />;
   }
 
