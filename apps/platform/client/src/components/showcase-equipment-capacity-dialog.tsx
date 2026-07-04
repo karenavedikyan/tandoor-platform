@@ -28,6 +28,7 @@ import {
 } from "@/lib/showcase-placement-labels";
 import { loadCachedPlacements } from "@/lib/showcase-matrix-store";
 import {
+  countSelectedByPlacement,
   countSelectedByType,
   findShowcaseCapacityGaps,
   getShowcaseTypeCapacity,
@@ -152,20 +153,35 @@ export function ShowcaseEquipmentCapacityDialog({
   const parsedCapacity = useMemo(() => {
     const capacity: Record<string, number> = {};
     for (const segment of SEGMENTS) {
-      for (const row of byEquipment[segment]) {
-        const key = equipmentCapacityKey(segment, row.placementType);
+      for (const placementType of allowedTypesForSegment(segment)) {
+        const key = equipmentCapacityKey(segment, placementType);
         capacity[key] = parseCapacityInput(inputs[key] ?? "0");
       }
     }
     return capacity;
-  }, [byEquipment, inputs]);
+  }, [inputs]);
+
+  const hasPlacementOverflow = useMemo(
+    () =>
+      SEGMENTS.some((segment) =>
+        allowedTypesForSegment(segment).some((pt) => {
+          const key = equipmentCapacityKey(segment, pt);
+          return (
+            countSelectedByPlacement(selectedModels, segment, pt, catalogLookup) >
+            (parsedCapacity[key] ?? 0)
+          );
+        }),
+      ),
+    [catalogLookup, parsedCapacity, selectedModels],
+  );
 
   const mkPortalSecondValidation = useMemo(
     () => validateMkPortalSecondCapacity(parsedCapacity),
     [parsedCapacity],
   );
 
-  const hasSaveError = hasMinError || hasLegacyOverflow || !mkPortalSecondValidation.valid;
+  const hasSaveError =
+    hasMinError || hasLegacyOverflow || !mkPortalSecondValidation.valid || hasPlacementOverflow;
 
   const handleConfirm = useCallback(() => {
     if (hasSaveError) return;
@@ -204,6 +220,11 @@ export function ShowcaseEquipmentCapacityDialog({
             const legacyForSegment = legacySegmentTotals[segment];
             const legacyOverflowError =
               selectedCount + legacyForSegment > segmentTotals[segment];
+            const overflownPlacements = allowedTypesForSegment(segment).filter((pt) => {
+              const k = equipmentCapacityKey(segment, pt);
+              const sel = countSelectedByPlacement(selectedModels, segment, pt, catalogLookup);
+              return sel > (parsedCapacity[k] ?? 0);
+            });
             return (
               <div key={segment} className="space-y-2 rounded-lg border border-border/70 bg-muted/10 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -252,8 +273,18 @@ export function ShowcaseEquipmentCapacityDialog({
                     {mkPortalSecondValidation.message}
                   </p>
                 ) : null}
-                <div className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                {overflownPlacements.length > 0 ? (
+                  <p
+                    className="text-xs font-medium text-red-600 dark:text-red-400"
+                    data-testid={`text-placement-overflow-${segment}`}
+                  >
+                    Витрин меньше, чем выбрано моделей:{" "}
+                    {overflownPlacements.map((pt) => PLACEMENT_TYPE_LABEL_RU[pt]).join(", ")}.
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_5.5rem] gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                   <span />
+                  <span className="text-center">Выбрано</span>
                   <span className="text-center">Витрин всего</span>
                   <span className="text-center">Неактуальные</span>
                 </div>
@@ -261,6 +292,13 @@ export function ShowcaseEquipmentCapacityDialog({
                   {allowedTypesForSegment(segment).map((placementType) => {
                     const key = equipmentCapacityKey(segment, placementType);
                     const current = getShowcaseTypeCapacity(candidateRec, typeKey);
+                    const selectedForPlacement = countSelectedByPlacement(
+                      selectedModels,
+                      segment,
+                      placementType,
+                      catalogLookup,
+                    );
+                    const placementOverflow = selectedForPlacement > (parsedCapacity[key] ?? 0);
                     const portalSecondFieldError =
                       segment === "mk" &&
                       placementType === "portal_second" &&
@@ -268,17 +306,31 @@ export function ShowcaseEquipmentCapacityDialog({
                     return (
                       <div
                         key={key}
-                        className="grid grid-cols-[minmax(0,1fr)_5.5rem_5.5rem] items-center gap-2"
+                        className="grid grid-cols-[minmax(0,1fr)_4.5rem_5.5rem_5.5rem] items-center gap-2"
                       >
                         <Label htmlFor={key} className="text-xs font-normal text-foreground">
                           {PLACEMENT_TYPE_LABEL_RU[placementType]}
                         </Label>
+                        <span
+                          className={cn(
+                            "text-center text-sm tabular-nums",
+                            placementOverflow
+                              ? "font-semibold text-red-600 dark:text-red-400"
+                              : "text-muted-foreground",
+                          )}
+                          data-testid={`text-equipment-selected-${segment}-${placementType}`}
+                        >
+                          {selectedForPlacement}
+                        </span>
                         <Input
                           id={key}
                           className={cn(
                             "h-9 tabular-nums",
                             categoryGap && segmentTotals[segment] === 0 && "border-amber-500/60",
-                            (minCapacityError || legacyOverflowError || portalSecondFieldError) &&
+                            (minCapacityError ||
+                              legacyOverflowError ||
+                              portalSecondFieldError ||
+                              placementOverflow) &&
                               "border-red-500/60",
                           )}
                           inputMode="numeric"
