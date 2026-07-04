@@ -113,6 +113,47 @@ assert.equal(
 );
 
 assert.equal(
+  computeTradePointDisplayName({
+    name: "Основная торговая точка",
+    city: "—",
+    address: "",
+    dealerName: "АКОНА ООО",
+    dealerId: "client-ma-ma000059",
+  }),
+  "(АКОНА ООО, #ma-ma000059)",
+);
+
+assert.equal(
+  computeTradePointDisplayName({
+    name: "-",
+    city: "—",
+    address: "",
+    dealerName: "Авраменко Людмила Владимировна ИП",
+  }),
+  "(Авраменко Людмила Владимировна ИП)",
+);
+
+assert.equal(
+  computeTradePointDisplayName({
+    name: "Торговая точка",
+    city: "Казань",
+    address: "ул. Баумана 12",
+    dealerName: "Клиент ООО",
+  }),
+  "Казань, ул. Баумана 12 (Клиент ООО)",
+);
+
+assert.equal(
+  computeTradePointDisplayName({
+    name: "—",
+    city: "—",
+    address: "ул. Ленина 10",
+    dealerName: "Клиент ООО",
+  }),
+  "ул. Ленина 10 (Клиент ООО)",
+);
+
+assert.equal(
   computeTradePointAutoDisplayName({
     city: "Краснодар",
     address: "ул. Ленина 10",
