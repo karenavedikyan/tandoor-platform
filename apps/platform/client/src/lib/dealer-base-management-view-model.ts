@@ -374,6 +374,116 @@ function managerKeyForDealerRow(row: DealerRow): string {
   return display || row.id;
 }
 
+function resolveManagerApiUserIdFromCatalog(catalogOrUserId: string): string {
+  for (const [uuid, mgr] of Object.entries(UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE)) {
+    if (mgr === catalogOrUserId) return uuid;
+  }
+  return catalogOrUserId;
+}
+
+/** Ключи личности менеджера (uuid ↔ catalog-id) — как в trade-points-overview-view-model. */
+function managerIdentityKeysForDedup(managerId: string): Set<string> {
+  const keys = new Set<string>();
+  keys.add(managerId);
+  keys.add(resolveManagerApiUserIdFromCatalog(managerId));
+  keys.add(catalogManagerIdFromUserRef(managerId));
+  return keys;
+}
+
+function managersShareIdentity(a: string, b: string): boolean {
+  const keysA = managerIdentityKeysForDedup(a);
+  for (const k of Array.from(managerIdentityKeysForDedup(b))) {
+    if (keysA.has(k)) return true;
+  }
+  return false;
+}
+
+function catalogManagerIdentityKeySet(catalogResults: ManagerRowModel[]): Set<string> {
+  const keys = new Set<string>();
+  for (const m of catalogResults) {
+    for (const k of Array.from(managerIdentityKeysForDedup(m.managerId))) {
+      keys.add(k);
+    }
+  }
+  return keys;
+}
+
+function externalSharesCatalogIdentity(externalMgr: ManagerRowModel, catalogIdentityKeys: Set<string>): boolean {
+  for (const k of Array.from(managerIdentityKeysForDedup(externalMgr.managerId))) {
+    if (catalogIdentityKeys.has(k)) return true;
+  }
+  return false;
+}
+
+function mergeOrphanRowsIntoCatalogManager(target: ManagerRowModel, orphanRows: DealerRow[]): ManagerRowModel {
+  if (orphanRows.length === 0) return target;
+  const existingIds = new Set(target.rows.map((r) => r.id));
+  const mergedRows = [...target.rows];
+  for (const r of orphanRows) {
+    if (!existingIds.has(r.id)) {
+      mergedRows.push(r);
+      existingIds.add(r.id);
+    }
+  }
+  if (mergedRows.length === target.rows.length) return target;
+  if (target.countsFromServerTotals) {
+    return {
+      ...target,
+      rows: mergedRows,
+      topSegmentLabel: bestTopSegmentLabel(mergedRows),
+    };
+  }
+  return {
+    ...target,
+    rows: mergedRows,
+    active: mergedRows.filter((r) => r.status === "активный").length,
+    potential: mergedRows.filter((r) => r.status === "потенциальный").length,
+    attention: mergedRows.filter((r) => dealerNeedsAttention(r)).length,
+    outlets: mergedRows.reduce((a, r) => a + r.outlets, 0),
+    topSegmentLabel: bestTopSegmentLabel(mergedRows),
+  };
+}
+
+function dedupeExternalManagersAgainstCatalog(
+  catalogResults: ManagerRowModel[],
+  external: ManagerRowModel[],
+  teamId: string,
+  orgSnap?: OrgSnapshot | null,
+): ManagerRowModel[] {
+  const mergedCatalog = catalogResults.map((m) => ({ ...m, rows: [...m.rows] }));
+  const catalogIdentityKeys = catalogManagerIdentityKeySet(mergedCatalog);
+  const externalKept: ManagerRowModel[] = [];
+  const teamCatalogId = resolveManagementCatalogTeamId(teamId, orgSnap);
+  const teamDisplayName = orgSnap
+    ? orgSnap.teams.find(
+        (t) =>
+          t.id === resolveManagementOrgTeamUuid(teamId, orgSnap) ||
+          t.id === teamId ||
+          resolveManagementCatalogTeamId(t.id, orgSnap) === teamCatalogId,
+      )?.name?.trim() || null
+    : null;
+
+  for (const ext of external) {
+    if (!externalSharesCatalogIdentity(ext, catalogIdentityKeys)) {
+      externalKept.push(ext);
+      continue;
+    }
+    const isNativeDuplicate =
+      managerHasMembershipInTeam(ext.managerId, teamCatalogId, orgSnap) ||
+      Boolean(teamDisplayName && ext.externalTeamName?.trim() === teamDisplayName);
+    if (!isNativeDuplicate) {
+      externalKept.push(ext);
+      continue;
+    }
+    const catalogIdx = mergedCatalog.findIndex((m) => managersShareIdentity(m.managerId, ext.managerId));
+    if (catalogIdx >= 0) {
+      mergedCatalog[catalogIdx] = mergeOrphanRowsIntoCatalogManager(mergedCatalog[catalogIdx]!, ext.rows);
+    }
+  }
+
+  return [...mergedCatalog, ...externalKept];
+}
+
 function resolveExternalTeamName(userKey: string, orgSnap?: OrgSnapshot | null): string | null {
   if (!orgSnap) return null;
   const catalogKey = catalogManagerIdFromUserRef(userKey);
@@ -547,7 +657,7 @@ export function aggregateManagersForTeam(
     orgSnap,
     grantedCodes,
   );
-  return [...catalogResults, ...external];
+  return dedupeExternalManagersAgainstCatalog(catalogResults, external, teamId, orgSnap);
 }
 
 function collectGrantedOrphanRows(

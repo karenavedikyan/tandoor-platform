@@ -380,5 +380,105 @@ const teamRows = [
   assert.ok(salesCard, "sales manager still matched");
 }
 
+// Дедуп каталожного менеджера и его же «внешней» карточки (осиротевшие строки)
+{
+  const TEAM_SAP = "team-sapozhkov";
+  const MGR_PETR = "mgr-petrichenko-ev";
+  const snap = {
+    me: { id: "rop-sap", role: "rop" },
+    teams: [{ id: TEAM_SAP, name: "Команда Сапожков Артем", ropUserId: "rop-sap", ropName: "Сапожков" }],
+    users: [{ id: MGR_PETR, fullName: "Петриченко Елена Викторовна", role: "manager", teamId: TEAM_SAP }],
+  } as import("../use-org-snapshot.js").OrgSnapshot;
+  const matched = row("client-petr-matched", {
+    releaseCode: "CL-PETR-OK",
+    releaseManagerId: MGR_PETR,
+    releaseTeamId: TEAM_SAP,
+    outlets: 100,
+  });
+  const orphan = row("client-petr-orphan", {
+    releaseCode: "CL-PETR-BLOCK",
+    releaseManagerId: MGR_PETR,
+    releaseTeamId: TEAM_SAP,
+    outlets: 45,
+  });
+  const responsibleByCode: Record<string, string> = {
+    "CL-PETR-BLOCK": UUID_YAKUBOVA,
+  };
+  const managers = aggregateManagersForTeam(TEAM_SAP, [matched, orphan], snap, responsibleByCode, userIdToCatalogMgrId);
+  const petrCards = managers.filter((m) => m.managerId === MGR_PETR);
+  assert.equal(petrCards.length, 1, "single card for catalog manager");
+  assert.equal(petrCards[0]!.isExternal, false);
+  assert.equal(petrCards[0]!.rows.length, 2);
+  assert.equal(petrCards[0]!.active, 2);
+  assert.equal(petrCards[0]!.outlets, 145);
+}
+
+// Настоящий внешний менеджер (не в каталоге команды) сохраняет бейдж
+{
+  const TEAM_SAP = "team-sapozhkov";
+  const MGR_YAK = MGR_YAKUBOVA;
+  const crossTeam = row("client-yak-cross", {
+    releaseCode: "CL-YAK-EXT",
+    releaseManagerId: MGR_YAK,
+    releaseTeamId: TEAM_SAP,
+  });
+  const responsibleByCode: Record<string, string> = { "CL-YAK-EXT": UUID_YAKUBOVA };
+  const snap = {
+    me: { id: "rop-sap", role: "rop" },
+    teams: [
+      { id: TEAM_SAP, name: "Команда Сапожков Артем", ropUserId: "rop-sap", ropName: "Сапожков" },
+      { id: TEAM, name: "Команда Купянский", ropUserId: "rop-kup", ropName: "Купянский" },
+    ],
+    users: [
+      { id: UUID_YAKUBOVA, fullName: "Якубова Юлия Сергеевна", role: "manager", teamId: TEAM },
+    ],
+  } as import("../use-org-snapshot.js").OrgSnapshot;
+  const managers = aggregateManagersForTeam(TEAM_SAP, [crossTeam], snap, responsibleByCode, userIdToCatalogMgrId);
+  const yakCards = managers.filter((m) => m.managerId === MGR_YAK);
+  assert.equal(yakCards.length, 1);
+  assert.equal(yakCards[0]!.isExternal, true);
+  assert.equal(yakCards[0]!.externalTeamName, "Команда Купянский");
+}
+
+// Смешанный список: три члена команды — без дублей
+{
+  const TEAM_SAP = "team-sapozhkov";
+  const MGR_PETR = "mgr-petrichenko-ev";
+  const MGR_CHERN = "mgr-chernousova-in";
+  const MGR_OSMAN = "mgr-osmanov-fm";
+  const snap = {
+    me: { id: "rop-sap", role: "rop" },
+    teams: [{ id: TEAM_SAP, name: "Команда Сапожков Артем", ropUserId: "rop-sap", ropName: "Сапожков" }],
+    users: [
+      { id: MGR_PETR, fullName: "Петриченко", role: "manager", teamId: TEAM_SAP },
+      { id: MGR_CHERN, fullName: "Черноусова", role: "manager", teamId: TEAM_SAP },
+      { id: MGR_OSMAN, fullName: "Османов", role: "manager", teamId: TEAM_SAP },
+    ],
+  } as import("../use-org-snapshot.js").OrgSnapshot;
+  const specs = [
+    { mgr: MGR_PETR, ok: "CL-P1", block: "CL-P2" },
+    { mgr: MGR_CHERN, ok: "CL-C1", block: "CL-C2" },
+    { mgr: MGR_OSMAN, ok: "CL-O1", block: "CL-O2" },
+  ];
+  const rows: DealerRow[] = [];
+  const responsibleByCode: Record<string, string> = {};
+  for (const s of specs) {
+    rows.push(
+      row(`matched-${s.mgr}`, { releaseCode: s.ok, releaseManagerId: s.mgr, releaseTeamId: TEAM_SAP }),
+      row(`orphan-${s.mgr}`, { releaseCode: s.block, releaseManagerId: s.mgr, releaseTeamId: TEAM_SAP }),
+    );
+    responsibleByCode[s.block] = UUID_YAKUBOVA;
+  }
+  const managers = aggregateManagersForTeam(TEAM_SAP, rows, snap, responsibleByCode, userIdToCatalogMgrId);
+  for (const s of specs) {
+    const cards = managers.filter((m) => m.managerId === s.mgr);
+    assert.equal(cards.length, 1, `single card for ${s.mgr}`);
+    assert.equal(cards[0]!.isExternal, false);
+    assert.equal(cards[0]!.rows.length, 2);
+  }
+  const externalDupes = managers.filter((m) => m.isExternal && specs.some((s) => s.mgr === m.managerId));
+  assert.equal(externalDupes.length, 0);
+}
+
 console.log("dealer-base-management-view-model.test.ts: OK");
 
