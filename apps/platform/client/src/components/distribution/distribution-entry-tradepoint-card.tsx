@@ -7,6 +7,7 @@ import {
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { DistributionEntryTradePointRow } from "@/lib/distribution-entry-tradepoint-view-model";
 import type { DistributionEntryTradePointView } from "@/lib/distribution-entry-tradepoint-view";
+import { getClientCategoryBadgeClass, getClientCategoryShortLabel } from "@/lib/client-category";
 import { formatDisplayDate } from "@/lib/format-datetime";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,13 @@ function formatCityAddressLine(point: DealerTradePoint, rowCity: string | null):
 function formatCompactClientLine(row: DistributionEntryTradePointRow, point: DealerTradePoint): string {
   const city = resolveCityLabel(point, row.city);
   return city ? `${row.clientName} · ${city}` : row.clientName;
+}
+
+function formatDetailMetaLine(point: DealerTradePoint): string {
+  const parts: string[] = [];
+  if (isMeaningfulLocationPart(point.format)) parts.push(point.format!.trim());
+  if (isMeaningfulLocationPart(point.contactPhone)) parts.push(point.contactPhone!.trim());
+  return parts.join(" · ");
 }
 
 function CoverageBadge({ row }: { row: DistributionEntryTradePointRow }) {
@@ -115,6 +123,19 @@ function CompactOnShelfBadge({ row }: { row: DistributionEntryTradePointRow }) {
   );
 }
 
+function ClientCategoryPill({ row }: { row: DistributionEntryTradePointRow }) {
+  const label = getClientCategoryShortLabel(row.clientCategory);
+  if (!label || label === "—") return null;
+  return (
+    <Badge
+      variant="outline"
+      className={cn("shrink-0 px-1.5 py-0 text-[10px] font-medium leading-none", getClientCategoryBadgeClass(row.clientCategory))}
+    >
+      {label}
+    </Badge>
+  );
+}
+
 export function DistributionEntryTradePointCard({
   row,
   dealer,
@@ -125,9 +146,16 @@ export function DistributionEntryTradePointCard({
   onSelect,
 }: DistributionEntryTradePointCardProps) {
   const freshness = freshnessLabel(row.lastUpdatedAt);
-  const selectedCls = selected ? "border-primary/50 bg-primary/5 shadow-xs ring-1 ring-primary/20" : "border-border bg-card hover:bg-muted/40";
+  const selectedCls = selected
+    ? "border-primary/40 bg-primary/5 ring-1 ring-primary/30"
+    : "border-border bg-card hover:bg-muted/40";
   const cityAddressLine = formatCityAddressLine(point, row.city);
   const compactClientLine = formatCompactClientLine(row, point);
+  const detailMetaLine = formatDetailMetaLine(point);
+  const compactDateHint =
+    row.lastUpdatedAt && (row.filledCount > 0 || row.installedOursTotal > 0)
+      ? formatDisplayDate(row.lastUpdatedAt)
+      : null;
 
   if (view === "compact") {
     return (
@@ -135,41 +163,39 @@ export function DistributionEntryTradePointCard({
         type="button"
         onClick={onSelect}
         className={cn(
-          "flex w-full min-w-0 flex-col gap-1.5 rounded-xl border p-2 text-left transition-colors sm:flex-row sm:items-start sm:gap-2.5 sm:p-2.5",
+          "flex h-[60px] w-full min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
           selectedCls,
         )}
         data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
       >
-        <div className="flex min-w-0 w-full gap-2">
-          <ShowcaseCoverPhotoSlot
-            kind="trade_point"
-            dealer={dealer}
-            tradePoint={point}
-            profile={profile}
-            size="list"
-            rounded="md"
-            className="shrink-0"
-          />
-          <div className="min-w-0 flex-1 space-y-0.5">
-            <p
-              className="break-words text-sm font-semibold leading-snug text-foreground line-clamp-2"
-              data-testid={`distribution-entry-tradepoint-name-${row.tradePointId}`}
-            >
-              {row.tradePointName}
-            </p>
-            <p
-              className="break-words text-xs text-muted-foreground line-clamp-1"
-              data-testid={`distribution-entry-tradepoint-client-${row.tradePointId}`}
-            >
-              {compactClientLine}
-            </p>
-          </div>
-          <div className="hidden shrink-0 self-center sm:flex sm:max-w-[6.5rem] sm:justify-end">
-            <CompactOnShelfBadge row={row} />
-          </div>
+        <ShowcaseCoverPhotoSlot
+          kind="trade_point"
+          dealer={dealer}
+          tradePoint={point}
+          profile={profile}
+          size="table"
+          rounded="md"
+          className="shrink-0"
+        />
+        <div className="min-w-0 flex-1">
+          <p
+            className="truncate text-sm font-semibold text-foreground"
+            data-testid={`distribution-entry-tradepoint-name-${row.tradePointId}`}
+          >
+            {row.tradePointName}
+          </p>
+          <p
+            className="truncate text-xs text-muted-foreground"
+            data-testid={`distribution-entry-tradepoint-client-${row.tradePointId}`}
+          >
+            {compactClientLine}
+          </p>
         </div>
-        <div className="flex items-center gap-1 pl-10 sm:hidden">
+        <div className="flex shrink-0 flex-col items-end justify-center gap-0.5">
           <CompactOnShelfBadge row={row} />
+          {compactDateHint ? (
+            <span className="whitespace-nowrap text-[10px] text-muted-foreground tabular-nums">{compactDateHint}</span>
+          ) : null}
         </div>
       </button>
     );
@@ -180,50 +206,51 @@ export function DistributionEntryTradePointCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex w-full shrink-0 flex-col overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
+        "flex w-full min-w-0 shrink-0 overflow-hidden rounded-xl border text-left shadow-sm transition-colors",
         selectedCls,
       )}
       data-testid={`distribution-entry-tradepoint-row-${row.tradePointId}`}
     >
-      <div className="w-full space-y-3 p-3 sm:p-4">
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:gap-4">
-          <ShowcaseCoverPhotoSlot
-            kind="trade_point"
-            dealer={dealer}
-            tradePoint={point}
-            profile={profile}
-            size="large"
-            className="shrink-0"
-          />
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0 space-y-1">
-                <p
-                  className="break-words text-base font-semibold leading-snug text-foreground sm:text-lg"
-                  data-testid={`distribution-entry-tradepoint-name-${row.tradePointId}`}
-                >
-                  {row.tradePointName}
-                </p>
-                <p
-                  className="break-words text-sm font-medium text-foreground"
-                  data-testid={`distribution-entry-tradepoint-client-${row.tradePointId}`}
-                >
-                  {row.clientName}
-                </p>
-                {cityAddressLine ? (
-                  <p
-                    className="break-words text-xs text-muted-foreground"
-                    data-testid={`distribution-entry-tradepoint-location-${row.tradePointId}`}
-                  >
-                    {cityAddressLine}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <CoverageWithDate row={row} />
-                <span className="text-[10px] text-muted-foreground">{freshness}</span>
-              </div>
-            </div>
+      <div className="flex w-full min-w-0 gap-3 p-3">
+        <ShowcaseCoverPhotoSlot
+          kind="trade_point"
+          dealer={dealer}
+          tradePoint={point}
+          profile={profile}
+          size="branch"
+          rounded="md"
+          className="shrink-0"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex min-w-0 items-start gap-2">
+            <p
+              className="min-w-0 flex-1 break-words text-base font-semibold leading-snug text-foreground line-clamp-2"
+              data-testid={`distribution-entry-tradepoint-name-${row.tradePointId}`}
+            >
+              {row.tradePointName}
+            </p>
+            <ClientCategoryPill row={row} />
+          </div>
+          <p
+            className="break-words text-sm font-medium text-foreground line-clamp-1"
+            data-testid={`distribution-entry-tradepoint-client-${row.tradePointId}`}
+          >
+            {row.clientName}
+          </p>
+          {cityAddressLine ? (
+            <p
+              className="break-words text-xs text-muted-foreground line-clamp-2"
+              data-testid={`distribution-entry-tradepoint-location-${row.tradePointId}`}
+            >
+              {cityAddressLine}
+            </p>
+          ) : null}
+          {detailMetaLine ? (
+            <p className="truncate text-[11px] text-muted-foreground">{detailMetaLine}</p>
+          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-border/50 pt-1.5">
+            <CoverageWithDate row={row} />
+            <span className="text-[10px] text-muted-foreground tabular-nums">{freshness}</span>
           </div>
         </div>
       </div>

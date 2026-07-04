@@ -8,8 +8,8 @@ import { useVirtualizer, type Virtualizer } from "@tanstack/react-virtual";
 export const DISTRIBUTION_ENTRY_VIRTUAL_OVERSCAN = 6;
 
 export const DISTRIBUTION_ENTRY_VIRTUAL_ESTIMATE = {
-  tradepointCompact: 68,
-  tradepointDetailed: 150,
+  tradepointCompact: 60,
+  tradepointDetailed: 132,
   catalogGridRow: 220,
   catalogList: 52,
   simpleRow: 72,
