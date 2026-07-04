@@ -3,7 +3,7 @@ import { ArrowLeft, LayoutGrid, List, Loader2, Search, SlidersHorizontal } from 
 import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
 import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
 import { DistributionEntryTradePointCard } from "@/components/distribution/distribution-entry-tradepoint-card";
-import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
+import { DistributionEntryTradePointFiltersPanel } from "@/components/distribution/distribution-entry-tradepoint-filters-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,10 +45,13 @@ import {
   type DistributionEntryStatusTab,
 } from "@/lib/distribution-entry-tradepoint-status";
 import {
-  defaultDistributionFilterState,
-  listActiveDistributionFilterChips,
-  type DistributionFilterState,
+  defaultDistributionEntryTradePointFilterState,
+  listActiveEntryTradePointFilterChips,
+  type DistributionEntryTradePointFilterState,
 } from "@/lib/distribution-filters";
+import { buildDistributionAnalyticsFilterOptionsFromDealers } from "@/lib/distribution-analytics/distribution-analytics-filter-options";
+import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
+import { useOrgSnapshot } from "@/lib/use-org-snapshot";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { fetchShowcaseMatrixScope } from "@/lib/showcase-matrix-api";
@@ -90,20 +93,19 @@ type DistributionEntryTradePointPanelProps = {
   profile: ReleaseDemoProfile;
   /** Отфильтрованные дилеры из мастера «Ввод»; если не переданы — считаются внутри панели. */
   dealers?: readonly DealerRow[];
-  filter: DistributionFilterState;
-  onFilterChange: (next: DistributionFilterState) => void;
-  regionOptions: string[];
-  cityOptions: string[];
+  /** Полный scope дилеров для опций фильтров. */
+  scopedDealers?: readonly DealerRow[];
+  filter: DistributionEntryTradePointFilterState;
+  onFilterChange: (next: DistributionEntryTradePointFilterState) => void;
   hideRegion?: boolean;
 };
 
 export function DistributionEntryTradePointPanel({
   profile,
   dealers: dealersProp,
+  scopedDealers: scopedDealersProp,
   filter,
   onFilterChange,
-  regionOptions,
-  cityOptions,
   hideRegion,
 }: DistributionEntryTradePointPanelProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
@@ -125,8 +127,7 @@ export function DistributionEntryTradePointPanel({
     readDistributionEntryTradePointView(isMobile),
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
-
-  const activeChips = useMemo(() => listActiveDistributionFilterChips(filter), [filter]);
+  const { data: orgSnap } = useOrgSnapshot();
 
   useEffect(() => {
     writeDistributionEntryTradePointView(tradePointView);
@@ -142,6 +143,22 @@ export function DistributionEntryTradePointPanel({
   );
 
   const scopedDealersInternal = useRoleScopedDealerRowsAuto(workingDealerRows, profile);
+
+  const filterOptionLabels = useMemo(() => {
+    const scoped = scopedDealersProp ?? scopedDealersInternal;
+    const options = buildDistributionAnalyticsFilterOptionsFromDealers(scoped, orgSnap);
+    const toMap = (items: { value: string; label: string }[]) => new Map(items.map((o) => [o.value, o.label]));
+    return {
+      managers: toMap(options.managerOptions),
+      regionalManagers: toMap(options.regionalManagerOptions),
+      rops: toMap(options.ropOptions),
+    };
+  }, [orgSnap, scopedDealersInternal, scopedDealersProp]);
+
+  const activeChips = useMemo(
+    () => listActiveEntryTradePointFilterChips(filter, filterOptionLabels),
+    [filter, filterOptionLabels],
+  );
 
   const scopedDealers = dealersProp ?? scopedDealersInternal;
 
@@ -301,10 +318,14 @@ export function DistributionEntryTradePointPanel({
   }, [setSelectedTradePointId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const displayRows = useMemo(
-    () => sortedRows.filter((r) => rowRefs.has(r.tradePointId)),
-    [sortedRows, rowRefs],
-  );
+  const displayRows = useMemo(() => {
+    const visible = sortedRows.filter((r) => rowRefs.has(r.tradePointId));
+    if (filter.status === "all") return visible;
+    return visible.filter((row) => {
+      const entries = loadCachedMatrix(row.tradePointId);
+      return entries.some((entry) => entry.status === filter.status);
+    });
+  }, [filter.status, rowRefs, sortedRows, cacheBump]);
 
   const virtualRowCount = displayRows.length;
 
@@ -517,7 +538,7 @@ export function DistributionEntryTradePointPanel({
             variant="ghost"
             size="sm"
             className="h-8 text-xs"
-            onClick={() => onFilterChange(defaultDistributionFilterState())}
+            onClick={() => onFilterChange(defaultDistributionEntryTradePointFilterState())}
             data-testid="distribution-entry-reset-filters"
           >
             Сбросить фильтры
@@ -528,16 +549,14 @@ export function DistributionEntryTradePointPanel({
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
         <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-md">
           <SheetHeader>
-            <SheetTitle>Фильтры списка</SheetTitle>
+            <SheetTitle>Фильтры списка: по торговой точке</SheetTitle>
           </SheetHeader>
-          <div className="mt-4 min-w-0">
-            <DistributionFiltersBar
+          <div className="mt-4 min-w-0 flex-1">
+            <DistributionEntryTradePointFiltersPanel
+              scopedDealers={scopedDealersProp ?? scopedDealersInternal}
               value={filter}
               onChange={onFilterChange}
-              regionOptions={regionOptions}
-              cityOptions={cityOptions}
               hideRegion={hideRegion}
-              title="Фильтры списка: по торговой точке"
             />
           </div>
         </SheetContent>

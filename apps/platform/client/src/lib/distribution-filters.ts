@@ -4,7 +4,13 @@
 
 import type { ClientCategoryId } from "./client-category.js";
 import { CLIENT_CATEGORY_META, getClientCategoryLabel } from "./client-category.js";
-import type { DealerRow } from "./dealer-base-mock-data.js";
+import {
+  getDealerManagerDisplay,
+  getDealerRegionalManagerDisplay,
+  getDealerRopDisplay,
+  type DealerRow,
+} from "./dealer-base-mock-data.js";
+import { getRopOverrideUserId, loadDealerRopOverridesState } from "./dealer-rop-overrides.js";
 import { getMergedDealerTradePoints } from "./dealer-trade-points-overrides.js";
 import type { ShowcaseMatrixEntryDto, ShowcaseMatrixStatus, ShowcasePlacementType } from "./showcase-matrix-api.js";
 import { PLACEMENT_TYPE_LABEL_RU } from "./showcase-placement-labels.js";
@@ -125,6 +131,204 @@ export function filterScopeDealers(
     }
     return true;
   });
+}
+
+/** Фильтры панели списка ТТ «Дистрибуция → Ввод» (мультивыбор, отдельно от общего DistributionFilterState). */
+export type DistributionEntryTradePointFilterState = {
+  managerIds: string[];
+  regionalManagerIds: string[];
+  ropIds: string[];
+  cityValues: string[];
+  regionValues: string[];
+  clientCategoryIds: ClientCategoryId[];
+  status: "all" | ShowcaseMatrixStatus;
+};
+
+export function defaultDistributionEntryTradePointFilterState(): DistributionEntryTradePointFilterState {
+  return {
+    managerIds: [],
+    regionalManagerIds: [],
+    ropIds: [],
+    cityValues: [],
+    regionValues: [],
+    clientCategoryIds: [],
+    status: "all",
+  };
+}
+
+function matchesMulti(values: readonly string[], candidate: string): boolean {
+  if (values.length === 0) return true;
+  return values.includes(candidate);
+}
+
+function dealerMatchesCityValues(dealer: DealerRow, cityValues: readonly string[]): boolean {
+  if (cityValues.length === 0) return true;
+  const dealerCity = normalizeGeoValue(dealer.city);
+  if (dealerCity && cityValues.includes(dealerCity)) return true;
+  return getMergedDealerTradePoints(dealer, { includeArchived: false }).some(({ point }) => {
+    const city = normalizeGeoValue(point.city);
+    return city != null && cityValues.includes(city);
+  });
+}
+
+function dealerMatchesRegionValues(dealer: DealerRow, regionValues: readonly string[]): boolean {
+  if (regionValues.length === 0) return true;
+  const region = normalizeGeoValue(dealer.region);
+  return region != null && regionValues.includes(region);
+}
+
+function dealerMatchesManagerIds(dealer: DealerRow, managerIds: readonly string[]): boolean {
+  if (managerIds.length === 0) return true;
+  const manager = getDealerManagerDisplay(dealer);
+  if (manager) {
+    if (matchesMulti(managerIds, manager)) return true;
+    if (matchesMulti(managerIds, `mgr:${manager}`)) return true;
+  }
+  const managerUserId = dealer.managerUserId?.trim();
+  if (managerUserId && matchesMulti(managerIds, managerUserId)) return true;
+  const releaseManagerId = dealer.releaseManagerId?.trim();
+  if (releaseManagerId && matchesMulti(managerIds, releaseManagerId)) return true;
+  return false;
+}
+
+function dealerMatchesRegionalManagerIds(dealer: DealerRow, regionalManagerIds: readonly string[]): boolean {
+  if (regionalManagerIds.length === 0) return true;
+  const regionalManager = getDealerRegionalManagerDisplay(dealer);
+  if (regionalManager) {
+    if (matchesMulti(regionalManagerIds, regionalManager)) return true;
+    if (matchesMulti(regionalManagerIds, `rm:${regionalManager}`)) return true;
+  }
+  const regionalManagerId = dealer.regionalManagerId?.trim();
+  if (regionalManagerId && matchesMulti(regionalManagerIds, regionalManagerId)) return true;
+  return false;
+}
+
+function dealerMatchesRopIds(
+  dealer: DealerRow,
+  ropIds: readonly string[],
+  ropOverridesState: ReturnType<typeof loadDealerRopOverridesState>,
+): boolean {
+  if (ropIds.length === 0) return true;
+  const ropDisplay = getDealerRopDisplay(dealer);
+  if (ropDisplay && matchesMulti(ropIds, ropDisplay)) return true;
+  const dealerRopId = getRopOverrideUserId(dealer.id, ropOverridesState) ?? dealer.ropId?.trim() ?? null;
+  if (dealerRopId && matchesMulti(ropIds, dealerRopId)) return true;
+  const releaseTeamId = dealer.releaseTeamId?.trim();
+  if (releaseTeamId && matchesMulti(ropIds, releaseTeamId)) return true;
+  return false;
+}
+
+export function filterScopeDealersByEntryTradePointFilters(
+  dealers: readonly DealerRow[],
+  filter: DistributionEntryTradePointFilterState,
+): DealerRow[] {
+  const ropOverridesState = loadDealerRopOverridesState();
+  return dealers.filter((dealer) => {
+    if (filter.clientCategoryIds.length > 0 && !filter.clientCategoryIds.includes(dealer.clientCategory)) {
+      return false;
+    }
+    if (!dealerMatchesRegionValues(dealer, filter.regionValues)) return false;
+    if (!dealerMatchesCityValues(dealer, filter.cityValues)) return false;
+    if (!dealerMatchesManagerIds(dealer, filter.managerIds)) return false;
+    if (!dealerMatchesRegionalManagerIds(dealer, filter.regionalManagerIds)) return false;
+    if (!dealerMatchesRopIds(dealer, filter.ropIds, ropOverridesState)) return false;
+    return true;
+  });
+}
+
+export type DistributionEntryTradePointFilterScope = {
+  hideRegion: boolean;
+};
+
+export function sanitizeEntryTradePointFilterForScope(
+  state: DistributionEntryTradePointFilterState,
+  scope: DistributionEntryTradePointFilterScope,
+): DistributionEntryTradePointFilterState {
+  if (scope.hideRegion && state.regionValues.length > 0) {
+    return { ...state, regionValues: [] };
+  }
+  return state;
+}
+
+export function getEntryTradePointClientCategoryOptions(): { value: ClientCategoryId; label: string }[] {
+  return CLIENT_CATEGORY_META.map((m) => ({ value: m.id, label: m.label }));
+}
+
+export type ActiveEntryTradePointFilterChip = {
+  id: string;
+  label: string;
+  clear: (state: DistributionEntryTradePointFilterState) => DistributionEntryTradePointFilterState;
+};
+
+function clearArrayField<K extends keyof DistributionEntryTradePointFilterState>(
+  field: K,
+): (state: DistributionEntryTradePointFilterState) => DistributionEntryTradePointFilterState {
+  return (state) => ({ ...state, [field]: [] });
+}
+
+export function listActiveEntryTradePointFilterChips(
+  filter: DistributionEntryTradePointFilterState,
+  labels?: {
+    managers?: ReadonlyMap<string, string>;
+    regionalManagers?: ReadonlyMap<string, string>;
+    rops?: ReadonlyMap<string, string>;
+  },
+): ActiveEntryTradePointFilterChip[] {
+  const chips: ActiveEntryTradePointFilterChip[] = [];
+  const managerLabel = (id: string) => labels?.managers?.get(id) ?? id.replace(/^mgr:/, "");
+  const rmLabel = (id: string) => labels?.regionalManagers?.get(id) ?? id.replace(/^rm:/, "");
+  const ropLabel = (id: string) => labels?.rops?.get(id) ?? id;
+
+  if (filter.managerIds.length > 0) {
+    chips.push({
+      id: "managers",
+      label: `Менеджер: ${filter.managerIds.map(managerLabel).join(", ")}`,
+      clear: clearArrayField("managerIds"),
+    });
+  }
+  if (filter.regionalManagerIds.length > 0) {
+    chips.push({
+      id: "regionalManagers",
+      label: `Регионал: ${filter.regionalManagerIds.map(rmLabel).join(", ")}`,
+      clear: clearArrayField("regionalManagerIds"),
+    });
+  }
+  if (filter.ropIds.length > 0) {
+    chips.push({
+      id: "rops",
+      label: `РОП: ${filter.ropIds.map(ropLabel).join(", ")}`,
+      clear: clearArrayField("ropIds"),
+    });
+  }
+  if (filter.regionValues.length > 0) {
+    chips.push({
+      id: "regions",
+      label: `Регион: ${filter.regionValues.join(", ")}`,
+      clear: clearArrayField("regionValues"),
+    });
+  }
+  if (filter.cityValues.length > 0) {
+    chips.push({
+      id: "cities",
+      label: `Город: ${filter.cityValues.join(", ")}`,
+      clear: clearArrayField("cityValues"),
+    });
+  }
+  if (filter.clientCategoryIds.length > 0) {
+    chips.push({
+      id: "clientCategories",
+      label: `Категория: ${filter.clientCategoryIds.map(getClientCategoryLabel).join(", ")}`,
+      clear: clearArrayField("clientCategoryIds"),
+    });
+  }
+  if (filter.status !== "all") {
+    chips.push({
+      id: "status",
+      label: `Статус: ${statusLabelRu(filter.status)}`,
+      clear: (s) => ({ ...s, status: "all" }),
+    });
+  }
+  return chips;
 }
 
 export function extractRegionOptions(dealers: readonly DealerRow[]): string[] {

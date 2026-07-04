@@ -5,11 +5,13 @@ import assert from "node:assert/strict";
 import type { DealerRow } from "../dealer-base-mock-data.js";
 import type { ShowcaseMatrixEntryDto } from "../showcase-matrix-api.js";
 import {
+  defaultDistributionEntryTradePointFilterState,
   defaultDistributionFilterState,
   extractCityOptions,
   extractRegionOptions,
   filterMatrixEntries,
   filterScopeDealers,
+  filterScopeDealersByEntryTradePointFilters,
   modelMatchesSegment,
   periodWindowIso,
   buildAnalyticsFilterContext,
@@ -37,8 +39,27 @@ const dealerKzn: DealerRow = {
   region: "Поволжье",
   status: "активный",
   clientCategory: "top150",
+  manager: "Иванов И.И.",
+  regionalManager: "Петров П.П.",
+  ropName: "Сидоров С.С.",
   tradePoints: [
     { id: "tp2", name: "ТТ 2", city: "Казань", address: "", status: "активный" },
+  ],
+} as DealerRow;
+
+const dealerSouth: DealerRow = {
+  id: "d-south",
+  name: "Клиент Юг",
+  city: "Краснодар",
+  region: "Юг",
+  status: "активный",
+  clientCategory: "top350",
+  manager: "Иванов И.И.",
+  regionalManager: "Смирнов С.С.",
+  ropName: "Сидоров С.С.",
+  managerUserId: "mgr-uuid-1",
+  tradePoints: [
+    { id: "tp3", name: "ТТ 3", city: "Краснодар", address: "", status: "активный" },
   ],
 } as DealerRow;
 
@@ -133,5 +154,61 @@ assert.equal(filteredOld.length, 0);
 assert.deepEqual(extractRegionOptions([dealerMsk, dealerKzn]), ["Поволжье", "Центр"]);
 assert.ok(extractCityOptions([dealerMsk, dealerKzn]).includes("Казань"));
 assert.ok(extractCityOptions([dealerMsk, dealerKzn]).includes("Москва"));
+
+const ttDefaults = defaultDistributionEntryTradePointFilterState();
+assert.deepEqual(ttDefaults.managerIds, []);
+assert.deepEqual(ttDefaults.cityValues, []);
+assert.equal(ttDefaults.status, "all");
+
+const allTtDealers = filterScopeDealersByEntryTradePointFilters(
+  [dealerMsk, dealerKzn, dealerSouth],
+  ttDefaults,
+);
+assert.equal(allTtDealers.length, 3);
+
+const filteredManagers = filterScopeDealersByEntryTradePointFilters(
+  [dealerMsk, dealerKzn, dealerSouth],
+  { ...ttDefaults, managerIds: ["mgr:Иванов И.И."] },
+);
+assert.equal(filteredManagers.length, 2);
+assert.ok(filteredManagers.some((d) => d.id === "d-kzn"));
+assert.ok(filteredManagers.some((d) => d.id === "d-south"));
+
+const filteredRegionAndManager = filterScopeDealersByEntryTradePointFilters(
+  [dealerMsk, dealerKzn, dealerSouth],
+  {
+    ...ttDefaults,
+    regionValues: ["Юг"],
+    managerIds: ["mgr-uuid-1"],
+  },
+);
+assert.equal(filteredRegionAndManager.length, 1);
+assert.equal(filteredRegionAndManager[0]?.id, "d-south");
+
+const filteredCities = filterScopeDealersByEntryTradePointFilters(
+  [dealerMsk, dealerKzn, dealerSouth],
+  { ...ttDefaults, cityValues: ["Москва", "Казань"] },
+);
+assert.equal(filteredCities.length, 2);
+
+const filteredCategories = filterScopeDealersByEntryTradePointFilters(
+  [dealerMsk, dealerKzn, dealerSouth],
+  { ...ttDefaults, clientCategoryIds: ["top150", "top350"] },
+);
+assert.equal(filteredCategories.length, 3);
+
+const resetAfterFilter = defaultDistributionEntryTradePointFilterState();
+assert.equal(
+  filterScopeDealersByEntryTradePointFilters([dealerMsk, dealerKzn], {
+    ...resetAfterFilter,
+    managerIds: ["mgr:Иванов И.И."],
+    regionValues: ["Юг"],
+  }).length,
+  0,
+);
+assert.equal(
+  filterScopeDealersByEntryTradePointFilters([dealerMsk, dealerKzn, dealerSouth], resetAfterFilter).length,
+  3,
+);
 
 console.log("✓ distribution-filters tests passed");
