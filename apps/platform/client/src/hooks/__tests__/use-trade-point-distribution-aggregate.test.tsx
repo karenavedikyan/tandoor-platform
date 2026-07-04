@@ -2,13 +2,14 @@
  * @vitest-environment jsdom
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __clearDistributionScopePrefetchKeys } from "@/lib/distribution-scope-prefetch-guard";
 import { createEmptyActualizationState, type ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ShowcaseMatrixEntryDto } from "@/lib/showcase-matrix-api";
 import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
 import {
   hasMatrixCacheForTradePointIds,
+  LOADING_DEADLINE_MS,
   useTradePointDistributionAggregate,
 } from "@/hooks/use-trade-point-distribution-aggregate";
 
@@ -304,5 +305,43 @@ describe("useTradePointDistributionAggregate SWR", () => {
 
     expect(result.current.loading).toBe(false);
     expect(result.current.aggregate.byType.entrance.capacity).toBe(5);
+  });
+});
+
+describe("useTradePointDistributionAggregate loading deadline", () => {
+  beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
+    fetchShowcaseMatrixScopeMock.mockClear();
+    loadCachedMatrixMock.mockClear();
+    loadCachedMatrixMock.mockReturnValue([]);
+    fetchShowcaseMatrixScopeMock.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never settles */
+        }),
+    );
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stops cold loading after deadline while external prefetching stays true", async () => {
+    const { result } = renderHook(() =>
+      useTradePointDistributionAggregate(["tp-deadline"], makeAct("tp-deadline"), undefined, {
+        skipInternalPrefetch: true,
+        externalPrefetching: true,
+      }),
+    );
+
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOADING_DEADLINE_MS);
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.tradePointsCount).toBe(1);
   });
 });
