@@ -126,6 +126,7 @@ import type { TradePointsManagerDetailClient } from "@/lib/trade-points-overview
 import {
   buildTradePointsOverviewDisplayIndex,
   formatOverviewScopedCount,
+  lookupOverviewNumberForTeamAndManager,
   resolveManagerApiUserId,
   splitManagersByRegionalRole,
   unionCatalogManagersWithOverviewCards,
@@ -754,23 +755,41 @@ export function DealerBaseManagementCockpit({
   );
 
   const resolveManagerTp = useCallback(
-    (m: { managerId?: string; userId?: string }): number | null => {
+    (m: { managerId?: string; userId?: string }, teamId?: string): number | null => {
       if (!overviewTpReady) return null;
       const key = String(m.managerId ?? m.userId ?? "");
       if (!key) return 0;
+      if (teamId) {
+        const scoped = lookupOverviewNumberForTeamAndManager(
+          tpOverviewIndex.tradePointsByTeamAndManagerId,
+          teamId,
+          key,
+          orgTeamCtx?.snap,
+        );
+        if (scoped != null) return scoped;
+      }
       return tpOverviewIndex.tradePointsByManagerId.get(key) ?? 0;
     },
-    [overviewTpReady, tpOverviewIndex.tradePointsByManagerId],
+    [overviewTpReady, tpOverviewIndex.tradePointsByManagerId, tpOverviewIndex.tradePointsByTeamAndManagerId, orgTeamCtx?.snap],
   );
 
   const resolveManagerClients = useCallback(
-    (m: { managerId?: string; userId?: string }): number | null => {
+    (m: { managerId?: string; userId?: string }, teamId?: string): number | null => {
       if (!overviewTpReady) return null;
       const key = String(m.managerId ?? m.userId ?? "");
       if (!key) return 0;
+      if (teamId) {
+        const scoped = lookupOverviewNumberForTeamAndManager(
+          tpOverviewIndex.clientsByTeamAndManagerId,
+          teamId,
+          key,
+          orgTeamCtx?.snap,
+        );
+        if (scoped != null) return scoped;
+      }
       return tpOverviewIndex.clientsByManagerId.get(key) ?? 0;
     },
-    [overviewTpReady, tpOverviewIndex.clientsByManagerId],
+    [overviewTpReady, tpOverviewIndex.clientsByManagerId, tpOverviewIndex.clientsByTeamAndManagerId, orgTeamCtx?.snap],
   );
 
   const ropGroupManagersViewByTeamKey = useMemo(() => {
@@ -789,11 +808,11 @@ export function DealerBaseManagementCockpit({
       const displayManagers = managersForTeamDisplay(g.managers, teamKey);
       const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
 
-      const sortSection = (managers: ManagerRowModel[]) => {
+      const sortSection = (managers: ManagerRowModel[], sectionTeamKey: string) => {
         const heatEntries = managers.map((m) => ({
           id: m.managerId,
-          clientsActive: resolveManagerClients(m) ?? 0,
-          tradePointsActive: resolveManagerTp(m) ?? 0,
+          clientsActive: resolveManagerClients(m, sectionTeamKey) ?? 0,
+          tradePointsActive: resolveManagerTp(m, sectionTeamKey) ?? 0,
         }));
         const heatMap = computeManagerHeatMap(heatEntries);
         const sorted = sortManagersByHeat(
@@ -804,8 +823,8 @@ export function DealerBaseManagementCockpit({
         return { sorted, heatMap };
       };
 
-      const salesView = sortSection(salesManagers);
-      const regionalView = sortSection(regionalManagers);
+      const salesView = sortSection(salesManagers, teamKey);
+      const regionalView = sortSection(regionalManagers, teamKey);
       map.set(teamKey, {
         salesManagers: salesView.sorted,
         regionalManagers: regionalView.sorted,
@@ -1356,11 +1375,11 @@ export function DealerBaseManagementCockpit({
                                         key={m.managerId}
                                         manager={{
                                           ...m,
-                                          active: resolveManagerClients(m) ?? 0,
-                                          outlets: resolveManagerTp(m) ?? 0,
+                                          active: resolveManagerClients(m, teamKey) ?? 0,
+                                          outlets: resolveManagerTp(m, teamKey) ?? 0,
                                         }}
-                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m), m.active)}
-                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
+                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}
+                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                                         {...managerDistributionCardProps(m.managerId, m.isRegional)}
@@ -1383,11 +1402,11 @@ export function DealerBaseManagementCockpit({
                                         key={m.managerId}
                                         manager={{
                                           ...m,
-                                          active: resolveManagerClients(m) ?? 0,
-                                          outlets: resolveManagerTp(m) ?? 0,
+                                          active: resolveManagerClients(m, teamKey) ?? 0,
+                                          outlets: resolveManagerTp(m, teamKey) ?? 0,
                                         }}
-                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m), m.active)}
-                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m), m.outlets)}
+                                        clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}
+                                        tpCountDisplay={formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}
                                         ropName={g.ropName}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                                         {...managerDistributionCardProps(m.managerId, m.isRegional)}
@@ -1452,7 +1471,7 @@ export function DealerBaseManagementCockpit({
                 {isKpiDetail
                   ? "Список клиентов по выбранной категории"
                   : detail?.kind === "manager_overview" && selectedManager
-                    ? `Команда: ${selectedManagerRopName} · клиентов ${formatScopedOverviewCount(resolveManagerClients(selectedManager), selectedManagerClients.length)} · ТТ ${formatScopedTpCount(resolveManagerTp(selectedManager), selectedManager.outlets)}`
+                    ? `Команда: ${selectedManagerRopName} · клиентов ${formatScopedOverviewCount(resolveManagerClients(selectedManager, detail.teamId), selectedManagerClients.length)} · ТТ ${formatScopedTpCount(resolveManagerTp(selectedManager, detail.teamId), selectedManager.outlets)}`
                     : detail?.kind === "manager_overview"
                       ? "Клиенты по данным базы (назначения и seed)"
                       : "Реальные данные из актуализации"}
@@ -1512,8 +1531,8 @@ export function DealerBaseManagementCockpit({
                     >
                       <p className="truncate text-sm font-semibold text-foreground">{m.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        активные {formatScopedOverviewCount(resolveManagerClients(m), m.active)} · ТТ{" "}
-                        {formatScopedTpCount(resolveManagerTp(m), m.outlets)} · потенц. {m.potential} · вним. {m.attention}
+                        активные {formatScopedOverviewCount(resolveManagerClients(m, detail.teamId), m.active)} · ТТ{" "}
+                        {formatScopedTpCount(resolveManagerTp(m, detail.teamId), m.outlets)} · потенц. {m.potential} · вним. {m.attention}
                       </p>
                     </button>
                   ))}
@@ -1690,10 +1709,10 @@ export function DealerBaseManagementCockpit({
           const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
           const maxMgrActive = Math.max(
             1,
-            ...displayManagers.map((m) => resolveManagerClients(m) ?? m.active),
+            ...displayManagers.map((m) => resolveManagerClients(m, teamKey) ?? m.active),
           );
           const renderLegacyManagerCard = (m: ManagerRowModel) => {
-            const mgrClients = resolveManagerClients(m) ?? m.active;
+            const mgrClients = resolveManagerClients(m, teamKey) ?? m.active;
             const share = Math.round((mgrClients / maxMgrActive) * 100);
             return (
               <button
@@ -1710,9 +1729,9 @@ export function DealerBaseManagementCockpit({
                   <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
                 </div>
                 <p className="mt-1 text-[11px] text-[#8F96B0]">
-                  активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m), m.active)}</span>
+                  активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}</span>
                   {" · "}
-                  ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m), m.outlets)}</span>
+                  ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}</span>
                   {" · "}
                   сегм. {m.topSegmentLabel}
                 </p>

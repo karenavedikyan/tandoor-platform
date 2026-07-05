@@ -4,6 +4,7 @@ import {
   buildTradePointsOverviewDisplayIndex,
   filterManagersToTradePointsOverview,
   formatOverviewScopedCount,
+  lookupOverviewNumberForTeamAndManager,
   managerCardFromOverview,
   splitManagersByRegionalRole,
   unionCatalogManagersWithOverviewCards,
@@ -286,5 +287,88 @@ describe("trade-points overview display index", () => {
       managerCardsByTeamKey: index.managerCardsByTeamKey,
     });
     expect(result).toEqual(catalogManagers);
+  });
+
+  it("одному userId в двух командах отдаёт разные значения", () => {
+    const ropGroups: TradePointsOverviewRopGroup[] = [
+      {
+        teamId: "team-A",
+        teamName: "A",
+        ropUserId: "rop-A",
+        ropFullName: "A rop",
+        managerCount: 1,
+        tradePoints: 639,
+        clientsWithTp: 627,
+        cities: 0,
+        withoutPhoto: 0,
+        notFilled: 0,
+        managers: [
+          {
+            userId: "rm-1",
+            fullName: "RM",
+            tradePoints: 639,
+            clientsWithTp: 627,
+            cities: 0,
+            withoutPhoto: 0,
+            notFilled: 0,
+            isRegional: true,
+          },
+        ],
+      },
+      {
+        teamId: "team-B",
+        teamName: "B",
+        ropUserId: "rop-B",
+        ropFullName: "B rop",
+        managerCount: 1,
+        tradePoints: 477,
+        clientsWithTp: 477,
+        cities: 0,
+        withoutPhoto: 0,
+        notFilled: 0,
+        managers: [
+          {
+            userId: "rm-1",
+            fullName: "RM",
+            tradePoints: 477,
+            clientsWithTp: 477,
+            cities: 0,
+            withoutPhoto: 0,
+            notFilled: 0,
+            isRegional: true,
+          },
+        ],
+      },
+      {
+        teamId: null,
+        teamName: "Без команды",
+        ropUserId: null,
+        ropFullName: "—",
+        managerCount: 1,
+        tradePoints: 2,
+        clientsWithTp: 2,
+        cities: 0,
+        withoutPhoto: 0,
+        notFilled: 0,
+        managers: [
+          {
+            userId: "rm-1",
+            fullName: "RM",
+            tradePoints: 2,
+            clientsWithTp: 2,
+            cities: 0,
+            withoutPhoto: 0,
+            notFilled: 0,
+            isRegional: true,
+          },
+        ],
+      },
+    ];
+    const idx = buildTradePointsOverviewDisplayIndex(ropGroups, null, () => undefined);
+    expect(lookupOverviewNumberForTeamAndManager(idx.clientsByTeamAndManagerId, "team-A", "rm-1")).toBe(627);
+    expect(lookupOverviewNumberForTeamAndManager(idx.tradePointsByTeamAndManagerId, "team-A", "rm-1")).toBe(639);
+    expect(lookupOverviewNumberForTeamAndManager(idx.clientsByTeamAndManagerId, "team-B", "rm-1")).toBe(477);
+    expect(lookupOverviewNumberForTeamAndManager(idx.tradePointsByTeamAndManagerId, "team-B", "rm-1")).toBe(477);
+    expect(idx.clientsByManagerId.get("rm-1")).toBe(2);
   });
 });
