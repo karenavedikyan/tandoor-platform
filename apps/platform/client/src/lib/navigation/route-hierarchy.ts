@@ -139,7 +139,7 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
   const seg = p.split("/").filter(Boolean);
 
   if (seg[0] === "dealer-base") {
-    items.push(crumb("Клиентская база", "/dealer-base"));
+    items.push(crumb("Клиенты / ТТ", "/dealer-base"));
     if (seg[1] === "manager" && seg[2]) {
       items.push(crumb(labels.manager ?? "Менеджер"));
       return finalize(items);
@@ -148,7 +148,7 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
       items.push(crumb(labels.city ?? decodeURIComponent(seg[2])));
       return finalize(items);
     }
-    items[items.length - 1] = crumb("Клиентская база");
+    items[items.length - 1] = crumb("Клиенты / ТТ");
     return items;
   }
 
@@ -164,7 +164,7 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
   }
 
   if (seg[0] === "trade-points") {
-    items.push(crumb("Торговые точки"));
+    items.push(crumb("Клиенты / ТТ", "/dealer-base?entity=tps"));
     return finalize(items);
   }
 

@@ -22,6 +22,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -128,6 +129,7 @@ import { useClientBaseTeamActualization } from "@/context/client-base-team-actua
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
 import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { DealerBaseManagementCockpit } from "@/pages/dealer-base-management-cockpit";
+import TradePointsPage from "@/pages/trade-points";
 import {
   canActualizeClientBase,
   canCreateDealerDuringActualization,
@@ -1504,6 +1506,33 @@ export default function DealerBase(props: DealerBaseProps = {}) {
 
 function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
   const scopeUserIdResolved = scopeUserId?.trim() || undefined;
+
+  const [entity, setEntity] = useState<"clients" | "tps">(() => {
+    if (typeof window === "undefined") return "clients";
+    try {
+      const raw = window.location.hash.split("?")[1] ?? window.location.search.replace(/^\?/, "");
+      const params = new URLSearchParams(raw);
+      return params.get("entity") === "tps" ? "tps" : "clients";
+    } catch {
+      return "clients";
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || embedListOnly) return;
+    const [hashPath = "", hashQuery = ""] = window.location.hash.replace(/^#/, "").split("?");
+    const params = new URLSearchParams(hashQuery);
+    if (entity === "clients") {
+      params.delete("entity");
+    } else {
+      params.set("entity", "tps");
+    }
+    const nextHash = `#${hashPath}${params.toString() ? `?${params.toString()}` : ""}`;
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, "", nextHash);
+    }
+  }, [entity, embedListOnly]);
+
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const isRealUser = Boolean(me?.id);
   const viewingOtherUserScope = Boolean(scopeUserIdResolved && me?.id && scopeUserIdResolved !== me.id);
@@ -3985,6 +4014,58 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     );
   }
 
+  if (!embedListOnly && entity === "tps") {
+    return (
+      <div
+        className="min-w-0 max-w-full overflow-x-hidden space-y-6 sm:space-y-8"
+        data-testid="page-dealer-base"
+      >
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиенты / ТТ</h1>
+            <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+              Клиентская база: переключение между списком клиентов и торговых точек.
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <Tabs value={entity} onValueChange={(v) => setEntity(v as "clients" | "tps")}>
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:w-auto">
+              <TabsTrigger value="clients" className="text-xs sm:text-sm" data-testid="tab-entity-clients">
+                По клиентам
+              </TabsTrigger>
+              <TabsTrigger value="tps" className="text-xs sm:text-sm" data-testid="tab-entity-tps">
+                По ТТ
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {useReal ? (
+          <RoleDistributionSummaryBar
+            access={access}
+            aggregate={scopeDistribution.aggregate}
+            tradePointsCount={scopeDistribution.tradePointsCount}
+            tradePointIds={scopeTradePointIds}
+            testIdPrefix="manager-home"
+            showTradePointsCount={false}
+            loading={
+              !kpisReady ||
+              scopeDistribution.loading ||
+              (!scopeTradePointIdsReady && scopeDistribution.tradePointsCount === 0)
+            }
+            progress={access === "sales_director" ? progressiveRopMatrixPrefetch : undefined}
+          />
+        ) : null}
+
+        <div data-testid="dealer-base-tps-embed">
+          <TradePointsPage embedListOnly />
+        </div>
+      </div>
+    );
+  }
+
   if (!embedListOnly && !isTaskSelectMode && actx.enabled && shouldUseTeamMergedActualizationPlane(profile, me?.role)) {
     return (
       <DealerBaseManagementCockpit
@@ -4068,7 +4149,7 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиентская база</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Клиенты / ТТ</h1>
               <p className="mt-1 text-sm text-muted-foreground sm:text-base">
                 Клиентская база: поиск, фильтры и переход в карточку клиента.
               </p>
@@ -4105,6 +4186,21 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
           </div>
         ) : null}
       </div>
+      ) : null}
+
+      {!embedListOnly ? (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <Tabs value={entity} onValueChange={(v) => setEntity(v as "clients" | "tps")}>
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:w-auto">
+              <TabsTrigger value="clients" className="text-xs sm:text-sm" data-testid="tab-entity-clients">
+                По клиентам
+              </TabsTrigger>
+              <TabsTrigger value="tps" className="text-xs sm:text-sm" data-testid="tab-entity-tps">
+                По ТТ
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       ) : null}
 
       {!embedListOnly && showActualizationSync ? (

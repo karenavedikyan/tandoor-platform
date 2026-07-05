@@ -88,7 +88,8 @@ const ACTUALIZATION_SAVE_STATUS_ROUTES = [
 const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-item-home": Home,
   "nav-item-clients": Users,
-  "nav-item-trade-points": Store,
+  "nav-item-clients-tps": Users,
+  "nav-clients-tps": Users,
   "nav-item-client-map": Map,
   "nav-item-client-base-activity": BarChart3,
   "nav-item-team-activity": Users,
@@ -104,7 +105,6 @@ const ICON_BY_TESTID: Partial<Record<string, LucideIcon>> = {
   "nav-main": Home,
   "nav-client-map": Map,
   "nav-dealer-base": Users,
-  "nav-trade-points": Store,
   "nav-catalog": LayoutGrid,
   "nav-tasks": ListTodo,
   "nav-communications": MessageCircle,
@@ -130,7 +130,8 @@ function isMainPath(path: string) {
 }
 
 function isDealerBasePath(path: string) {
-  return path === DEALER_BASE_HREF;
+  const p = path.split("?")[0] ?? path;
+  return p === DEALER_BASE_HREF;
 }
 
 function isTradePointsPath(path: string) {
@@ -212,8 +213,7 @@ function isNavItemActive(item: PilotNavItem, location: string, isActiveFromLink?
   }
   const bid = behaviorId(item);
   if (bid === "nav-main") return isMainPath(location);
-  if (bid === "nav-dealer-base") return isClientsSectionPath(location);
-  if (bid === "nav-trade-points") return isTradePointsPath(location);
+  if (bid === "nav-dealer-base") return isClientsSectionPath(location) || isTradePointsPath(location);
   if (bid === "nav-catalog") return isCatalogPath(location);
   if (bid === "nav-tasks") return isTasksPath(location);
   if (bid === "nav-tasks-inbox") return isTasksInboxPath(location);
@@ -265,9 +265,9 @@ function headerContextLabel(location: string) {
   if (isClientBaseActivityPath(location)) return "Статистика обновления базы";
   if (isSalesControlPlanFactPath(location)) return "План-факт и KPI";
   if (isMainPath(location)) return "Главная";
-  if (isTradePointsPath(pathOnly)) return "Торговые точки";
+  if (isTradePointsPath(pathOnly)) return "Клиенты / ТТ";
   if (location.startsWith("/dealers/")) return "Карточка клиента";
-  if (isDealerBasePath(location)) return "Клиенты";
+  if (isDealerBasePath(location)) return "Клиенты / ТТ";
   if (isClientMapPath(location)) return "Карта клиентов";
   if (isTasksInboxPath(location)) return "Задачи";
   if (isTasksPath(location)) return "Задачи по витрине";
@@ -420,15 +420,9 @@ function NavRowLink({
   pilotWipTag?: boolean;
 }) {
   const bid = behaviorId(item);
-  const pulse = (bid === "nav-dealer-base" || bid === "nav-trade-points") && item.badgeLoading;
+  const pulse = bid === "nav-dealer-base" && item.badgeLoading;
   const countTestId =
-    bid === "nav-trade-points"
-      ? variant === "sidebar"
-        ? "text-sidebar-trade-points-count"
-        : "text-mobile-sidebar-trade-points-count"
-      : variant === "sidebar"
-        ? "text-sidebar-clients-count"
-        : "text-mobile-sidebar-clients-count";
+    variant === "sidebar" ? "text-sidebar-clients-count" : "text-mobile-sidebar-clients-count";
   const badgeClass =
     linkStyle === "pilot"
       ? "h-6 min-w-6 shrink-0 rounded-md border border-[#E3E6F3] bg-[#EEEFF6] px-1.5 text-xs tabular-nums text-[#222631]"
@@ -463,7 +457,7 @@ function NavRowLink({
         <span
           className="h-6 min-w-7 shrink-0 animate-pulse rounded-md bg-muted"
           aria-busy
-          aria-label={bid === "nav-trade-points" ? "Загрузка количества точек" : "Загрузка количества клиентов"}
+          aria-label="Загрузка количества клиентов"
           data-testid={countTestId}
         />
       ) : item.badge != null ? (

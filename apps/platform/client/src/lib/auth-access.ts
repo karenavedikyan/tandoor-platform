@@ -624,17 +624,10 @@ export function getPilotNavigation(
     leadingItems: [
       {
         href: homeHref,
-        label: "Клиенты-дилеры",
-        testId: "nav-item-clients",
+        label: "Клиенты / ТТ",
+        testId: "nav-item-clients-tps",
         navBehaviorId: "nav-dealer-base",
         ...dealerNavExtras(),
-      },
-      {
-        href: "/trade-points",
-        label: "Торговые точки",
-        testId: "nav-item-trade-points",
-        navBehaviorId: "nav-trade-points",
-        ...tradePointNavExtras(),
       },
       {
         href: "/distribution",
@@ -719,8 +712,13 @@ export function getPilotNavigation(
     const items: PilotNavItem[] = [];
     const push = (x: PilotNavItem) => items.push(x);
     if (role === "analyst") {
-      push({ href: "/dealer-base", label: "Клиенты", testId: "nav-dealer-base", ...dealerNavExtras() });
-      push({ href: "/trade-points", label: "Торговые точки", testId: "nav-trade-points", ...tradePointNavExtras() });
+      push({
+        href: "/dealer-base",
+        label: "Клиенты / ТТ",
+        testId: "nav-clients-tps",
+        navBehaviorId: "nav-dealer-base",
+        ...dealerNavExtras(),
+      });
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
       push({ href: "/assignments", label: "Задачи", testId: "nav-item-tasks-inbox", navBehaviorId: "nav-tasks-inbox" });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });

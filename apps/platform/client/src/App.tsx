@@ -54,7 +54,6 @@ const LazyMainRopDetail = lazy(() => import("@/pages/main-rop-detail"));
 const LazyDealerBase = lazy(() => import("@/pages/dealer-base"));
 const LazyDealerBaseCityDetail = lazy(() => import("@/pages/dealer-base-city-detail"));
 const LazyDealerBaseManagerDetail = lazy(() => import("@/pages/dealer-base-manager-detail"));
-const LazyTradePoints = lazy(() => import("@/pages/trade-points"));
 const LazyClientMap = lazy(() => import("@/pages/client-map"));
 const LazyDealerCardFoundation = lazy(() => import("@/pages/dealer-card-foundation"));
 const LazyDealerCardPage = lazy(() => import("@/pages/dealer-card-foundation").then((m) => ({ default: m.DealerCardPage })));
@@ -155,7 +154,6 @@ const MainRopDetailRoute = suspensePage(LazyMainRopDetail);
 const DealerBaseRoute = suspensePage(LazyDealerBase);
 const DealerBaseCityDetailRoute = suspensePageWithErrorBoundary(LazyDealerBaseCityDetail);
 const DealerBaseManagerDetailRoute = suspensePageWithErrorBoundary(LazyDealerBaseManagerDetail);
-const TradePointsRoute = suspensePageWithErrorBoundary(LazyTradePoints);
 const ClientMapRoute = suspensePage(LazyClientMap);
 const DealerCardFoundationRoute = suspensePage(LazyDealerCardFoundation);
 const DealerCardPageRoute = suspensePage(LazyDealerCardPage);
@@ -465,7 +463,14 @@ function AuthenticatedShell({
         <Route path="/dealer-base/city/:cityKey" component={DealerBaseCityDetailRoute} />
         <Route path="/dealer-base/manager/:managerId" component={DealerBaseManagerDetailRoute} />
         <Route path="/dealer-base" component={DealerBaseRoute} />
-        <Route path="/trade-points" component={TradePointsRoute} />
+        <Route path="/trade-points">
+          {() => {
+            if (typeof window !== "undefined") {
+              window.location.replace("#/dealer-base?entity=tps");
+            }
+            return null;
+          }}
+        </Route>
         <Route path="/client-map" component={ClientMapRoute} />
         <Route path="/catalog/1c/:productId" component={CatalogProduct1cPageRoute} />
         <Route path="/catalog/:productId" component={CatalogLegacyRedirectRoute} />
