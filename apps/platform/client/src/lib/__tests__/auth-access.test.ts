@@ -33,17 +33,69 @@ function navTestIds(role: Parameters<typeof getPilotNavigation>[0], platformUser
   return flattenGroupedPilotNavigation(model).map((i) => i.testId);
 }
 
+function groupedNav(role: Parameters<typeof getPilotNavigation>[0], platformUserRole: UserRole) {
+  const model = getPilotNavigation(role, undefined, undefined, platformUserRole);
+  assert.equal(model.layout, "grouped", `${platformUserRole}: expected grouped nav`);
+  return model;
+}
+
+function leadingTestIds(role: Parameters<typeof getPilotNavigation>[0], platformUserRole: UserRole) {
+  const model = groupedNav(role, platformUserRole);
+  return (model.leadingItems ?? []).map((i) => i.testId);
+}
+
+function administrationTestIds(role: Parameters<typeof getPilotNavigation>[0], platformUserRole: UserRole) {
+  const model = groupedNav(role, platformUserRole);
+  const group = model.groups.find((g) => g.key === "administration");
+  return group?.items.map((i) => i.testId) ?? null;
+}
+
 const adminIds = navTestIds("sales_director", "admin");
 assert.ok(adminIds.includes("nav-item-admin-brief-migrate-top"), "admin: top migrate shortcut");
 assert.ok(adminIds.includes("nav-item-admin-brief-migrate"), "admin: migrate in administration group");
 assert.ok(adminIds.includes("nav-item-admin-users"), "admin: administration users link");
+assert.equal(administrationTestIds("sales_director", "admin")?.[0], "nav-item-team-activity", "admin: team first in administration");
 
 for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
-  const ids = navTestIds(salesRole, salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager");
+  const platformUserRole =
+    salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager";
+  const ids = navTestIds(salesRole, platformUserRole);
   assert.ok(!ids.includes("nav-item-admin-brief-migrate-top"), `${salesRole}: no top migrate for non-admin`);
   assert.ok(!ids.includes("nav-item-admin-brief-migrate"), `${salesRole}: no migrate in nav for non-admin`);
   assert.ok(ids.includes("nav-item-marketing-briefs"), `${salesRole}: marketing briefs in main nav`);
+  assert.ok(
+    !leadingTestIds(salesRole, platformUserRole).includes("nav-item-team-activity"),
+    `${salesRole}: team not in leadingItems`,
+  );
 }
+
+for (const [salesRole, platformUserRole] of [
+  ["sales_director", "director"],
+  ["team_lead", "rop"],
+  ["team_lead", "regional_manager"],
+] as const) {
+  const adminIdsForRole = administrationTestIds(salesRole, platformUserRole);
+  assert.deepEqual(adminIdsForRole, ["nav-item-team-activity"], `${platformUserRole}: only team in administration`);
+  assert.ok(!adminIdsForRole!.includes("nav-item-admin-users"), `${platformUserRole}: no admin users link`);
+}
+
+for (const [salesRole, platformUserRole] of [
+  ["sales_manager", "manager"],
+  ["marketer", "marketer"],
+] as const) {
+  assert.equal(
+    administrationTestIds(salesRole, platformUserRole),
+    null,
+    `${platformUserRole}: no administration accordion`,
+  );
+}
+
+const analystNav = getPilotNavigation("analyst", undefined, undefined, "analyst");
+assert.equal(analystNav.layout, "flat", "analyst: flat nav");
+assert.ok(
+  !navTestIds("analyst", "analyst").includes("nav-group-administration"),
+  "analyst: no administration items",
+);
 
 const managerNav = navTestIds("sales_manager", "manager");
 const devGroup = getPilotNavigation("sales_manager", undefined, undefined, "manager");

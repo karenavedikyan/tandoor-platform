@@ -362,51 +362,42 @@ function buildAdministrationNavGroup(
   adminPurgeQueueCount?: number | null,
 ): PilotNavGroup | null {
   if (!platformUserRole) return null;
-  if (platformUserRole === "analyst") {
-    return {
-      key: "administration",
-      label: "АДМИНИСТРИРОВАНИЕ",
-      testId: "nav-group-administration",
-      items: [
-        {
-          href: "/admin/sync-health",
-          label: "Sync health overrides",
-          testId: "nav-item-admin-sync-health",
-          navBehaviorId: "nav-admin-sync-health",
-        },
-        {
-          href: "/admin/counts-diag",
-          label: "Счётчики",
-          testId: "nav-item-admin-counts-diag",
-          navBehaviorId: "nav-admin-counts-diag",
-        },
-        {
-          href: "/admin/tp-count-diag",
-          label: "ТТ-счётчики",
-          testId: "nav-item-admin-tp-count-diag",
-          navBehaviorId: "nav-admin-tp-count-diag",
-        },
-      ],
-    };
-  }
+
+  const hasTeam =
+    platformUserRole === "admin" ||
+    platformUserRole === "director" ||
+    platformUserRole === "rop" ||
+    platformUserRole === "regional_manager";
+  if (!hasTeam) return null;
+
   const items: PilotNavItem[] = [];
-  if (userHas(platformUserRole, "users.list")) {
+
+  if (canAccessTeamActivityForUser(platformUserRole)) {
     items.push({
-      href: "/admin/users",
-      label: "Пользователи",
-      testId: "nav-item-admin-users",
-      navBehaviorId: "nav-admin-users",
+      href: "/team-activity",
+      label: "Команда",
+      testId: "nav-item-team-activity",
+      navBehaviorId: "nav-team-activity",
     });
   }
-  if (canManageClientAssignments(platformUserRole)) {
-    items.push({
-      href: "/admin/client-assignments",
-      label: "Назначения клиентов",
-      testId: "nav-item-admin-client-assignments",
-      navBehaviorId: "nav-admin-client-assignments",
-    });
-  }
+
   if (platformUserRole === "admin") {
+    if (userHas(platformUserRole, "users.list")) {
+      items.push({
+        href: "/admin/users",
+        label: "Пользователи",
+        testId: "nav-item-admin-users",
+        navBehaviorId: "nav-admin-users",
+      });
+    }
+    if (canManageClientAssignments(platformUserRole)) {
+      items.push({
+        href: "/admin/client-assignments",
+        label: "Назначения клиентов",
+        testId: "nav-item-admin-client-assignments",
+        navBehaviorId: "nav-admin-client-assignments",
+      });
+    }
     items.push({
       href: "/admin/migrate-marketing-briefs",
       label: "Миграции брифов",
@@ -431,55 +422,47 @@ function buildAdministrationNavGroup(
       testId: "nav-item-admin-sync-health",
       navBehaviorId: "nav-admin-sync-health",
     });
-  }
-  if (platformUserRole === "admin" || platformUserRole === "director") {
     items.push({
       href: "/admin/performance",
       label: "Производительность",
       testId: "nav-item-admin-performance",
       navBehaviorId: "nav-admin-performance",
     });
-  }
-  if (userHas(platformUserRole, "admin.purge_dealer")) {
-    const purgeExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
-      if (adminPurgeQueueCount === undefined) return {};
-      if (adminPurgeQueueCount === null) return { badgeLoading: true };
-      if (adminPurgeQueueCount <= 0) return {};
-      return { badge: adminPurgeQueueCount };
-    };
-    items.push({
-      href: "/admin/purge-queue",
-      label: "Корзина админа",
-      testId: "nav-item-admin-purge-queue",
-      navBehaviorId: "nav-admin-purge-queue",
-      ...purgeExtras(),
-    });
-  }
-  if (platformUserRole === "admin") {
+    if (userHas(platformUserRole, "admin.purge_dealer")) {
+      const purgeExtras = (): Pick<PilotNavItem, "badge" | "badgeLoading"> => {
+        if (adminPurgeQueueCount === undefined) return {};
+        if (adminPurgeQueueCount === null) return { badgeLoading: true };
+        if (adminPurgeQueueCount <= 0) return {};
+        return { badge: adminPurgeQueueCount };
+      };
+      items.push({
+        href: "/admin/purge-queue",
+        label: "Корзина админа",
+        testId: "nav-item-admin-purge-queue",
+        navBehaviorId: "nav-admin-purge-queue",
+        ...purgeExtras(),
+      });
+    }
     items.push({
       href: "/admin/actualization/dedupe",
       label: "Дедуп актуализации",
       testId: "nav-item-admin-actualization-dedupe",
       navBehaviorId: "nav-admin-actualization-dedupe",
     });
-  }
-  if (userCanManageInvitations(platformUserRole)) {
-    items.push({
-      href: "/admin/invitations",
-      label: "Приглашения",
-      testId: "nav-item-admin-invitations",
-      navBehaviorId: "nav-admin-invitations",
-    });
-  }
-  if (platformUserRole === "admin" || platformUserRole === "director") {
+    if (userCanManageInvitations(platformUserRole)) {
+      items.push({
+        href: "/admin/invitations",
+        label: "Приглашения",
+        testId: "nav-item-admin-invitations",
+        navBehaviorId: "nav-admin-invitations",
+      });
+    }
     items.push({
       href: "/admin/audit",
       label: "Аудит",
       testId: "nav-item-admin-audit",
       navBehaviorId: "nav-admin-audit",
     });
-  }
-  if (platformUserRole === "admin" || platformUserRole === "director" || platformUserRole === "rop") {
     items.push({
       href: "/reset-requests",
       label: "Запросы на сброс",
@@ -487,6 +470,7 @@ function buildAdministrationNavGroup(
       navBehaviorId: "nav-reset-requests",
     });
   }
+
   if (items.length === 0) return null;
   return {
     key: "administration",
@@ -653,16 +637,6 @@ export function getPilotNavigation(
         testId: "nav-item-catalog",
         navBehaviorId: "nav-catalog",
       },
-      ...(platformUserRole && canAccessTeamActivityForUser(platformUserRole)
-        ? ([
-            {
-              href: "/team-activity",
-              label: "Команда",
-              testId: "nav-item-team-activity",
-              navBehaviorId: "nav-team-activity",
-            },
-          ] satisfies PilotNavItem[])
-        : []),
       {
         href: "/marketing-briefs",
         label: "Маркетинговые брифы",
