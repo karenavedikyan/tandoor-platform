@@ -25,6 +25,7 @@ import { useOrgScope } from "@/hooks/use-org-scope";
 import { useMyVisibleClientCodes } from "@/lib/use-my-visible-client-codes";
 import { mapUserRoleToDealerBaseAccess } from "@/lib/auth-user-dealer-access";
 import { buildDealerBaseRowsWithActualization } from "@/lib/client-base-actualization-data-merge";
+import { shouldUseTeamMergedActualizationPlane } from "@/lib/client-base-management-scope";
 import { useSubjectScopeActualizationState } from "@/hooks/use-subject-scope-actualization-state";
 import {
   buildRopGroups,
@@ -357,6 +358,8 @@ export default function DealerBaseManagerDetailPage() {
     (actx.enabled && actx.loading) ||
     (actx.enabled && teamCtx.teamFetchLoading);
 
+  const managementPlane = shouldUseTeamMergedActualizationPlane(profile);
+
   if (viewingOtherUserScope && targetScopeQ.loading) {
     return (
       <div className="min-w-0 space-y-6 pb-20" data-testid="page-dealer-base-manager-detail">
@@ -406,7 +409,7 @@ export default function DealerBaseManagerDetailPage() {
     );
   }
 
-  if (!loading && !viewingOtherUserScope && !actx.enabled) {
+  if (!loading && !viewingOtherUserScope && (!actx.enabled || !managementPlane)) {
     return <Redirect to={buildHashPath("/dealer-base")} />;
   }
 
