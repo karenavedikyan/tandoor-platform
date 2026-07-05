@@ -11,14 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { EntityCard, EntityCardEscape } from "@/components/ui/entity-card";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { useClientBaseTeamActualization } from "@/context/client-base-team-actualization-context";
 import { useAuthUser } from "@/hooks/use-auth-user";
@@ -516,59 +509,57 @@ export default function DealerBaseCityDetailPage() {
                   : "Нет клиентов по выбранным фильтрам."}
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-border bg-card">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Клиент</TableHead>
-                      <TableHead>Категория</TableHead>
-                      <TableHead>Менеджер</TableHead>
-                      <TableHead className="text-right">ТТ</TableHead>
-                      <TableHead className="w-[88px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredClients
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name, "ru"))
-                      .map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell className="max-w-[200px] truncate font-medium">{r.name}</TableCell>
-                          <TableCell>
-                            <button
-                              type="button"
-                              className="inline-flex transition-opacity hover:opacity-90"
-                              onClick={() =>
-                                setCategoryF(resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null))
-                              }
-                              data-testid={`link-city-client-category-${r.id}`}
-                            >
-                              <ClientCategoryBadge dealer={r} state={actx.enabled ? actx.state : null} />
-                            </button>
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              type="button"
-                              className="text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                              onClick={() => {
-                                const id = resolveDealerRowManagerCatalogId(r);
-                                if (id) setManagerF(id);
-                              }}
-                              data-testid={`link-city-client-manager-${r.id}`}
-                            >
-                              {getDealerManagerDisplay(r)}
-                            </button>
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums">{r.outlets}</TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
-                              <Link href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}>Карточка</Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                data-testid="city-clients-grid"
+              >
+                {filteredClients
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name, "ru"))
+                  .map((r) => (
+                    <EntityCard
+                      key={r.id}
+                      href={buildHashPath(`/dealers/${encodeURIComponent(r.id)}`)}
+                      testId={`card-city-client-${r.id}`}
+                      ariaLabel={`Карточка клиента ${r.name}`}
+                    >
+                      <div className="flex flex-col gap-2">
+                        <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary">
+                          {r.name}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <EntityCardEscape
+                            onActivate={() =>
+                              setCategoryF(resolveEffectiveClientCategory(r, actx.enabled ? actx.state : null))
+                            }
+                            testId={`link-city-client-category-${r.id}`}
+                            ariaLabel="Фильтр по категории"
+                          >
+                            <ClientCategoryBadge dealer={r} state={actx.enabled ? actx.state : null} />
+                          </EntityCardEscape>
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full bg-muted text-xs font-normal text-muted-foreground"
+                            data-testid={`badge-city-client-outlets-${r.id}`}
+                          >
+                            ТТ: {r.outlets}
+                          </Badge>
+                        </div>
+                        <EntityCardEscape
+                          onActivate={() => {
+                            const id = resolveDealerRowManagerCatalogId(r);
+                            if (id) setManagerF(id);
+                          }}
+                          className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          testId={`link-city-client-manager-${r.id}`}
+                          ariaLabel="Фильтр по менеджеру"
+                        >
+                          <span className="mr-1 text-muted-foreground/70">Менеджер:</span>
+                          <span className="truncate">{getDealerManagerDisplay(r)}</span>
+                        </EntityCardEscape>
+                      </div>
+                    </EntityCard>
+                  ))}
               </div>
             )}
           </TabsContent>
@@ -597,77 +588,86 @@ export default function DealerBaseCityDetailPage() {
             ) : tradePointRows.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Нет точек по выбранным фильтрам.</p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-border bg-card">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Точка</TableHead>
-                      <TableHead>Клиент</TableHead>
-                      <TableHead>Менеджер</TableHead>
-                      <TableHead className="w-[88px]" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tradePointRows.map((tp) => (
-                      <TableRow key={tp.tpId}>
-                        <TableCell className="max-w-[180px] truncate font-medium">{tp.name}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{tp.dealerName}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{tp.manager}</TableCell>
-                        <TableCell>
-                          <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
-                            <Link
-                              href={buildHashPath(
-                                `/dealers/${encodeURIComponent(tp.dealerId)}/trade-points/${encodeURIComponent(tp.tpId)}`,
-                              )}
-                            >
-                              Открыть
-                            </Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                data-testid="city-trade-points-grid"
+              >
+                {tradePointRows.map((tp) => (
+                  <EntityCard
+                    key={tp.tpId}
+                    href={buildHashPath(
+                      `/dealers/${encodeURIComponent(tp.dealerId)}/trade-points/${encodeURIComponent(tp.tpId)}`,
+                    )}
+                    testId={`card-city-trade-point-${tp.tpId}`}
+                    ariaLabel={`Карточка торговой точки ${tp.name}`}
+                  >
+                    <div className="flex flex-col gap-2">
+                      <p className="truncate text-sm font-semibold text-foreground group-hover:text-primary">
+                        {tp.name}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="shrink-0 text-muted-foreground/70">Клиент:</span>
+                        <span className="truncate">{tp.dealerName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="shrink-0 text-muted-foreground/70">Менеджер:</span>
+                        <span className="truncate">{tp.manager}</span>
+                      </div>
+                    </div>
+                  </EntityCard>
+                ))}
               </div>
             )}
           </TabsContent>
 
-          <TabsContent value="managers" className="mt-3 space-y-2">
+          <TabsContent value="managers" className="mt-3">
             {detail.byManager.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Нет данных по менеджерам.</p>
             ) : (
-              detail.byManager.map((m) => (
-                <Card
-                  key={`${m.managerCatalogId}-${m.managerName}`}
-                  className="rounded-xl border border-border bg-card text-card-foreground"
-                  data-testid={`card-city-manager-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
-                >
-                  <CardContent className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{m.managerName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {m.ropName ? `${m.ropName} · ` : ""}
-                        активные {m.activeClients} · ТТ {m.tradePoints}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      data-testid={`button-city-manager-clients-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
-                      onClick={() => {
-                        setManagerF(m.managerCatalogId);
-                        setActiveTab("clients");
-                        document
-                          .querySelector('[data-testid="tab-city-clients"]')
-                          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }}
-                    >
-                      Клиенты
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+                data-testid="city-managers-grid"
+              >
+                {detail.byManager.map((m) => (
+                  <Card
+                    key={`${m.managerCatalogId}-${m.managerName}`}
+                    className="rounded-xl border border-border bg-card text-card-foreground"
+                    data-testid={`card-city-manager-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+                  >
+                    <CardContent className="flex flex-col gap-3 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">{m.managerName}</p>
+                        {m.ropName ? (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">РОП: {m.ropName}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary" className="rounded-full bg-muted text-xs font-normal text-muted-foreground">
+                          Активные: {m.activeClients}
+                        </Badge>
+                        <Badge variant="secondary" className="rounded-full bg-muted text-xs font-normal text-muted-foreground">
+                          ТТ: {m.tradePoints}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="self-start"
+                        data-testid={`button-city-manager-clients-${m.managerCatalogId.replace(/[^a-zA-Z0-9_-]/g, "_")}`}
+                        onClick={() => {
+                          setManagerF(m.managerCatalogId);
+                          setActiveTab("clients");
+                          document
+                            .querySelector('[data-testid="tab-city-clients"]')
+                            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }}
+                      >
+                        Клиенты менеджера
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>
