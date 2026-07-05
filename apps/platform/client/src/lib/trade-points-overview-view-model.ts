@@ -173,6 +173,10 @@ export type OverviewManagerCard = ReturnType<typeof managerCardFromOverview>;
 export type TradePointsOverviewDisplayIndex = {
   tradePointsByManagerId: Map<string, number>;
   clientsByManagerId: Map<string, number>;
+  /** Иерархия: teamKey → managerId(userId | catalogId) → tradePoints. Приоритет над плоским `tradePointsByManagerId`. */
+  tradePointsByTeamAndManagerId: Map<string, Map<string, number>>;
+  /** Иерархия: teamKey → managerId(userId | catalogId) → clientsWithTp. Приоритет над плоским `clientsByManagerId`. */
+  clientsByTeamAndManagerId: Map<string, Map<string, number>>;
   tradePointsByTeamKey: Map<string, number>;
   clientsByTeamKey: Map<string, number>;
   managerCountByTeamKey: Map<string, number>;
@@ -187,6 +191,8 @@ export function buildTradePointsOverviewDisplayIndex(
 ): TradePointsOverviewDisplayIndex {
   const tradePointsByManagerId = new Map<string, number>();
   const clientsByManagerId = new Map<string, number>();
+  const tradePointsByTeamAndManagerId = new Map<string, Map<string, number>>();
+  const clientsByTeamAndManagerId = new Map<string, Map<string, number>>();
   const tradePointsByTeamKey = new Map<string, number>();
   const clientsByTeamKey = new Map<string, number>();
   const managerCountByTeamKey = new Map<string, number>();
@@ -196,18 +202,32 @@ export function buildTradePointsOverviewDisplayIndex(
   for (const g of ropGroups) {
     const managerIds = new Set<string>();
     const cards = g.managers.map((m) => managerCardFromOverview(m));
+    const teamLookupKeys = collectTradePointsOverviewTeamLookupKeys(g, orgSnap);
+
+    for (const key of teamLookupKeys) {
+      if (!tradePointsByTeamAndManagerId.has(key)) tradePointsByTeamAndManagerId.set(key, new Map());
+      if (!clientsByTeamAndManagerId.has(key)) clientsByTeamAndManagerId.set(key, new Map());
+    }
+    const teamTpMaps = teamLookupKeys.map((k) => tradePointsByTeamAndManagerId.get(k)!);
+    const teamCliMaps = teamLookupKeys.map((k) => clientsByTeamAndManagerId.get(k)!);
+
     for (const m of g.managers) {
       managerIds.add(m.userId);
       tradePointsByManagerId.set(m.userId, m.tradePoints);
       clientsByManagerId.set(m.userId, m.clientsWithTp);
+      for (const tpMap of teamTpMaps) tpMap.set(m.userId, m.tradePoints);
+      for (const cliMap of teamCliMaps) cliMap.set(m.userId, m.clientsWithTp);
+
       const catalogId = managerCatalogIdForUserId(m.userId);
       if (catalogId) {
         managerIds.add(catalogId);
         tradePointsByManagerId.set(catalogId, m.tradePoints);
         clientsByManagerId.set(catalogId, m.clientsWithTp);
+        for (const tpMap of teamTpMaps) tpMap.set(catalogId, m.tradePoints);
+        for (const cliMap of teamCliMaps) cliMap.set(catalogId, m.clientsWithTp);
       }
     }
-    for (const key of collectTradePointsOverviewTeamLookupKeys(g, orgSnap)) {
+    for (const key of teamLookupKeys) {
       tradePointsByTeamKey.set(key, g.tradePoints);
       clientsByTeamKey.set(key, g.clientsWithTp);
       managerCountByTeamKey.set(key, g.managers.length);
@@ -219,6 +239,8 @@ export function buildTradePointsOverviewDisplayIndex(
   return {
     tradePointsByManagerId,
     clientsByManagerId,
+    tradePointsByTeamAndManagerId,
+    clientsByTeamAndManagerId,
     tradePointsByTeamKey,
     clientsByTeamKey,
     managerCountByTeamKey,
@@ -278,6 +300,24 @@ export function lookupOverviewManagerCardsForTeam(
   for (const key of candidates) {
     const cards = managerCardsByTeamKey.get(key);
     if (cards) return cards;
+  }
+  return undefined;
+}
+
+export function lookupOverviewNumberForTeamAndManager(
+  teamMaps: Map<string, Map<string, number>>,
+  teamId: string,
+  managerId: string,
+  orgSnap?: OrgSnapshot | null,
+): number | undefined {
+  const candidates = [teamId, String(teamId ?? "__no_rop__")];
+  if (orgSnap) {
+    candidates.push(resolveManagementCatalogTeamId(teamId, orgSnap));
+    candidates.push(resolveManagementOrgTeamUuid(teamId, orgSnap));
+  }
+  for (const key of candidates) {
+    const inner = teamMaps.get(key);
+    if (inner && inner.has(managerId)) return inner.get(managerId);
   }
   return undefined;
 }
