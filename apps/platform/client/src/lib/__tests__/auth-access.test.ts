@@ -65,12 +65,11 @@ assert.deepEqual(buildTrashNavBadge(0, 5), { badge: 5 });
 assert.deepEqual(buildTrashNavBadge(0, 0), {});
 assert.deepEqual(buildTrashNavBadge(null, 0), { badgeLoading: true });
 
-const navWithTrash = getPilotNavigation("sales_manager", 44, 33, "manager", 12, 10);
-assert.equal(navWithTrash.layout, "grouped");
-if (navWithTrash.layout === "grouped") {
-  const flat = flattenGroupedPilotNavigation(navWithTrash);
-  const trashItem = flat.find((i) => i.testId === "nav-item-trash");
-  assert.equal(trashItem?.badge, "12/10", "418: trash nav badge dealers/tp");
+const navWithTrashCounts = getPilotNavigation("sales_manager", 44, 33, "manager", 12, 10);
+assert.equal(navWithTrashCounts.layout, "grouped");
+if (navWithTrashCounts.layout === "grouped") {
+  const flat = flattenGroupedPilotNavigation(navWithTrashCounts);
+  assert.equal(flat.find((i) => i.testId === "nav-item-trash"), undefined, "trash removed from sidebar nav");
 }
 
 console.log("auth-access trash badge: ok");

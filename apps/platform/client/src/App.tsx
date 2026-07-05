@@ -425,6 +425,8 @@ function AuthenticatedShell({
         role: user.role,
       }}
       isImpersonating={Boolean(user.impersonatedBy)}
+      trashDealersCount={trashDealersNavCount}
+      trashTradePointsCount={trashTradePointsNavCount}
     >
       {overridesBootstrap}
       <NavigationDepthTracker />

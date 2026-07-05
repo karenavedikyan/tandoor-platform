@@ -42,6 +42,7 @@ import triangleMarkUrl from "@/assets/brand/tandoor-triangle-mark.svg";
 import { TandoorLogo } from "@/components/tandoor-logo";
 import { ThemeToggleDesktop, ThemeToggleSidebarCompact } from "@/components/theme-toggle";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
+import { TrashHeaderButton } from "@/components/layout/trash-header-button";
 import { SaveStatusBadge } from "@/components/client-base-actualization-save-status-badge";
 import { cn } from "@/lib/utils";
 import { flattenGroupedPilotNavigation, type PilotNavGroup, type PilotNavItem, type PilotNavigationModel } from "@/lib/auth-access";
@@ -778,6 +779,8 @@ export type AppShellProps = {
   isImpersonating?: boolean;
   /** Временная диагностика ролей для сайдбара (промт 104.3). */
   navDebugRoles?: { salesRole: SalesRole; platformUserRole: UserRole };
+  trashDealersCount?: number | null;
+  trashTradePointsCount?: number | null;
 };
 
 export function AppShell({
@@ -793,6 +796,8 @@ export function AppShell({
   shellUser = null,
   isImpersonating = false,
   navDebugRoles,
+  trashDealersCount,
+  trashTradePointsCount,
 }: AppShellProps) {
   useEffect(() => {
     if (navDebugRoles) {
@@ -854,6 +859,11 @@ export function AppShell({
               <GlobalSearchTrigger variant="mobile" onOpen={openGlobalSearch} />
               {showSaveBadge ? <SaveStatusBadge /> : null}
               <NotificationsBell />
+              <TrashHeaderButton
+                dealersCount={trashDealersCount}
+                tradePointsCount={trashTradePointsCount}
+                variant="mobile"
+              />
               <ThemeToggleDesktop className="h-9 w-9" />
               <Button
                 type="button"
@@ -1012,6 +1022,10 @@ export function AppShell({
           <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 sm:gap-3">
             {showSaveBadge ? <SaveStatusBadge /> : null}
             <NotificationsBell />
+            <TrashHeaderButton
+              dealersCount={trashDealersCount}
+              tradePointsCount={trashTradePointsCount}
+            />
             <ThemeToggleDesktop />
             <Button type="button" variant="outline" size="sm" className="max-w-[10rem] truncate border-border/80" data-testid="button-current-city">
               <span data-testid="text-current-city">{cityLabel}</span>
@@ -1122,6 +1136,11 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-2">
               <GlobalSearchTrigger variant="mobile" onOpen={openGlobalSearch} />
               <NotificationsBell />
+              <TrashHeaderButton
+                dealersCount={trashDealersCount}
+                tradePointsCount={trashTradePointsCount}
+                variant="mobile"
+              />
               {showSaveBadge ? <SaveStatusBadge /> : null}
             </div>
           </div>
