@@ -199,6 +199,11 @@ import {
   type WorkPlanListFilter,
   WORK_PLAN_FILTER_LABELS,
 } from "@/lib/dealer-work-plan";
+import {
+  buildReleaseClientByCodeMap,
+  dealerRowMatchesSegment,
+  type DealerBaseSegmentKey,
+} from "@/lib/dealer-base-dealer-segment";
 import { resolveWorkPlanState } from "@/lib/dealer-work-plan-db-cache";
 import { DealerShipmentDayPlanner } from "@/components/dealer-shipment-day-planner";
 import { DealerShipmentRoutesSection } from "@/components/dealer-shipment-routes-section";
@@ -1494,6 +1499,9 @@ export type DealerBaseProps = {
   scopeUserId?: string;
   /** Если true — рендерим только таблицу/карточки + фильтры. */
   embedListOnly?: boolean;
+  /** Дополнительный фильтр списка по бизнес-сегменту (чипы «Сегментация» на штабе менеджера).
+   *  null/undefined = фильтр выключен. Применяется поверх всех остальных фильтров. */
+  forcedSegmentFilter?: DealerBaseSegmentKey | null;
 };
 
 export default function DealerBase(props: DealerBaseProps = {}) {
@@ -1504,7 +1512,7 @@ export default function DealerBase(props: DealerBaseProps = {}) {
   );
 }
 
-function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
+function DealerBaseContent({ scopeUserId, embedListOnly = false, forcedSegmentFilter = null }: DealerBaseProps = {}) {
   const scopeUserIdResolved = scopeUserId?.trim() || undefined;
 
   const [entity, setEntity] = useState<"clients" | "tps">(() => {
@@ -3151,11 +3159,22 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     return filterDealersByWorkPlan(displayRows, profile.personaUserId, workPlanFilter, workPlanState);
   }, [displayRows, profile.personaUserId, workPlanFilter, workPlanState]);
 
+  const forcedSegmentReleaseByCode = useMemo(
+    () => (forcedSegmentFilter ? buildReleaseClientByCodeMap() : null),
+    [forcedSegmentFilter],
+  );
+
   const rowsAfterSegmentFilter = useMemo(() => {
-    if (segmentList.length === 0) return rowsForWorkPlan;
-    const set = new Set(segmentList);
-    return rowsForWorkPlan.filter((r) => set.has(getDealerBaseSegment(r)));
-  }, [rowsForWorkPlan, segmentList]);
+    let rows = rowsForWorkPlan;
+    if (segmentList.length > 0) {
+      const set = new Set(segmentList);
+      rows = rows.filter((r) => set.has(getDealerBaseSegment(r)));
+    }
+    if (forcedSegmentFilter && forcedSegmentReleaseByCode) {
+      rows = rows.filter((r) => dealerRowMatchesSegment(r, forcedSegmentFilter, forcedSegmentReleaseByCode));
+    }
+    return rows;
+  }, [rowsForWorkPlan, segmentList, forcedSegmentFilter, forcedSegmentReleaseByCode]);
 
   /** Для маршрутов: те же права/рабочий план, но без фильтра ТОП-сегмента — чтобы не «терялись» клиенты. */
   const rowsForRoutePlanning = useMemo(() => rowsForWorkPlan, [rowsForWorkPlan]);
