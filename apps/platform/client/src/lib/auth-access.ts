@@ -598,6 +598,12 @@ export function getPilotNavigation(
       { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
       { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
       { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
+      {
+        href: "/sales-control/plan-fact",
+        label: "План-факт и KPI",
+        testId: "nav-item-sales-plan-fact",
+        navBehaviorId: "nav-sales-control",
+      },
     ];
     if (options.includeMarketingBriefsInDev) {
       items.push({
@@ -646,12 +652,6 @@ export function getPilotNavigation(
         label: "Каталог",
         testId: "nav-item-catalog",
         navBehaviorId: "nav-catalog",
-      },
-      {
-        href: "/sales-control/plan-fact",
-        label: "План-факт и KPI",
-        testId: "nav-item-sales-plan-fact",
-        navBehaviorId: "nav-sales-control",
       },
       ...(platformUserRole && canAccessTeamActivityForUser(platformUserRole)
         ? ([
