@@ -50,11 +50,45 @@ function administrationTestIds(role: Parameters<typeof getPilotNavigation>[0], p
   return group?.items.map((i) => i.testId) ?? null;
 }
 
+const TEAM_LEADERSHIP_ADMIN_IDS = [
+  "nav-item-team-activity",
+  "nav-item-admin-users",
+  "nav-item-admin-client-assignments",
+  "nav-item-admin-invitations",
+  "nav-item-reset-requests",
+] as const;
+
+const TECHNICAL_ADMIN_ONLY_IDS = [
+  "nav-item-admin-brief-migrate",
+  "nav-item-admin-dealer-tp-migrate",
+  "nav-item-admin-catalog-1c-migrate",
+  "nav-item-admin-sync-health",
+  "nav-item-admin-performance",
+  "nav-item-admin-purge-queue",
+  "nav-item-admin-actualization-dedupe",
+  "nav-item-admin-audit",
+] as const;
+
 const adminIds = navTestIds("sales_director", "admin");
 assert.ok(adminIds.includes("nav-item-admin-brief-migrate-top"), "admin: top migrate shortcut");
 assert.ok(adminIds.includes("nav-item-admin-brief-migrate"), "admin: migrate in administration group");
 assert.ok(adminIds.includes("nav-item-admin-users"), "admin: administration users link");
-assert.equal(administrationTestIds("sales_director", "admin")?.[0], "nav-item-team-activity", "admin: team first in administration");
+const adminAdministrationIds = administrationTestIds("sales_director", "admin");
+assert.equal(adminAdministrationIds?.[0], "nav-item-team-activity", "admin: team first in administration");
+assert.deepEqual(
+  adminAdministrationIds?.slice(0, 3),
+  ["nav-item-team-activity", "nav-item-admin-users", "nav-item-admin-client-assignments"],
+  "admin: team leadership block order",
+);
+for (const id of TECHNICAL_ADMIN_ONLY_IDS) {
+  assert.ok(adminAdministrationIds?.includes(id), `admin: includes ${id}`);
+}
+assert.ok(
+  adminAdministrationIds?.indexOf("nav-item-admin-invitations")! >
+    adminAdministrationIds!.indexOf("nav-item-admin-audit")!,
+  "admin: invitations after technical items",
+);
+assert.equal(adminAdministrationIds?.at(-1), "nav-item-reset-requests", "admin: reset requests last");
 
 for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
   const platformUserRole =
@@ -75,8 +109,10 @@ for (const [salesRole, platformUserRole] of [
   ["team_lead", "regional_manager"],
 ] as const) {
   const adminIdsForRole = administrationTestIds(salesRole, platformUserRole);
-  assert.deepEqual(adminIdsForRole, ["nav-item-team-activity"], `${platformUserRole}: only team in administration`);
-  assert.ok(!adminIdsForRole!.includes("nav-item-admin-users"), `${platformUserRole}: no admin users link`);
+  assert.deepEqual(adminIdsForRole, [...TEAM_LEADERSHIP_ADMIN_IDS], `${platformUserRole}: team leadership administration items`);
+  for (const id of TECHNICAL_ADMIN_ONLY_IDS) {
+    assert.ok(!adminIdsForRole?.includes(id), `${platformUserRole}: no ${id}`);
+  }
 }
 
 for (const [salesRole, platformUserRole] of [

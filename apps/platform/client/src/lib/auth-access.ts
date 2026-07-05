@@ -370,6 +370,7 @@ function buildAdministrationNavGroup(
     platformUserRole === "regional_manager";
   if (!hasTeam) return null;
 
+  const isAdmin = platformUserRole === "admin";
   const items: PilotNavItem[] = [];
 
   if (canAccessTeamActivityForUser(platformUserRole)) {
@@ -381,23 +382,25 @@ function buildAdministrationNavGroup(
     });
   }
 
-  if (platformUserRole === "admin") {
-    if (userHas(platformUserRole, "users.list")) {
-      items.push({
-        href: "/admin/users",
-        label: "Пользователи",
-        testId: "nav-item-admin-users",
-        navBehaviorId: "nav-admin-users",
-      });
-    }
-    if (canManageClientAssignments(platformUserRole)) {
-      items.push({
-        href: "/admin/client-assignments",
-        label: "Назначения клиентов",
-        testId: "nav-item-admin-client-assignments",
-        navBehaviorId: "nav-admin-client-assignments",
-      });
-    }
+  if (userHas(platformUserRole, "users.list") || !isAdmin) {
+    items.push({
+      href: "/admin/users",
+      label: "Пользователи",
+      testId: "nav-item-admin-users",
+      navBehaviorId: "nav-admin-users",
+    });
+  }
+
+  if (canManageClientAssignments(platformUserRole) || platformUserRole === "regional_manager") {
+    items.push({
+      href: "/admin/client-assignments",
+      label: "Назначения клиентов",
+      testId: "nav-item-admin-client-assignments",
+      navBehaviorId: "nav-admin-client-assignments",
+    });
+  }
+
+  if (isAdmin) {
     items.push({
       href: "/admin/migrate-marketing-briefs",
       label: "Миграции брифов",
@@ -449,27 +452,29 @@ function buildAdministrationNavGroup(
       testId: "nav-item-admin-actualization-dedupe",
       navBehaviorId: "nav-admin-actualization-dedupe",
     });
-    if (userCanManageInvitations(platformUserRole)) {
-      items.push({
-        href: "/admin/invitations",
-        label: "Приглашения",
-        testId: "nav-item-admin-invitations",
-        navBehaviorId: "nav-admin-invitations",
-      });
-    }
     items.push({
       href: "/admin/audit",
       label: "Аудит",
       testId: "nav-item-admin-audit",
       navBehaviorId: "nav-admin-audit",
     });
+  }
+
+  if (userCanManageInvitations(platformUserRole) || platformUserRole === "regional_manager") {
     items.push({
-      href: "/reset-requests",
-      label: "Запросы на сброс",
-      testId: "nav-item-reset-requests",
-      navBehaviorId: "nav-reset-requests",
+      href: "/admin/invitations",
+      label: "Приглашения",
+      testId: "nav-item-admin-invitations",
+      navBehaviorId: "nav-admin-invitations",
     });
   }
+
+  items.push({
+    href: "/reset-requests",
+    label: "Запросы на сброс",
+    testId: "nav-item-reset-requests",
+    navBehaviorId: "nav-reset-requests",
+  });
 
   if (items.length === 0) return null;
   return {
