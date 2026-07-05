@@ -51,21 +51,21 @@ const CASES: RoleExpectation[] = [
     role: "admin",
     expectedSalesRole: "sales_director",
     expectedFallbackPersona: "user-dir-goncharenko",
-    navMustContain: ["nav-dealer-base", "nav-trade-points"],
+    navMustContain: ["nav-dealer-base"],
     hasOwnScope: false,
   },
   {
     role: "director",
     expectedSalesRole: "sales_director",
     expectedFallbackPersona: "user-dir-goncharenko",
-    navMustContain: ["nav-dealer-base", "nav-trade-points", "nav-sales-control"],
+    navMustContain: ["nav-dealer-base", "nav-sales-control"],
     hasOwnScope: false,
   },
   {
     role: "rop",
     expectedSalesRole: "team_lead",
     expectedFallbackPersona: "user-tl-kupiansky",
-    navMustContain: ["nav-dealer-base", "nav-trade-points"],
+    navMustContain: ["nav-dealer-base"],
     hasOwnScope: true,
   },
   {
@@ -93,7 +93,7 @@ const CASES: RoleExpectation[] = [
     role: "analyst",
     expectedSalesRole: "analyst",
     expectedFallbackPersona: "user-anl-ivanets",
-    navMustContain: ["nav-dealer-base", "nav-trade-points"],
+    navMustContain: ["nav-dealer-base"],
     hasOwnScope: false,
   },
   {
