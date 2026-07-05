@@ -664,13 +664,6 @@ export function getPilotNavigation(
           ] satisfies PilotNavItem[])
         : []),
       {
-        href: "/trash",
-        label: "Корзина",
-        testId: "nav-item-trash",
-        navBehaviorId: "nav-trash",
-        ...trashNavExtras(),
-      },
-      {
         href: "/marketing-briefs",
         label: "Маркетинговые брифы",
         testId: "nav-item-marketing-briefs",
