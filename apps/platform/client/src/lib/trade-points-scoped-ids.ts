@@ -5,7 +5,7 @@
 import { displayCityLabelFromRawCity } from "./main-dashboard-city-stats.js";
 import type { ScopedTradePointDto, TradePointsListScopedResponse } from "./trade-points-scoped-api.js";
 
-function cityKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
+export function cityKeyForScopedTradePoint(tp: ScopedTradePointDto): string {
   return displayCityLabelFromRawCity(tp.dealerCity ?? tp.city, tp.address);
 }
 

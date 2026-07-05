@@ -105,7 +105,6 @@ import { UUID_TO_MGR_FOR_ACTUALIZATION_DEDUPE } from "@shared/admin/actualizatio
 import { useLocation } from "wouter";
 import { ManagerTeamCard } from "@/components/dealer-base/manager-team-card";
 import { ManagerDistributionMiniBar } from "@/components/distribution/manager-distribution-mini-bar";
-import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { ScopedTradePointDto } from "@/lib/trade-points-scoped-api";
 import {
@@ -1249,10 +1248,12 @@ export function DealerBaseManagementCockpit({
                               </span>
                             </div>
                             {staffDistributionEnabled && distributionAct ? (
-                              <CompactDistributionBadge
+                              <ManagerDistributionMiniBar
                                 externalKeys={cityExternalKeysMap.get(c.cityKey) ?? []}
                                 act={distributionAct}
-                                testId={`city-distribution-badge-${c.cityKey}`}
+                                showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+                                prefetching={distributionPrefetching ?? false}
+                                testId={`city-distribution-mini-${c.cityKey}`}
                               />
                             ) : null}
                           </Link>
@@ -1279,10 +1280,12 @@ export function DealerBaseManagementCockpit({
                       {" · "}ТТ <span className="font-semibold text-foreground">{resolveCityTp(overviewWithoutCity)}</span>
                       {staffDistributionEnabled && distributionAct ? (
                         <span className="ml-2 inline-flex align-baseline">
-                          <CompactDistributionBadge
+                          <ManagerDistributionMiniBar
                             externalKeys={cityExternalKeysMap.get("Без города") ?? []}
                             act={distributionAct}
-                            testId="city-distribution-badge-no-city"
+                            showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+                            prefetching={distributionPrefetching ?? false}
+                            testId="city-distribution-mini-no-city"
                           />
                         </span>
                       ) : null}
