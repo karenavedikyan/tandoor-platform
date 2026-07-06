@@ -5,6 +5,8 @@
 import type { PoolLike } from "./admin/admin-auth.js";
 import { fetchMyClientCodes } from "./my-client-codes-handlers.js";
 
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
 
@@ -262,7 +264,8 @@ function parseOptionalRef(raw: unknown): string | null {
 }
 
 
-function parseOurModels(raw: unknown): ShowcasePlacementOurModel[] {
+function parseOurModelsFromDb(raw: unknown): ShowcasePlacementOurModel[] {
+  if (raw == null) return [];
   if (!Array.isArray(raw)) return [];
   const out: ShowcasePlacementOurModel[] = [];
   for (const r of raw) {
@@ -270,6 +273,25 @@ function parseOurModels(raw: unknown): ShowcasePlacementOurModel[] {
     const modelId = String((r as { modelId?: unknown }).modelId ?? "").trim();
     const count = Number.parseInt(String((r as { count?: unknown }).count ?? ""), 10);
     if (!modelId || !Number.isFinite(count) || count < 1) continue;
+    out.push({ modelId, count });
+  }
+  return out;
+}
+
+function parseOurModels(raw: unknown): ShowcasePlacementOurModel[] {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) return [];
+  const out: ShowcasePlacementOurModel[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const modelId = String((r as { modelId?: unknown }).modelId ?? "").trim();
+    const count = Number.parseInt(String((r as { count?: unknown }).count ?? ""), 10);
+    if (!modelId || !Number.isFinite(count) || count < 1) continue;
+    if (!UUID_RX.test(modelId)) {
+      throw new ShowcaseMatrixValidationError(
+        `Модель ${modelId} внутри блока не связана с товаром 1С.`,
+      );
+    }
     out.push({ modelId, count });
   }
   return out;
@@ -376,6 +398,11 @@ export function parseShowcaseMatrixUpsertInput(body: Record<string, unknown>): S
     placementCompetitors: parseCompetitors(body.placementCompetitors),
     placementLegacyOurs: parseOptionalCount(body.placementLegacyOurs, "placementLegacyOurs"),
   };
+  if ((parsed.targetKind === "model" || parsed.targetKind === "variant") && !UUID_RX.test(parsed.targetId)) {
+    throw new ShowcaseMatrixValidationError(
+      `Позиция ${parsed.targetId} не связана с товаром 1С. Выберите товар из каталога.`,
+    );
+  }
   return normalizePlacementFields(parsed);
 }
 
@@ -414,7 +441,7 @@ function mapEntryRow(row: Record<string, unknown>): ShowcaseMatrixEntryDto {
     placementCapacity: mapOptionalInt(row.placement_capacity),
     placementActual: mapOptionalInt(row.placement_actual),
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
-    placementOurModels: parseOurModels(row.placement_our_models),
+    placementOurModels: parseOurModelsFromDb(row.placement_our_models),
     placementCompetitors: parseCompetitors(row.placement_competitors),
     placementLegacyOurs: mapOptionalInt(row.placement_legacy_ours),
   };
@@ -439,7 +466,7 @@ function mapEventRow(row: Record<string, unknown>): ShowcaseMatrixEventDto {
     placementCapacity: mapOptionalInt(row.placement_capacity),
     placementActual: mapOptionalInt(row.placement_actual),
     placementRef: row.placement_ref != null ? String(row.placement_ref) : null,
-    placementOurModels: parseOurModels(row.placement_our_models),
+    placementOurModels: parseOurModelsFromDb(row.placement_our_models),
     placementCompetitors: parseCompetitors(row.placement_competitors),
     placementLegacyOurs: mapOptionalInt(row.placement_legacy_ours),
   };

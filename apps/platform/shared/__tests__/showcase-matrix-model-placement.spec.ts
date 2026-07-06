@@ -4,12 +4,14 @@ import {
   ShowcaseMatrixValidationError,
 } from "../showcase-matrix-handlers.js";
 
+const MODEL_ENTRY_UUID = "413ef265-1234-4abc-8def-0123456789ab";
+
 function modelBody(overrides: Record<string, unknown> = {}) {
   return {
     dealerId: "client-test",
     tradePointId: "tp-1",
     targetKind: "model",
-    targetId: "model-1",
+    targetId: MODEL_ENTRY_UUID,
     status: "installed",
     ...overrides,
   };
