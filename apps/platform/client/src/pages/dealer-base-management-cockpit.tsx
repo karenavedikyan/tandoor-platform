@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info, Store, Users } from "lucide-react";
@@ -234,6 +234,37 @@ function detailTitle(detail: DetailKind | null, ropGroups: RopGroupModel[], citi
   return m?.name ?? "Менеджер";
 }
 
+const RopHeaderDistributionMiniBar = memo(function RopHeaderDistributionMiniBar({
+  teamId,
+  testId,
+  resolveKeys,
+  distributionAct,
+  showcaseUuidByMatrixKey,
+  prefetching,
+  enabled,
+}: {
+  teamId: string;
+  testId: string;
+  resolveKeys: (teamId: string) => string[];
+  distributionAct: ActualizationState | undefined;
+  showcaseUuidByMatrixKey: ReadonlyMap<string, string> | undefined;
+  prefetching: boolean;
+  enabled: boolean;
+}) {
+  if (!enabled || !distributionAct) return null;
+  const keys = resolveKeys(teamId);
+  if (keys.length === 0) return null;
+  return (
+    <ManagerDistributionMiniBar
+      externalKeys={keys}
+      act={distributionAct}
+      showcaseUuidByMatrixKey={showcaseUuidByMatrixKey}
+      prefetching={prefetching}
+      testId={testId}
+    />
+  );
+});
+
 type RopAccordionItemProps = {
   g: RopGroupModel;
   isOpen: boolean;
@@ -250,7 +281,7 @@ type RopAccordionItemProps = {
   distributionShowcaseUuidByMatrixKey?: ReadonlyMap<string, string>;
   distributionPrefetching?: boolean;
   resolveManagerDistributionKeys: (managerId: string, isRegional?: boolean) => string[];
-  ropDistributionMiniBar: (teamId: string, testId: string) => ReactNode;
+  resolveRopDistributionKeys: (teamId: string) => string[];
   onManagerOpen: (teamId: string, managerId: string) => void;
   onRopDetailsOpen: (teamId: string) => void;
 };
@@ -271,11 +302,12 @@ function RopAccordionItem({
   distributionShowcaseUuidByMatrixKey,
   distributionPrefetching,
   resolveManagerDistributionKeys,
-  ropDistributionMiniBar,
+  resolveRopDistributionKeys,
   onManagerOpen,
   onRopDetailsOpen,
 }: RopAccordionItemProps) {
   const showDistribution = useDeferredMount(isOpen, 1);
+  const showHeaderDistribution = useDeferredMount(true, 2);
   const teamKey = g.teamId ?? "__no_rop__";
   const displayManagers = managersForTeamDisplay(g.managers, teamKey);
   const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
@@ -339,7 +371,17 @@ function RopAccordionItem({
             {formatScopedTpCount(resolveTeamTp(g), g.outlets)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
             {formatScopedOverviewCount(resolveTeamManagerCount(g), g.managerCatalogCount)}
           </span>
-          {ropDistributionMiniBar(teamKey, `rop-distribution-mini-${teamKey}`)}
+          {showHeaderDistribution ? (
+            <RopHeaderDistributionMiniBar
+              teamId={teamKey}
+              testId={`rop-distribution-mini-${teamKey}`}
+              resolveKeys={resolveRopDistributionKeys}
+              distributionAct={distributionAct}
+              showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+              prefetching={distributionPrefetching ?? false}
+              enabled={staffDistributionEnabled}
+            />
+          ) : null}
         </div>
       </AccordionTrigger>
       <AccordionContent className="pb-3 pt-0">
@@ -1877,7 +1919,7 @@ export function DealerBaseManagementCockpit({
               distributionShowcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
               distributionPrefetching={distributionPrefetching}
               resolveManagerDistributionKeys={resolveManagerDistributionKeys}
-              ropDistributionMiniBar={ropDistributionMiniBar}
+              resolveRopDistributionKeys={resolveRopDistributionKeys}
               onManagerOpen={(teamId, managerId) => setDetail({ kind: "manager", teamId, managerId })}
               onRopDetailsOpen={(teamId) => setDetail({ kind: "rop", teamId })}
             />
