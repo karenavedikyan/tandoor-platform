@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { memo, type ReactElement } from "react";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import {
   ALL_EQUIPMENT_TYPES,
@@ -20,7 +20,7 @@ type Props = {
   testId?: string;
 };
 
-export function ManagerDistributionMiniBar({
+export const ManagerDistributionMiniBar = memo(function ManagerDistributionMiniBar({
   externalKeys,
   act,
   showcaseUuidByMatrixKey,
@@ -38,7 +38,7 @@ export function ManagerDistributionMiniBar({
       testId={testId}
     />
   );
-}
+});
 
 function ManagerDistributionMiniBarBody({
   externalKeys,
