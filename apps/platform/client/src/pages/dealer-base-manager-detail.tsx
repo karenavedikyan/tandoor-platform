@@ -50,7 +50,7 @@ import {
 } from "@/lib/dealer-base-dealer-segment";
 import {
   buildManagerDashboardModel,
-  findManagerInRopGroups,
+  findManagerInRopGroupByTeam,
   resolveManagerDetailObservationCtx,
 } from "@/lib/dealer-base-manager-dashboard-view-model";
 import {
@@ -66,7 +66,7 @@ import {
   activeTradePointIdsFromScopedResponse,
   buildShowcaseUuidByMatrixKeyFromScopedTradePoints,
 } from "@/lib/trade-points-scoped-ids";
-import { buildHashPath } from "@/lib/hash-route-utils";
+import { buildHashPath, useRouteSearchParams } from "@/lib/hash-route-utils";
 import { resolveManagerApiUserId } from "@/lib/trade-points-overview-view-model";
 import { fetchTradePointsOverview } from "@/lib/trade-points-overview-api";
 import { cn } from "@/lib/utils";
@@ -84,6 +84,8 @@ export default function DealerBaseManagerDetailPage() {
   const catalogRows = catalogQ.data ?? [];
   const [, params] = useRoute("/dealer-base/manager/:managerId");
   const managerId = decodeURIComponent(params?.managerId ?? "");
+  const routeQs = useRouteSearchParams();
+  const teamIdFromQuery = routeQs.get("teamId")?.trim() || undefined;
 
   const { user: me, isLoading: authLoading, isError: authError } = useAuthUser();
   const { profile } = useReleaseDemoProfile();
@@ -251,7 +253,10 @@ export default function DealerBaseManagerDetailPage() {
     [scopedRows, teams, orgTeamCtx, responsibleByCode, userIdToCatalogMgrId, grantedCodes],
   );
 
-  const managerCtx = useMemo(() => findManagerInRopGroups(managerId, ropGroups), [managerId, ropGroups]);
+  const managerCtx = useMemo(
+    () => findManagerInRopGroupByTeam(managerId, teamIdFromQuery, ropGroups),
+    [managerId, teamIdFromQuery, ropGroups],
+  );
 
   const tradePointsOverviewQ = useQuery({
     queryKey: ["trade-points-overview"],
@@ -335,13 +340,23 @@ export default function DealerBaseManagerDetailPage() {
   const managerTpFromOverview = useMemo<number | null>(() => {
     const data = tradePointsOverviewQ.data;
     if (!data) return null;
+    if (teamIdFromQuery) {
+      for (const g of data.ropGroups) {
+        if (String(g.teamId ?? "") !== teamIdFromQuery) continue;
+        for (const m of g.managers) {
+          if (m.userId === managerApiUserId) return m.tradePoints;
+          const catalogId = userIdToCatalogMgrId.get(m.userId);
+          if (catalogId && catalogId === managerId) return m.tradePoints;
+        }
+      }
+    }
     for (const g of data.ropGroups) {
       for (const m of g.managers) {
         if (m.userId === managerApiUserId) return m.tradePoints;
       }
     }
     return null;
-  }, [tradePointsOverviewQ.data, managerApiUserId]);
+  }, [tradePointsOverviewQ.data, managerApiUserId, teamIdFromQuery, userIdToCatalogMgrId, managerId]);
 
   const managerTradePointsKpiDisplay = useMemo(() => {
     if (!dashboard) return "—";
@@ -620,7 +635,7 @@ export default function DealerBaseManagerDetailPage() {
                 </Badge>
               </div>
             ) : null}
-            <DealerBase embedListOnly scopeUserId={managerApiUserId} />
+            <DealerBase embedListOnly scopeUserId={managerApiUserId} scopeTeamId={teamIdFromQuery} />
           </TabsContent>
 
           <TabsContent value="cities" className="mt-3">
@@ -647,6 +662,7 @@ export default function DealerBaseManagerDetailPage() {
           </TabsContent>
 
           <TabsContent value="trade_points" className="mt-3">
+            {/* TODO scope by team */}
             <TradePoints embedListOnly scopeUserId={managerApiUserId} />
           </TabsContent>
 

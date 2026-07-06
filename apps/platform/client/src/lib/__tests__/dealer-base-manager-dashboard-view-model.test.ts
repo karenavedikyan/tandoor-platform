@@ -6,6 +6,8 @@ import type { DealerRow } from "../dealer-base-mock-data";
 import type { ManagerRowModel } from "../dealer-base-management-view-model";
 import {
   buildManagerDashboardModel,
+  findManagerInRopGroupByTeam,
+  findManagerInRopGroups,
   resolveManagerDetailObservationCtx,
 } from "../dealer-base-manager-dashboard-view-model";
 
@@ -124,6 +126,54 @@ const manager: ManagerRowModel = {
   assert.equal(regionalCtx!.manager.name, "Дрогобицкий");
   assert.equal(regionalCtx!.manager.rows.length, scopedRows.length);
   assert.equal(regionalCtx!.ropName, "Директор");
+}
+
+{
+  const ropGroups = [
+    {
+      teamId: "team-A",
+      ropName: "A",
+      managers: [
+        {
+          managerId: "rm-1",
+          name: "M",
+          active: 24,
+          outlets: 0,
+          potential: 0,
+          attention: 0,
+          rows: [],
+          teamId: "team-A",
+          topSegmentLabel: "",
+          isExternal: false,
+          externalTeamName: null,
+        },
+      ],
+    },
+    {
+      teamId: "team-B",
+      ropName: "B",
+      managers: [
+        {
+          managerId: "rm-1",
+          name: "M",
+          active: 191,
+          outlets: 0,
+          potential: 0,
+          attention: 0,
+          rows: [],
+          teamId: "team-B",
+          topSegmentLabel: "",
+          isExternal: false,
+          externalTeamName: null,
+        },
+      ],
+    },
+  ] satisfies Parameters<typeof findManagerInRopGroupByTeam>[2];
+  assert.equal(findManagerInRopGroupByTeam("rm-1", "team-A", ropGroups)?.manager.active, 24);
+  assert.equal(findManagerInRopGroupByTeam("rm-1", "team-B", ropGroups)?.manager.active, 191);
+  assert.equal(findManagerInRopGroupByTeam("rm-1", null, ropGroups)?.manager.active, 24);
+  assert.equal(findManagerInRopGroupByTeam("rm-1", undefined, ropGroups)?.manager.active, 24);
+  assert.equal(findManagerInRopGroups("rm-1", ropGroups)?.manager.active, 24);
 }
 
 console.log("dealer-base-manager-dashboard-view-model.test.ts: ok");

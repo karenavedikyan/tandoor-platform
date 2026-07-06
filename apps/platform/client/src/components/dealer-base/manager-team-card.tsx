@@ -21,6 +21,8 @@ type Props = {
   manager: ManagerRowModel;
   ropName: string;
   heatLevel: ManagerHeatLevel;
+  /** Команда РОПа — пробрасывается в URL штаба менеджера (`?teamId=`). */
+  teamKey?: string;
   /** When set, shown instead of manager.outlets (e.g. loading gate "…"). */
   tpCountDisplay?: string;
   /** When set, shown instead of manager.active for clients count. */
@@ -35,6 +37,7 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({
   manager,
   ropName,
   heatLevel,
+  teamKey,
   tpCountDisplay,
   clientsCountDisplay,
   distributionExternalKeys,
@@ -137,7 +140,9 @@ export const ManagerTeamCard = memo(function ManagerTeamCard({
 
       <Button variant="outline" size="sm" className="h-8 w-full justify-between text-xs" asChild>
         <Link
-          href={buildHashPath(`/dealer-base/manager/${encodeURIComponent(manager.managerId)}`)}
+          href={buildHashPath(`/dealer-base/manager/${encodeURIComponent(manager.managerId)}`, {
+            ...(teamKey ? { teamId: teamKey } : {}),
+          })}
           data-testid={`button-manager-team-open-${manager.managerId}`}
         >
           Штаб менеджера

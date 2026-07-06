@@ -1381,6 +1381,7 @@ export function DealerBaseManagementCockpit({
                                         clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}
                                         ropName={g.ropName}
+                                        teamKey={teamKey}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                                         {...managerDistributionCardProps(m.managerId, m.isRegional)}
                                       />
@@ -1408,6 +1409,7 @@ export function DealerBaseManagementCockpit({
                                         clientsCountDisplay={formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}
                                         tpCountDisplay={formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}
                                         ropName={g.ropName}
+                                        teamKey={teamKey}
                                         heatLevel={managersView.heatMap[m.managerId] ?? "medium"}
                                         {...managerDistributionCardProps(m.managerId, m.isRegional)}
                                       />
