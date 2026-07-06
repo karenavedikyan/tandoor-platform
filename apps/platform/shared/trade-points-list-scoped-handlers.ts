@@ -41,6 +41,8 @@ export type ScopedTradePointDto = {
   teamName: string | null;
   ropUserId: string | null;
   ropFullName: string | null;
+  /** dealer_overrides.rop_id — территориальный РОП клиента (может отличаться от ca.team_id). */
+  overrideRopUserId: string | null;
 };
 
 type ScopedTradePointSqlRow = {
@@ -67,6 +69,7 @@ type ScopedTradePointSqlRow = {
   team_name: string | null;
   rop_user_id: string | null;
   rop_full_name: string | null;
+  override_rop_user_id: string | null;
 };
 
 export type ListScopedTradePointsResult =
@@ -107,7 +110,8 @@ const SCOPED_TP_SELECT = `
   ca.team_id::text AS team_id,
   t.name AS team_name,
   t.rop_user_id::text AS rop_user_id,
-  ru.full_name AS rop_full_name
+  ru.full_name AS rop_full_name,
+  d_ov.rop_id::text AS override_rop_user_id
 `;
 
 export function mapScopedTradePointRow(row: ScopedTradePointSqlRow): ScopedTradePointDto {
@@ -135,6 +139,7 @@ export function mapScopedTradePointRow(row: ScopedTradePointSqlRow): ScopedTrade
     teamName: row.team_name,
     ropUserId: row.rop_user_id,
     ropFullName: row.rop_full_name,
+    overrideRopUserId: row.override_rop_user_id,
   };
 }
 

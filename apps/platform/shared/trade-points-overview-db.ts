@@ -95,8 +95,77 @@ function managerName(tp: ScopedTradePointDto): string {
   return tp.managerFullName?.trim() || "Без менеджера";
 }
 
-function teamKey(tp: ScopedTradePointDto): string {
+function teamKey(tp: ScopedTradePointDto, ropUserToTeamId: Map<string, string>): string {
+  if (tp.overrideRopUserId) {
+    const overrideTeam = ropUserToTeamId.get(tp.overrideRopUserId);
+    if (overrideTeam) return overrideTeam;
+  }
   return tp.teamId ?? "__no_team__";
+}
+
+type TeamInfo = {
+  teamName: string;
+  ropUserId: string | null;
+  ropFullName: string;
+};
+
+async function loadRopUserToTeamId(pool: PoolLike): Promise<Map<string, string>> {
+  const ropUserToTeamId = new Map<string, string>();
+  const q = await pool.query<{ id: string; rop_user_id: string }>(
+    `SELECT id::text, rop_user_id::text FROM teams WHERE rop_user_id IS NOT NULL`,
+  );
+  for (const row of q.rows) {
+    if (row.rop_user_id) ropUserToTeamId.set(row.rop_user_id, row.id);
+  }
+  return ropUserToTeamId;
+}
+
+async function loadTeamsInfo(pool: PoolLike): Promise<Map<string, TeamInfo>> {
+  const teamsInfo = new Map<string, TeamInfo>();
+  const q = await pool.query<{
+    id: string;
+    name: string;
+    rop_user_id: string | null;
+    rop_name: string | null;
+  }>(
+    `SELECT t.id::text, t.name, t.rop_user_id::text, u.full_name AS rop_name
+       FROM teams t LEFT JOIN users u ON u.id = t.rop_user_id`,
+  );
+  for (const r of q.rows) {
+    teamsInfo.set(r.id, {
+      teamName: r.name ?? "Без команды",
+      ropUserId: r.rop_user_id,
+      ropFullName: r.rop_name ?? "—",
+    });
+  }
+  return teamsInfo;
+}
+
+function teamInfoForKey(
+  teamIdKey: string,
+  teamsInfo: Map<string, TeamInfo>,
+  sampleTp?: ScopedTradePointDto,
+): {
+  teamId: string | null;
+  teamName: string;
+  ropUserId: string | null;
+  ropFullName: string;
+} {
+  const info = teamsInfo.get(teamIdKey);
+  if (info) {
+    return {
+      teamId: teamIdKey === "__no_team__" ? null : teamIdKey,
+      teamName: info.teamName,
+      ropUserId: info.ropUserId,
+      ropFullName: info.ropFullName,
+    };
+  }
+  return {
+    teamId: teamIdKey === "__no_team__" ? null : teamIdKey,
+    teamName: sampleTp?.teamName?.trim() || "Без команды",
+    ropUserId: sampleTp?.ropUserId ?? null,
+    ropFullName: sampleTp?.ropFullName?.trim() || "—",
+  };
 }
 
 type RegionalManagerDealerStat = {
@@ -158,13 +227,14 @@ export async function fetchRegionalManagerDealerCountsByTeam(
 
 function buildRegionalManagerTpBuckets(
   tradePoints: ScopedTradePointDto[],
+  ropUserToTeamId: Map<string, string>,
   viewerTeam?: TradePointsOverviewViewerTeam | null,
 ): Map<string, Map<string, { fullName: string; tps: ScopedTradePointDto[] }>> {
   const buckets = new Map<string, Map<string, { fullName: string; tps: ScopedTradePointDto[] }>>();
   for (const tp of tradePoints) {
     const rmId = tp.regionalManagerUserId?.trim();
     if (!rmId) continue;
-    const tk = viewerTeam ? viewerTeam.teamId : teamKey(tp);
+    const tk = viewerTeam ? viewerTeam.teamId : teamKey(tp, ropUserToTeamId);
     let teamMap = buckets.get(tk);
     if (!teamMap) {
       teamMap = new Map();
@@ -233,6 +303,9 @@ export async function buildTradePointsOverviewFromDb(
   const scope = await computeDbScopeForUser(pool, userId, role);
   const sqlRows = await fetchScopedTradePointsRows(pool, scope, { activeOnly: true });
   const tradePoints = sqlRows.map((r) => mapScopedTradePointRow(r));
+
+  const ropUserToTeamId = await loadRopUserToTeamId(pool);
+  const teamsInfo = await loadTeamsInfo(pool);
 
   const clientsWithTpSet = new Set(tradePoints.map((tp) => tp.dealerExternalKey));
   const cityAgg = new Map<string, { cityName: string; tpCount: number; clientIds: Set<string> }>();
@@ -320,14 +393,15 @@ export async function buildTradePointsOverviewFromDb(
     }
   } else {
     for (const tp of tradePoints) {
-      const tk = teamKey(tp);
+      const tk = teamKey(tp, ropUserToTeamId);
       let group = teamAgg.get(tk);
       if (!group) {
+        const meta = teamInfoForKey(tk, teamsInfo, tp);
         group = {
-          teamId: tp.teamId,
-          teamName: tp.teamName?.trim() || "Без команды",
-          ropUserId: tp.ropUserId,
-          ropFullName: tp.ropFullName?.trim() || "—",
+          teamId: meta.teamId,
+          teamName: meta.teamName,
+          ropUserId: meta.ropUserId,
+          ropFullName: meta.ropFullName,
           managers: new Map(),
         };
         teamAgg.set(tk, group);
@@ -342,7 +416,7 @@ export async function buildTradePointsOverviewFromDb(
     }
   }
 
-  const regionalTpBuckets = buildRegionalManagerTpBuckets(tradePoints, viewerTeam);
+  const regionalTpBuckets = buildRegionalManagerTpBuckets(tradePoints, ropUserToTeamId, viewerTeam);
   const regionalDealerCounts =
     role === "regional_manager"
       ? new Map<string, Map<string, RegionalManagerDealerStat>>()
@@ -356,11 +430,12 @@ export async function buildTradePointsOverviewFromDb(
     const sampleTp = sampleBucket
       ? Array.from(sampleBucket.values()).find((v) => v.tps.length > 0)?.tps[0]
       : undefined;
+    const meta = teamInfoForKey(teamId, teamsInfo, sampleTp);
     teamAgg.set(teamId, {
-      teamId: teamId === "__no_team__" ? null : teamId,
-      teamName: sampleTp?.teamName?.trim() || "Без команды",
-      ropUserId: sampleTp?.ropUserId ?? null,
-      ropFullName: sampleTp?.ropFullName?.trim() || "—",
+      teamId: meta.teamId,
+      teamName: meta.teamName,
+      ropUserId: meta.ropUserId,
+      ropFullName: meta.ropFullName,
       managers: new Map(),
     });
   }
