@@ -115,6 +115,7 @@ import {
   type DealerBaseAccessRole,
   type DealerBaseWorkView,
 } from "@/lib/dealer-base-role-views";
+import { filterDealerRowsForManagementTeam } from "@/lib/dealer-base-management-view-model";
 import {
   applyDealerBasePickerFilters,
   type ClientCategorySelection,
@@ -1492,6 +1493,8 @@ function buildTotalsMapsFromOrgScope(data: OrgScopePayload): {
 export type DealerBaseProps = {
   /** Если задан — показываем scope этого пользователя, а не текущего me. */
   scopeUserId?: string;
+  /** Если задан вместе с scopeUserId — дополнительно ограничиваем клиентов командой РОПа. */
+  scopeTeamId?: string;
   /** Если true — рендерим только таблицу/карточки + фильтры. */
   embedListOnly?: boolean;
 };
@@ -1504,8 +1507,9 @@ export default function DealerBase(props: DealerBaseProps = {}) {
   );
 }
 
-function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBaseProps = {}) {
+function DealerBaseContent({ scopeUserId, scopeTeamId, embedListOnly = false }: DealerBaseProps = {}) {
   const scopeUserIdResolved = scopeUserId?.trim() || undefined;
+  const scopeTeamIdResolved = scopeTeamId?.trim() || undefined;
 
   const [entity, setEntity] = useState<"clients" | "tps">(() => {
     if (typeof window === "undefined") return "clients";
@@ -1941,41 +1945,43 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
   );
 
   const scopedRows = useMemo(() => {
+    let base: DealerRow[];
     if (viewingOtherUserScope && targetScopeQ.ready) {
       const role = targetScopeQ.scopeSubject.role;
       if (role === "manager" || role === "regional_manager") {
-        return filterRowsByDbScopeExternalKeys(
+        base = filterRowsByDbScopeExternalKeys(
           mergedRowsForDealerBase,
           targetScopeQ.active_dealer_external_keys,
         );
+      } else {
+        base = mergedRowsForDealerBase;
       }
-      return mergedRowsForDealerBase;
-    }
-    // [410] Manager в real-режиме: прямой scope от сервера через my-scope.
-    // catalogRows фильтруется по active_dealer_external_keys — никаких UUID/ФИО матчингов.
-    if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
-      return mergedRowsForDealerBase.filter((r) => dbScopedExternalKeys.has(r.id));
-    }
-    if (useReal && access === "team_lead") {
+    } else if (useReal && access === "sales_manager" && selfDbScopeQ.ready && dbScopedExternalKeys && dbScopedExternalKeys.size > 0) {
+      base = mergedRowsForDealerBase.filter((r) => dbScopedExternalKeys.has(r.id));
+    } else if (useReal && access === "team_lead") {
       if (!teamScopeQ.ready || !teamScopeQ.data) return [];
       const keys = dealerExternalKeysFromTeamScope(teamScopeQ.data);
-      return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
-    }
-    if (useReal && access === "sales_director") {
+      base = mergedRowsForDealerBase.filter((r) => keys.has(r.id));
+    } else if (useReal && access === "sales_director") {
       if (!orgScopeQ.ready || !orgScopeQ.data) return [];
       const keys = dealerExternalKeysFromOrgScope(orgScopeQ.data);
-      return mergedRowsForDealerBase.filter((r) => keys.has(r.id));
-    }
-    if (useReal && snap) {
-      return safeRoleScopedDealerRowsForReal(
+      base = mergedRowsForDealerBase.filter((r) => keys.has(r.id));
+    } else if (useReal && snap) {
+      base = safeRoleScopedDealerRowsForReal(
         mergedRowsForDealerBase,
         snap,
         access,
         undefined,
         assignmentsScopeIsActive(assignmentsScope) ? assignmentsScope : undefined,
       );
+    } else {
+      base = roleScopedDealerRows(mergedRowsForDealerBase, profile);
     }
-    return roleScopedDealerRows(mergedRowsForDealerBase, profile);
+
+    if (scopeTeamIdResolved && viewingOtherUserScope && scopeUserIdResolved) {
+      return filterDealerRowsForManagementTeam(base, scopeTeamIdResolved, snap);
+    }
+    return base;
   }, [
     viewingOtherUserScope,
     targetScopeQ.ready,
@@ -1993,6 +1999,8 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
     mergedRowsForDealerBase,
     profile,
     assignmentsScope,
+    scopeTeamIdResolved,
+    scopeUserIdResolved,
   ]);
 
   const scopedTpQ = useTradePointsScoped({
@@ -4678,7 +4686,9 @@ function DealerBaseContent({ scopeUserId, embedListOnly = false }: DealerBasePro
                 </div>
 
                 <div className="space-y-2 border-t border-border/60 pt-2">
-                  <p className="text-xs font-semibold text-muted-foreground">Ответственные</p>
+                  {!embedListOnly ? (
+                    <p className="text-xs font-semibold text-muted-foreground">Ответственные</p>
+                  ) : null}
                   <div
                     className={cn(
                       "grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2",

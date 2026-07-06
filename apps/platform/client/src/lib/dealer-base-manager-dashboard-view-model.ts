@@ -136,3 +136,18 @@ export function findManagerInRopGroups(
   }
   return null;
 }
+
+export function findManagerInRopGroupByTeam(
+  managerId: string,
+  teamId: string | null | undefined,
+  ropGroups: { teamId: string | null; ropName: string; managers: ManagerRowModel[] }[],
+): { manager: ManagerRowModel; ropName: string; teamId: string } | null {
+  if (!teamId) return findManagerInRopGroups(managerId, ropGroups as { teamId: string; ropName: string; managers: ManagerRowModel[] }[]);
+  const teamKey = String(teamId);
+  for (const g of ropGroups) {
+    if (String(g.teamId ?? "") !== teamKey) continue;
+    const manager = g.managers.find((m) => m.managerId === managerId);
+    if (manager) return { manager, ropName: g.ropName, teamId: String(g.teamId ?? "") };
+  }
+  return findManagerInRopGroups(managerId, ropGroups as { teamId: string; ropName: string; managers: ManagerRowModel[] }[]);
+}

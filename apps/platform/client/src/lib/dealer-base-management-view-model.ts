@@ -139,6 +139,34 @@ export function resolveDealerRowTeamId(row: DealerRow): string | undefined {
   return fromRop;
 }
 
+/** Оставить строки, принадлежащие команде (тот же критерий, что `buildRopGroups` / `groupRowsByResolvedTeamId`). */
+export function filterDealerRowsForManagementTeam(
+  rows: DealerRow[],
+  teamId: string,
+  orgSnap?: OrgSnapshot | null,
+): DealerRow[] {
+  const catalogTeamId = resolveManagementCatalogTeamId(teamId, orgSnap);
+  const orgTeamUuid = resolveManagementOrgTeamUuid(teamId, orgSnap);
+  const team = orgSnap?.teams.find(
+    (t) =>
+      t.id === orgTeamUuid ||
+      t.id === teamId ||
+      resolveManagementCatalogTeamId(t.id, orgSnap) === catalogTeamId,
+  );
+  const teamRopUserId = team?.ropUserId ?? null;
+
+  return rows.filter((row) => {
+    const rowTeamId = resolveDealerRowTeamId(row);
+    if (rowTeamId) {
+      const rowCatalog = resolveManagementCatalogTeamId(rowTeamId, orgSnap);
+      if (rowCatalog === catalogTeamId) return true;
+      if (rowTeamId === orgTeamUuid || rowTeamId === teamId) return true;
+    }
+    if (teamRopUserId && row.ropId === teamRopUserId) return true;
+    return false;
+  });
+}
+
 export function dealerRowClientCodeForAssignments(row: DealerRow): string {
   return row.releaseCode?.trim() || row.id;
 }
