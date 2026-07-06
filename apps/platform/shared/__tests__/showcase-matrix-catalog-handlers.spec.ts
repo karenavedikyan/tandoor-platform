@@ -458,6 +458,12 @@ describe("resolveActiveMatrixDef", () => {
   });
 });
 
+const MODEL_UUID_A = "11111111-1111-4111-8111-111111111111";
+const MODEL_UUID_B = "22222222-2222-4222-8222-222222222222";
+const MODEL_UUID_C = "33333333-3333-4333-8333-333333333333";
+const MODEL_UUID_X = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const MODEL_UUID_1C = "413ef265-1234-4abc-8def-0123456789ab";
+
 describe("replaceMatrixDefModels", () => {
   it("replaces composition transactionally and enforces unique targets", async () => {
     const pool = new InMemoryMatrixCatalogDb();
@@ -467,8 +473,22 @@ describe("replaceMatrixDefModels", () => {
     });
 
     const models: ShowcaseMatrixDefModelInput[] = [
-      { targetKind: "model", targetId: "a", segment: "vh", priority: "high", sortOrder: 0 },
-      { targetKind: "variant", targetId: "b", segment: "mk", sortOrder: 1, valueWeight: 50 },
+      {
+        targetKind: "model",
+        targetId: MODEL_UUID_A,
+        catalog1cId: MODEL_UUID_A,
+        segment: "vh",
+        priority: "high",
+        sortOrder: 0,
+      },
+      {
+        targetKind: "variant",
+        targetId: MODEL_UUID_B,
+        catalog1cId: MODEL_UUID_B,
+        segment: "mk",
+        sortOrder: 1,
+        valueWeight: 50,
+      },
     ];
     const inserted = await replaceMatrixDefModels(pool, def.id, models, ACTOR);
     expect(inserted).toHaveLength(2);
@@ -476,11 +496,11 @@ describe("replaceMatrixDefModels", () => {
     const replaced = await replaceMatrixDefModels(
       pool,
       def.id,
-      [{ targetKind: "model", targetId: "c", segment: "hardware" }],
+      [{ targetKind: "model", targetId: MODEL_UUID_C, catalog1cId: MODEL_UUID_C, segment: "hardware" }],
       ACTOR,
     );
     expect(replaced).toHaveLength(1);
-    expect(replaced[0]?.targetId).toBe("c");
+    expect(replaced[0]?.targetId).toBe(MODEL_UUID_C);
     expect([...pool.models.values()].filter((m) => m.def_id === def.id)).toHaveLength(1);
 
     await expect(
@@ -488,11 +508,66 @@ describe("replaceMatrixDefModels", () => {
         pool,
         def.id,
         [
-          { targetKind: "model", targetId: "x", segment: "vh" },
-          { targetKind: "model", targetId: "x", segment: "mk" },
+          { targetKind: "model", targetId: MODEL_UUID_X, catalog1cId: MODEL_UUID_X, segment: "vh" },
+          { targetKind: "model", targetId: MODEL_UUID_X, catalog1cId: MODEL_UUID_X, segment: "mk" },
         ],
         ACTOR,
       ),
     ).rejects.toThrow(ShowcaseMatrixCatalogValidationError);
+  });
+
+  it("отклоняет модель со slug-ом вместо UUID", async () => {
+    const pool = new InMemoryMatrixCatalogDb();
+    const { def } = await upsertMatrixDef(pool, ACTOR, {
+      clientCategory: "top500",
+      scopeKind: "global",
+    });
+
+    await expect(
+      replaceMatrixDefModels(
+        pool,
+        def.id,
+        [
+          {
+            targetKind: "model",
+            targetId: "tc-vh-era-grafit-belyy",
+            catalog1cId: null,
+            priority: "medium",
+            segment: "vh",
+            valueWeight: null,
+            sortOrder: 0,
+          },
+        ],
+        ACTOR,
+      ),
+    ).rejects.toThrow(/не связана с товаром 1С/);
+  });
+
+  it("принимает модель с UUID из 1С в targetId", async () => {
+    const pool = new InMemoryMatrixCatalogDb();
+    const { def } = await upsertMatrixDef(pool, ACTOR, {
+      clientCategory: "top500",
+      scopeKind: "global",
+    });
+
+    const result = await replaceMatrixDefModels(
+      pool,
+      def.id,
+      [
+        {
+          targetKind: "model",
+          targetId: MODEL_UUID_1C,
+          catalog1cId: MODEL_UUID_1C,
+          priority: "medium",
+          segment: "vh",
+          valueWeight: null,
+          sortOrder: 0,
+        },
+      ],
+      ACTOR,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]?.targetId).toBe(MODEL_UUID_1C);
+    expect(result[0]?.catalog1cId).toBe(MODEL_UUID_1C);
   });
 });

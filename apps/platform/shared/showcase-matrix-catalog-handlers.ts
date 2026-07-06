@@ -233,6 +233,8 @@ function parseOptionalCatalog1cId(raw: unknown): string | null {
   return t || null;
 }
 
+const CATALOG_1C_UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function parseOptionalValueWeight(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
   let n: number;
@@ -680,6 +682,14 @@ function validateModelInputs(models: ShowcaseMatrixDefModelInput[]): void {
     parseSegment(m.segment);
     parseOptionalValueWeight(m.valueWeight);
     parseSortOrder(m.sortOrder);
+
+    const targetIsUuid = CATALOG_1C_UUID_RX.test(m.targetId);
+    const catalogIsUuid = m.catalog1cId != null && CATALOG_1C_UUID_RX.test(m.catalog1cId);
+    if (!targetIsUuid && !catalogIsUuid) {
+      throw new ShowcaseMatrixCatalogValidationError(
+        `Позиция ${m.targetId} не связана с товаром 1С. Выберите товар из каталога.`,
+      );
+    }
   }
 }
 
