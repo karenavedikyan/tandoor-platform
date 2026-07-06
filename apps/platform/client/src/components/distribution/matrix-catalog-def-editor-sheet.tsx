@@ -292,6 +292,7 @@ export function MatrixCatalogDefEditorSheet(props: MatrixCatalogDefEditorSheetPr
         id: m.id,
         targetKind: m.targetKind,
         targetId: m.targetId,
+        catalog1cId: m.targetId,
         priority: m.priority ?? "medium",
         segment: m.segment,
         valueWeight: m.valueWeight ?? null,
