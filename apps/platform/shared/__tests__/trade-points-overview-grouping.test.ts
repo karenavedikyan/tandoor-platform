@@ -52,6 +52,7 @@ const MIXED_SCOPE_TPS = [
     rop_full_name: "Скалабан Александр",
     regional_manager_user_id: null,
     regional_manager_full_name: null,
+    override_rop_user_id: null,
   },
   {
     id: "tp2",
@@ -76,6 +77,7 @@ const MIXED_SCOPE_TPS = [
     rop_full_name: "Скалабан Александр",
     regional_manager_user_id: null,
     regional_manager_full_name: null,
+    override_rop_user_id: null,
   },
   {
     id: "tp3",
@@ -100,6 +102,7 @@ const MIXED_SCOPE_TPS = [
     rop_full_name: "Купянский Родион",
     regional_manager_user_id: null,
     regional_manager_full_name: null,
+    override_rop_user_id: null,
   },
 ];
 
@@ -131,10 +134,35 @@ const MIXED_SCOPE_TPS_WITH_RM = [
   },
 ];
 
+const TEAMS_ROP_MAP = [
+  { id: TEAM_SKALABAN, rop_user_id: ROP_ID },
+  { id: TEAM_KUPIANSKY, rop_user_id: "ccffcf6e-2505-4eee-b257-ac65b60bb779" },
+  { id: TEAM_SAPOZH, rop_user_id: ROP_SAPOZH },
+];
+
+const TEAMS_INFO_ROWS = [
+  { id: TEAM_SKALABAN, name: "Команда Скалабан Александр", rop_user_id: ROP_ID, rop_name: "Скалабан Александр" },
+  { id: TEAM_KUPIANSKY, name: "Команда Купянский Родион", rop_user_id: "ccffcf6e-2505-4eee-b257-ac65b60bb779", rop_name: "Купянский Родион" },
+  { id: TEAM_SAPOZH, name: "Команда Сапожков", rop_user_id: ROP_SAPOZH, rop_name: "Сапожков" },
+];
+
+function mockTeamsLookupRows(s: string): { rows: unknown[] } | null {
+  if (s.includes("FROM teams WHERE rop_user_id IS NOT NULL")) {
+    return { rows: TEAMS_ROP_MAP };
+  }
+  if (s.includes("FROM teams t LEFT JOIN users u ON u.id = t.rop_user_id")) {
+    return { rows: TEAMS_INFO_ROWS };
+  }
+  return null;
+}
+
 function mockPoolForOverview(role: string): PoolLike {
   return {
     query: async (sql: string, params?: unknown[]) => {
       const s = sql.replace(/\s+/g, " ").trim();
+
+      const teamsLookup = mockTeamsLookupRows(s);
+      if (teamsLookup) return teamsLookup;
 
       if (s.includes("FROM teams t") && s.includes("rop_user_id") && !s.includes("user_team_memberships")) {
         const userId = params?.[0] as string;
@@ -273,6 +301,8 @@ function mockPoolForOverview(role: string): PoolLike {
     return {
       query: async (sql: string, params?: unknown[]) => {
         const s = sql.replace(/\s+/g, " ").trim();
+        const teamsLookup = mockTeamsLookupRows(s);
+        if (teamsLookup) return teamsLookup;
         if (s.includes("FROM trade_points tp") && s.includes("ORDER BY d.name")) {
           if (s.includes("d.external_key = ANY")) {
             const keys = (params?.[0] as string[]) ?? [];
@@ -338,6 +368,51 @@ function mockPoolForOverview(role: string): PoolLike {
   const pool = mockPoolForOverview("regional_manager");
   const overview = await buildTradePointsOverviewFromDb(pool, RM_DROGO, "regional_manager");
   assert.equal(overview.structure.activeTradePoints, 3);
+}
+
+// overview-override-rop: клиент с ca.team_id чужой команды, но d_ov.rop_id → группа override-РОПа
+{
+  const OVERRIDE_TPS = MIXED_SCOPE_TPS.map((tp) =>
+    tp.id === "tp3"
+      ? { ...tp, override_rop_user_id: ROP_ID }
+      : tp,
+  );
+
+  const pool: PoolLike = {
+    query: async (sql: string, params?: unknown[]) => {
+      const s = sql.replace(/\s+/g, " ").trim();
+      const teamsLookup = mockTeamsLookupRows(s);
+      if (teamsLookup) return teamsLookup;
+      if (s.includes("FROM trade_points tp") && s.includes("ORDER BY d.name")) {
+        return { rows: OVERRIDE_TPS };
+      }
+      if (s.includes("FROM dealers d") && s.includes("dealer_overrides") && !s.includes("release_code = ANY")) {
+        return {
+          rows: [
+            { id: "d1", external_key: "client-a", status: "active" },
+            { id: "d2", external_key: "client-b", status: "active" },
+            { id: "d3", external_key: "client-c", status: "active" },
+          ],
+        };
+      }
+      if (s.includes("COUNT(*) FILTER") && s.includes("trade_points")) {
+        return { rows: [{ active_tps: "3", trashed_tps: "0" }] };
+      }
+      if (s.includes("d_ov.regional_manager_id") && s.includes("GROUP BY")) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const overview = await buildTradePointsOverviewFromDb(pool, ADMIN_ID, "admin", undefined, null);
+  const skalaban = overview.ropGroups.find((g) => g.teamId === TEAM_SKALABAN);
+  const kupiansky = overview.ropGroups.find((g) => g.teamId === TEAM_KUPIANSKY);
+  assert.ok(skalaban, "Skalaban group");
+  const yakubova = skalaban!.managers.find((m) => m.fullName === "Якубова");
+  assert.ok(yakubova, "Якубова в группе Скалабана через override");
+  assert.equal(yakubova!.tradePoints, 1);
+  assert.equal(kupiansky, undefined, "Нет отдельной группы Купянского без ТТ");
 }
 
 console.log("trade-points-overview-grouping.test.ts: ok");
