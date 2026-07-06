@@ -1707,6 +1707,7 @@ export function DealerBaseManagementCockpit({
       >
         {ropGroups.map((g) => {
           const teamKey = g.teamId ?? "__no_rop__";
+          const isOpen = openRops.includes(teamKey);
           const displayManagers = managersForTeamDisplay(g.managers, teamKey);
           const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
           const maxMgrActive = Math.max(
@@ -1776,32 +1777,36 @@ export function DealerBaseManagementCockpit({
                 </div>
               </AccordionTrigger>
               <AccordionContent className="pb-3 pt-0">
-                <p className="mb-2 text-[11px] text-[#8F96B0]">{g.statusLine}</p>
-                <div className="flex flex-wrap gap-2 pb-2">
-                  <Button type="button" variant="outline" size="sm" className="h-8 border-[#E3E6F3] text-xs" onClick={() => setDetail({ kind: "rop", teamId: g.teamId })}>
-                    Детали команды
-                  </Button>
-                </div>
-                <div className="space-y-3" data-testid={`section-client-base-rop-members-${g.teamId}`}>
-                  {salesManagers.length > 0 ? (
-                    <div className="space-y-2">
-                      {regionalManagers.length > 0 ? (
-                        <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-sales-managers-${g.teamId}`}>
-                          Менеджеры по продажам
-                        </h4>
+                {isOpen ? (
+                  <>
+                    <p className="mb-2 text-[11px] text-[#8F96B0]">{g.statusLine}</p>
+                    <div className="flex flex-wrap gap-2 pb-2">
+                      <Button type="button" variant="outline" size="sm" className="h-8 border-[#E3E6F3] text-xs" onClick={() => setDetail({ kind: "rop", teamId: g.teamId })}>
+                        Детали команды
+                      </Button>
+                    </div>
+                    <div className="space-y-3" data-testid={`section-client-base-rop-members-${g.teamId}`}>
+                      {salesManagers.length > 0 ? (
+                        <div className="space-y-2">
+                          {regionalManagers.length > 0 ? (
+                            <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-sales-managers-${g.teamId}`}>
+                              Менеджеры по продажам
+                            </h4>
+                          ) : null}
+                          <div className="grid gap-2 sm:grid-cols-2">{salesManagers.map(renderLegacyManagerCard)}</div>
+                        </div>
                       ) : null}
-                      <div className="grid gap-2 sm:grid-cols-2">{salesManagers.map(renderLegacyManagerCard)}</div>
+                      {regionalManagers.length > 0 ? (
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-regional-managers-${g.teamId}`}>
+                            Региональные менеджеры
+                          </h4>
+                          <div className="grid gap-2 sm:grid-cols-2">{regionalManagers.map(renderLegacyManagerCard)}</div>
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {regionalManagers.length > 0 ? (
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-regional-managers-${g.teamId}`}>
-                        Региональные менеджеры
-                      </h4>
-                      <div className="grid gap-2 sm:grid-cols-2">{regionalManagers.map(renderLegacyManagerCard)}</div>
-                    </div>
-                  ) : null}
-                </div>
+                  </>
+                ) : null}
               </AccordionContent>
             </AccordionItem>
           );
