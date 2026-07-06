@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { ChevronRight, ExternalLink, Info, Store, Users } from "lucide-react";
@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDeferredMount } from "@/hooks/use-deferred-mount";
 import { ManagementCockpitSkeleton } from "@/components/skeletons/management-cockpit-skeleton";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import {
@@ -231,6 +232,156 @@ function detailTitle(detail: DetailKind | null, ropGroups: RopGroupModel[], citi
   const g = ropGroups.find((x) => x.teamId === detail.teamId);
   const m = g?.managers.find((x) => x.managerId === detail.managerId);
   return m?.name ?? "Менеджер";
+}
+
+type RopAccordionItemProps = {
+  g: RopGroupModel;
+  isOpen: boolean;
+  managersForTeamDisplay: (managers: ManagerRowModel[], teamKey: string) => ManagerRowModel[];
+  resolveManagerClients: (m: ManagerRowModel, teamKey: string) => number | null;
+  resolveManagerTp: (m: ManagerRowModel, teamKey: string) => number | null;
+  resolveTeamClients: (g: RopGroupModel) => number | null;
+  resolveTeamTp: (g: RopGroupModel) => number | null;
+  resolveTeamManagerCount: (g: RopGroupModel) => number | null;
+  formatScopedOverviewCount: (value: number | null, fallback?: number) => string;
+  formatScopedTpCount: (value: number | null, fallback?: number) => string;
+  staffDistributionEnabled: boolean;
+  distributionAct?: ActualizationState;
+  distributionShowcaseUuidByMatrixKey?: ReadonlyMap<string, string>;
+  distributionPrefetching?: boolean;
+  resolveManagerDistributionKeys: (managerId: string, isRegional?: boolean) => string[];
+  ropDistributionMiniBar: (teamId: string, testId: string) => ReactNode;
+  onManagerOpen: (teamId: string, managerId: string) => void;
+  onRopDetailsOpen: (teamId: string) => void;
+};
+
+function RopAccordionItem({
+  g,
+  isOpen,
+  managersForTeamDisplay,
+  resolveManagerClients,
+  resolveManagerTp,
+  resolveTeamClients,
+  resolveTeamTp,
+  resolveTeamManagerCount,
+  formatScopedOverviewCount,
+  formatScopedTpCount,
+  staffDistributionEnabled,
+  distributionAct,
+  distributionShowcaseUuidByMatrixKey,
+  distributionPrefetching,
+  resolveManagerDistributionKeys,
+  ropDistributionMiniBar,
+  onManagerOpen,
+  onRopDetailsOpen,
+}: RopAccordionItemProps) {
+  const showDistribution = useDeferredMount(isOpen, 1);
+  const teamKey = g.teamId ?? "__no_rop__";
+  const displayManagers = managersForTeamDisplay(g.managers, teamKey);
+  const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
+  const maxMgrActive = Math.max(
+    1,
+    ...displayManagers.map((m) => resolveManagerClients(m, teamKey) ?? m.active),
+  );
+
+  const renderLegacyManagerCard = (m: ManagerRowModel) => {
+    const mgrClients = resolveManagerClients(m, teamKey) ?? m.active;
+    const share = Math.round((mgrClients / maxMgrActive) * 100);
+    return (
+      <button
+        key={m.managerId}
+        type="button"
+        className="rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/50"
+        data-testid={`button-client-base-manager-open-${m.managerId}`}
+        onClick={() => onManagerOpen(g.teamId, m.managerId)}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <p className="truncate text-sm font-semibold text-[#222631]" data-testid={`card-client-base-manager-${m.managerId}`}>
+            {m.name}
+          </p>
+          <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
+        </div>
+        <p className="mt-1 text-[11px] text-[#8F96B0]">
+          активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}</span>
+          {" · "}
+          ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}</span>
+          {" · "}
+          сегм. {m.topSegmentLabel}
+        </p>
+        <p className="mt-0.5 text-[11px] text-[#8F96B0]">
+          потенц. {m.potential} · вним. {m.attention}
+        </p>
+        {staffDistributionEnabled && distributionAct && showDistribution ? (
+          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+            <ManagerDistributionMiniBar
+              externalKeys={resolveManagerDistributionKeys(m.managerId, m.isRegional)}
+              act={distributionAct}
+              showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+              prefetching={distributionPrefetching ?? false}
+              testId={`manager-distribution-mini-${m.managerId}`}
+            />
+          </div>
+        ) : null}
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
+          <div className="h-full rounded-full bg-[#9ACA3C]/75" style={{ width: `${share}%` }} />
+        </div>
+      </button>
+    );
+  };
+
+  return (
+    <AccordionItem value={g.teamId} className="border-[#E3E6F3]" data-testid={`card-client-base-rop-${g.teamId}`}>
+      <AccordionTrigger className="py-3 hover:no-underline" data-testid={`button-client-base-rop-toggle-${g.teamId}`}>
+        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:flex-row sm:items-center sm:gap-3">
+          <span className="truncate font-semibold text-[#222631]">{g.ropName}</span>
+          <span className="text-[11px] text-[#8F96B0]">
+            клиенты {formatScopedOverviewCount(resolveTeamClients(g), g.active)} · ТТ{" "}
+            {formatScopedTpCount(resolveTeamTp(g), g.outlets)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
+            {formatScopedOverviewCount(resolveTeamManagerCount(g), g.managerCatalogCount)}
+          </span>
+          {ropDistributionMiniBar(teamKey, `rop-distribution-mini-${teamKey}`)}
+        </div>
+      </AccordionTrigger>
+      <AccordionContent className="pb-3 pt-0">
+        {isOpen ? (
+          <>
+            <p className="mb-2 text-[11px] text-[#8F96B0]">{g.statusLine}</p>
+            <div className="flex flex-wrap gap-2 pb-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 border-[#E3E6F3] text-xs"
+                onClick={() => onRopDetailsOpen(g.teamId)}
+              >
+                Детали команды
+              </Button>
+            </div>
+            <div className="space-y-3" data-testid={`section-client-base-rop-members-${g.teamId}`}>
+              {salesManagers.length > 0 ? (
+                <div className="space-y-2">
+                  {regionalManagers.length > 0 ? (
+                    <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-sales-managers-${g.teamId}`}>
+                      Менеджеры по продажам
+                    </h4>
+                  ) : null}
+                  <div className="grid gap-2 sm:grid-cols-2">{salesManagers.map(renderLegacyManagerCard)}</div>
+                </div>
+              ) : null}
+              {regionalManagers.length > 0 ? (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-regional-managers-${g.teamId}`}>
+                    Региональные менеджеры
+                  </h4>
+                  <div className="grid gap-2 sm:grid-cols-2">{regionalManagers.map(renderLegacyManagerCard)}</div>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </AccordionContent>
+    </AccordionItem>
+  );
 }
 
 function CockpitFilteredClientList({
@@ -1708,107 +1859,28 @@ export function DealerBaseManagementCockpit({
         {ropGroups.map((g) => {
           const teamKey = g.teamId ?? "__no_rop__";
           const isOpen = openRops.includes(teamKey);
-          const displayManagers = managersForTeamDisplay(g.managers, teamKey);
-          const { salesManagers, regionalManagers } = splitManagersByRegionalRole(displayManagers);
-          const maxMgrActive = Math.max(
-            1,
-            ...displayManagers.map((m) => resolveManagerClients(m, teamKey) ?? m.active),
-          );
-          const renderLegacyManagerCard = (m: ManagerRowModel) => {
-            const mgrClients = resolveManagerClients(m, teamKey) ?? m.active;
-            const share = Math.round((mgrClients / maxMgrActive) * 100);
-            return (
-              <button
-                key={m.managerId}
-                type="button"
-                className="rounded-xl border border-[#E3E6F3] bg-[#FFFFFF] p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-[#EEEFF6]/50"
-                data-testid={`button-client-base-manager-open-${m.managerId}`}
-                onClick={() => setDetail({ kind: "manager", teamId: g.teamId, managerId: m.managerId })}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="truncate text-sm font-semibold text-[#222631]" data-testid={`card-client-base-manager-${m.managerId}`}>
-                    {m.name}
-                  </p>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-[#8F96B0]" aria-hidden />
-                </div>
-                <p className="mt-1 text-[11px] text-[#8F96B0]">
-                  активные <span className="text-[#222631]">{formatScopedOverviewCount(resolveManagerClients(m, teamKey), m.active)}</span>
-                  {" · "}
-                  ТТ <span className="text-[#222631]">{formatScopedTpCount(resolveManagerTp(m, teamKey), m.outlets)}</span>
-                  {" · "}
-                  сегм. {m.topSegmentLabel}
-                </p>
-                <p className="mt-0.5 text-[11px] text-[#8F96B0]">
-                  потенц. {m.potential} · вним. {m.attention}
-                </p>
-                {staffDistributionEnabled && distributionAct ? (
-                  <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-                    <ManagerDistributionMiniBar
-                      externalKeys={resolveManagerDistributionKeys(m.managerId, m.isRegional)}
-                      act={distributionAct}
-                      showcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
-                      prefetching={distributionPrefetching ?? false}
-                      testId={`manager-distribution-mini-${m.managerId}`}
-                    />
-                  </div>
-                ) : null}
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-[#EEEFF6]">
-                  <div className="h-full rounded-full bg-[#9ACA3C]/75" style={{ width: `${share}%` }} />
-                </div>
-              </button>
-            );
-          };
           return (
-            <AccordionItem key={g.teamId} value={g.teamId} className="border-[#E3E6F3]" data-testid={`card-client-base-rop-${g.teamId}`}>
-              <AccordionTrigger
-                className="py-3 hover:no-underline"
-                data-testid={`button-client-base-rop-toggle-${g.teamId}`}
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:flex-row sm:items-center sm:gap-3">
-                  <span className="truncate font-semibold text-[#222631]">
-                    {g.ropName}
-                  </span>
-                  <span className="text-[11px] text-[#8F96B0]">
-                    клиенты {formatScopedOverviewCount(resolveTeamClients(g), g.active)} · ТТ{" "}
-                    {formatScopedTpCount(resolveTeamTp(g), g.outlets)} · потенц. {g.potential} · вним. {g.attention} · менеджеров{" "}
-                    {formatScopedOverviewCount(resolveTeamManagerCount(g), g.managerCatalogCount)}
-                  </span>
-                  {ropDistributionMiniBar(teamKey, `rop-distribution-mini-${teamKey}`)}
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="pb-3 pt-0">
-                {isOpen ? (
-                  <>
-                    <p className="mb-2 text-[11px] text-[#8F96B0]">{g.statusLine}</p>
-                    <div className="flex flex-wrap gap-2 pb-2">
-                      <Button type="button" variant="outline" size="sm" className="h-8 border-[#E3E6F3] text-xs" onClick={() => setDetail({ kind: "rop", teamId: g.teamId })}>
-                        Детали команды
-                      </Button>
-                    </div>
-                    <div className="space-y-3" data-testid={`section-client-base-rop-members-${g.teamId}`}>
-                      {salesManagers.length > 0 ? (
-                        <div className="space-y-2">
-                          {regionalManagers.length > 0 ? (
-                            <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-sales-managers-${g.teamId}`}>
-                              Менеджеры по продажам
-                            </h4>
-                          ) : null}
-                          <div className="grid gap-2 sm:grid-cols-2">{salesManagers.map(renderLegacyManagerCard)}</div>
-                        </div>
-                      ) : null}
-                      {regionalManagers.length > 0 ? (
-                        <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-[#222631]" data-testid={`heading-regional-managers-${g.teamId}`}>
-                            Региональные менеджеры
-                          </h4>
-                          <div className="grid gap-2 sm:grid-cols-2">{regionalManagers.map(renderLegacyManagerCard)}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-              </AccordionContent>
-            </AccordionItem>
+            <RopAccordionItem
+              key={g.teamId}
+              g={g}
+              isOpen={isOpen}
+              managersForTeamDisplay={managersForTeamDisplay}
+              resolveManagerClients={resolveManagerClients}
+              resolveManagerTp={resolveManagerTp}
+              resolveTeamClients={resolveTeamClients}
+              resolveTeamTp={resolveTeamTp}
+              resolveTeamManagerCount={resolveTeamManagerCount}
+              formatScopedOverviewCount={formatScopedOverviewCount}
+              formatScopedTpCount={formatScopedTpCount}
+              staffDistributionEnabled={staffDistributionEnabled}
+              distributionAct={distributionAct}
+              distributionShowcaseUuidByMatrixKey={distributionShowcaseUuidByMatrixKey}
+              distributionPrefetching={distributionPrefetching}
+              resolveManagerDistributionKeys={resolveManagerDistributionKeys}
+              ropDistributionMiniBar={ropDistributionMiniBar}
+              onManagerOpen={(teamId, managerId) => setDetail({ kind: "manager", teamId, managerId })}
+              onRopDetailsOpen={(teamId) => setDetail({ kind: "rop", teamId })}
+            />
           );
         })}
       </Accordion>
