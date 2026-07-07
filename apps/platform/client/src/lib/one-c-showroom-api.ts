@@ -82,17 +82,6 @@ export type OneCRopResponse = {
   message?: string;
 };
 
-export type OneCManagerStoreRow = {
-  id_1c: string;
-  address: string | null;
-  store_name: string;
-  legal_short: string | null;
-  inn: string | null;
-  kpp: string | null;
-  legal_city: string | null;
-  resp?: string | null;
-};
-
 export type OneCRmResponse = {
   success: boolean;
   user: OneCUserCard;
@@ -100,7 +89,7 @@ export type OneCRmResponse = {
   ropName: string | null;
   managers: OneCTeamMemberRow[];
   total: number;
-  items: OneCManagerStoreRow[];
+  items: OneCStoreListItem[];
   limit: number;
   offset: number;
   message?: string;
@@ -110,7 +99,7 @@ export type OneCManagerResponse = {
   success: boolean;
   user: OneCUserCard;
   total: number;
-  items: OneCManagerStoreRow[];
+  items: OneCStoreListItem[];
   limit: number;
   offset: number;
   message?: string;
@@ -127,6 +116,7 @@ export type OneCStoreListItem = {
   legal_parent_name: string | null;
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
+  legal_payment_form: string | null;
   status: string | null;
   distribution_filled: number;
   distribution_total: number;
@@ -266,14 +256,6 @@ export type OneCLegalChild = {
   inn: string | null;
 };
 
-export type OneCLegalStoreRow = {
-  id_1c: string;
-  address: string | null;
-  manager_name: string | null;
-  distribution_filled: number;
-  distribution_total: number;
-};
-
 export type OneCLegalSibling = {
   id_1c: string;
   name: string;
@@ -317,7 +299,7 @@ export type OneCLegalResponse = {
   legal: OneCLegalDetail;
   children: OneCLegalChild[];
   siblings: OneCLegalSibling[];
-  stores: OneCLegalStoreRow[];
+  stores: OneCStoreListItem[];
   message?: string;
 };
 

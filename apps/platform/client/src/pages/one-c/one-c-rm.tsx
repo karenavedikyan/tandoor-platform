@@ -19,15 +19,15 @@ import {
   OneCPagination,
   OneCPageShell,
   OneCRefreshStubButton,
-  OneCSearchInput,
-  useDebouncedSearch,
 } from "./one-c-ui";
+import { OneCStoresFilters } from "./one-c-stores-filters";
+import { OneCStoresTable } from "./one-c-stores-table";
+import { useOneCStoresListView } from "./use-one-c-stores-list";
 
 export default function OneCRmPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const [, params] = useRoute("/1c/rm/:id");
   const rmId = params?.id ?? "";
-  const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [card, setCard] = useState<Awaited<ReturnType<typeof fetchOneCRm>>["user"] | null>(null);
@@ -37,18 +37,27 @@ export default function OneCRmPage() {
   const [ropName, setRopName] = useState<string | null>(null);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+  const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
+    serverSideSearch: true,
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(filters.search), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
 
   useEffect(() => {
     setOffset(0);
-  }, [debouncedQ, rmId]);
+  }, [debouncedSearch, rmId]);
 
   useEffect(() => {
     if (!canAccess || !rmId) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCRm(rmId, { q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset })
+    void fetchOneCRm(rmId, { q: debouncedSearch, limit: ONE_C_PAGE_LIMIT, offset })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -72,7 +81,7 @@ export default function OneCRmPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, rmId, debouncedQ, offset]);
+  }, [canAccess, rmId, debouncedSearch, offset]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -131,47 +140,23 @@ export default function OneCRmPage() {
           </section>
           <section>
             <h2 className="mb-3 text-lg font-semibold">Все ТТ РМа</h2>
-            <OneCSearchInput
-              value={searchQ}
-              onChange={setSearchQ}
-              placeholder="Адрес, юрлицо, ИНН…"
-              testId="input-one-c-rm-search"
+            <OneCStoresFilters
+              items={stores}
+              filters={filters}
+              onFiltersChange={setFilters}
+              distAggregates={distAggregates}
+              distLoading={distLoading}
+              hideRm
+              serverSideSearch
+              filteredCount={filtered.length}
+              testIdPrefix="one-c-rm-stores"
             />
-            <div className="mt-3 rounded-md border">
-              <Table data-testid="table-one-c-rm-stores">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Адрес</TableHead>
-                    <TableHead>Юрлицо</TableHead>
-                    <TableHead>ИНН</TableHead>
-                    <TableHead>Город</TableHead>
-                    <TableHead>Ответственный</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stores.map((row) => (
-                    <TableRow key={row.id_1c}>
-                      <TableCell>
-                        <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
-                          {dash(row.address)}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{dash(row.legal_short)}</TableCell>
-                      <TableCell className="font-mono text-xs">{dash(row.inn)}</TableCell>
-                      <TableCell>{dash(row.legal_city)}</TableCell>
-                      <TableCell>{dash(row.resp)}</TableCell>
-                    </TableRow>
-                  ))}
-                  {stores.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                        Торговые точки не найдены
-                      </TableCell>
-                    </TableRow>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </div>
+            <OneCStoresTable
+              items={filtered}
+              act={act}
+              emptyLabel="Торговые точки не найдены"
+              testIdPrefix="one-c-rm-stores"
+            />
             <OneCPagination
               total={total}
               limit={ONE_C_PAGE_LIMIT}
