@@ -21,6 +21,7 @@ export default defineConfig({
       "shared/**/*.spec.ts",
       "api/**/*.spec.ts",
       "api/**/__tests__/**/*.test.ts",
+      "tests/**/*.test.ts",
       "__tests__/**/*.test.ts",
       "__tests__/**/*.test.tsx",
       "client/**/*.test.ts",
