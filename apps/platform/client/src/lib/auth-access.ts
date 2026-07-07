@@ -155,6 +155,7 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     p === "/admin/migrate-dealer-tp" ||
     p === "/admin/migrate-catalog-1c" ||
     p === "/admin/exchange-explorer" ||
+    p === "/admin/exchange-stores" ||
     p === "/admin/migrate"
   ) {
     return role === "admin";
@@ -419,6 +420,12 @@ function buildAdministrationNavGroup(
       label: "Миграция каталог 1С",
       testId: "nav-item-admin-catalog-1c-migrate",
       navBehaviorId: "nav-admin-catalog-1c-migrate",
+    });
+    items.push({
+      href: "/admin/exchange-stores",
+      label: "ТТ из 1С",
+      testId: "nav-item-admin-exchange-stores",
+      navBehaviorId: "nav-admin-exchange-stores",
     });
     items.push({
       href: "/admin/sync-health",
