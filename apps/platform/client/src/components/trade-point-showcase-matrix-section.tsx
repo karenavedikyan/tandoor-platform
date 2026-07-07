@@ -314,6 +314,8 @@ type Props = {
   onOpenEntry?: (productId?: string) => void;
   hideOpenTasksSection?: boolean;
   hideDistributionOnPointSection?: boolean;
+  hidePlacementBlocksSection?: boolean;
+  matrixSectionTitle?: string;
 };
 
 export function TradePointShowcaseMatrixSection({
@@ -328,6 +330,8 @@ export function TradePointShowcaseMatrixSection({
   onOpenEntry,
   hideOpenTasksSection = false,
   hideDistributionOnPointSection = false,
+  hidePlacementBlocksSection = false,
+  matrixSectionTitle = "Витрина торговой точки",
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
@@ -1127,7 +1131,7 @@ export function TradePointShowcaseMatrixSection({
         >
           <div data-testid="section-trade-point-showcase" className={cn(isCompact ? "space-y-2" : "space-y-3")}>
             <div className="space-y-1">
-              <h2 className={cn("font-semibold tracking-tight text-foreground sm:text-lg", isCompact ? "text-sm sm:text-lg" : "text-base")}>Витрина торговой точки</h2>
+              <h2 className={cn("font-semibold tracking-tight text-foreground sm:text-lg", isCompact ? "text-sm sm:text-lg" : "text-base")}>{matrixSectionTitle}</h2>
               <p className={cn("max-w-2xl text-sm text-muted-foreground", isCompact && "hidden sm:block")}>
                 Что стоит, что нужно поставить и какие задачи есть по этой точке. Статусы матрицы сохраняются в этом браузере.
               </p>
@@ -1526,13 +1530,15 @@ export function TradePointShowcaseMatrixSection({
         )}
           </div>
 
-          <TradePointPlacementBlocksSection
-            dealerId={dealer.id}
-            tradePointId={point.id}
-            canEdit={canEdit}
-            actorUserId={actorUserId}
-            actorName={actorName}
-          />
+          {!hidePlacementBlocksSection ? (
+            <TradePointPlacementBlocksSection
+              dealerId={dealer.id}
+              tradePointId={point.id}
+              canEdit={canEdit}
+              actorUserId={actorUserId}
+              actorName={actorName}
+            />
+          ) : null}
 
           <TradePointShowcaseHistorySection tradePointId={point.id} density={density} />
 

@@ -180,6 +180,7 @@ export type TradePointShowcaseCatalogPanelProps = {
   dealerCode?: string;
   /** Город ТТ/клиента — для шапки контрагента. */
   counterpartyCity?: string;
+  hideCounterpartyStickyHeader?: boolean;
 };
 
 function isShowcaseCatalogProduct(p: CatalogProduct): boolean {
@@ -227,6 +228,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
     dealerName,
     dealerCode,
     counterpartyCity,
+    hideCounterpartyStickyHeader = false,
   } = props;
 
   const catalogReady = useCatalogReady();
@@ -1110,7 +1112,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
 
   return (
     <div className="space-y-3 rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4" data-testid="section-trade-point-showcase-catalog">
-      {(() => {
+      {!hideCounterpartyStickyHeader
+        ? (() => {
         const tpName = meaningfulTradePointName(tradePointName);
         const tpCode = (tradePointCode ?? "").trim() || null;
         const dName = (dealerName ?? "").trim() || null;
@@ -1147,7 +1150,8 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
             ) : null}
           </div>
         );
-      })()}
+      })()
+        : null}
       <div className="space-y-0.5">
         <p className="text-sm font-semibold">Модели на витрине</p>
         <p className="text-xs text-muted-foreground">Отметьте модели на витрине. Сохранение — в блоке «Витрина и порталы» выше.</p>

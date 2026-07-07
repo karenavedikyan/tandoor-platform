@@ -316,6 +316,10 @@ export default function OneCStorePage() {
               hideOpenTasksSection
               hideOpenTradePointCard
               hideDistributionOnPointSection
+              hideEnterDistributionButton
+              hidePlacementBlocksSection
+              hideCounterpartyStickyHeader
+              matrixSectionTitle="Контрагент и витрина"
             />
           </section>
 

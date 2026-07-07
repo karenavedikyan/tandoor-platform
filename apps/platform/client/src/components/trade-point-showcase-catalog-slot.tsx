@@ -51,6 +51,7 @@ export type TradePointShowcaseCatalogSlotProps = {
   actorUserId: string;
   actorLabel: string;
   canEdit: boolean;
+  hideCounterpartyStickyHeader?: boolean;
 };
 
 export function TradePointShowcaseCatalogSlot({
@@ -60,6 +61,7 @@ export function TradePointShowcaseCatalogSlot({
   actorUserId,
   actorLabel,
   canEdit,
+  hideCounterpartyStickyHeader = false,
 }: TradePointShowcaseCatalogSlotProps): ReactElement {
   const actx = useClientBaseActualization();
   const showcaseRec = actx.state.tradePointShowcaseActualizationById[point.id];
@@ -144,6 +146,7 @@ export function TradePointShowcaseCatalogSlot({
       onMarkDirty={() => {}}
       showcaseRec={showcaseRec}
       onPatchShowcase={onPatchShowcase}
+      hideCounterpartyStickyHeader={hideCounterpartyStickyHeader}
     />
   );
 }
