@@ -1,14 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
 import { Copy } from "lucide-react";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
+import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
-import { fetchOneCStore, type OneCStoreDistributionState } from "@/lib/one-c-showroom-api";
+import { fetchOneCStore } from "@/lib/one-c-showroom-api";
+import { build1cDealerRow, build1cPoint } from "@/lib/one-c-dealer-shape";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
+import { setShowcaseMatrixApiBase, resetShowcaseMatrixApiBase } from "@/lib/showcase-matrix-api";
+import { refreshMatrixFromServer } from "@/lib/showcase-matrix-store";
+import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { OneCDistributionSection } from "./one-c-distribution-section";
+import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import {
   CopyField,
   dash,
@@ -51,6 +56,7 @@ function LkPersonLink({
 export default function OneCStorePage() {
   const { toast } = useToast();
   const { user, isLoading: userLoading } = useCurrentUser();
+  const { profile } = useReleaseDemoProfile();
   const [, params] = useRoute("/1c/store/:id");
   const storeId = params?.id ?? "";
   const [loading, setLoading] = useState(true);
@@ -58,6 +64,11 @@ export default function OneCStorePage() {
   const [error, setError] = useState<string | null>(null);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+
+  useEffect(() => {
+    setShowcaseMatrixApiBase("/api/one-c/showcase-matrix");
+    return () => resetShowcaseMatrixApiBase();
+  }, []);
 
   useEffect(() => {
     if (!canAccess || !storeId) return;
@@ -85,18 +96,47 @@ export default function OneCStorePage() {
     };
   }, [canAccess, storeId]);
 
-  const onDistributionChange = useCallback((state: OneCStoreDistributionState) => {
-    setStore((prev) =>
-      prev
-        ? {
-            ...prev,
-            matrix: state.matrix,
-            overrides: state.overrides,
-            distributionFill: state.distributionFill,
-          }
-        : prev,
+  const dealerPoint = useMemo(() => {
+    if (!store || !store.legal_entity_1c) return null;
+    const legal = {
+      id_1c: store.legal_entity_1c,
+      name: store.legal_name ?? "",
+      legal_name: store.legal_legal_name,
+      inn: store.legal_inn,
+      kpp: store.legal_kpp,
+      ogrn: store.legal_ogrn,
+      region: store.legal_region,
+      city: store.legal_city,
+      client_type: store.legal_client_type,
+      payment_form: store.legal_payment_form,
+      phone: store.legal_phone,
+      email: store.legal_email,
+      discount_code: store.legal_discount_code,
+      discount_percent: store.legal_discount_percent,
+      responsible_manager_name: store.legal_responsible_manager_name,
+      regional_manager_name: store.legal_regional_manager_name,
+      plan_sum: store.legal_plan_sum,
+      plan_retro_bonus: store.legal_plan_retro_bonus,
+    };
+    const dealer = build1cDealerRow(legal, { canEditDistribution: store.canEditDistribution });
+    const point = build1cPoint(
+      {
+        id_1c: store.id_1c,
+        address: store.address,
+        name: store.name,
+        manager_name: store.manager_name,
+        manager_phone: store.manager_phone,
+        legal_entity_1c: store.legal_entity_1c,
+      },
+      legal,
     );
-  }, []);
+    return { dealer, point };
+  }, [store]);
+
+  useEffect(() => {
+    if (!dealerPoint) return;
+    void refreshMatrixFromServer(dealerPoint.point.id, dealerPoint.dealer.id);
+  }, [dealerPoint]);
 
   async function copyAddress() {
     if (!store?.address?.trim()) return;
@@ -118,6 +158,9 @@ export default function OneCStorePage() {
     store?.name ? `ТТ · ${store.name}` : "ТТ",
     store ? `импортировано ${formatDisplayDateTime(store.imported_at)}` : null,
   ].filter(Boolean);
+
+  const actorUserId = user.id;
+  const actorName = displayUserName(user) ?? userLabelFromProfile(profile);
 
   return (
     <OneCPageShell
@@ -146,7 +189,7 @@ export default function OneCStorePage() {
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
         <OneCLoadingBlock />
-      ) : store ? (
+      ) : store && dealerPoint ? (
         <div className="space-y-4">
           <OneCDetailSection title="Команда по этой точке" testId="section-one-c-store-team">
             <OneCFieldRow label="Ответственный менеджер">
@@ -215,15 +258,15 @@ export default function OneCStorePage() {
             ) : null}
           </OneCDetailSection>
 
-          <OneCDistributionSection
-            storeId1c={storeId}
-            matrix={store.matrix}
-            overrides={store.overrides}
-            history={store.history}
-            distributionFill={store.distributionFill}
-            canEdit={store.canEditDistribution}
-            onStateChange={onDistributionChange}
-          />
+          <section data-testid="section-one-c-distribution-lk">
+            <DistributionTradePointMatrixEntry
+              dealer={dealerPoint.dealer}
+              point={dealerPoint.point}
+              profile={profile}
+              actorUserId={actorUserId}
+              actorName={actorName}
+            />
+          </section>
         </div>
       ) : null}
     </OneCPageShell>

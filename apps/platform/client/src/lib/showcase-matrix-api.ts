@@ -3,6 +3,14 @@
  */
 
 import { triggerDistributionSnapshotAfterMatrixSave, triggerDistributionSnapshotsAfterBatchSave } from "./distribution-snapshot-client.js";
+import { getShowcaseMatrixApiBase, isOneCShowcaseMatrixApiBase } from "./showcase-matrix-api-base.js";
+
+export {
+  getShowcaseMatrixApiBase,
+  isOneCShowcaseMatrixApiBase,
+  resetShowcaseMatrixApiBase,
+  setShowcaseMatrixApiBase,
+} from "./showcase-matrix-api-base.js";
 
 export type ShowcaseMatrixTargetKind = "model" | "variant" | "placement";
 export type ShowcaseMatrixStatus = "need_install" | "installed" | "postponed" | "not_relevant";
@@ -147,7 +155,7 @@ export async function fetchShowcaseMatrixList(opts: {
     const params = new URLSearchParams();
     params.set("tradePointId", opts.tradePointId);
     if (opts.dealerId) params.set("dealerId", opts.dealerId);
-    const res = await fetch(`/api/showcase-matrix/list?${params}`, {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/list?${params}`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -196,7 +204,7 @@ async function fetchShowcaseMatrixScopeChunk(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), SCOPE_FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch("/api/showcase-matrix/scope", {
+      const res = await fetch(`${getShowcaseMatrixApiBase()}/scope`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -227,7 +235,7 @@ export async function fetchShowcaseMatrixScopeAll(
   params?: { statuses?: ShowcaseMatrixStatus[] },
 ): Promise<{ entries: ShowcaseMatrixEntryDto[]; tradePointIds: string[] } | null> {
   try {
-    const res = await fetch("/api/showcase-matrix/scope-all", {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/scope-all`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -283,7 +291,7 @@ export async function fetchShowcaseMatrixHistory(opts: {
     if (opts.tradePointId) params.set("tradePointId", opts.tradePointId);
     if (opts.dealerId) params.set("dealerId", opts.dealerId);
     if (opts.limit != null) params.set("limit", String(opts.limit));
-    const res = await fetch(`/api/showcase-matrix/history?${params}`, {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/history?${params}`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -296,6 +304,7 @@ export async function fetchShowcaseMatrixHistory(opts: {
 }
 
 async function afterMatrixUpsertSnapshot(body: ShowcaseMatrixUpsertBody): Promise<void> {
+  if (isOneCShowcaseMatrixApiBase()) return;
   void triggerDistributionSnapshotAfterMatrixSave({
     tradePointId: body.tradePointId,
     dealerId: body.dealerId,
@@ -312,7 +321,7 @@ export async function apiUpsertShowcaseMatrixEntry(
   network?: boolean;
 }> {
   try {
-    const res = await fetch("/api/showcase-matrix/upsert", {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/upsert`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -348,7 +357,7 @@ export async function apiBatchSyncShowcaseMatrix(
   status?: number;
 }> {
   try {
-    const res = await fetch("/api/showcase-matrix/batch-sync", {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/batch-sync`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -364,7 +373,9 @@ export async function apiBatchSyncShowcaseMatrix(
         status: res.status,
       };
     }
-    void triggerDistributionSnapshotsAfterBatchSave(operations);
+    if (!isOneCShowcaseMatrixApiBase()) {
+      void triggerDistributionSnapshotsAfterBatchSave(operations);
+    }
     return {
       ok: true,
       applied: data.applied,
@@ -386,7 +397,7 @@ export async function apiUpsertShowcaseMatrixEntryStrict(
   network?: boolean;
 }> {
   try {
-    const res = await fetch("/api/showcase-matrix/upsert", {
+    const res = await fetch(`${getShowcaseMatrixApiBase()}/upsert`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },

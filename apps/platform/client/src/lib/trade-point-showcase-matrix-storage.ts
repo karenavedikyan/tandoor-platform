@@ -323,11 +323,14 @@ export function getShowcaseMatrixDealerHistoryEvents(dealerId: string, storage: 
 }
 
 export function canViewTradePointShowcaseMatrix(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
+  if ((dealer as DealerRow & { source1c?: boolean }).source1c) return true;
   return canViewShowcaseDistribution(profile, dealer);
 }
 
 /** Как canEditClientNextStep: менеджер — свои клиенты, РОП — команда, директор — все, маркетолог/аналитик — без правки. */
 export function canEditTradePointShowcaseMatrix(profile: ReleaseDemoProfile, dealer: DealerRow): boolean {
+  const d = dealer as DealerRow & { source1c?: boolean; oneCDistributionCanEdit?: boolean };
+  if (d.source1c) return d.oneCDistributionCanEdit === true;
   return canEditClientNextStep(profile, dealer);
 }
 
