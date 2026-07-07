@@ -18,6 +18,8 @@ const SCRIPT =
 const PHOTO_SCRIPT =
   process.env.SYNC_1C_PHOTO_SCRIPT?.trim() ||
   path.join(__dirname, "sync-1c-photos.mjs");
+const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
+const EXCHANGE_MAX_BYTES = 65_536;
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let running = null;
@@ -88,6 +90,94 @@ function startSync(target = "both", dry = false, extraEnv = {}, kind = "catalog"
 const server = http.createServer((req, res) => {
   if (!authOk(req)) {
     json(res, 401, { ok: false, code: "UNAUTHORIZED" });
+    return;
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/exchange/list")) {
+    const u = new URL(req.url, "http://x");
+    const rawPath = String(u.searchParams.get("path") ?? "/").trim();
+    if (!rawPath.startsWith("/") || rawPath.length > 200 || rawPath.includes("..")) {
+      json(res, 400, { ok: false, code: "BAD_PATH", message: "Некорректный путь." });
+      return;
+    }
+    const target = `${EXCHANGE_BASE}${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 15_000);
+    fetch(target, {
+      signal: ac.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    })
+      .then(async (r) => {
+        clearTimeout(t);
+        const html = await r.text();
+        res.writeHead(r.status, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
+      });
+    return;
+  }
+
+  if (req.method === "GET" && req.url && req.url.startsWith("/exchange/peek")) {
+    const u = new URL(req.url, "http://x");
+    const rawPath = String(u.searchParams.get("path") ?? "").trim();
+    if (
+      !rawPath.startsWith("/") ||
+      rawPath.length > 300 ||
+      rawPath.includes("..") ||
+      rawPath.endsWith("/")
+    ) {
+      json(res, 400, { ok: false, code: "BAD_PATH", message: "Некорректный путь (должен быть файл)." });
+      return;
+    }
+    const bytesParam = Number(u.searchParams.get("bytes") ?? 8192);
+    const bytes =
+      Number.isFinite(bytesParam) && bytesParam > 0
+        ? Math.min(Math.floor(bytesParam), EXCHANGE_MAX_BYTES)
+        : 8192;
+    const target = `${EXCHANGE_BASE}${rawPath}`;
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 15_000);
+    fetch(target, {
+      signal: ac.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "*/*",
+        Range: `bytes=0-${bytes - 1}`,
+      },
+    })
+      .then(async (r) => {
+        clearTimeout(t);
+        if (r.status !== 200 && r.status !== 206) {
+          json(res, r.status === 404 ? 404 : 502, {
+            ok: false,
+            code: r.status === 404 ? "NOT_FOUND" : "UPSTREAM_ERROR",
+            message: `Upstream HTTP ${r.status}`,
+          });
+          return;
+        }
+        const totalSize = r.headers.get("content-range")?.match(/\/(\d+)$/)?.[1] ?? null;
+        const buf = Buffer.from(await r.arrayBuffer());
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Exchange-Total-Size": totalSize ?? "unknown",
+          "X-Exchange-Bytes-Returned": String(buf.length),
+        });
+        res.end(buf);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
+      });
     return;
   }
 
