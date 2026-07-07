@@ -1,19 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, Redirect } from "wouter";
+import { Redirect } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCLegals } from "@/lib/one-c-showroom-api";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  dash,
-  formatPlanSum,
   ONE_C_PAGE_LIMIT,
   OneCLoadingBlock,
   OneCPagination,
@@ -23,9 +14,17 @@ import {
   OneCSearchInput,
   useDebouncedSearch,
 } from "./one-c-ui";
+import { OneCLegalsCards } from "./one-c-legals-cards";
+import { OneCLegalsTable } from "./one-c-legals-table";
+import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCListKpi } from "./one-c-list-kpi";
+import { buildOneCLegalsKpi } from "./one-c-list-kpi-data";
+import { useOneCListView } from "./use-one-c-list-view";
 
 export default function OneCLegalsPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
+  const actx = useClientBaseActualization();
+  const act = actx.state;
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
   const [onlyActive, setOnlyActive] = useState(true);
   const [hasDistribution, setHasDistribution] = useState(false);
@@ -34,6 +33,7 @@ export default function OneCLegalsPage() {
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchOneCLegals>>["items"]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useOneCListView("legals", "cards");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
@@ -79,10 +79,14 @@ export default function OneCLegalsPage() {
       actions={<OneCRefreshStubButton />}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <OneCListKpi items={buildOneCLegalsKpi(items, total, onlyActive)} testId="kpi-one-c-legals" />
+        <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-legals" />
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <OneCSearchInput
           value={searchQ}
           onChange={setSearchQ}
-          placeholder="Название, полное наименование, ИНН…"
+          placeholder="Название, полное наименование, ИНН, холдинг…"
           testId="input-one-c-legals-search"
         />
         <OneCOnlyActiveToggle
@@ -108,47 +112,11 @@ export default function OneCLegalsPage() {
         <OneCLoadingBlock />
       ) : (
         <>
-          <div className="rounded-md border">
-            <Table data-testid="table-one-c-legals">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Краткое имя</TableHead>
-                  <TableHead>Полное наименование</TableHead>
-                  <TableHead>ИНН</TableHead>
-                  <TableHead>КПП</TableHead>
-                  <TableHead>Город</TableHead>
-                  <TableHead>Ответственный</TableHead>
-                  <TableHead>Дистрибуция</TableHead>
-                  <TableHead className="text-right">План</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((row) => (
-                  <TableRow key={row.id_1c} className="cursor-pointer" data-testid={`row-one-c-legal-${row.id_1c}`}>
-                    <TableCell>
-                      <Link href={`/1c/legal/${row.id_1c}`} className="font-medium text-primary hover:underline">
-                        {row.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="max-w-[14rem] truncate">{dash(row.legal_name)}</TableCell>
-                    <TableCell className="font-mono text-xs">{dash(row.inn)}</TableCell>
-                    <TableCell className="font-mono text-xs">{dash(row.kpp)}</TableCell>
-                    <TableCell>{dash(row.city)}</TableCell>
-                    <TableCell>{dash(row.responsible_manager_name)}</TableCell>
-                    <TableCell>{row.has_distribution ? "✓" : ""}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatPlanSum(row.plan_sum)}</TableCell>
-                  </TableRow>
-                ))}
-                {items.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                      Ничего не найдено
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
+          {view === "cards" ? (
+            <OneCLegalsCards items={items} act={act} testIdPrefix="one-c-legals" />
+          ) : (
+            <OneCLegalsTable items={items} testIdPrefix="one-c-legals" />
+          )}
           <OneCPagination
             total={total}
             limit={ONE_C_PAGE_LIMIT}

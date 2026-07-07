@@ -24,6 +24,7 @@ type OneCStoresFiltersProps = {
   hideManager?: boolean;
   hideRm?: boolean;
   serverSideSearch?: boolean;
+  disableDistributionFilters?: boolean;
   filteredCount: number;
   testIdPrefix?: string;
 };
@@ -84,6 +85,7 @@ export function OneCStoresFilters({
   hideManager = false,
   hideRm = false,
   serverSideSearch = false,
+  disableDistributionFilters = false,
   filteredCount,
   testIdPrefix = "one-c-stores",
 }: OneCStoresFiltersProps): ReactElement {
@@ -193,9 +195,14 @@ export function OneCStoresFilters({
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">Дистрибуция</span>
-          {distLoading ? (
+          {distLoading && !disableDistributionFilters ? (
             <Badge variant="outline" className="text-[10px] font-normal">
               загружается
+            </Badge>
+          ) : null}
+          {disableDistributionFilters ? (
+            <Badge variant="outline" className="text-[10px] font-normal">
+              в режиме карточек
             </Badge>
           ) : null}
         </div>
@@ -204,28 +211,28 @@ export function OneCStoresFilters({
             label="ВХ"
             value={filters.vhPresence}
             onChange={(vhPresence) => patch({ vhPresence })}
-            disabled={distLoading}
+            disabled={distLoading || disableDistributionFilters}
             testId={`filter-${testIdPrefix}-vh`}
           />
           <SegmentPresenceToggle
             label="МК"
             value={filters.mkPresence}
             onChange={(mkPresence) => patch({ mkPresence })}
-            disabled={distLoading}
+            disabled={distLoading || disableDistributionFilters}
             testId={`filter-${testIdPrefix}-mk`}
           />
           <SegmentPresenceToggle
             label="Фурн"
             value={filters.hwPresence}
             onChange={(hwPresence) => patch({ hwPresence })}
-            disabled={distLoading}
+            disabled={distLoading || disableDistributionFilters}
             testId={`filter-${testIdPrefix}-hw`}
           />
           <SegmentPresenceToggle
             label="Ротация"
             value={filters.rotPresence}
             onChange={(rotPresence) => patch({ rotPresence })}
-            disabled={distLoading}
+            disabled={distLoading || disableDistributionFilters}
             testId={`filter-${testIdPrefix}-rot`}
           />
         </div>

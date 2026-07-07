@@ -14,7 +14,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
+import { OneCStoresCards } from "./one-c-stores-cards";
+import { OneCListViewToggle } from "./one-c-list-view-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
+import { useOneCListView } from "./use-one-c-list-view";
 
 export default function OneCManagerPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -27,10 +30,13 @@ export default function OneCManagerPage() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [view, setView] = useOneCListView(`manager-${managerId}`, "cards");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+  const cardsView = view === "cards";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
     serverSideSearch: true,
+    cardsView,
   });
 
   useEffect(() => {
@@ -104,23 +110,36 @@ export default function OneCManagerPage() {
         <OneCLoadingBlock />
       ) : (
         <>
+          <div className="mb-3 flex justify-end">
+            <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-manager-stores" />
+          </div>
           <OneCStoresFilters
             items={stores}
             filters={filters}
             onFiltersChange={setFilters}
             distAggregates={distAggregates}
             distLoading={distLoading}
+            disableDistributionFilters={cardsView}
             hideManager
             serverSideSearch
             filteredCount={filtered.length}
             testIdPrefix="one-c-manager-stores"
           />
-          <OneCStoresTable
-            items={filtered}
-            act={act}
-            emptyLabel="Торговые точки не найдены"
-            testIdPrefix="one-c-manager-stores"
-          />
+          {cardsView ? (
+            <OneCStoresCards
+              items={filtered}
+              act={act}
+              emptyLabel="Торговые точки не найдены"
+              testIdPrefix="one-c-manager-stores"
+            />
+          ) : (
+            <OneCStoresTable
+              items={filtered}
+              act={act}
+              emptyLabel="Торговые точки не найдены"
+              testIdPrefix="one-c-manager-stores"
+            />
+          )}
           <OneCPagination
             total={total}
             limit={ONE_C_PAGE_LIMIT}

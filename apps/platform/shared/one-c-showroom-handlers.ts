@@ -576,8 +576,14 @@ export type OneCLegalListItem = {
   inn: string | null;
   kpp: string | null;
   city: string | null;
+  parent_1c: string | null;
+  parent_name: string | null;
+  client_type: string | null;
+  payment_form: string | null;
+  regional_manager_name: string | null;
   responsible_manager_name: string | null;
   plan_sum: number | null;
+  stores_count: number;
   has_distribution: boolean;
 };
 
@@ -611,17 +617,28 @@ export async function fetchOneCLegals(
        )`
     : "";
 
-  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1) ${activeClause} ${distClause}`;
+  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1 OR p.name ILIKE $1) ${activeClause} ${distClause}`;
 
   const countRes = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM exchange_legals_raw l ${where}`,
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}`,
     params,
   );
   const rows = await pool.query<Omit<OneCLegalListItem, "has_distribution">>(
     `SELECT l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.city,
-            l.responsible_manager_name, l.plan_sum
+            l.parent_1c::text, p.name AS parent_name,
+            l.client_type, l.payment_form,
+            l.regional_manager_name, l.responsible_manager_name, l.plan_sum,
+            COUNT(s.id_1c)::int AS stores_count
      FROM exchange_legals_raw l
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     LEFT JOIN exchange_stores_raw s ON s.legal_entity_1c = l.id_1c
      ${where}
+     GROUP BY l.id_1c, l.name, l.legal_name, l.inn, l.kpp, l.city,
+              l.parent_1c, p.name, l.client_type, l.payment_form,
+              l.regional_manager_name, l.responsible_manager_name, l.plan_sum
      ORDER BY l.name ASC
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
