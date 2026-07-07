@@ -28,6 +28,7 @@ export default function OneCLegalsPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
   const [onlyActive, setOnlyActive] = useState(true);
+  const [hasDistribution, setHasDistribution] = useState(false);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchOneCLegals>>["items"]>([]);
@@ -38,13 +39,13 @@ export default function OneCLegalsPage() {
 
   useEffect(() => {
     setOffset(0);
-  }, [debouncedQ, onlyActive]);
+  }, [debouncedQ, onlyActive, hasDistribution]);
 
   useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCLegals({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset, onlyActive })
+    void fetchOneCLegals({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset, onlyActive, hasDistribution })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -64,7 +65,7 @@ export default function OneCLegalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, debouncedQ, offset, onlyActive]);
+  }, [canAccess, debouncedQ, offset, onlyActive, hasDistribution]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -89,6 +90,18 @@ export default function OneCLegalsPage() {
           onCheckedChange={setOnlyActive}
           testId="toggle-one-c-legals-only-active"
         />
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="toggle-one-c-legals-has-distribution"
+            checked={hasDistribution}
+            onChange={(e) => setHasDistribution(e.target.checked)}
+            data-testid="toggle-one-c-legals-has-distribution"
+          />
+          <label htmlFor="toggle-one-c-legals-has-distribution" className="text-sm">
+            Только с дистрибуцией
+          </label>
+        </div>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
@@ -105,6 +118,7 @@ export default function OneCLegalsPage() {
                   <TableHead>КПП</TableHead>
                   <TableHead>Город</TableHead>
                   <TableHead>Ответственный</TableHead>
+                  <TableHead>Дистрибуция</TableHead>
                   <TableHead className="text-right">План</TableHead>
                 </TableRow>
               </TableHeader>
@@ -121,12 +135,13 @@ export default function OneCLegalsPage() {
                     <TableCell className="font-mono text-xs">{dash(row.kpp)}</TableCell>
                     <TableCell>{dash(row.city)}</TableCell>
                     <TableCell>{dash(row.responsible_manager_name)}</TableCell>
+                    <TableCell>{row.has_distribution ? "✓" : ""}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatPlanSum(row.plan_sum)}</TableCell>
                   </TableRow>
                 ))}
                 {items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                       Ничего не найдено
                     </TableCell>
                   </TableRow>

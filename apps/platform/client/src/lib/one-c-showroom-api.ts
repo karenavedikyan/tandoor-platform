@@ -170,11 +170,63 @@ export type OneCStoreDetail = {
   legal_parent_inn: string | null;
   responsible_manager_user_id: string | null;
   regional_manager_user_id: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
+};
+
+export type OneCMatrixRowDto = {
+  categoryId: string;
+  actualCount: number;
+  status: string | null;
+  comment: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+  updatedByName: string | null;
+};
+
+export type OneCOverrideDto = {
+  id: string;
+  storeId1c: string;
+  targetKind: string;
+  targetId: string | null;
+  status: string | null;
+  comment: string | null;
+  clientOpId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+  updatedByName: string | null;
+  placementType: string | null;
+  placementSegment: string | null;
+  placementCapacity: number | null;
+  placementActual: number | null;
+  placementRef: string | null;
+  placementOurModels: { modelId: string; count: number }[];
+  placementCompetitors: { brand: string; count: number }[];
+  placementLegacyOurs: number | null;
+};
+
+export type OneCHistoryRowDto = {
+  id: string;
+  storeId1c: string;
+  action: string;
+  payload: unknown;
+  actorUserId: string | null;
+  actorFullName: string | null;
+  createdAt: string;
+};
+
+export type OneCStoreDetailWithDistribution = OneCStoreDetail & {
+  matrix: OneCMatrixRowDto[];
+  overrides: OneCOverrideDto[];
+  history: OneCHistoryRowDto[];
+  distributionFill: { filled: number; total: number };
+  canEditDistribution: boolean;
 };
 
 export type OneCStoreResponse = {
   success: boolean;
-  store: OneCStoreDetail;
+  store: OneCStoreDetailWithDistribution;
   message?: string;
 };
 
@@ -187,6 +239,7 @@ export type OneCLegalListItem = {
   city: string | null;
   responsible_manager_name: string | null;
   plan_sum: number | null;
+  has_distribution: boolean;
 };
 
 export type OneCLegalsResponse = {
@@ -195,6 +248,7 @@ export type OneCLegalsResponse = {
   limit: number;
   offset: number;
   onlyActive: boolean;
+  hasDistribution: boolean;
   items: OneCLegalListItem[];
   message?: string;
 };
@@ -209,6 +263,14 @@ export type OneCLegalStoreRow = {
   id_1c: string;
   address: string | null;
   manager_name: string | null;
+  distribution_filled: number;
+  distribution_total: number;
+};
+
+export type OneCLegalSibling = {
+  id_1c: string;
+  name: string;
+  inn: string | null;
 };
 
 export type OneCLegalDetail = {
@@ -239,14 +301,32 @@ export type OneCLegalDetail = {
   imported_at: string;
   responsible_manager_user_id: string | null;
   regional_manager_user_id: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
 };
 
 export type OneCLegalResponse = {
   success: boolean;
   legal: OneCLegalDetail;
   children: OneCLegalChild[];
+  siblings: OneCLegalSibling[];
   stores: OneCLegalStoreRow[];
   message?: string;
+};
+
+export type OneCStoreHistoryResponse = {
+  success: boolean;
+  total: number;
+  limit: number;
+  offset: number;
+  items: OneCHistoryRowDto[];
+  message?: string;
+};
+
+export type OneCStoreDistributionState = {
+  matrix: OneCMatrixRowDto[];
+  overrides: OneCOverrideDto[];
+  distributionFill: { filled: number; total: number };
 };
 
 async function fetchOneC<T>(path: string, params?: Record<string, string>): Promise<T> {
@@ -319,11 +399,13 @@ export function fetchOneCLegals(opts?: {
   limit?: number;
   offset?: number;
   onlyActive?: boolean;
+  hasDistribution?: boolean;
 }): Promise<OneCLegalsResponse> {
   const params: Record<string, string> = {
     limit: String(opts?.limit ?? 100),
     offset: String(opts?.offset ?? 0),
     onlyActive: opts?.onlyActive === false ? "0" : "1",
+    hasDistribution: opts?.hasDistribution ? "1" : "0",
   };
   if (opts?.q?.trim()) params.q = opts.q.trim();
   return fetchOneC<OneCLegalsResponse>("legals", params);
@@ -331,4 +413,49 @@ export function fetchOneCLegals(opts?: {
 
 export function fetchOneCLegal(id1c: string): Promise<OneCLegalResponse> {
   return fetchOneC<OneCLegalResponse>("legal", { id_1c: id1c });
+}
+
+export function fetchOneCStoreHistory(
+  id1c: string,
+  opts?: { limit?: number; offset?: number },
+): Promise<OneCStoreHistoryResponse> {
+  return fetchOneC<OneCStoreHistoryResponse>("store-history", {
+    id_1c: id1c,
+    limit: String(opts?.limit ?? 50),
+    offset: String(opts?.offset ?? 0),
+  });
+}
+
+async function postOneC<T>(action: string, id1c: string, body: unknown): Promise<T> {
+  const res = await fetch(`/api/one-c/${action}?id_1c=${encodeURIComponent(id1c)}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return (await res.json()) as T;
+}
+
+export function postOneCStoreMatrix(
+  id1c: string,
+  body: { category_id: string; actual_count: number; status?: string | null; comment?: string | null },
+): Promise<{ success: boolean } & OneCStoreDistributionState> {
+  return postOneC("store-matrix", id1c, body);
+}
+
+export function postOneCStoreOverride(
+  id1c: string,
+  body: Record<string, unknown>,
+): Promise<{ success: boolean; idempotent?: boolean } & OneCStoreDistributionState> {
+  return postOneC("store-override", id1c, body);
+}
+
+export function deleteOneCStoreOverride(
+  id1c: string,
+  overrideId: string,
+): Promise<{ success: boolean } & OneCStoreDistributionState> {
+  return fetch(
+    `/api/one-c/store-override-delete?id_1c=${encodeURIComponent(id1c)}&override_id=${encodeURIComponent(overrideId)}`,
+    { method: "POST", credentials: "include" },
+  ).then((r) => r.json() as Promise<{ success: boolean } & OneCStoreDistributionState>);
 }
