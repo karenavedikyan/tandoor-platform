@@ -63,6 +63,7 @@ export function build1cDealerRow(
   return {
     id: legal.id_1c,
     name: legal.name?.trim() || legal.legal_name?.trim() || "Клиент 1С",
+    releaseCode: "",
     city,
     region,
     clientCategory,
@@ -119,9 +120,14 @@ export function build1cDealerRow(
 export function build1cPoint(store: OneCStoreShapeInput, legal: OneCLegalShapeInput): DealerTradePoint {
   const city = legal.city?.trim() || "—";
   const address = store.address?.trim() || "—";
+  const rawName = store.name?.trim() ?? "";
+  const isPlaceholder = !rawName || rawName === "ТТ" || rawName === "—" || rawName === ".";
+  const legalNameStr = legal.name?.trim() || legal.legal_name?.trim() || "";
+  const displayName = isPlaceholder ? legalNameStr || address : rawName;
   return {
     id: store.id_1c,
-    name: store.name?.trim() || address,
+    name: displayName,
+    releaseCode: "",
     city,
     address,
     format: "ТТ",

@@ -247,7 +247,7 @@ export function TradePointShowcaseCatalogPanel(props: TradePointShowcaseCatalogP
   const [viewMode, setViewMode] = useState<ShowcaseCatalogViewMode>("compact");
   const [search, setSearch] = useState("");
   const [doorType, setDoorType] = useState<DoorTypeFilter>("all");
-  const [preset, setPreset] = useState<CatalogFilterPreset>("all");
+  const [preset, setPreset] = useState<CatalogFilterPreset>("on_showcase");
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [detailProductId, setDetailProductId] = useState<string | null>(null);
   const [matrixListMode, setMatrixListMode] = useState<"deficit" | "all">("deficit");
