@@ -2,14 +2,19 @@
 /**
  * HTTP-раннер на Yandex VM: POST /run/catalog → фоновый sync-1c-catalog.mjs
  * Промт 117. Порт: SYNC_RUNNER_PORT (default 38443).
+ * /exchange/list и /exchange/peek — FTP (gw.toopatch.ru), не HTTPS s3.
  */
 
 import http from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
+import * as ftp from "basic-ftp";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+
 const PORT = Number(process.env.SYNC_RUNNER_PORT ?? 38443);
 const TOKEN = process.env.SYNC_RUNNER_TOKEN?.trim() ?? "";
 const SCRIPT =
@@ -18,8 +23,12 @@ const SCRIPT =
 const PHOTO_SCRIPT =
   process.env.SYNC_1C_PHOTO_SCRIPT?.trim() ||
   path.join(__dirname, "sync-1c-photos.mjs");
-const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
-const EXCHANGE_MAX_BYTES = 10_485_760; // 10 MB — stores1.xml ~1.7 MB
+
+const FTP_EXCHANGE_BASE = (process.env.FTP_EXCHANGE_BASE?.trim() || "/s3/IMG/exchange").replace(/\/$/, "");
+const FTP_HOST = process.env.FTP_HOST?.trim() || "gw.toopatch.ru";
+const EXCHANGE_MAX_BYTES = 10_485_760; // 10 MB
+const EXCHANGE_HTTP_PREFIX = "/images/IMG/exchange";
+const FTP_OP_TIMEOUT_MS = 25_000;
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let running = null;
@@ -38,13 +47,200 @@ function authOk(req) {
   return h === `Bearer ${TOKEN}`;
 }
 
+/**
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function normalizeExchangePath(raw) {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("/")) return null;
+  if (trimmed.length > 300) return null;
+  if (trimmed.includes("..")) return null;
+  if (trimmed.includes("\\")) return null;
+  return trimmed;
+}
+
+/**
+ * List queries may omit trailing slash (exchange-list API); normalize to directory path.
+ * @param {unknown} raw
+ * @returns {string | null}
+ */
+export function normalizeExchangeListPath(raw) {
+  const p = normalizeExchangePath(raw);
+  if (!p) return null;
+  if (p === "/" || p.endsWith("/")) return p;
+  return `${p}/`;
+}
+
+export function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * @param {Date | undefined} modifiedAt
+ */
+export function formatListingTime(modifiedAt) {
+  if (!modifiedAt || Number.isNaN(modifiedAt.getTime())) return "--:--";
+  const h = String(modifiedAt.getUTCHours()).padStart(2, "0");
+  const m = String(modifiedAt.getUTCMinutes()).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
+function entryIsDirectory(entry) {
+  if (typeof entry.isDirectory === "function") return entry.isDirectory();
+  return entry.type === ftp.FileType.Directory;
+}
+
+/**
+ * @param {string} listPath — normalized list path ending with /
+ * @param {import('basic-ftp').FileInfo[]} entries
+ */
+export function buildExchangeListHtml(listPath, entries) {
+  const pathPrefix = listPath === "/" ? "" : listPath.replace(/\/$/, "");
+  const lines = [`<html><head><title>Index of ${escapeHtml(EXCHANGE_HTTP_PREFIX)}${escapeHtml(listPath)}</title></head><body><pre>`];
+
+  for (const entry of entries) {
+    if (!entry?.name || entry.name === "." || entry.name === "..") continue;
+    const time = formatListingTime(entry.modifiedAt);
+    const encodedName = encodeURIComponent(entry.name);
+    const hrefBase = `${EXCHANGE_HTTP_PREFIX}${pathPrefix}/${encodedName}`;
+    const displayName = escapeHtml(entry.name);
+
+    if (entryIsDirectory(entry)) {
+      lines.push(`   ${time}        &lt;dir&gt; <A HREF="${hrefBase}/">${displayName}</A><br>`);
+    } else {
+      const size = Number.isFinite(entry.size) ? String(entry.size) : "0";
+      lines.push(`   ${time}        ${size} <A HREF="${hrefBase}">${displayName}</A><br>`);
+    }
+  }
+
+  lines.push("</pre></body></html>");
+  return lines.join("\n");
+}
+
+/**
+ * @param {string} listPath — normalized, ends with /
+ */
+export function remoteExchangeListPath(listPath) {
+  const suffix = listPath === "/" ? "" : listPath.replace(/\/$/, "");
+  return `${FTP_EXCHANGE_BASE}${suffix}/`;
+}
+
+/**
+ * @param {string} filePath — normalized file path, no trailing /
+ */
+export function remoteExchangePeekPath(filePath) {
+  return `${FTP_EXCHANGE_BASE}${filePath}`;
+}
+
+export async function ftpConnect() {
+  const user = process.env.FTP_USER?.trim();
+  const password = process.env.FTP_PASSWORD?.trim();
+  if (!user || !password) throw new Error("FTP_USER and FTP_PASSWORD are required");
+  const client = new ftp.Client(20_000);
+  client.ftp.verbose = false;
+  await client.access({
+    host: FTP_HOST,
+    user,
+    password,
+    secure: process.env.FTP_SECURE === "1",
+  });
+  return client;
+}
+
+function isFtpNotFoundError(err) {
+  const code = err && typeof err === "object" && "code" in err ? Number(err.code) : NaN;
+  return code === 550;
+}
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
+/**
+ * @param {string} listPath — normalized list path ending with /
+ */
+export async function exchangeListFromFtp(listPath) {
+  const remote = remoteExchangeListPath(listPath);
+  const client = await ftpConnect();
+  try {
+    const entries = await withTimeout(client.list(remote), FTP_OP_TIMEOUT_MS, "FTP list");
+    return buildExchangeListHtml(listPath, entries);
+  } finally {
+    client.close();
+  }
+}
+
+/**
+ * @param {string} filePath
+ * @param {number} bytes
+ * @returns {Promise<{ buf: Buffer, totalSize: number | null }>}
+ */
+export async function exchangePeekFromFtp(filePath, bytes) {
+  const remote = remoteExchangePeekPath(filePath);
+  const client = await ftpConnect();
+  let totalSize = null;
+  try {
+    try {
+      totalSize = await withTimeout(client.size(remote), FTP_OP_TIMEOUT_MS, "FTP size");
+    } catch (e) {
+      if (isFtpNotFoundError(e)) {
+        const err = new Error("NOT_FOUND");
+        err.code = "NOT_FOUND";
+        throw err;
+      }
+      throw e;
+    }
+
+    const chunks = [];
+    let total = 0;
+    const pass = new PassThrough();
+    pass.on("data", (chunk) => {
+      if (total >= bytes) return;
+      const room = bytes - total;
+      const slice = chunk.length <= room ? chunk : chunk.subarray(0, room);
+      chunks.push(slice);
+      total += slice.length;
+      if (total >= bytes) {
+        try {
+          client.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+
+    try {
+      await withTimeout(client.downloadTo(pass, remote, 0), FTP_OP_TIMEOUT_MS, "FTP download");
+    } catch (e) {
+      if (total < bytes) throw e;
+    }
+
+    const buf = Buffer.concat(chunks, total);
+    return { buf, totalSize };
+  } finally {
+    try {
+      client.close();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 function startSync(target = "both", dry = false, extraEnv = {}, kind = "catalog", extraArgs = []) {
   if (running) {
     return { ok: false, code: "BUSY", message: "Sync already running" };
   }
-  // extraEnv позволяет Vercel передавать временные секреты (напр. DATABASE_URL_UNPOOLED для Neon),
-  // чтобы не хранить их в ~/.env на VM. Секреты попадают только в env дочернего
-  // процесса, никуда не логируются.
   const allowedExtra = new Set([
     "DATABASE_URL",
     "DATABASE_URL_UNPOOLED",
@@ -96,30 +292,18 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && req.url && req.url.startsWith("/exchange/list")) {
     const u = new URL(req.url, "http://x");
     const rawPath = String(u.searchParams.get("path") ?? "/").trim();
-    if (!rawPath.startsWith("/") || rawPath.length > 200 || rawPath.includes("..")) {
+    const listPath = normalizeExchangeListPath(rawPath);
+    if (!listPath) {
       json(res, 400, { ok: false, code: "BAD_PATH", message: "Некорректный путь." });
       return;
     }
-    const target = `${EXCHANGE_BASE}${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 15_000);
-    fetch(target, {
-      signal: ac.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    })
-      .then(async (r) => {
-        clearTimeout(t);
-        const html = await r.text();
-        res.writeHead(r.status, { "Content-Type": "text/html; charset=utf-8" });
+
+    exchangeListFromFtp(listPath)
+      .then((html) => {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(html);
       })
       .catch((e) => {
-        clearTimeout(t);
         json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
       });
     return;
@@ -128,54 +312,31 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && req.url && req.url.startsWith("/exchange/peek")) {
     const u = new URL(req.url, "http://x");
     const rawPath = String(u.searchParams.get("path") ?? "").trim();
-    if (
-      !rawPath.startsWith("/") ||
-      rawPath.length > 300 ||
-      rawPath.includes("..") ||
-      rawPath.endsWith("/")
-    ) {
+    const filePath = normalizeExchangePath(rawPath);
+    if (!filePath || filePath.endsWith("/")) {
       json(res, 400, { ok: false, code: "BAD_PATH", message: "Некорректный путь (должен быть файл)." });
       return;
     }
     const bytesParam = Number(u.searchParams.get("bytes") ?? 8192);
-    const bytes =
+    const byteLimit =
       Number.isFinite(bytesParam) && bytesParam > 0
         ? Math.min(Math.floor(bytesParam), EXCHANGE_MAX_BYTES)
         : 8192;
-    const target = `${EXCHANGE_BASE}${rawPath}`;
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 15_000);
-    fetch(target, {
-      signal: ac.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "*/*",
-        Range: `bytes=0-${bytes - 1}`,
-      },
-    })
-      .then(async (r) => {
-        clearTimeout(t);
-        if (r.status !== 200 && r.status !== 206) {
-          json(res, r.status === 404 ? 404 : 502, {
-            ok: false,
-            code: r.status === 404 ? "NOT_FOUND" : "UPSTREAM_ERROR",
-            message: `Upstream HTTP ${r.status}`,
-          });
-          return;
-        }
-        const totalSize = r.headers.get("content-range")?.match(/\/(\d+)$/)?.[1] ?? null;
-        const buf = Buffer.from(await r.arrayBuffer());
+
+    exchangePeekFromFtp(filePath, byteLimit)
+      .then(({ buf, totalSize }) => {
         res.writeHead(200, {
           "Content-Type": "text/plain; charset=utf-8",
-          "X-Exchange-Total-Size": totalSize ?? "unknown",
+          "X-Exchange-Total-Size": totalSize != null ? String(totalSize) : "unknown",
           "X-Exchange-Bytes-Returned": String(buf.length),
         });
         res.end(buf);
       })
       .catch((e) => {
-        clearTimeout(t);
+        if (e?.code === "NOT_FOUND" || isFtpNotFoundError(e)) {
+          json(res, 404, { ok: false, code: "NOT_FOUND", message: "Файл не найден." });
+          return;
+        }
         json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
       });
     return;
@@ -226,6 +387,10 @@ const server = http.createServer((req, res) => {
   json(res, 404, { ok: false, code: "NOT_FOUND" });
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`[sync-1c-runner] listening on :${PORT}, script=${SCRIPT}`);
-});
+if (isMain) {
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`[sync-1c-runner] listening on :${PORT}, script=${SCRIPT}, ftpExchange=${FTP_EXCHANGE_BASE}`);
+  });
+}
+
+export { server, EXCHANGE_MAX_BYTES, FTP_EXCHANGE_BASE };
