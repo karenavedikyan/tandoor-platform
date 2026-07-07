@@ -299,3 +299,23 @@ export function OneCFieldRow({ label, children }: { label: string; children: Rea
     </div>
   );
 }
+
+export function OneCInfoBlock({
+  label,
+  children,
+  testId,
+}: {
+  label: string;
+  children: ReactNode;
+  testId?: string;
+}): ReactElement {
+  return (
+    <div
+      className="min-h-[48px] rounded-md border border-border/60 bg-card/40 px-3 py-2"
+      data-testid={testId}
+    >
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-0.5 text-sm text-foreground">{children ?? "—"}</div>
+    </div>
+  );
+}
