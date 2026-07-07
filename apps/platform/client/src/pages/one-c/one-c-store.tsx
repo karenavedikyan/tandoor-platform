@@ -1,26 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { Copy } from "lucide-react";
+import { Copy, Maximize2, User } from "lucide-react";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCStore } from "@/lib/one-c-showroom-api";
 import { build1cDealerRow, build1cPoint } from "@/lib/one-c-dealer-shape";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import { setShowcaseMatrixApiBase, resetShowcaseMatrixApiBase } from "@/lib/showcase-matrix-api";
 import { refreshMatrixFromServer } from "@/lib/showcase-matrix-store";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import {
   CopyField,
   dash,
   formatDiscount,
   formatPlanSum,
-  OneCDetailSection,
-  OneCFieldRow,
+  OneCInfoBlock,
   OneCLoadingBlock,
   OneCPageShell,
   OneCRefreshStubButton,
@@ -53,6 +54,43 @@ function LkPersonLink({
   );
 }
 
+function CopyableText({
+  value,
+  className,
+}: {
+  value: string | null | undefined;
+  className?: string;
+}): React.ReactNode {
+  const { toast } = useToast();
+  const display = dash(value);
+
+  async function onCopy() {
+    if (!value?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(value.trim());
+      toast({ title: "Скопировано" });
+    } catch {
+      toast({ title: "Не удалось скопировать", variant: "destructive" });
+    }
+  }
+
+  if (!value?.trim()) return display;
+
+  return (
+    <button
+      type="button"
+      className={cn(
+        "w-full cursor-pointer text-left hover:text-primary",
+        className,
+      )}
+      title="Кликните, чтобы скопировать"
+      onClick={() => void onCopy()}
+    >
+      {display}
+    </button>
+  );
+}
+
 export default function OneCStorePage() {
   const { toast } = useToast();
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -62,6 +100,8 @@ export default function OneCStorePage() {
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<Awaited<ReturnType<typeof fetchOneCStore>>["store"] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [infoExpanded, setInfoExpanded] = useState(false);
+  const distributionSectionRef = useRef<HTMLDivElement>(null);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
@@ -148,6 +188,21 @@ export default function OneCStorePage() {
     }
   }
 
+  function openDistributionFullscreen() {
+    const el = distributionSectionRef.current;
+    if (!el) return;
+    const btn = el.querySelector<HTMLButtonElement>(
+      '[data-testid$="open-fullscreen"], [data-testid*="fullscreen-open"], [data-testid="button-enter-distribution"], [aria-label*="полн" i]',
+    );
+    if (btn) {
+      btn.click();
+      return;
+    }
+    // Fallback: если fullscreen-кнопка не найдена, скроллим к секции.
+    // Не форкаем LK-компонент.
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
   if (!storeId) return <Redirect to="/1c/stores" />;
@@ -161,6 +216,12 @@ export default function OneCStorePage() {
 
   const actorUserId = user.id;
   const actorName = displayUserName(user) ?? userLabelFromProfile(profile);
+
+  const fill = store?.distributionFill;
+  const fillPercent =
+    fill && fill.total > 0 ? Math.round((fill.filled / fill.total) * 100) : 0;
+  const regionCity = [store?.legal_region, store?.legal_city].filter(Boolean).join(" · ") || "—";
+  const managerName = dash(store?.legal_responsible_manager_name);
 
   return (
     <OneCPageShell
@@ -191,74 +252,68 @@ export default function OneCStorePage() {
         <OneCLoadingBlock />
       ) : store && dealerPoint ? (
         <div className="space-y-4">
-          <OneCDetailSection title="Команда по этой точке" testId="section-one-c-store-team">
-            <OneCFieldRow label="Ответственный менеджер">
-              <LkPersonLink
-                userId={store.responsible_manager_user_id}
-                name={store.legal_responsible_manager_name}
-                hrefPrefix="/1c/manager"
-              />
-            </OneCFieldRow>
-            <OneCFieldRow label="Региональный менеджер">
-              <LkPersonLink
-                userId={store.regional_manager_user_id}
-                name={store.legal_regional_manager_name}
-                hrefPrefix="/1c/rm"
-              />
-            </OneCFieldRow>
-            <OneCFieldRow label="РОП">
-              <LkPersonLink userId={store.rop_user_id} name={store.rop_name} hrefPrefix="/1c/rop" />
-            </OneCFieldRow>
-          </OneCDetailSection>
+          <div
+            className="sticky top-0 z-10 -mx-4 border-b border-border/60 bg-card/80 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
+            data-testid="bar-one-c-store-summary"
+          >
+            <div className="flex max-h-14 flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex min-w-0 flex-1 items-center gap-3 max-md:basis-full">
+                <div className="min-w-0">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Дистрибуция</div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-lg font-semibold tabular-nums text-foreground">
+                      {fill?.filled ?? 0}/{fill?.total ?? 0}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width]"
+                      style={{ width: `${fillPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <Badge variant="outline" className="shrink-0 max-md:ml-auto">
+                  {dash(store.status)}
+                </Badge>
+              </div>
 
-          <OneCDetailSection title="Клиент" testId="section-one-c-store-legal">
-            <div className="mb-2">
-              {store.legal_entity_1c ? (
-                <Link
-                  href={`/1c/legal/${store.legal_entity_1c}`}
-                  className="text-sm text-primary hover:underline"
+              <div className="flex min-w-0 flex-1 items-center gap-2 max-md:basis-full max-md:justify-between">
+                <div className="flex min-w-0 items-center gap-1.5 text-sm">
+                  <User className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                  {store.responsible_manager_user_id ? (
+                    <Link
+                      href={`/1c/manager/${store.responsible_manager_user_id}`}
+                      className="truncate text-primary hover:underline"
+                    >
+                      {managerName}
+                    </Link>
+                  ) : (
+                    <span className="truncate">{managerName}</span>
+                  )}
+                </div>
+                <span className="hidden text-xs text-muted-foreground md:inline">{regionCity}</span>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  data-testid="button-one-c-enter-distribution-summary"
+                  onClick={openDistributionFullscreen}
                 >
-                  Открыть карточку клиента
-                </Link>
-              ) : null}
-            </div>
-            <OneCFieldRow label="Краткое имя">{dash(store.legal_name)}</OneCFieldRow>
-            <OneCFieldRow label="Полное наименование">{dash(store.legal_legal_name)}</OneCFieldRow>
-            <OneCFieldRow label="ИНН">
-              <CopyField value={store.legal_inn} label="ИНН" />
-            </OneCFieldRow>
-            <OneCFieldRow label="КПП">
-              <CopyField value={store.legal_kpp} label="КПП" />
-            </OneCFieldRow>
-            <OneCFieldRow label="ОГРН">
-              <CopyField value={store.legal_ogrn} label="ОГРН" />
-            </OneCFieldRow>
-            <OneCFieldRow label="Регион · Город">
-              {[store.legal_region, store.legal_city].filter(Boolean).join(" · ") || "—"}
-            </OneCFieldRow>
-            <OneCFieldRow label="Тип клиента · Оплата">
-              {[store.legal_client_type, store.legal_payment_form].filter(Boolean).join(" · ") || "—"}
-            </OneCFieldRow>
-            <OneCFieldRow label="Скидка">
-              {formatDiscount(store.legal_discount_code, store.legal_discount_percent)}
-            </OneCFieldRow>
-            <OneCFieldRow label="Телефон · Email">
-              {[store.legal_phone, store.legal_email].filter(Boolean).join(" · ") || "—"}
-            </OneCFieldRow>
-            <OneCFieldRow label="Номер MA">{dash(store.legal_ma_number)}</OneCFieldRow>
-            <OneCFieldRow label="План">
-              {formatPlanSum(store.legal_plan_sum)} / retro {dash(store.legal_plan_retro_bonus)}
-            </OneCFieldRow>
-            {store.legal_parent_1c ? (
-              <OneCFieldRow label="Холдинг">
-                <Link href={`/1c/legal/${store.legal_parent_1c}`} className="text-primary hover:underline">
-                  {dash(store.legal_parent_name)}
-                </Link>
-              </OneCFieldRow>
-            ) : null}
-          </OneCDetailSection>
+                  <Maximize2 className="h-4 w-4" aria-hidden />
+                  Внести дистрибуцию
+                </Button>
+              </div>
 
-          <section data-testid="section-one-c-distribution-lk">
+              <span className="w-full text-xs text-muted-foreground md:hidden">{regionCity}</span>
+            </div>
+          </div>
+
+          <section
+            ref={distributionSectionRef}
+            data-testid="section-one-c-distribution-lk"
+            className="mt-4"
+          >
             <DistributionTradePointMatrixEntry
               dealer={dealerPoint.dealer}
               point={dealerPoint.point}
@@ -266,6 +321,126 @@ export default function OneCStorePage() {
               actorUserId={actorUserId}
               actorName={actorName}
             />
+          </section>
+
+          <section data-testid="section-one-c-store-info" className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-foreground">О точке и клиенте</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                {store.legal_entity_1c ? (
+                  <Button type="button" variant="outline" size="sm" asChild>
+                    <Link href={`/1c/legal/${store.legal_entity_1c}`}>Открыть карточку клиента</Link>
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <a
+                    href={buildHashPath(`/dealers/${dealerPoint.dealer.id}/trade-points/${dealerPoint.point.id}`, {
+                      tradePointShowcase: "1",
+                    })}
+                  >
+                    Открыть карточку ТТ
+                  </a>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="button-one-c-store-info-toggle"
+                  onClick={() => setInfoExpanded((v) => !v)}
+                >
+                  {infoExpanded ? "Свернуть" : "Показать всё"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <OneCInfoBlock label="Ответственный менеджер" testId="tile-one-c-responsible-manager">
+                <LkPersonLink
+                  userId={store.responsible_manager_user_id}
+                  name={store.legal_responsible_manager_name}
+                  hrefPrefix="/1c/manager"
+                />
+              </OneCInfoBlock>
+              <OneCInfoBlock label="Региональный менеджер" testId="tile-one-c-regional-manager">
+                <LkPersonLink
+                  userId={store.regional_manager_user_id}
+                  name={store.legal_regional_manager_name}
+                  hrefPrefix="/1c/rm"
+                />
+              </OneCInfoBlock>
+              <OneCInfoBlock label="РОП" testId="tile-one-c-rop">
+                <LkPersonLink userId={store.rop_user_id} name={store.rop_name} hrefPrefix="/1c/rop" />
+              </OneCInfoBlock>
+              <OneCInfoBlock label="ИНН" testId="tile-one-c-inn">
+                <CopyField value={store.legal_inn} label="ИНН" />
+              </OneCInfoBlock>
+              <OneCInfoBlock label="Тип клиента · Оплата" testId="tile-one-c-client-type">
+                {[store.legal_client_type, store.legal_payment_form].filter(Boolean).join(" · ") || "—"}
+              </OneCInfoBlock>
+              <OneCInfoBlock label="Скидка" testId="tile-one-c-discount">
+                <span className="tabular-nums">
+                  {formatDiscount(store.legal_discount_code, store.legal_discount_percent)}
+                </span>
+              </OneCInfoBlock>
+
+              {infoExpanded ? (
+                <>
+                  <OneCInfoBlock label="Полное наименование" testId="tile-one-c-legal-name">
+                    <CopyableText value={store.legal_legal_name} />
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="КПП" testId="tile-one-c-kpp">
+                    <CopyField value={store.legal_kpp} label="КПП" />
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="ОГРН" testId="tile-one-c-ogrn">
+                    <CopyField value={store.legal_ogrn} label="ОГРН" />
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="Регион · Город" testId="tile-one-c-region-city">
+                    {regionCity}
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="Телефон · Email" testId="tile-one-c-contacts">
+                    {[store.legal_phone, store.legal_email].filter(Boolean).join(" · ") || "—"}
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="Номер MA" testId="tile-one-c-ma">
+                    <span className="tabular-nums">{dash(store.legal_ma_number)}</span>
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="План" testId="tile-one-c-plan">
+                    <span className="tabular-nums">
+                      {formatPlanSum(store.legal_plan_sum)} / retro {dash(store.legal_plan_retro_bonus)}
+                    </span>
+                  </OneCInfoBlock>
+                  {store.legal_parent_1c ? (
+                    <OneCInfoBlock label="Холдинг" testId="tile-one-c-holding">
+                      <div className="space-y-1">
+                        <CopyableText value={store.legal_parent_name} />
+                        <Link
+                          href={`/1c/legal/${store.legal_parent_1c}`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Открыть карточку холдинга
+                        </Link>
+                      </div>
+                    </OneCInfoBlock>
+                  ) : (
+                    <OneCInfoBlock label="Холдинг" testId="tile-one-c-holding">
+                      —
+                    </OneCInfoBlock>
+                  )}
+                  <OneCInfoBlock label="Мебельный менеджер" testId="tile-one-c-furniture-manager">
+                    {store.legal_furniture_manager_name
+                      ? [
+                          store.legal_furniture_manager_name,
+                          store.legal_furniture_manager_phone,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "—"}
+                  </OneCInfoBlock>
+                  <OneCInfoBlock label="Последний импорт" testId="tile-one-c-imported-at">
+                    {formatDisplayDateTime(store.imported_at)}
+                  </OneCInfoBlock>
+                </>
+              ) : null}
+            </div>
           </section>
         </div>
       ) : null}
