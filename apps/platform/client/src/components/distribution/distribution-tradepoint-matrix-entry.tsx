@@ -90,6 +90,8 @@ type DistributionTradePointMatrixEntryProps = {
   actorUserId: string;
   actorName: string;
   onBackToList?: () => void;
+  hideOpenTasksSection?: boolean;
+  hideOpenTradePointCard?: boolean;
 };
 
 export function DistributionTradePointMatrixEntry({
@@ -99,6 +101,8 @@ export function DistributionTradePointMatrixEntry({
   actorUserId,
   actorName,
   onBackToList,
+  hideOpenTasksSection = false,
+  hideOpenTradePointCard = false,
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
@@ -323,18 +327,20 @@ export function DistributionTradePointMatrixEntry({
           <TradePointShowcaseParamsSection dealer={dealer} point={point} profile={profile} canEdit={canEdit} />
         </CollapsibleContent>
       </Collapsible>
-      <Button
-        asChild
-        variant="outline"
-        size="sm"
-        className="h-9 w-full justify-center gap-1.5 text-sm font-medium"
-        data-testid="button-open-trade-point-card"
-      >
-        <a href={buildHashPath(`/dealers/${dealer.id}/trade-points/${point.id}`, { tradePointShowcase: "1" })}>
-          <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
-          Открыть карточку ТТ
-        </a>
-      </Button>
+      {!hideOpenTradePointCard ? (
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="h-9 w-full justify-center gap-1.5 text-sm font-medium"
+          data-testid="button-open-trade-point-card"
+        >
+          <a href={buildHashPath(`/dealers/${dealer.id}/trade-points/${point.id}`, { tradePointShowcase: "1" })}>
+            <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+            Открыть карточку ТТ
+          </a>
+        </Button>
+      ) : null}
       {showEnterDistributionButton ? (
         <Button
           type="button"
@@ -397,6 +403,7 @@ export function DistributionTradePointMatrixEntry({
             actorName={actorName}
             page={showcasePage}
             density="compact"
+            hideOpenTasksSection={hideOpenTasksSection}
           />
         </>
       )}
