@@ -32,6 +32,9 @@ import {
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
+import { OneCStoresFilters } from "./one-c-stores-filters";
+import { OneCStoresTable } from "./one-c-stores-table";
+import { useOneCStoresListView } from "./use-one-c-stores-list";
 
 function LkPersonLink({
   userId,
@@ -73,6 +76,7 @@ export default function OneCLegalPage() {
   const [reqOpen, setReqOpen] = useState(true);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+  const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores);
 
   useEffect(() => {
     if (!canAccess || !legalId) return;
@@ -222,33 +226,22 @@ export default function OneCLegalPage() {
             {stores.length === 0 ? (
               <p className="text-sm text-muted-foreground">Нет торговых точек</p>
             ) : (
-              <div className="rounded-md border">
-                <Table data-testid="table-one-c-legal-stores">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Адрес</TableHead>
-                      <TableHead>Менеджер</TableHead>
-                      <TableHead>Дистрибуция</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {stores.map((row) => (
-                      <TableRow key={row.id_1c}>
-                        <TableCell>{dash(row.address)}</TableCell>
-                        <TableCell>{dash(row.manager_name)}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {row.distribution_filled}/{row.distribution_total} категорий
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
-                            Открыть
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className="space-y-3">
+                <OneCStoresFilters
+                  items={stores}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                  distAggregates={distAggregates}
+                  distLoading={distLoading}
+                  filteredCount={filtered.length}
+                  testIdPrefix="one-c-legal-stores"
+                />
+                <OneCStoresTable
+                  items={filtered}
+                  act={act}
+                  emptyLabel="Торговые точки не найдены"
+                  testIdPrefix="one-c-legal-stores"
+                />
               </div>
             )}
           </OneCDetailSection>

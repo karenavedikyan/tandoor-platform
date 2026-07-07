@@ -233,16 +233,6 @@ export async function fetchOneCRm(pool: PoolLike, userId: string, q: string, lim
   return { user: card, teamName: team?.name ?? null, ropName: card.ropName, managers, ...stores };
 }
 
-export type OneCManagerStoreRow = {
-  id_1c: string;
-  address: string | null;
-  store_name: string;
-  legal_short: string | null;
-  inn: string | null;
-  kpp: string | null;
-  legal_city: string | null;
-};
-
 export async function fetchOneCManager(pool: PoolLike, userId: string, q: string, limit: number, offset: number) {
   const ctx = await loadOneCShowroomContext(pool);
   const user = ctx.usersById.get(userId);
@@ -256,86 +246,6 @@ export async function fetchOneCManager(pool: PoolLike, userId: string, q: string
   return { user: card, ...stores };
 }
 
-async function queryManagerStores(
-  pool: PoolLike,
-  matchedNames: string[],
-  q: string,
-  limit: number,
-  offset: number,
-) {
-  if (matchedNames.length === 0) {
-    return { total: 0, items: [] as OneCManagerStoreRow[] };
-  }
-  const pattern = q ? `%${q}%` : null;
-  const where = `WHERE l.responsible_manager_name = ANY($1::text[])
-    AND (
-      $2::text IS NULL
-      OR s.address ILIKE $2
-      OR l.name ILIKE $2
-      OR l.legal_name ILIKE $2
-      OR l.inn ILIKE $2
-    )`;
-  const countRes = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n
-     FROM exchange_legals_raw l
-     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
-     ${where}`,
-    [matchedNames, pattern],
-  );
-  const rows = await pool.query<OneCManagerStoreRow>(
-    `SELECT s.id_1c::text, s.address, s.name AS store_name,
-            l.name AS legal_short, l.inn, l.kpp, l.city AS legal_city
-     FROM exchange_legals_raw l
-     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
-     ${where}
-     ORDER BY s.address ASC NULLS LAST
-     LIMIT $3 OFFSET $4`,
-    [matchedNames, pattern, limit, offset],
-  );
-  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
-}
-
-async function queryRmStores(
-  pool: PoolLike,
-  matchedNames: string[],
-  q: string,
-  limit: number,
-  offset: number,
-  _ctx: OneCShowroomContext,
-) {
-  if (matchedNames.length === 0) {
-    return { total: 0, items: [] as OneCManagerStoreRow[] };
-  }
-  const pattern = q ? `%${q}%` : null;
-  const where = `WHERE l.regional_manager_name = ANY($1::text[])
-    AND (
-      $2::text IS NULL
-      OR s.address ILIKE $2
-      OR l.name ILIKE $2
-      OR l.inn ILIKE $2
-      OR l.responsible_manager_name ILIKE $2
-    )`;
-  const countRes = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n
-     FROM exchange_legals_raw l
-     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
-     ${where}`,
-    [matchedNames, pattern],
-  );
-  const rows = await pool.query<OneCManagerStoreRow & { resp: string | null }>(
-    `SELECT s.id_1c::text, s.address, s.name AS store_name,
-            l.name AS legal_short, l.inn, l.kpp, l.city AS legal_city,
-            l.responsible_manager_name AS resp
-     FROM exchange_legals_raw l
-     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
-     ${where}
-     ORDER BY s.address ASC NULLS LAST
-     LIMIT $3 OFFSET $4`,
-    [matchedNames, pattern, limit, offset],
-  );
-  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
-}
-
 export type OneCStoreListItem = {
   id_1c: string;
   address: string | null;
@@ -347,10 +257,130 @@ export type OneCStoreListItem = {
   legal_parent_name: string | null;
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
+  legal_payment_form: string | null;
   status: string | null;
   distribution_filled: number;
   distribution_total: number;
 };
+
+const ONE_C_STORE_LIST_SELECT = `SELECT
+       s.id_1c::text,
+       s.address,
+       s.manager_name,
+       l.name AS legal_name,
+       l.inn AS legal_inn,
+       l.city AS legal_city,
+       l.parent_1c::text AS legal_parent_1c,
+       p.name AS legal_parent_name,
+       l.client_type AS legal_client_type,
+       l.regional_manager_name AS legal_regional_manager_name,
+       l.payment_form AS legal_payment_form,
+       s.status`;
+
+const ONE_C_STORE_LIST_JOINS = `FROM exchange_stores_raw s
+     LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c`;
+
+const ONE_C_STORE_LIST_SEARCH = `(
+      $SEARCH::text IS NULL
+      OR s.address ILIKE $SEARCH
+      OR s.manager_name ILIKE $SEARCH
+      OR l.name ILIKE $SEARCH
+      OR l.legal_name ILIKE $SEARCH
+      OR l.inn ILIKE $SEARCH
+      OR p.name ILIKE $SEARCH
+    )`;
+
+type OneCStoreListRow = Omit<OneCStoreListItem, "distribution_filled" | "distribution_total">;
+
+async function attachDistributionFill(
+  pool: PoolLike,
+  rows: OneCStoreListRow[],
+): Promise<OneCStoreListItem[]> {
+  const fillByStore = await fetchDistributionFillForStores(
+    pool,
+    rows.map((r) => r.id_1c),
+  );
+  return rows.map((r) => {
+    const f = fillByStore.get(r.id_1c) ?? { filled: 0, total: 0 };
+    return {
+      ...r,
+      distribution_filled: f.filled,
+      distribution_total: f.total,
+    };
+  });
+}
+
+async function queryManagerStores(
+  pool: PoolLike,
+  matchedNames: string[],
+  q: string,
+  limit: number,
+  offset: number,
+) {
+  if (matchedNames.length === 0) {
+    return { total: 0, items: [] as OneCStoreListItem[] };
+  }
+  const pattern = q ? `%${q}%` : null;
+  const where = `WHERE l.responsible_manager_name = ANY($1::text[])
+    AND ${ONE_C_STORE_LIST_SEARCH.replaceAll("$SEARCH", "$2")}`;
+  const countRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}`,
+    [matchedNames, pattern],
+  );
+  const rows = await pool.query<OneCStoreListRow>(
+    `${ONE_C_STORE_LIST_SELECT}
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT $3 OFFSET $4`,
+    [matchedNames, pattern, limit, offset],
+  );
+  const items = await attachDistributionFill(pool, rows.rows);
+  return { total: countRes.rows[0]?.n ?? 0, items };
+}
+
+async function queryRmStores(
+  pool: PoolLike,
+  matchedNames: string[],
+  q: string,
+  limit: number,
+  offset: number,
+  _ctx: OneCShowroomContext,
+) {
+  if (matchedNames.length === 0) {
+    return { total: 0, items: [] as OneCStoreListItem[] };
+  }
+  const pattern = q ? `%${q}%` : null;
+  const where = `WHERE l.regional_manager_name = ANY($1::text[])
+    AND ${ONE_C_STORE_LIST_SEARCH.replaceAll("$SEARCH", "$2")}`;
+  const countRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}`,
+    [matchedNames, pattern],
+  );
+  const rows = await pool.query<OneCStoreListRow>(
+    `${ONE_C_STORE_LIST_SELECT}
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT $3 OFFSET $4`,
+    [matchedNames, pattern, limit, offset],
+  );
+  const items = await attachDistributionFill(pool, rows.rows);
+  return { total: countRes.rows[0]?.n ?? 0, items };
+}
 
 export async function fetchOneCStores(
   pool: PoolLike,
@@ -393,41 +423,15 @@ export async function fetchOneCStores(
   );
   const limitIdx = onlyActive ? 4 : 2;
   const offsetIdx = onlyActive ? 5 : 3;
-  const rows = await pool.query<
-    Omit<OneCStoreListItem, "distribution_filled" | "distribution_total">
-  >(
-    `SELECT
-       s.id_1c::text,
-       s.address,
-       s.manager_name,
-       l.name AS legal_name,
-       l.inn AS legal_inn,
-       l.city AS legal_city,
-       l.parent_1c::text AS legal_parent_1c,
-       p.name AS legal_parent_name,
-       l.client_type AS legal_client_type,
-       l.regional_manager_name AS legal_regional_manager_name,
-       s.status
-     FROM exchange_stores_raw s
-     LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
-     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+  const rows = await pool.query<OneCStoreListRow>(
+    `${ONE_C_STORE_LIST_SELECT}
+     ${ONE_C_STORE_LIST_JOINS}
      ${where}
      ORDER BY s.address ASC NULLS LAST
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
   );
-  const fillByStore = await fetchDistributionFillForStores(
-    pool,
-    rows.rows.map((r) => r.id_1c),
-  );
-  const items: OneCStoreListItem[] = rows.rows.map((r) => {
-    const f = fillByStore.get(r.id_1c) ?? { filled: 0, total: 0 };
-    return {
-      ...r,
-      distribution_filled: f.filled,
-      distribution_total: f.total,
-    };
-  });
+  const items = await attachDistributionFill(pool, rows.rows);
   return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
@@ -647,14 +651,6 @@ export type OneCLegalChild = {
   inn: string | null;
 };
 
-export type OneCLegalStoreRow = {
-  id_1c: string;
-  address: string | null;
-  manager_name: string | null;
-  distribution_filled: number;
-  distribution_total: number;
-};
-
 export type OneCLegalDetail = {
   id_1c: string;
   name: string;
@@ -747,19 +743,15 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
         [legal.parent_1c, id1c],
       )
     : { rows: [] as OneCLegalSibling[] };
-  const storesRes = await pool.query<Omit<OneCLegalStoreRow, "distribution_filled" | "distribution_total">>(
-    `SELECT id_1c::text, address, manager_name FROM exchange_stores_raw
-     WHERE legal_entity_1c = $1 ORDER BY address ASC NULLS LAST LIMIT 500`,
+  const storesRes = await pool.query<OneCStoreListRow>(
+    `${ONE_C_STORE_LIST_SELECT}
+     ${ONE_C_STORE_LIST_JOINS}
+     WHERE s.legal_entity_1c = $1
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT 500`,
     [id1c],
   );
-  const fillMap = await fetchDistributionFillForStores(
-    pool,
-    storesRes.rows.map((s) => s.id_1c),
-  );
-  const stores: OneCLegalStoreRow[] = storesRes.rows.map((s) => {
-    const fill = fillMap.get(s.id_1c) ?? { filled: 0, total: 4 };
-    return { ...s, distribution_filled: fill.filled, distribution_total: fill.total };
-  });
+  const stores = await attachDistributionFill(pool, storesRes.rows);
   return { legal, children: childrenRes.rows, siblings: siblingsRes.rows, stores };
 }
 
