@@ -6,6 +6,17 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "../server/db/neon-client.js";
 import { sendJson } from "./admin/admin-auth.js";
 import {
+  canEditDistributionForStore1c,
+} from "./one-c-distribution-permissions.js";
+import {
+  fetchDistributionFillForStores,
+  fetchHistory1cForStore,
+  fetchStoreDistributionState,
+  type OneCHistoryRowDto,
+  type OneCMatrixRowDto,
+  type OneCOverrideDto,
+} from "./one-c-distribution-handlers.js";
+import {
   buildHierarchy,
   countLegalsActive,
   countLegalsForRegionalNames,
@@ -48,6 +59,12 @@ function parseOnlyActive(req: VercelRequest): boolean {
   const raw = req.query.onlyActive;
   const v = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw ?? "1");
   return v !== "0" && v.toLowerCase() !== "false";
+}
+
+function parseHasDistribution(req: VercelRequest): boolean {
+  const raw = req.query.hasDistribution;
+  const v = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw ?? "");
+  return v === "1" || v.toLowerCase() === "true";
 }
 
 export type OneCOverviewV2 = {
@@ -414,6 +431,16 @@ export type OneCStoreDetail = {
   legal_parent_inn: string | null;
   responsible_manager_user_id: string | null;
   regional_manager_user_id: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
+};
+
+export type OneCStoreDetailWithDistribution = OneCStoreDetail & {
+  matrix: OneCMatrixRowDto[];
+  overrides: OneCOverrideDto[];
+  history: OneCHistoryRowDto[];
+  distributionFill: { filled: number; total: number };
+  canEditDistribution: boolean;
 };
 
 export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneCStoreDetail | null> {
@@ -463,7 +490,44 @@ export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneC
     ? (ctx.userIdByRegionalName.get(row.legal_regional_manager_name) ?? null)
     : null;
 
-  return { ...row, responsible_manager_user_id, regional_manager_user_id };
+  let rop_user_id: string | null = null;
+  let rop_name: string | null = null;
+  if (regional_manager_user_id) {
+    const rmUser = ctx.usersById.get(regional_manager_user_id);
+    if (rmUser?.team_id) {
+      const team = ctx.teams.find((t) => t.id === rmUser.team_id);
+      if (team?.rop_user_id) {
+        rop_user_id = team.rop_user_id;
+        rop_name = ctx.usersById.get(team.rop_user_id)?.full_name ?? null;
+      }
+    }
+  }
+
+  return { ...row, responsible_manager_user_id, regional_manager_user_id, rop_user_id, rop_name };
+}
+
+export async function fetchOneCStoreWithDistribution(
+  pool: PoolLike,
+  id1c: string,
+  viewerUserId: string | null,
+): Promise<OneCStoreDetailWithDistribution | null> {
+  const store = await fetchOneCStore(pool, id1c);
+  if (!store) return null;
+  const [{ matrix, overrides, distributionFill }, historyRes] = await Promise.all([
+    fetchStoreDistributionState(pool, id1c),
+    fetchHistory1cForStore(pool, id1c, 20, 0),
+  ]);
+  const canEditDistribution = viewerUserId
+    ? await canEditDistributionForStore1c(pool, viewerUserId, id1c)
+    : false;
+  return {
+    ...store,
+    matrix,
+    overrides,
+    history: historyRes.items,
+    distributionFill,
+    canEditDistribution,
+  };
 }
 
 export type OneCLegalListItem = {
@@ -475,6 +539,7 @@ export type OneCLegalListItem = {
   city: string | null;
   responsible_manager_name: string | null;
   plan_sum: number | null;
+  has_distribution: boolean;
 };
 
 export async function fetchOneCLegals(
@@ -483,6 +548,7 @@ export async function fetchOneCLegals(
   limit: number,
   offset: number,
   onlyActive: boolean,
+  hasDistribution = false,
 ) {
   const ctx = await loadOneCShowroomContext(pool);
   const pattern = q ? `%${q}%` : null;
@@ -498,13 +564,21 @@ export async function fetchOneCLegals(
   const limitIdx = onlyActive ? 4 : 2;
   const offsetIdx = onlyActive ? 5 : 3;
 
-  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1) ${activeClause}`;
+  const distClause = hasDistribution
+    ? `AND EXISTS (
+         SELECT 1 FROM exchange_stores_raw s
+         INNER JOIN showcase_matrix_1c m ON m.store_id_1c = s.id_1c AND m.actual_count > 0
+         WHERE s.legal_entity_1c = l.id_1c
+       )`
+    : "";
+
+  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1) ${activeClause} ${distClause}`;
 
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n FROM exchange_legals_raw l ${where}`,
     params,
   );
-  const rows = await pool.query<OneCLegalListItem>(
+  const rows = await pool.query<Omit<OneCLegalListItem, "has_distribution">>(
     `SELECT l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.city,
             l.responsible_manager_name, l.plan_sum
      FROM exchange_legals_raw l
@@ -513,7 +587,23 @@ export async function fetchOneCLegals(
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
   );
-  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
+  const legalIds = rows.rows.map((r) => r.id_1c);
+  const distFlags = new Map<string, boolean>();
+  if (legalIds.length > 0) {
+    const distRes = await pool.query<{ legal_entity_1c: string }>(
+      `SELECT DISTINCT s.legal_entity_1c::text
+       FROM exchange_stores_raw s
+       INNER JOIN showcase_matrix_1c m ON m.store_id_1c = s.id_1c AND m.actual_count > 0
+       WHERE s.legal_entity_1c = ANY($1::uuid[])`,
+      [legalIds],
+    );
+    for (const r of distRes.rows) distFlags.set(r.legal_entity_1c, true);
+  }
+  const items: OneCLegalListItem[] = rows.rows.map((r) => ({
+    ...r,
+    has_distribution: distFlags.has(r.id_1c),
+  }));
+  return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
 export type OneCLegalChild = {
@@ -526,6 +616,8 @@ export type OneCLegalStoreRow = {
   id_1c: string;
   address: string | null;
   manager_name: string | null;
+  distribution_filled: number;
+  distribution_total: number;
 };
 
 export type OneCLegalDetail = {
@@ -556,6 +648,14 @@ export type OneCLegalDetail = {
   imported_at: string;
   responsible_manager_user_id: string | null;
   regional_manager_user_id: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
+};
+
+export type OneCLegalSibling = {
+  id_1c: string;
+  name: string;
+  inn: string | null;
 };
 
 export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
@@ -585,16 +685,47 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
     ? (ctx.userIdByRegionalName.get(legal.regional_manager_name) ?? null)
     : null;
 
+  let rop_user_id: string | null = null;
+  let rop_name: string | null = null;
+  if (legal.regional_manager_user_id) {
+    const rmUser = ctx.usersById.get(legal.regional_manager_user_id);
+    if (rmUser?.team_id) {
+      const team = ctx.teams.find((t) => t.id === rmUser.team_id);
+      if (team?.rop_user_id) {
+        rop_user_id = team.rop_user_id;
+        rop_name = ctx.usersById.get(team.rop_user_id)?.full_name ?? null;
+      }
+    }
+  }
+  legal.rop_user_id = rop_user_id;
+  legal.rop_name = rop_name;
+
   const childrenRes = await pool.query<OneCLegalChild>(
     `SELECT id_1c::text, name, inn FROM exchange_legals_raw WHERE parent_1c = $1 ORDER BY name ASC LIMIT 200`,
     [id1c],
   );
-  const storesRes = await pool.query<OneCLegalStoreRow>(
+  const siblingsRes = legal.parent_1c
+    ? await pool.query<OneCLegalSibling>(
+        `SELECT id_1c::text, name, inn FROM exchange_legals_raw
+         WHERE parent_1c = $1::uuid AND id_1c <> $2::uuid
+         ORDER BY name ASC LIMIT 200`,
+        [legal.parent_1c, id1c],
+      )
+    : { rows: [] as OneCLegalSibling[] };
+  const storesRes = await pool.query<Omit<OneCLegalStoreRow, "distribution_filled" | "distribution_total">>(
     `SELECT id_1c::text, address, manager_name FROM exchange_stores_raw
      WHERE legal_entity_1c = $1 ORDER BY address ASC NULLS LAST LIMIT 500`,
     [id1c],
   );
-  return { legal, children: childrenRes.rows, stores: storesRes.rows };
+  const fillMap = await fetchDistributionFillForStores(
+    pool,
+    storesRes.rows.map((s) => s.id_1c),
+  );
+  const stores: OneCLegalStoreRow[] = storesRes.rows.map((s) => {
+    const fill = fillMap.get(s.id_1c) ?? { filled: 0, total: 4 };
+    return { ...s, distribution_filled: fill.filled, distribution_total: fill.total };
+  });
+  return { legal, children: childrenRes.rows, siblings: siblingsRes.rows, stores };
 }
 
 export async function handleOneCOverview(_req: VercelRequest, res: VercelResponse, pool: PoolLike) {
@@ -657,13 +788,18 @@ export async function handleOneCStores(req: VercelRequest, res: VercelResponse, 
   sendJson(res, 200, { success: true, limit, offset, onlyActive: parseOnlyActive(req), ...data });
 }
 
-export async function handleOneCStore(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCStore(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewerUserId?: string | null,
+) {
   const id1c = String(req.query.id_1c ?? "").trim();
   if (!id1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
-  const store = await fetchOneCStore(pool, id1c);
+  const store = await fetchOneCStoreWithDistribution(pool, id1c, viewerUserId ?? null);
   if (!store) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Торговая точка не найдена." });
     return;
@@ -673,8 +809,22 @@ export async function handleOneCStore(req: VercelRequest, res: VercelResponse, p
 
 export async function handleOneCLegals(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCLegals(pool, parseSearch(req), limit, offset, parseOnlyActive(req));
-  sendJson(res, 200, { success: true, limit, offset, onlyActive: parseOnlyActive(req), ...data });
+  const data = await fetchOneCLegals(
+    pool,
+    parseSearch(req),
+    limit,
+    offset,
+    parseOnlyActive(req),
+    parseHasDistribution(req),
+  );
+  sendJson(res, 200, {
+    success: true,
+    limit,
+    offset,
+    onlyActive: parseOnlyActive(req),
+    hasDistribution: parseHasDistribution(req),
+    ...data,
+  });
 }
 
 export async function handleOneCLegal(req: VercelRequest, res: VercelResponse, pool: PoolLike) {

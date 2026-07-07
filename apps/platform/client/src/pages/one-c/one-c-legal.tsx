@@ -3,6 +3,14 @@ import { Link, Redirect, useRoute } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCLegal } from "@/lib/one-c-showroom-api";
+import { formatDisplayDateTime } from "@/lib/format-display-date";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -11,6 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   CopyField,
   dash,
@@ -26,23 +36,26 @@ import {
 function LkPersonLink({
   userId,
   name,
+  phone,
   hrefPrefix,
 }: {
   userId: string | null;
   name: string | null;
-  hrefPrefix: "/1c/manager" | "/1c/rm";
+  phone?: string | null;
+  hrefPrefix: "/1c/manager" | "/1c/rm" | "/1c/rop";
 }): React.ReactNode {
   if (!name?.trim()) return "—";
+  const label = phone?.trim() ? `${name} · ${phone}` : name;
   if (userId) {
     return (
       <Link href={`${hrefPrefix}/${userId}`} className="text-primary hover:underline">
-        {name}
+        {label}
       </Link>
     );
   }
   return (
     <span>
-      {name} <span className="text-muted-foreground">(нет в ЛК)</span>
+      {label} <span className="text-muted-foreground">(нет в ЛК)</span>
     </span>
   );
 }
@@ -54,8 +67,10 @@ export default function OneCLegalPage() {
   const [loading, setLoading] = useState(true);
   const [legal, setLegal] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["legal"] | null>(null);
   const [children, setChildren] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["children"]>([]);
+  const [siblings, setSiblings] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["siblings"]>([]);
   const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["stores"]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [reqOpen, setReqOpen] = useState(true);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
@@ -73,6 +88,7 @@ export default function OneCLegalPage() {
         }
         setLegal(res.legal);
         setChildren(res.children);
+        setSiblings(res.siblings ?? []);
         setStores(res.stores);
         setError(null);
       })
@@ -101,15 +117,23 @@ export default function OneCLegalPage() {
       subtitle={
         legal ? (
           <span className="flex flex-wrap items-center gap-3 text-sm">
+            <span>{dash(legal.name)}</span>
             <span className="inline-flex items-center gap-1">
               ИНН <CopyField value={legal.inn} label="ИНН" />
             </span>
-            <span className="inline-flex items-center gap-1">
-              КПП <CopyField value={legal.kpp} label="КПП" />
+            <span>КПП {dash(legal.kpp)}</span>
+            <span>ОГРН {dash(legal.ogrn)}</span>
+            <span>
+              {[legal.region, legal.city].filter(Boolean).join(" · ") || "—"}
             </span>
-            <span className="inline-flex items-center gap-1">
-              ОГРН <CopyField value={legal.ogrn} label="ОГРН" />
-            </span>
+            {legal.parent_1c ? (
+              <Badge variant="secondary" className="gap-1">
+                Входит в холдинг{" "}
+                <Link href={`/1c/legal/${legal.parent_1c}`} className="underline">
+                  {dash(legal.parent_name)}
+                </Link>
+              </Badge>
+            ) : null}
           </span>
         ) : undefined
       }
@@ -121,35 +145,65 @@ export default function OneCLegalPage() {
         <OneCLoadingBlock />
       ) : legal ? (
         <div className="space-y-4">
-          <OneCDetailSection title="Реквизиты" testId="section-one-c-legal-details">
-            <OneCFieldRow label="Краткое имя">{dash(legal.name)}</OneCFieldRow>
-            <OneCFieldRow label="Полное наименование">{dash(legal.legal_name)}</OneCFieldRow>
-            <OneCFieldRow label="Регион">{dash(legal.region)}</OneCFieldRow>
-            <OneCFieldRow label="Город">{dash(legal.city)}</OneCFieldRow>
-            <OneCFieldRow label="Тип клиента">{dash(legal.client_type)}</OneCFieldRow>
-            <OneCFieldRow label="Форма оплаты">{dash(legal.payment_form)}</OneCFieldRow>
-            <OneCFieldRow label="Номер MA">{dash(legal.ma_number)}</OneCFieldRow>
-            <OneCFieldRow label="Телефон">{dash(legal.phone)}</OneCFieldRow>
-            <OneCFieldRow label="Email">{dash(legal.email)}</OneCFieldRow>
-            <OneCFieldRow label="Скидка">{formatDiscount(legal.discount_code, legal.discount_percent)}</OneCFieldRow>
-          </OneCDetailSection>
+          <Collapsible open={reqOpen} onOpenChange={setReqOpen}>
+            <CardLikeSection title="Реквизиты" testId="section-one-c-legal-details">
+              <CollapsibleTrigger asChild>
+                <Button type="button" variant="ghost" size="sm" className="mb-2 gap-1">
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", reqOpen && "rotate-180")} />
+                  {reqOpen ? "Свернуть" : "Развернуть"}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3">
+                <GroupTitle>Юридические</GroupTitle>
+                <OneCFieldRow label="Полное наименование">{dash(legal.legal_name)}</OneCFieldRow>
+                <OneCFieldRow label="ИНН">
+                  <CopyField value={legal.inn} label="ИНН" />
+                </OneCFieldRow>
+                <OneCFieldRow label="КПП">
+                  <CopyField value={legal.kpp} label="КПП" />
+                </OneCFieldRow>
+                <OneCFieldRow label="ОГРН">
+                  <CopyField value={legal.ogrn} label="ОГРН" />
+                </OneCFieldRow>
+                <GroupTitle>Локация</GroupTitle>
+                <OneCFieldRow label="Регион">{dash(legal.region)}</OneCFieldRow>
+                <OneCFieldRow label="Город">{dash(legal.city)}</OneCFieldRow>
+                <GroupTitle>Коммерческие</GroupTitle>
+                <OneCFieldRow label="Тип клиента">{dash(legal.client_type)}</OneCFieldRow>
+                <OneCFieldRow label="Форма оплаты">{dash(legal.payment_form)}</OneCFieldRow>
+                <OneCFieldRow label="Номер MA">{dash(legal.ma_number)}</OneCFieldRow>
+                <OneCFieldRow label="Скидка">
+                  {formatDiscount(legal.discount_code, legal.discount_percent)}
+                </OneCFieldRow>
+                <GroupTitle>Контакты</GroupTitle>
+                <OneCFieldRow label="Телефон">{dash(legal.phone)}</OneCFieldRow>
+                <OneCFieldRow label="Email">{dash(legal.email)}</OneCFieldRow>
+                <GroupTitle>План</GroupTitle>
+                <OneCFieldRow label="Сумма плана">{formatPlanSum(legal.plan_sum)}</OneCFieldRow>
+                <OneCFieldRow label="Ретро-бонус">{dash(legal.plan_retro_bonus)}</OneCFieldRow>
+                <p className="text-xs text-muted-foreground">
+                  Импортировано {formatDisplayDateTime(legal.imported_at)}
+                </p>
+              </CollapsibleContent>
+            </CardLikeSection>
+          </Collapsible>
 
-          <OneCDetailSection title="Менеджеры" testId="section-one-c-legal-managers">
-            <OneCFieldRow label="Региональный">
-              <LkPersonLink
-                userId={legal.regional_manager_user_id}
-                name={legal.regional_manager_name}
-                hrefPrefix="/1c/rm"
-              />
-            </OneCFieldRow>
-            <OneCFieldRow label="Ответственный">
+          <OneCDetailSection title="Команда" testId="section-one-c-legal-team">
+            <OneCFieldRow label="Ответственный менеджер">
               <LkPersonLink
                 userId={legal.responsible_manager_user_id}
                 name={legal.responsible_manager_name}
                 hrefPrefix="/1c/manager"
               />
             </OneCFieldRow>
-            <OneCFieldRow label="Фурнитура">
+            <OneCFieldRow label="Региональный менеджер">
+              <LkPersonLink
+                userId={legal.regional_manager_user_id}
+                name={legal.regional_manager_name}
+                hrefPrefix="/1c/rm"
+              />
+            </OneCFieldRow>
+            <OneCFieldRow label="Фурнитурный менеджер">
               {legal.furniture_manager_name ? (
                 <>
                   {legal.furniture_manager_name}
@@ -159,53 +213,10 @@ export default function OneCLegalPage() {
                 "—"
               )}
             </OneCFieldRow>
+            <OneCFieldRow label="РОП">
+              <LkPersonLink userId={legal.rop_user_id} name={legal.rop_name} hrefPrefix="/1c/rop" />
+            </OneCFieldRow>
           </OneCDetailSection>
-
-          <OneCDetailSection title="План" testId="section-one-c-legal-plan">
-            <OneCFieldRow label="Сумма плана">{formatPlanSum(legal.plan_sum)}</OneCFieldRow>
-            <OneCFieldRow label="Ретро-бонус">{dash(legal.plan_retro_bonus)}</OneCFieldRow>
-          </OneCDetailSection>
-
-          {legal.parent_1c ? (
-            <OneCDetailSection title="Холдинг" testId="section-one-c-legal-parent">
-              <Link
-                href={`/1c/legal/${legal.parent_1c}`}
-                className="inline-flex flex-wrap items-center gap-2 text-primary hover:underline"
-              >
-                <span>{dash(legal.parent_name)}</span>
-                {legal.parent_inn ? (
-                  <span className="font-mono text-sm text-muted-foreground">{legal.parent_inn}</span>
-                ) : null}
-              </Link>
-            </OneCDetailSection>
-          ) : null}
-
-          {children.length > 0 ? (
-            <OneCDetailSection title="Дочерние юрлица" testId="section-one-c-legal-children">
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Имя</TableHead>
-                      <TableHead>ИНН</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {children.map((child) => (
-                      <TableRow key={child.id_1c}>
-                        <TableCell>
-                          <Link href={`/1c/legal/${child.id_1c}`} className="text-primary hover:underline">
-                            {child.name}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{dash(child.inn)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </OneCDetailSection>
-          ) : null}
 
           <OneCDetailSection title="Торговые точки" testId="section-one-c-legal-stores">
             {stores.length === 0 ? (
@@ -217,17 +228,23 @@ export default function OneCLegalPage() {
                     <TableRow>
                       <TableHead>Адрес</TableHead>
                       <TableHead>Менеджер</TableHead>
+                      <TableHead>Дистрибуция</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {stores.map((row) => (
                       <TableRow key={row.id_1c}>
-                        <TableCell>
+                        <TableCell>{dash(row.address)}</TableCell>
+                        <TableCell>{dash(row.manager_name)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {row.distribution_filled}/{row.distribution_total} категорий
+                        </TableCell>
+                        <TableCell className="text-right">
                           <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
-                            {dash(row.address)}
+                            Открыть
                           </Link>
                         </TableCell>
-                        <TableCell>{dash(row.manager_name)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -235,8 +252,85 @@ export default function OneCLegalPage() {
               </div>
             )}
           </OneCDetailSection>
+
+          {legal.parent_1c ? (
+            <OneCDetailSection title="Холдинг" testId="section-one-c-legal-holding">
+              <OneCFieldRow label="Родитель">
+                <Link href={`/1c/legal/${legal.parent_1c}`} className="text-primary hover:underline">
+                  {dash(legal.parent_name)} {legal.parent_inn ? `· ${legal.parent_inn}` : ""}
+                </Link>
+              </OneCFieldRow>
+              {siblings.length > 0 ? (
+                <SiblingTable title="Другие юрлица холдинга" rows={siblings} />
+              ) : null}
+            </OneCDetailSection>
+          ) : null}
+
+          {children.length > 0 ? (
+            <OneCDetailSection title="Дочерние юрлица" testId="section-one-c-legal-children">
+              <SiblingTable title="" rows={children} />
+            </OneCDetailSection>
+          ) : null}
+
+          {/* TODO: агрегированная дистрибуция по всем ТТ клиента — следующий PR */}
         </div>
       ) : null}
     </OneCPageShell>
+  );
+}
+
+function CardLikeSection({
+  title,
+  children,
+  testId,
+}: {
+  title: string;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <OneCDetailSection title={title} testId={testId}>
+      {children}
+    </OneCDetailSection>
+  );
+}
+
+function GroupTitle({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>;
+}
+
+function SiblingTable({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: { id_1c: string; name: string; inn: string | null }[];
+}) {
+  return (
+    <div className="space-y-2">
+      {title ? <p className="text-sm font-medium">{title}</p> : null}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Имя</TableHead>
+              <TableHead>ИНН</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((child) => (
+              <TableRow key={child.id_1c}>
+                <TableCell>
+                  <Link href={`/1c/legal/${child.id_1c}`} className="text-primary hover:underline">
+                    {child.name}
+                  </Link>
+                </TableCell>
+                <TableCell className="font-mono text-xs">{dash(child.inn)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   );
 }

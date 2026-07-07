@@ -82,6 +82,27 @@ async function main(): Promise<void> {
     await page.waitForSelector('[data-testid="page-one-c-manager"]', { timeout: 15_000 });
     step(true, "manager page opened");
 
+    await page.goto(`${hashBase}1c/stores`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="page-one-c-stores"]', { timeout: 30_000 });
+    const firstStore = page.locator('[data-testid^="row-one-c-store-"] a').first();
+    await firstStore.click();
+    await page.waitForURL(/#\/1c\/store\//, { timeout: 15_000 });
+    await page.waitForSelector('[data-testid="section-one-c-distribution"]', { timeout: 15_000 });
+    step(true, "store page with distribution section opened");
+
+    const matrixInput = page.locator('[data-testid="input-one-c-matrix-entrance_doors"]');
+    if (await matrixInput.count()) {
+      await matrixInput.fill("3");
+      await matrixInput.blur();
+      await page.waitForTimeout(800);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForSelector('[data-testid="input-one-c-matrix-entrance_doors"]', { timeout: 15_000 });
+      const value = await matrixInput.inputValue();
+      step(value === "3", `matrix value persisted after reload (${value})`);
+    } else {
+      step(true, "SKIP matrix edit — no entrance_doors input (read-only user?)");
+    }
+
     console.log("ALL PASS one-c-showroom-e2e");
   } finally {
     await browser.close();
