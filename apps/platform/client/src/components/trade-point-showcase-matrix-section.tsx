@@ -9,7 +9,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { getProductById } from "@/lib/catalog-data";
@@ -313,6 +312,7 @@ type Props = {
   density?: ShowcaseSectionDensity;
   statusFilterActionSlot?: ReactNode;
   onOpenEntry?: (productId?: string) => void;
+  hideOpenTasksSection?: boolean;
 };
 
 export function TradePointShowcaseMatrixSection({
@@ -325,6 +325,7 @@ export function TradePointShowcaseMatrixSection({
   density = "comfortable",
   statusFilterActionSlot,
   onOpenEntry,
+  hideOpenTasksSection = false,
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
@@ -1533,73 +1534,6 @@ export function TradePointShowcaseMatrixSection({
 
           <TradePointShowcaseHistorySection tradePointId={point.id} density={density} />
 
-          <Separator className="bg-border/60" />
-
-          <div
-            id="section-trade-point-showcase-current-state"
-            data-testid="section-trade-point-showcase-current-state"
-            className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
-          >
-            <Collapsible defaultOpen={false}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 w-full justify-between text-xs sm:w-auto"
-                  data-testid="button-current-state-toggle"
-                >
-                  <span>Текущее состояние витрины</span>
-                  <ChevronDown className="h-4 w-4 opacity-70" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
-                <div className={cn("rounded-lg border border-border/70 bg-card/90 text-sm", isCompact ? "p-2.5" : "p-3")}>
-              <div className={cn("grid sm:grid-cols-2", isCompact ? "gap-1" : "gap-2")}>
-                <p>
-                  <span className="text-muted-foreground">Статус витрины: </span>
-                  <span className="font-medium text-foreground">{point.showcaseStatus}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Что нужно добавить: </span>
-                  <span className="font-medium text-foreground">{point.showcaseNeeds}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Оборудование: </span>
-                  <span className="font-medium text-foreground">{point.equipment}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Комментарий: </span>
-                  <span className="font-medium text-foreground">{page.showcaseComment}</span>
-                </p>
-              </div>
-              <div className={cn("grid gap-1.5 sm:grid-cols-4", isCompact ? "mt-2 grid-cols-4" : "mt-3 grid-cols-2 sm:gap-2")}>
-                <div className={cn("rounded-md border border-border bg-muted/30 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
-                  <p className={cn("font-semibold uppercase text-muted-foreground", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Должно быть</p>
-                  <p className={cn("font-bold tabular-nums", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalRequired}</p>
-                </div>
-                <div className={cn("rounded-md border border-emerald-200 bg-emerald-50 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
-                  <p className={cn("font-semibold uppercase text-emerald-900/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>На витрине</p>
-                  <p className={cn("font-bold tabular-nums text-emerald-900", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalPresent}</p>
-                </div>
-                <div className={cn("rounded-md border border-red-200 bg-red-50 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
-                  <p className={cn("font-semibold uppercase text-red-900/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Отсутствует</p>
-                  <p className={cn("font-bold tabular-nums text-red-900", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.totalMissing}</p>
-                </div>
-                <div className={cn("rounded-md border border-primary/30 bg-primary/10 text-center", isCompact ? "px-1 py-1" : "px-2 py-1.5")}>
-                  <p className={cn("font-semibold uppercase text-primary/80", isCompact ? "text-[9px] leading-tight" : "text-[10px]")}>Зона A</p>
-                  <p className={cn("font-bold tabular-nums text-primary", isCompact ? "text-sm" : "text-base")}>{page.matrixSummary.zoneA}</p>
-                </div>
-              </div>
-              <p className={cn("text-xs text-muted-foreground", isCompact ? "mt-2" : "mt-3")}>
-                <span className="font-semibold text-foreground">Ближайшее действие: </span>
-                {dealer.nextAction}
-              </p>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
-
           <div
             id="section-trade-point-showcase-distribution"
             data-testid="section-trade-point-showcase-distribution"
@@ -1686,19 +1620,21 @@ export function TradePointShowcaseMatrixSection({
             </Collapsible>
           </div>
 
-          <div
-            id="section-trade-point-showcase-open-tasks"
-            data-testid="section-trade-point-showcase-open-tasks"
-            className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
-          >
-            <TradePointShowcaseAssignmentsPanel
-              dealerId={dealer.id}
-              tradePointId={point.id}
-              tradePointName={tradePointDisplayName}
-              actorUserId={actorUserId}
-              actorName={actorName}
-            />
-          </div>
+          {!hideOpenTasksSection ? (
+            <div
+              id="section-trade-point-showcase-open-tasks"
+              data-testid="section-trade-point-showcase-open-tasks"
+              className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
+            >
+              <TradePointShowcaseAssignmentsPanel
+                dealerId={dealer.id}
+                tradePointId={point.id}
+                tradePointName={tradePointDisplayName}
+                actorUserId={actorUserId}
+                actorName={actorName}
+              />
+            </div>
+          ) : null}
         </div>
       </section>
 

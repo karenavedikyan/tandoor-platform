@@ -320,6 +320,7 @@ export default function OneCStorePage() {
               profile={profile}
               actorUserId={actorUserId}
               actorName={actorName}
+              hideOpenTasksSection
             />
           </section>
 
