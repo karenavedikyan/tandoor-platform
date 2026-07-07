@@ -118,9 +118,12 @@ describe("one-c hierarchy", () => {
     const tree = buildHierarchy(makeCtx());
     expect(tree).toHaveLength(1);
     expect(tree[0]?.fullName).toBe("Скалабан Александр");
+    expect(tree[0]?.storeCount).toBe(2);
     expect(tree[0]?.rms).toHaveLength(1);
     expect(tree[0]?.rms[0]?.storeCount).toBe(2);
-    expect(tree[0]?.rms[0]?.managers[0]?.storeCount).toBe(2);
+    expect(tree[0]?.rms[0]?.managers).toEqual([]);
+    expect(tree[0]?.managers).toHaveLength(1);
+    expect(tree[0]?.managers[0]?.storeCount).toBe(2);
   });
 });
 

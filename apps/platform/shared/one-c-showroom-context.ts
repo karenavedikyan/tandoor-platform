@@ -300,6 +300,7 @@ export type OneCRopNode = {
   storeCount: number;
   legalCount: number;
   rms: OneCRmNode[];
+  managers: OneCManagerNode[];
 };
 
 function teamManagers(teamId: string, ctx: OneCShowroomContext): LkUserRow[] {
@@ -322,9 +323,8 @@ function buildManagerNode(user: LkUserRow, ctx: OneCShowroomContext): OneCManage
   };
 }
 
-function buildRmNode(user: LkUserRow, teamId: string, ctx: OneCShowroomContext): OneCRmNode {
+function buildRmNode(user: LkUserRow, ctx: OneCShowroomContext): OneCRmNode {
   const names = ctx.matchedRegionalByUserId.get(user.id) ?? [];
-  const managers = teamManagers(teamId, ctx).map((m) => buildManagerNode(m, ctx));
   return {
     userId: user.id,
     fullName: user.full_name,
@@ -332,8 +332,30 @@ function buildRmNode(user: LkUserRow, teamId: string, ctx: OneCShowroomContext):
     storeCount: storeIdsForRegionalNames(names, ctx).size,
     legalCount: countLegalsForRegionalNames(names, ctx),
     hasMatch: names.length > 0,
-    managers,
+    managers: [],
   };
+}
+
+export function ropCountsFromTeamManagers(
+  teamId: string,
+  ctx: OneCShowroomContext,
+): { storeCount: number; legalCount: number } {
+  const teamMgrs = teamManagers(teamId, ctx);
+  const ropStoreIds = new Set<string>();
+  const ropLegalIds = new Set<string>();
+  for (const mgr of teamMgrs) {
+    const names = ctx.matchedResponsibleByUserId.get(mgr.id) ?? [];
+    for (const id of Array.from(storeIdsForResponsibleNames(names, ctx))) {
+      ropStoreIds.add(id);
+    }
+    const nameSet = new Set(names);
+    for (const l of Array.from(ctx.legalById.values())) {
+      if (l.responsible_manager_name && nameSet.has(l.responsible_manager_name)) {
+        ropLegalIds.add(l.id_1c);
+      }
+    }
+  }
+  return { storeCount: ropStoreIds.size, legalCount: ropLegalIds.size };
 }
 
 export function buildHierarchy(ctx: OneCShowroomContext, searchQ = ""): OneCRopNode[] {
@@ -345,26 +367,9 @@ export function buildHierarchy(ctx: OneCShowroomContext, searchQ = ""): OneCRopN
     const rop = ctx.usersById.get(team.rop_user_id);
     if (!rop) continue;
 
-    const rms = teamRms(team.id, ctx).map((rm) => buildRmNode(rm, team.id, ctx));
-    const managers = teamManagers(team.id, ctx);
-    const ropStoreIds = new Set<string>();
-    for (const rm of rms) {
-      const rmNames = ctx.matchedRegionalByUserId.get(rm.userId) ?? [];
-      for (const id of Array.from(storeIdsForRegionalNames(rmNames, ctx))) {
-        ropStoreIds.add(id);
-      }
-    }
-
-    const ropLegalIds = new Set<string>();
-    for (const rm of rms) {
-      const rmNames = ctx.matchedRegionalByUserId.get(rm.userId) ?? [];
-      const nameSet = new Set(rmNames);
-      for (const l of Array.from(ctx.legalById.values())) {
-        if (l.regional_manager_name && nameSet.has(l.regional_manager_name)) {
-          ropLegalIds.add(l.id_1c);
-        }
-      }
-    }
+    const rms = teamRms(team.id, ctx).map((rm) => buildRmNode(rm, ctx));
+    const managers = teamManagers(team.id, ctx).map((m) => buildManagerNode(m, ctx));
+    const { storeCount, legalCount } = ropCountsFromTeamManagers(team.id, ctx);
 
     const node: OneCRopNode = {
       userId: rop.id,
@@ -375,9 +380,10 @@ export function buildHierarchy(ctx: OneCShowroomContext, searchQ = ""): OneCRopN
       teamName: team.name,
       rmCount: rms.length,
       managerCount: managers.length,
-      storeCount: ropStoreIds.size,
-      legalCount: ropLegalIds.size,
+      storeCount,
+      legalCount,
       rms,
+      managers,
     };
 
     if (!q) {
@@ -386,19 +392,14 @@ export function buildHierarchy(ctx: OneCShowroomContext, searchQ = ""): OneCRopN
     }
 
     const ropHit = normalizeName(node.fullName).includes(q);
-    const filteredRms: OneCRmNode[] = [];
-    for (const rm of node.rms) {
-      const rmHit = normalizeName(rm.fullName).includes(q);
-      const mgrHits = rm.managers.filter((m) => normalizeName(m.fullName).includes(q));
-      if (ropHit || rmHit || mgrHits.length > 0) {
-        filteredRms.push({
-          ...rm,
-          managers: rmHit || ropHit ? rm.managers : mgrHits,
-        });
-      }
-    }
-    if (ropHit || filteredRms.length > 0) {
-      nodes.push({ ...node, rms: ropHit ? node.rms : filteredRms });
+    const filteredRms = ropHit
+      ? node.rms
+      : node.rms.filter((rm) => normalizeName(rm.fullName).includes(q));
+    const filteredManagers = ropHit
+      ? node.managers
+      : node.managers.filter((m) => normalizeName(m.fullName).includes(q));
+    if (ropHit || filteredRms.length > 0 || filteredManagers.length > 0) {
+      nodes.push({ ...node, rms: filteredRms, managers: filteredManagers });
     }
   }
 
