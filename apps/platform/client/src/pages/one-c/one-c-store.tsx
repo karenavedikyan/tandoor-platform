@@ -321,6 +321,7 @@ export default function OneCStorePage() {
               actorUserId={actorUserId}
               actorName={actorName}
               hideOpenTasksSection
+              hideOpenTradePointCard
             />
           </section>
 
