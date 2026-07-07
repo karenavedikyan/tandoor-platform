@@ -19,7 +19,7 @@ const PHOTO_SCRIPT =
   process.env.SYNC_1C_PHOTO_SCRIPT?.trim() ||
   path.join(__dirname, "sync-1c-photos.mjs");
 const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
-const EXCHANGE_MAX_BYTES = 65_536;
+const EXCHANGE_MAX_BYTES = 10_485_760; // 10 MB — stores1.xml ~1.7 MB
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let running = null;
