@@ -359,6 +359,11 @@ export default function AdminMigrateCatalog1cPage() {
         <p className="mt-1 text-sm text-[#8F96B0]">
           Промт 116 — DDL · Промт 117 — импорт <code className="text-xs">catalog1.xml</code> с FTP (runner на Yandex VM, cron hourly).
         </p>
+        <p className="mt-1 text-sm">
+          <Link href="/admin/exchange-explorer" className="text-primary hover:underline">
+            Проводник обмена 1С
+          </Link>
+        </p>
       </div>
 
       <Card className="border-border/80" data-testid="section-catalog-1c-sync">

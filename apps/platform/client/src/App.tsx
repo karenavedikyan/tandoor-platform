@@ -110,6 +110,7 @@ const LazyAdminMigration = lazy(() => import("@/pages/admin/migration"));
 const LazyAdminMigrateMarketingBriefs = lazy(() => import("@/pages/admin-migrate-marketing-briefs"));
 const LazyAdminMigrateDealerTp = lazy(() => import("@/pages/admin-migrate-dealer-tp"));
 const LazyAdminMigrateCatalog1c = lazy(() => import("@/pages/admin-migrate-catalog-1c"));
+const LazyAdminExchangeExplorer = lazy(() => import("@/pages/admin-exchange-explorer"));
 const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminPerformance = lazy(() => import("@/pages/admin-performance"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
@@ -221,6 +222,7 @@ const AdminMigrationRoute = wrapProfileShell(suspensePage(LazyAdminMigration));
 const AdminMigrateMarketingBriefsRoute = wrapProfileShell(suspensePage(LazyAdminMigrateMarketingBriefs));
 const AdminMigrateDealerTpRoute = wrapProfileShell(suspensePage(LazyAdminMigrateDealerTp));
 const AdminMigrateCatalog1cRoute = wrapProfileShell(suspensePage(LazyAdminMigrateCatalog1c));
+const AdminExchangeExplorerRoute = wrapProfileShell(suspensePage(LazyAdminExchangeExplorer));
 const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
 const AdminPerformanceRoute = wrapProfileShell(suspensePage(LazyAdminPerformance));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
@@ -452,6 +454,7 @@ function AuthenticatedShell({
         <Route path="/admin/migrate-marketing-briefs" component={AdminMigrateMarketingBriefsRoute} />
         <Route path="/admin/migrate-dealer-tp" component={AdminMigrateDealerTpRoute} />
         <Route path="/admin/migrate-catalog-1c" component={AdminMigrateCatalog1cRoute} />
+        <Route path="/admin/exchange-explorer" component={AdminExchangeExplorerRoute} />
         <Route path="/admin/migrate" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/sync-health" component={AdminSyncHealthRoute} />
         <Route path="/admin/performance" component={AdminPerformanceRoute} />
