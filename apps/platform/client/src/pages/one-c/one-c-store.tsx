@@ -15,7 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
 import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
+import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import {
   CopyField,
   dash,
@@ -95,6 +97,7 @@ export default function OneCStorePage() {
   const { toast } = useToast();
   const { user, isLoading: userLoading } = useCurrentUser();
   const { profile } = useReleaseDemoProfile();
+  const actx = useClientBaseActualization();
   const [, params] = useRoute("/1c/store/:id");
   const storeId = params?.id ?? "";
   const [loading, setLoading] = useState(true);
@@ -309,6 +312,16 @@ export default function OneCStorePage() {
             </div>
           </div>
 
+          {dealerPoint ? (
+            <div className="rounded-lg border border-border/70 bg-card/80 px-3 py-2">
+              <DistributionCardHeaderBlock
+                externalKeys={[dealerPoint.point.id]}
+                act={actx.state}
+                testId="one-c-store-header-distribution"
+              />
+            </div>
+          ) : null}
+
           <section
             ref={distributionSectionRef}
             data-testid="section-one-c-distribution-lk"
@@ -322,6 +335,7 @@ export default function OneCStorePage() {
               actorName={actorName}
               hideOpenTasksSection
               hideOpenTradePointCard
+              hideDistributionOnPointSection
             />
           </section>
 

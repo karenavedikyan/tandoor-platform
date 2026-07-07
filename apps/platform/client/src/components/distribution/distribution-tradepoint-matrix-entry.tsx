@@ -92,6 +92,7 @@ type DistributionTradePointMatrixEntryProps = {
   onBackToList?: () => void;
   hideOpenTasksSection?: boolean;
   hideOpenTradePointCard?: boolean;
+  hideDistributionOnPointSection?: boolean;
 };
 
 export function DistributionTradePointMatrixEntry({
@@ -103,6 +104,7 @@ export function DistributionTradePointMatrixEntry({
   onBackToList,
   hideOpenTasksSection = false,
   hideOpenTradePointCard = false,
+  hideDistributionOnPointSection = false,
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
@@ -404,6 +406,7 @@ export function DistributionTradePointMatrixEntry({
             page={showcasePage}
             density="compact"
             hideOpenTasksSection={hideOpenTasksSection}
+            hideDistributionOnPointSection={hideDistributionOnPointSection}
           />
         </>
       )}
