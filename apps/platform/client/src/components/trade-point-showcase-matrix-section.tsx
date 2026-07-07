@@ -313,6 +313,7 @@ type Props = {
   statusFilterActionSlot?: ReactNode;
   onOpenEntry?: (productId?: string) => void;
   hideOpenTasksSection?: boolean;
+  hideDistributionOnPointSection?: boolean;
 };
 
 export function TradePointShowcaseMatrixSection({
@@ -326,6 +327,7 @@ export function TradePointShowcaseMatrixSection({
   statusFilterActionSlot,
   onOpenEntry,
   hideOpenTasksSection = false,
+  hideDistributionOnPointSection = false,
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
   const canEdit = useMemo(() => canEditTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
@@ -1534,91 +1536,93 @@ export function TradePointShowcaseMatrixSection({
 
           <TradePointShowcaseHistorySection tradePointId={point.id} density={density} />
 
-          <div
-            id="section-trade-point-showcase-distribution"
-            data-testid="section-trade-point-showcase-distribution"
-            className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
-          >
-            <Collapsible defaultOpen={false}>
-              <CollapsibleTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="h-9 w-full justify-between text-xs sm:w-auto">
-                  <span className="flex items-center gap-2">
-                    <PieChart className="h-4 w-4" aria-hidden />
-                    Дистрибуция на точке
-                  </span>
-                  <ChevronDown className="h-4 w-4 opacity-70" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent
-                className="mt-2 space-y-2 rounded-lg border border-border/70 bg-card/80 p-3"
-                data-testid="section-trade-point-distribution"
-              >
-                <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
-                  {[
-                    { label: "МК", data: distributionFromPlacements.mk },
-                    { label: "ВХ", data: distributionFromPlacements.vh },
-                    { label: "Фурнитура", data: distributionFromPlacements.hardware },
-                    { label: "Общее", data: distributionFromPlacements.total },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-md border border-border/80 bg-muted/20 px-2 py-2"
-                      data-testid={`tile-trade-point-distribution-${item.label.toLowerCase()}`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold">{item.label}</p>
-                        <span className="text-sm font-bold tabular-nums">{item.data.pct}%</span>
-                      </div>
-                      <Progress value={item.data.pct} className="mt-1.5 h-2 bg-muted" />
-                      <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-                        наши {item.data.ours} из {item.data.total}
-                      </p>
-                      {item.label === "МК" && item.data.portalSecond ? (
-                        <p
-                          className="mt-1 text-[10px] text-muted-foreground tabular-nums"
-                          data-testid="text-trade-point-mk-portal-second"
-                        >
-                          вкл. 2-й план: {item.data.portalSecond.ours} из {item.data.portalSecond.total} (
-                          {item.data.portalSecond.pct}%)
-                        </p>
-                      ) : null}
-                      {item.data.legacyOurs > 0 ? (
-                        <>
-                          <Progress
-                            value={item.data.rotationPct}
-                            className="mt-1.5 h-1.5 bg-muted [&>div]:bg-amber-500/80"
-                          />
-                          <p
-                            className="mt-1 text-[10px] tabular-nums text-amber-700 dark:text-amber-300"
-                            data-testid={`text-trade-point-rotation-${item.label.toLowerCase()}`}
-                          >
-                            под ротацию {item.data.legacyOurs} ({item.data.rotationPct}%)
-                          </p>
-                        </>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                <p
-                  className="text-xs leading-relaxed text-foreground"
-                  data-testid="text-trade-point-distribution-conclusion"
+          {!hideDistributionOnPointSection ? (
+            <div
+              id="section-trade-point-showcase-distribution"
+              data-testid="section-trade-point-showcase-distribution"
+              className="scroll-mt-28 space-y-2 sm:scroll-mt-32"
+            >
+              <Collapsible defaultOpen={false}>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="outline" size="sm" className="h-9 w-full justify-between text-xs sm:w-auto">
+                    <span className="flex items-center gap-2">
+                      <PieChart className="h-4 w-4" aria-hidden />
+                      Дистрибуция на точке
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-70" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent
+                  className="mt-2 space-y-2 rounded-lg border border-border/70 bg-card/80 p-3"
+                  data-testid="section-trade-point-distribution"
                 >
-                  {!distributionFromPlacements.hasData
-                    ? "Данные по витринам ещё не внесены — добавьте блоки в разделе «Типы размещения витрины» (всего витрин и сколько из них наши)."
-                    : distributionFromPlacements.total.pct >= 70
-                      ? "Показатели в комфортной зоне, точечные доработки по сегментам."
-                      : distributionFromPlacements.total.pct >= 50
-                        ? "Есть резерв по выкладке и полноте линейки."
-                        : "Нужны действия по усилению дистрибуции и контролю на точке."}
-                </p>
-                <TradePointShowcaseSegmentSummary
-                  tradePointId={point.id}
-                  density={density}
-                  installedModelsBySegment={installedModelsBySegment}
-                />
-              </CollapsibleContent>
-            </Collapsible>
-          </div>
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+                    {[
+                      { label: "МК", data: distributionFromPlacements.mk },
+                      { label: "ВХ", data: distributionFromPlacements.vh },
+                      { label: "Фурнитура", data: distributionFromPlacements.hardware },
+                      { label: "Общее", data: distributionFromPlacements.total },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-md border border-border/80 bg-muted/20 px-2 py-2"
+                        data-testid={`tile-trade-point-distribution-${item.label.toLowerCase()}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold">{item.label}</p>
+                          <span className="text-sm font-bold tabular-nums">{item.data.pct}%</span>
+                        </div>
+                        <Progress value={item.data.pct} className="mt-1.5 h-2 bg-muted" />
+                        <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
+                          наши {item.data.ours} из {item.data.total}
+                        </p>
+                        {item.label === "МК" && item.data.portalSecond ? (
+                          <p
+                            className="mt-1 text-[10px] text-muted-foreground tabular-nums"
+                            data-testid="text-trade-point-mk-portal-second"
+                          >
+                            вкл. 2-й план: {item.data.portalSecond.ours} из {item.data.portalSecond.total} (
+                            {item.data.portalSecond.pct}%)
+                          </p>
+                        ) : null}
+                        {item.data.legacyOurs > 0 ? (
+                          <>
+                            <Progress
+                              value={item.data.rotationPct}
+                              className="mt-1.5 h-1.5 bg-muted [&>div]:bg-amber-500/80"
+                            />
+                            <p
+                              className="mt-1 text-[10px] tabular-nums text-amber-700 dark:text-amber-300"
+                              data-testid={`text-trade-point-rotation-${item.label.toLowerCase()}`}
+                            >
+                              под ротацию {item.data.legacyOurs} ({item.data.rotationPct}%)
+                            </p>
+                          </>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <p
+                    className="text-xs leading-relaxed text-foreground"
+                    data-testid="text-trade-point-distribution-conclusion"
+                  >
+                    {!distributionFromPlacements.hasData
+                      ? "Данные по витринам ещё не внесены — добавьте блоки в разделе «Типы размещения витрины» (всего витрин и сколько из них наши)."
+                      : distributionFromPlacements.total.pct >= 70
+                        ? "Показатели в комфортной зоне, точечные доработки по сегментам."
+                        : distributionFromPlacements.total.pct >= 50
+                          ? "Есть резерв по выкладке и полноте линейки."
+                          : "Нужны действия по усилению дистрибуции и контролю на точке."}
+                  </p>
+                  <TradePointShowcaseSegmentSummary
+                    tradePointId={point.id}
+                    density={density}
+                    installedModelsBySegment={installedModelsBySegment}
+                  />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+          ) : null}
 
           {!hideOpenTasksSection ? (
             <div
