@@ -7,6 +7,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, vercelHeaders } from "../../shared/admin/admin-auth.js";
+import { fetchWithRetry } from "../../shared/admin/exchange-fetch.js";
 
 const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
 const MAX_BYTES = 65_536;
@@ -46,14 +47,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         : DEFAULT_BYTES;
 
     const url = `${EXCHANGE_BASE}${rawPath}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
     try {
-      const r = await fetch(url, {
-        signal: controller.signal,
-        headers: { Range: `bytes=0-${bytes - 1}` },
-        redirect: "follow",
-      });
+      const r = await fetchWithRetry(url, "*/*", { Range: `bytes=0-${bytes - 1}` });
       if (r.status !== 200 && r.status !== 206) {
         res.status(r.status === 404 ? 404 : 502).json({
           success: false,
@@ -72,8 +67,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.setHeader("X-Exchange-Content-Type", contentType);
       res.setHeader("X-Exchange-Bytes-Returned", String(buf.length));
       res.status(200).send(buf.toString("utf8"));
-    } finally {
-      clearTimeout(timer);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      res.status(502).json({
+        success: false,
+        code: "UPSTREAM_UNREACHABLE",
+        message: `s3.toopatch.ru недоступен: ${m}`,
+        url,
+      });
+      return;
     }
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
