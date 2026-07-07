@@ -220,9 +220,6 @@ export default function OneCStorePage() {
   const actorUserId = user.id;
   const actorName = displayUserName(user) ?? userLabelFromProfile(profile);
 
-  const fill = store?.distributionFill;
-  const fillPercent =
-    fill && fill.total > 0 ? Math.round((fill.filled / fill.total) * 100) : 0;
   const regionCity = [store?.legal_region, store?.legal_city].filter(Boolean).join(" · ") || "—";
   const managerName = dash(store?.legal_responsible_manager_name);
 
@@ -260,27 +257,10 @@ export default function OneCStorePage() {
             data-testid="bar-one-c-store-summary"
           >
             <div className="flex max-h-14 flex-wrap items-center gap-x-4 gap-y-2">
-              <div className="flex min-w-0 flex-1 items-center gap-3 max-md:basis-full">
-                <div className="min-w-0">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Дистрибуция</div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-semibold tabular-nums text-foreground">
-                      {fill?.filled ?? 0}/{fill?.total ?? 0}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width]"
-                      style={{ width: `${fillPercent}%` }}
-                    />
-                  </div>
-                </div>
-                <Badge variant="outline" className="shrink-0 max-md:ml-auto">
+              <div className="flex min-w-0 flex-1 items-center gap-2 max-md:basis-full max-md:justify-between">
+                <Badge variant="outline" className="shrink-0">
                   {dash(store.status)}
                 </Badge>
-              </div>
-
-              <div className="flex min-w-0 flex-1 items-center gap-2 max-md:basis-full max-md:justify-between">
                 <div className="flex min-w-0 items-center gap-1.5 text-sm">
                   <User className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                   {store.responsible_manager_user_id ? (
