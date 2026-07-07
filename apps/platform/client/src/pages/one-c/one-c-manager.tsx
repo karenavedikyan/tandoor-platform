@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/table";
 import {
   dash,
+  ONE_C_PAGE_LIMIT,
   OneCLoadingBlock,
+  OneCPagination,
   OneCPageShell,
   OneCRefreshStubButton,
   OneCSearchInput,
@@ -26,18 +28,24 @@ export default function OneCManagerPage() {
   const [, params] = useRoute("/1c/manager/:id");
   const managerId = params?.id ?? "";
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [manager, setManager] = useState<Awaited<ReturnType<typeof fetchOneCManager>>["user"] | null>(null);
-  const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCManager>>["stores"]>([]);
+  const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCManager>>["items"]>([]);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
   useEffect(() => {
+    setOffset(0);
+  }, [debouncedQ, managerId]);
+
+  useEffect(() => {
     if (!canAccess || !managerId) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCManager(managerId, debouncedQ)
+    void fetchOneCManager(managerId, { q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -47,7 +55,8 @@ export default function OneCManagerPage() {
           return;
         }
         setManager(res.user);
-        setStores(res.stores);
+        setStores(res.items);
+        setTotal(res.total);
         setError(null);
       })
       .catch((e) => {
@@ -59,7 +68,7 @@ export default function OneCManagerPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, managerId, debouncedQ]);
+  }, [canAccess, managerId, debouncedQ, offset]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -68,13 +77,21 @@ export default function OneCManagerPage() {
   return (
     <OneCPageShell
       path={`/1c/manager/${managerId}`}
-      breadcrumbLabels={{ manager: manager?.name }}
-      title={manager?.name ?? "Менеджер"}
+      breadcrumbLabels={{ manager: manager?.fullName }}
+      title={manager?.fullName ?? "Менеджер"}
       subtitle={
         manager ? (
-          <span className="flex flex-wrap items-center gap-2">
-            <span>{dash(manager.phone)}</span>
-            <Badge variant="secondary">{manager.store_count} ТТ</Badge>
+          <span className="flex flex-col gap-1 text-sm">
+            <span className="flex flex-wrap items-center gap-2">
+              <span>{dash(manager.phone)}</span>
+              <span>{dash(manager.email)}</span>
+              <Badge variant="secondary">{manager.storeCount} ТТ</Badge>
+              <Badge variant="outline">{manager.legalCount} юрлиц</Badge>
+            </span>
+            <span>
+              РОП: {dash(manager.ropName)} · РМ: {manager.rmNames.length > 0 ? manager.rmNames.join(", ") : "—"} ·
+              Команда: {dash(manager.teamName)}
+            </span>
           </span>
         ) : undefined
       }
@@ -84,46 +101,57 @@ export default function OneCManagerPage() {
       <OneCSearchInput
         value={searchQ}
         onChange={setSearchQ}
-        placeholder="Поиск по адресу или юрлицу…"
+        placeholder="Адрес, юрлицо, ИНН…"
         testId="input-one-c-manager-search"
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
         <OneCLoadingBlock />
       ) : (
-        <div className="rounded-md border">
-          <Table data-testid="table-one-c-manager-stores">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Адрес</TableHead>
-                <TableHead>Юрлицо</TableHead>
-                <TableHead>ИНН</TableHead>
-                <TableHead>Город</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stores.map((row) => (
-                <TableRow key={row.id_1c} className="cursor-pointer" data-testid={`row-one-c-store-${row.id_1c}`}>
-                  <TableCell>
-                    <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
-                      {dash(row.address)}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{dash(row.legal_name)}</TableCell>
-                  <TableCell className="font-mono text-xs">{dash(row.legal_inn)}</TableCell>
-                  <TableCell>{dash(row.legal_city)}</TableCell>
-                </TableRow>
-              ))}
-              {stores.length === 0 ? (
+        <>
+          <div className="rounded-md border">
+            <Table data-testid="table-one-c-manager-stores">
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    Торговые точки не найдены
-                  </TableCell>
+                  <TableHead>Адрес</TableHead>
+                  <TableHead>Юрлицо</TableHead>
+                  <TableHead>ИНН</TableHead>
+                  <TableHead>КПП</TableHead>
+                  <TableHead>Город</TableHead>
                 </TableRow>
-              ) : null}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {stores.map((row) => (
+                  <TableRow key={row.id_1c} className="cursor-pointer" data-testid={`row-one-c-store-${row.id_1c}`}>
+                    <TableCell>
+                      <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
+                        {dash(row.address)}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{dash(row.legal_short)}</TableCell>
+                    <TableCell className="font-mono text-xs">{dash(row.inn)}</TableCell>
+                    <TableCell className="font-mono text-xs">{dash(row.kpp)}</TableCell>
+                    <TableCell>{dash(row.legal_city)}</TableCell>
+                  </TableRow>
+                ))}
+                {stores.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      Торговые точки не найдены
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          <OneCPagination
+            total={total}
+            limit={ONE_C_PAGE_LIMIT}
+            offset={offset}
+            onOffsetChange={setOffset}
+            testIdPrefix="one-c-manager"
+          />
+        </>
       )}
     </OneCPageShell>
   );

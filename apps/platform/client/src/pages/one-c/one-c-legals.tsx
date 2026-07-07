@@ -17,6 +17,7 @@ import {
   ONE_C_PAGE_LIMIT,
   OneCLoadingBlock,
   OneCPagination,
+  OneCOnlyActiveToggle,
   OneCPageShell,
   OneCRefreshStubButton,
   OneCSearchInput,
@@ -26,6 +27,7 @@ import {
 export default function OneCLegalsPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
+  const [onlyActive, setOnlyActive] = useState(true);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchOneCLegals>>["items"]>([]);
@@ -36,13 +38,13 @@ export default function OneCLegalsPage() {
 
   useEffect(() => {
     setOffset(0);
-  }, [debouncedQ]);
+  }, [debouncedQ, onlyActive]);
 
   useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCLegals({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset })
+    void fetchOneCLegals({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset, onlyActive })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -62,7 +64,7 @@ export default function OneCLegalsPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, debouncedQ, offset]);
+  }, [canAccess, debouncedQ, offset, onlyActive]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -75,12 +77,19 @@ export default function OneCLegalsPage() {
       testId="page-one-c-legals"
       actions={<OneCRefreshStubButton />}
     >
-      <OneCSearchInput
-        value={searchQ}
-        onChange={setSearchQ}
-        placeholder="Название, полное наименование, ИНН…"
-        testId="input-one-c-legals-search"
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <OneCSearchInput
+          value={searchQ}
+          onChange={setSearchQ}
+          placeholder="Название, полное наименование, ИНН…"
+          testId="input-one-c-legals-search"
+        />
+        <OneCOnlyActiveToggle
+          checked={onlyActive}
+          onCheckedChange={setOnlyActive}
+          testId="toggle-one-c-legals-only-active"
+        />
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
         <OneCLoadingBlock />

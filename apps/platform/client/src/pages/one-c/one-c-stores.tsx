@@ -16,6 +16,7 @@ import {
   ONE_C_PAGE_LIMIT,
   OneCLoadingBlock,
   OneCPagination,
+  OneCOnlyActiveToggle,
   OneCPageShell,
   OneCRefreshStubButton,
   OneCSearchInput,
@@ -25,6 +26,7 @@ import {
 export default function OneCStoresPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
+  const [onlyActive, setOnlyActive] = useState(true);
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchOneCStores>>["items"]>([]);
@@ -35,13 +37,13 @@ export default function OneCStoresPage() {
 
   useEffect(() => {
     setOffset(0);
-  }, [debouncedQ]);
+  }, [debouncedQ, onlyActive]);
 
   useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCStores({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset })
+    void fetchOneCStores({ q: debouncedQ, limit: ONE_C_PAGE_LIMIT, offset, onlyActive })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -61,7 +63,7 @@ export default function OneCStoresPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, debouncedQ, offset]);
+  }, [canAccess, debouncedQ, offset, onlyActive]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -74,12 +76,19 @@ export default function OneCStoresPage() {
       testId="page-one-c-stores"
       actions={<OneCRefreshStubButton />}
     >
-      <OneCSearchInput
-        value={searchQ}
-        onChange={setSearchQ}
-        placeholder="Адрес, менеджер, юрлицо, ИНН…"
-        testId="input-one-c-stores-search"
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <OneCSearchInput
+          value={searchQ}
+          onChange={setSearchQ}
+          placeholder="Адрес, менеджер, юрлицо, ИНН…"
+          testId="input-one-c-stores-search"
+        />
+        <OneCOnlyActiveToggle
+          checked={onlyActive}
+          onCheckedChange={setOnlyActive}
+          testId="toggle-one-c-stores-only-active"
+        />
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
         <OneCLoadingBlock />

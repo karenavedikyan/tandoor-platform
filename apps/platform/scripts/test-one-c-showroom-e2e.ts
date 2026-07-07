@@ -1,13 +1,8 @@
 /**
- * E2E skeleton: /1c → /1c/team → клик по менеджеру → /1c/manager/[id].
+ * E2E skeleton: /1c/team → раскрыть РОПа → РМа → клик по менеджеру.
  *
- * ENV (обязательны для запуска):
- *   BASE_URL — например https://lk.tandoor.ru
- *   ADMIN_EMAIL
- *   ADMIN_PASSWORD
- *
- * Запуск: `npm run test:one-c-showroom-e2e` из apps/platform
- * (требует `npx playwright install chromium` при первом запуске).
+ * ENV: BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD
+ * Запуск: `npm run test:one-c-showroom-e2e`
  */
 
 function step(ok: boolean, message: string): void {
@@ -15,8 +10,7 @@ function step(ok: boolean, message: string): void {
 }
 
 function mustEnv(name: string): string | null {
-  const v = process.env[name]?.trim();
-  return v || null;
+  return process.env[name]?.trim() || null;
 }
 
 async function main(): Promise<void> {
@@ -43,7 +37,6 @@ async function main(): Promise<void> {
           waitForSelector: (selector: string, opts?: object) => Promise<void>;
           locator: (selector: string) => {
             first: () => {
-              getAttribute: (name: string) => Promise<string | null>;
               click: () => Promise<void>;
             };
           };
@@ -71,22 +64,23 @@ async function main(): Promise<void> {
     await page.click('[data-testid="button-login-submit"]');
     await page.waitForURL(/#\/(dealer-base|admin)/, { timeout: 60_000 });
 
-    await page.goto(`${hashBase}1c`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('[data-testid="page-one-c-overview"]', { timeout: 30_000 });
-    step(true, "overview page opened");
+    await page.goto(`${hashBase}1c/team`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector('[data-testid="page-one-c-team"]', { timeout: 30_000 });
+    step(true, "team hierarchy page opened");
 
-    await page.click('[data-testid="card-one-c-team"]');
-    await page.waitForURL(/#\/1c\/team/, { timeout: 15_000 });
-    await page.waitForSelector('[data-testid="page-one-c-team"]', { timeout: 15_000 });
-    step(true, "team list opened");
+    const firstRop = page.locator('[data-testid^="one-c-rop-"]').first();
+    await firstRop.locator("button").first().click();
+    step(true, "expanded first ROP");
 
-    const firstManagerLink = page.locator('[data-testid^="row-one-c-manager-"] a').first();
-    const managerHref = await firstManagerLink.getAttribute("href");
-    if (!managerHref) throw new Error("no manager link in team table");
-    await firstManagerLink.click();
+    const firstRm = page.locator('[data-testid^="one-c-rm-"]').first();
+    await firstRm.locator("button").first().click();
+    step(true, "expanded first RM");
+
+    const firstManager = page.locator('[data-testid^="one-c-manager-"] a').first();
+    await firstManager.click();
     await page.waitForURL(/#\/1c\/manager\//, { timeout: 15_000 });
     await page.waitForSelector('[data-testid="page-one-c-manager"]', { timeout: 15_000 });
-    step(true, `manager page opened (${managerHref})`);
+    step(true, "manager page opened");
 
     console.log("ALL PASS one-c-showroom-e2e");
   } finally {

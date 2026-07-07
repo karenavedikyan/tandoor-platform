@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { breadcrumbsFor, type BreadcrumbItem } from "@/lib/navigation/route-hierarchy";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 export const ONE_C_PAGE_LIMIT = 100;
 
@@ -267,6 +269,25 @@ export function OneCDetailSection({
       </CardHeader>
       <CardContent className="space-y-3">{children}</CardContent>
     </Card>
+  );
+}
+
+export function OneCOnlyActiveToggle({
+  checked,
+  onCheckedChange,
+  testId,
+}: {
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  testId: string;
+}): ReactElement {
+  return (
+    <div className="flex items-center gap-2" data-testid={testId}>
+      <Switch id={`${testId}-switch`} checked={checked} onCheckedChange={onCheckedChange} />
+      <Label htmlFor={`${testId}-switch`} className="text-sm font-normal">
+        Только по действующим менеджерам
+      </Label>
+    </div>
   );
 }
 

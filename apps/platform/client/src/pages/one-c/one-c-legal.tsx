@@ -23,24 +23,28 @@ import {
   OneCRefreshStubButton,
 } from "./one-c-ui";
 
-function ManagerLink({
-  id,
+function LkPersonLink({
+  userId,
   name,
-  inUsers,
+  hrefPrefix,
 }: {
-  id: string | null;
+  userId: string | null;
   name: string | null;
-  inUsers: boolean;
+  hrefPrefix: "/1c/manager" | "/1c/rm";
 }): React.ReactNode {
   if (!name?.trim()) return "—";
-  if (id && inUsers) {
+  if (userId) {
     return (
-      <Link href={`/1c/manager/${id}`} className="text-primary hover:underline">
+      <Link href={`${hrefPrefix}/${userId}`} className="text-primary hover:underline">
         {name}
       </Link>
     );
   }
-  return name;
+  return (
+    <span>
+      {name} <span className="text-muted-foreground">(нет в ЛК)</span>
+    </span>
+  );
 }
 
 export default function OneCLegalPage() {
@@ -132,27 +136,23 @@ export default function OneCLegalPage() {
 
           <OneCDetailSection title="Менеджеры" testId="section-one-c-legal-managers">
             <OneCFieldRow label="Региональный">
-              <ManagerLink
-                id={legal.regional_manager_1c}
+              <LkPersonLink
+                userId={legal.regional_manager_user_id}
                 name={legal.regional_manager_name}
-                inUsers={legal.regional_manager_in_users}
+                hrefPrefix="/1c/rm"
               />
             </OneCFieldRow>
             <OneCFieldRow label="Ответственный">
-              <ManagerLink
-                id={legal.responsible_manager_1c}
+              <LkPersonLink
+                userId={legal.responsible_manager_user_id}
                 name={legal.responsible_manager_name}
-                inUsers={legal.responsible_manager_in_users}
+                hrefPrefix="/1c/manager"
               />
             </OneCFieldRow>
             <OneCFieldRow label="Фурнитура">
               {legal.furniture_manager_name ? (
                 <>
-                  <ManagerLink
-                    id={legal.furniture_manager_1c}
-                    name={legal.furniture_manager_name}
-                    inUsers={legal.furniture_manager_in_users}
-                  />
+                  {legal.furniture_manager_name}
                   {legal.furniture_manager_phone ? ` · ${legal.furniture_manager_phone}` : null}
                 </>
               ) : (
