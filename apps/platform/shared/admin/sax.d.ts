@@ -9,6 +9,7 @@ declare module "sax" {
   export interface SaxStream extends Readable {
     on(event: "opentag", listener: (node: SaxTag) => void): this;
     on(event: "closetag", listener: (tagName: string) => void): this;
+    on(event: "text", listener: (text: string) => void): this;
     on(event: "error", listener: (err: Error) => void): this;
     on(event: "end", listener: () => void): this;
     write(chunk: string): void;

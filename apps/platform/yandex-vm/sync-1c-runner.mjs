@@ -23,6 +23,9 @@ const SCRIPT =
 const PHOTO_SCRIPT =
   process.env.SYNC_1C_PHOTO_SCRIPT?.trim() ||
   path.join(__dirname, "sync-1c-photos.mjs");
+const USERS_LEGALS_SCRIPT =
+  process.env.SYNC_1C_USERS_LEGALS_SCRIPT?.trim() ||
+  path.join(__dirname, "sync-1c-users-legals.mjs");
 
 const FTP_EXCHANGE_BASE = (process.env.FTP_EXCHANGE_BASE?.trim() || "/s3/IMG/exchange").replace(/\/$/, "");
 const FTP_HOST = process.env.FTP_HOST?.trim() || "gw.toopatch.ru";
@@ -237,6 +240,19 @@ export async function exchangePeekFromFtp(filePath, bytes) {
   }
 }
 
+function resolveScript(kind) {
+  if (kind === "photos") return PHOTO_SCRIPT;
+  if (kind === "users-legals") return USERS_LEGALS_SCRIPT;
+  return SCRIPT;
+}
+
+function spawnArgsForKind(kind, script, extraArgs) {
+  if (kind === "users-legals") {
+    return ["--import", "tsx", script, ...extraArgs];
+  }
+  return [script, ...extraArgs];
+}
+
 function startSync(target = "both", dry = false, extraEnv = {}, kind = "catalog", extraArgs = []) {
   if (running) {
     return { ok: false, code: "BUSY", message: "Sync already running" };
@@ -251,14 +267,17 @@ function startSync(target = "both", dry = false, extraEnv = {}, kind = "catalog"
   for (const [k, v] of Object.entries(extraEnv || {})) {
     if (allowedExtra.has(k) && typeof v === "string" && v.length > 0) safeExtra[k] = v;
   }
-  const script = kind === "photos" ? PHOTO_SCRIPT : SCRIPT;
-  const args = [script, ...extraArgs];
+  const script = resolveScript(kind);
+  const args = spawnArgsForKind(kind, script, extraArgs);
   const child = spawn(process.execPath, args, {
     env: {
       ...process.env,
       ...safeExtra,
       TARGET_DB: target,
       DRY_RUN: dry ? "1" : "0",
+      TANDOOR_PLATFORM:
+        process.env.TANDOOR_PLATFORM?.trim() ||
+        "/home/ubuntu/tandoor-platform/apps/platform",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -379,6 +398,32 @@ const server = http.createServer((req, res) => {
         /* ignore */
       }
       const r = startSync(target, dry, extraEnv, kind, extraArgs);
+      json(res, r.ok ? 202 : 409, r);
+    });
+    return;
+  }
+
+  if (
+    req.method === "POST" &&
+    (req.url === "/run/users" || req.url === "/run/legals" || req.url === "/run/users-legals")
+  ) {
+    const targetArg =
+      req.url === "/run/users" ? "users" : req.url === "/run/legals" ? "legals" : "both";
+    let body = "";
+    req.on("data", (c) => {
+      body += c;
+    });
+    req.on("end", () => {
+      let extraEnv = {};
+      try {
+        if (body.trim()) {
+          const p = JSON.parse(body);
+          if (p.extraEnv && typeof p.extraEnv === "object") extraEnv = p.extraEnv;
+        }
+      } catch {
+        /* ignore */
+      }
+      const r = startSync("neon", false, extraEnv, "users-legals", [`--target=${targetArg}`]);
       json(res, r.ok ? 202 : 409, r);
     });
     return;

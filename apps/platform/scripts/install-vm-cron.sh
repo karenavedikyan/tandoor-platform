@@ -18,6 +18,7 @@ rsync -avz -e "ssh -i $SSH_KEY" \
 
 rsync -avz -e "ssh -i $SSH_KEY" \
   "$REPO_ROOT/apps/platform/yandex-vm/sync-1c-runner.mjs" \
+  "$REPO_ROOT/apps/platform/yandex-vm/sync-1c-users-legals.mjs" \
   "${VM_HOST}:${REMOTE_DIR}/yandex-vm/"
 
 ssh -i "$SSH_KEY" "$VM_HOST" bash -s <<'REMOTE'
@@ -80,6 +81,7 @@ After=network.target
 WorkingDirectory=/home/ubuntu/sync-1c
 EnvironmentFile=-/home/ubuntu/sync-1c/.env
 Environment=NODE_PATH=/home/ubuntu/tandoor-platform/apps/platform/node_modules
+Environment=TANDOOR_PLATFORM=/home/ubuntu/tandoor-platform/apps/platform
 Environment=SYNC_1C_SCRIPT=/home/ubuntu/sync-1c/sync-1c-catalog.mjs
 ExecStart=/usr/bin/node /home/ubuntu/sync-1c/yandex-vm/sync-1c-runner.mjs
 Restart=always
