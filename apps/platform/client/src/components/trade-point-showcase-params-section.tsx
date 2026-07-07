@@ -422,7 +422,7 @@ export function TradePointShowcaseParamsSection({
                 <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   Витрины по типам оборудования
                 </p>
-                {canEdit ? (
+                {canEdit && hasEquipmentCapacity ? (
                   <Button
                     type="button"
                     size="sm"
@@ -430,7 +430,7 @@ export function TradePointShowcaseParamsSection({
                     className="h-8"
                     onClick={openEquipmentDialog}
                   >
-                    {hasEquipmentCapacity ? "Изменить" : "Указать кол-во"}
+                    Изменить
                   </Button>
                 ) : null}
               </div>

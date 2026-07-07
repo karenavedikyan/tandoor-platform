@@ -93,6 +93,10 @@ type DistributionTradePointMatrixEntryProps = {
   hideOpenTasksSection?: boolean;
   hideOpenTradePointCard?: boolean;
   hideDistributionOnPointSection?: boolean;
+  hideEnterDistributionButton?: boolean;
+  hidePlacementBlocksSection?: boolean;
+  hideCounterpartyStickyHeader?: boolean;
+  matrixSectionTitle?: string;
 };
 
 export function DistributionTradePointMatrixEntry({
@@ -105,6 +109,10 @@ export function DistributionTradePointMatrixEntry({
   hideOpenTasksSection = false,
   hideOpenTradePointCard = false,
   hideDistributionOnPointSection = false,
+  hideEnterDistributionButton = false,
+  hidePlacementBlocksSection = false,
+  hideCounterpartyStickyHeader = false,
+  matrixSectionTitle,
 }: DistributionTradePointMatrixEntryProps) {
   const templateModelsCount = useMemo(
     () =>
@@ -343,7 +351,7 @@ export function DistributionTradePointMatrixEntry({
           </a>
         </Button>
       ) : null}
-      {showEnterDistributionButton ? (
+      {showEnterDistributionButton && !hideEnterDistributionButton ? (
         <Button
           type="button"
           size="sm"
@@ -365,6 +373,7 @@ export function DistributionTradePointMatrixEntry({
         actorUserId={actorUserId}
         actorLabel={actorName}
         canEdit={canEdit}
+        hideCounterpartyStickyHeader={hideCounterpartyStickyHeader}
       />
       {canEdit && showcaseFullscreenOpen ? (
         <DistributionFullscreenEntry
@@ -407,6 +416,8 @@ export function DistributionTradePointMatrixEntry({
             density="compact"
             hideOpenTasksSection={hideOpenTasksSection}
             hideDistributionOnPointSection={hideDistributionOnPointSection}
+            hidePlacementBlocksSection={hidePlacementBlocksSection}
+            matrixSectionTitle={matrixSectionTitle}
           />
         </>
       )}
