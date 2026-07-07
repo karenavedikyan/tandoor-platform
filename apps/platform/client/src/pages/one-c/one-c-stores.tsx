@@ -13,7 +13,12 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
+import { OneCStoresCards } from "./one-c-stores-cards";
+import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCListKpi } from "./one-c-list-kpi";
+import { buildOneCStoresKpi } from "./one-c-list-kpi-data";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
+import { useOneCListView } from "./use-one-c-list-view";
 
 export default function OneCStoresPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -24,10 +29,13 @@ export default function OneCStoresPage() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [view, setView] = useOneCListView("stores", "cards");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+  const cardsView = view === "cards";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(items, {
     serverSideSearch: true,
+    cardsView,
   });
 
   useEffect(() => {
@@ -76,12 +84,16 @@ export default function OneCStoresPage() {
       testId="page-one-c-stores"
       actions={<OneCRefreshStubButton />}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-        <OneCOnlyActiveToggle
-          checked={onlyActive}
-          onCheckedChange={setOnlyActive}
-          testId="toggle-one-c-stores-only-active"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <OneCListKpi items={buildOneCStoresKpi(items, total)} testId="kpi-one-c-stores" />
+        <div className="flex flex-wrap items-center gap-3">
+          <OneCOnlyActiveToggle
+            checked={onlyActive}
+            onCheckedChange={setOnlyActive}
+            testId="toggle-one-c-stores-only-active"
+          />
+          <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-stores" />
+        </div>
       </div>
       <OneCStoresFilters
         items={items}
@@ -89,6 +101,7 @@ export default function OneCStoresPage() {
         onFiltersChange={setFilters}
         distAggregates={distAggregates}
         distLoading={distLoading}
+        disableDistributionFilters={cardsView}
         serverSideSearch
         filteredCount={filtered.length}
         testIdPrefix="one-c-stores"
@@ -98,7 +111,11 @@ export default function OneCStoresPage() {
         <OneCLoadingBlock />
       ) : (
         <>
-          <OneCStoresTable items={filtered} act={act} testIdPrefix="one-c-stores" />
+          {cardsView ? (
+            <OneCStoresCards items={filtered} act={act} testIdPrefix="one-c-stores" />
+          ) : (
+            <OneCStoresTable items={filtered} act={act} testIdPrefix="one-c-stores" />
+          )}
           <OneCPagination
             total={total}
             limit={ONE_C_PAGE_LIMIT}

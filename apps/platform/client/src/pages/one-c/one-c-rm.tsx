@@ -22,7 +22,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
+import { OneCStoresCards } from "./one-c-stores-cards";
+import { OneCListViewToggle } from "./one-c-list-view-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
+import { useOneCListView } from "./use-one-c-list-view";
 
 export default function OneCRmPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -38,10 +41,13 @@ export default function OneCRmPage() {
   const [teamName, setTeamName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [view, setView] = useOneCListView(`rm-${rmId}`, "cards");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
+  const cardsView = view === "cards";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
     serverSideSearch: true,
+    cardsView,
   });
 
   useEffect(() => {
@@ -139,24 +145,37 @@ export default function OneCRmPage() {
             </div>
           </section>
           <section>
-            <h2 className="mb-3 text-lg font-semibold">Все ТТ РМа</h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Все ТТ РМа</h2>
+              <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-rm-stores" />
+            </div>
             <OneCStoresFilters
               items={stores}
               filters={filters}
               onFiltersChange={setFilters}
               distAggregates={distAggregates}
               distLoading={distLoading}
+              disableDistributionFilters={cardsView}
               hideRm
               serverSideSearch
               filteredCount={filtered.length}
               testIdPrefix="one-c-rm-stores"
             />
-            <OneCStoresTable
-              items={filtered}
-              act={act}
-              emptyLabel="Торговые точки не найдены"
-              testIdPrefix="one-c-rm-stores"
-            />
+            {cardsView ? (
+              <OneCStoresCards
+                items={filtered}
+                act={act}
+                emptyLabel="Торговые точки не найдены"
+                testIdPrefix="one-c-rm-stores"
+              />
+            ) : (
+              <OneCStoresTable
+                items={filtered}
+                act={act}
+                emptyLabel="Торговые точки не найдены"
+                testIdPrefix="one-c-rm-stores"
+              />
+            )}
             <OneCPagination
               total={total}
               limit={ONE_C_PAGE_LIMIT}

@@ -234,8 +234,14 @@ export type OneCLegalListItem = {
   inn: string | null;
   kpp: string | null;
   city: string | null;
+  parent_1c: string | null;
+  parent_name: string | null;
+  client_type: string | null;
+  payment_form: string | null;
+  regional_manager_name: string | null;
   responsible_manager_name: string | null;
   plan_sum: number | null;
+  stores_count: number;
   has_distribution: boolean;
 };
 

@@ -34,7 +34,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
+import { OneCStoresCards } from "./one-c-stores-cards";
+import { OneCListViewToggle } from "./one-c-list-view-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
+import { useOneCListView } from "./use-one-c-list-view";
 
 function LkPersonLink({
   userId,
@@ -74,9 +77,13 @@ export default function OneCLegalPage() {
   const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["stores"]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reqOpen, setReqOpen] = useState(true);
+  const [view, setView] = useOneCListView(`legal-${legalId}`, "table");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
-  const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores);
+  const cardsView = view === "cards";
+  const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
+    cardsView,
+  });
 
   useEffect(() => {
     if (!canAccess || !legalId) return;
@@ -227,21 +234,34 @@ export default function OneCLegalPage() {
               <p className="text-sm text-muted-foreground">Нет торговых точек</p>
             ) : (
               <div className="space-y-3">
+                <div className="flex justify-end">
+                  <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-legal-stores" />
+                </div>
                 <OneCStoresFilters
                   items={stores}
                   filters={filters}
                   onFiltersChange={setFilters}
                   distAggregates={distAggregates}
                   distLoading={distLoading}
+                  disableDistributionFilters={cardsView}
                   filteredCount={filtered.length}
                   testIdPrefix="one-c-legal-stores"
                 />
-                <OneCStoresTable
-                  items={filtered}
-                  act={act}
-                  emptyLabel="Торговые точки не найдены"
-                  testIdPrefix="one-c-legal-stores"
-                />
+                {cardsView ? (
+                  <OneCStoresCards
+                    items={filtered}
+                    act={act}
+                    emptyLabel="Торговые точки не найдены"
+                    testIdPrefix="one-c-legal-stores"
+                  />
+                ) : (
+                  <OneCStoresTable
+                    items={filtered}
+                    act={act}
+                    emptyLabel="Торговые точки не найдены"
+                    testIdPrefix="one-c-legal-stores"
+                  />
+                )}
               </div>
             )}
           </OneCDetailSection>
