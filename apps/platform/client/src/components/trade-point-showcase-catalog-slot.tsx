@@ -118,14 +118,18 @@ export function TradePointShowcaseCatalogSlot({
     [persistShowcase],
   );
 
+  const isOneC = (dealer as { source1c?: boolean }).source1c === true;
+  const tpCodeFinal = point.releaseCode?.trim() ? point.releaseCode : isOneC ? undefined : point.id;
+  const dealerCodeFinal = dealer.releaseCode?.trim() ? dealer.releaseCode : isOneC ? undefined : dealer.id;
+
   return (
     <TradePointShowcaseCatalogPanel
       tradePointId={point.id}
       dealerId={dealer.id}
       tradePointName={tradePointDisplayName}
-      tradePointCode={point.releaseCode ?? point.id}
+      tradePointCode={tpCodeFinal}
       dealerName={dealer.name}
-      dealerCode={dealer.releaseCode ?? dealer.id}
+      dealerCode={dealerCodeFinal}
       counterpartyCity={point.city ?? dealer.city}
       matrixScopeRegion={dealer.region}
       matrixScopeCity={point.city}
