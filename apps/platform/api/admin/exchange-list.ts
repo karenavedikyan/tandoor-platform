@@ -1,15 +1,17 @@
 /**
  * GET /api/admin/exchange-list?path=/
- * Читает HTTPS-листинг директории обмена 1С (s3.toopatch.ru).
- * Никаких кредов не требуется — публичный nginx autoindex.
+ * Читает HTTPS-листинг директории обмена 1С через Yandex VM-прокси (s3.toopatch.ru).
  * Только для роли admin.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
-import { fetchWithRetry } from "../../shared/admin/exchange-fetch.js";
-
-const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
+import {
+  EXCHANGE_S3_BASE,
+  exchangeProxyAuthHeaders,
+  fetchWithRetry,
+  resolveExchangeProxyConfig,
+} from "../../shared/admin/exchange-fetch.js";
 
 export type ExchangeListItem = {
   name: string;
@@ -46,7 +48,16 @@ export function parseExchangeListing(html: string, baseHref: string): ExchangeLi
 }
 
 function listingUrlForPath(rawPath: string): string {
-  return `${EXCHANGE_BASE}${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
+  return `${EXCHANGE_S3_BASE}${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
+}
+
+async function readProxyErrorMessage(r: Response): Promise<string> {
+  const ct = r.headers.get("content-type") ?? "";
+  if (ct.includes("application/json")) {
+    const json = (await r.json().catch(() => ({}))) as { message?: string };
+    return json.message ?? `Proxy HTTP ${r.status}`;
+  }
+  return `Proxy HTTP ${r.status}`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -70,22 +81,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    const proxy = resolveExchangeProxyConfig();
+    if (!proxy) {
+      sendJson(res, 503, {
+        success: false,
+        code: "PROXY_NOT_CONFIGURED",
+        message: "EXCHANGE_PROXY_URL не настроен (Yandex VM proxy).",
+      });
+      return;
+    }
+
     const rawPath = String(req.query.path ?? "/").trim();
     if (!rawPath.startsWith("/") || rawPath.length > 200 || rawPath.includes("..")) {
       sendJson(res, 400, { success: false, code: "BAD_PATH", message: "Некорректный путь." });
       return;
     }
 
-    const url = listingUrlForPath(rawPath);
+    const s3Url = listingUrlForPath(rawPath);
+    const proxyUrl = `${proxy.proxyUrl}/exchange/list?path=${encodeURIComponent(rawPath)}`;
     let html: string;
     try {
-      const r = await fetchWithRetry(url, "text/html,application/xhtml+xml");
+      const r = await fetchWithRetry(
+        proxyUrl,
+        "text/html,application/xhtml+xml",
+        exchangeProxyAuthHeaders(proxy.token),
+      );
       if (!r.ok) {
+        const message = await readProxyErrorMessage(r);
         sendJson(res, r.status === 404 ? 404 : 502, {
           success: false,
           code: r.status === 404 ? "NOT_FOUND" : "UPSTREAM_ERROR",
-          message: `Upstream HTTP ${r.status}`,
-          url,
+          message,
+          url: s3Url,
         });
         return;
       }
@@ -95,8 +122,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 502, {
         success: false,
         code: "UPSTREAM_UNREACHABLE",
-        message: `s3.toopatch.ru недоступен: ${m}`,
-        url,
+        message: `VM proxy недоступен: ${m}`,
+        url: s3Url,
       });
       return;
     }
@@ -105,9 +132,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const items = parseExchangeListing(html, baseHref);
     sendJson(res, 200, {
       success: true,
-      base: EXCHANGE_BASE,
+      base: EXCHANGE_S3_BASE,
       path: rawPath,
-      url,
+      url: s3Url,
       count: items.length,
       items,
     });

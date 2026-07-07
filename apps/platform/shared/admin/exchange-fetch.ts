@@ -1,3 +1,5 @@
+export const EXCHANGE_S3_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
+
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -36,4 +38,21 @@ export async function fetchWithRetry(
     }
   }
   throw lastErr ?? new Error("fetch failed");
+}
+
+export type ExchangeProxyConfig = {
+  proxyUrl: string;
+  token: string;
+};
+
+export function resolveExchangeProxyConfig(): ExchangeProxyConfig | null {
+  const proxyUrl = process.env.EXCHANGE_PROXY_URL?.trim()?.replace(/\/$/, "");
+  if (!proxyUrl) return null;
+  const token =
+    process.env.EXCHANGE_PROXY_TOKEN?.trim() || process.env.SYNC_RUNNER_TOKEN?.trim() || "";
+  return { proxyUrl, token };
+}
+
+export function exchangeProxyAuthHeaders(token: string): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }

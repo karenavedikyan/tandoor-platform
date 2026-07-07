@@ -91,6 +91,20 @@ RUNNER
 sudo systemctl daemon-reload
 sudo systemctl enable --now sync-1c-catalog.timer
 sudo systemctl enable --now sync-1c-runner.service || true
+sudo systemctl restart sync-1c-runner.service || true
+sleep 2
+HEALTH_OK=0
+for i in 1 2 3 4 5; do
+  if curl -sf "http://127.0.0.1:38443/health" >/dev/null; then
+    HEALTH_OK=1
+    echo "sync-1c-runner: health OK"
+    break
+  fi
+  sleep 2
+done
+if [ "$HEALTH_OK" != 1 ]; then
+  echo "WARNING: sync-1c-runner health check failed after restart" >&2
+fi
 echo "Timers:"
 systemctl list-timers | grep sync-1c || true
 REMOTE
