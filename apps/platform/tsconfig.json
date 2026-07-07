@@ -11,7 +11,8 @@
     "build",
     "dist",
     "**/*.test.ts",
-    "scripts/test-manager-dealer-base-not-empty.ts"
+    "scripts/test-manager-dealer-base-not-empty.ts",
+    "scripts/test-one-c-showroom-e2e.ts"
   ],
   "compilerOptions": {
     "incremental": true,
