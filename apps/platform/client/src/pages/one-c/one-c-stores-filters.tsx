@@ -202,7 +202,7 @@ export function OneCStoresFilters({
           ) : null}
           {disableDistributionFilters ? (
             <Badge variant="outline" className="text-[10px] font-normal">
-              в режиме карточек
+              в карточных видах
             </Badge>
           ) : null}
         </div>

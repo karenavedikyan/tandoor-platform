@@ -14,12 +14,12 @@ import {
   OneCSearchInput,
   useDebouncedSearch,
 } from "./one-c-ui";
-import { OneCLegalsCards } from "./one-c-legals-cards";
+import { OneCLegalsCardsList } from "./one-c-legals-cards";
 import { OneCLegalsTable } from "./one-c-legals-table";
-import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { OneCListKpi } from "./one-c-list-kpi";
 import { buildOneCLegalsKpi } from "./one-c-list-kpi-data";
-import { useOneCListView } from "./use-one-c-list-view";
+import { useOneCListDensity } from "./use-one-c-list-density";
 
 export default function OneCLegalsPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -33,7 +33,7 @@ export default function OneCLegalsPage() {
   const [items, setItems] = useState<Awaited<ReturnType<typeof fetchOneCLegals>>["items"]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useOneCListView("legals", "cards");
+  const { density, setDensity, effectiveDensity } = useOneCListDensity("legals", "grid");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
@@ -80,7 +80,7 @@ export default function OneCLegalsPage() {
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <OneCListKpi items={buildOneCLegalsKpi(items, total, onlyActive)} testId="kpi-one-c-legals" />
-        <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-legals" />
+        <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-legals" />
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <OneCSearchInput
@@ -112,10 +112,10 @@ export default function OneCLegalsPage() {
         <OneCLoadingBlock />
       ) : (
         <>
-          {view === "cards" ? (
-            <OneCLegalsCards items={items} act={act} testIdPrefix="one-c-legals" />
-          ) : (
+          {effectiveDensity === "table" ? (
             <OneCLegalsTable items={items} testIdPrefix="one-c-legals" />
+          ) : (
+            <OneCLegalsCardsList items={items} density={effectiveDensity} act={act} testIdPrefix="one-c-legals" />
           )}
           <OneCPagination
             total={total}

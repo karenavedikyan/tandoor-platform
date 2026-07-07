@@ -14,10 +14,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
-import { OneCStoresCards } from "./one-c-stores-cards";
-import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCStoresCardsList } from "./one-c-stores-cards";
+import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
-import { useOneCListView } from "./use-one-c-list-view";
+import { useOneCListDensity } from "./use-one-c-list-density";
 
 export default function OneCManagerPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -30,13 +30,13 @@ export default function OneCManagerPage() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [view, setView] = useOneCListView(`manager-${managerId}`, "cards");
+  const { density, setDensity, effectiveDensity } = useOneCListDensity(`manager-${managerId}`, "grid");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
-  const cardsView = view === "cards";
+  const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
     serverSideSearch: true,
-    cardsView,
+    nonTableView,
   });
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function OneCManagerPage() {
       ) : (
         <>
           <div className="mb-3 flex justify-end">
-            <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-manager-stores" />
+            <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-manager-stores" />
           </div>
           <OneCStoresFilters
             items={stores}
@@ -119,22 +119,23 @@ export default function OneCManagerPage() {
             onFiltersChange={setFilters}
             distAggregates={distAggregates}
             distLoading={distLoading}
-            disableDistributionFilters={cardsView}
+            disableDistributionFilters={nonTableView}
             hideManager
             serverSideSearch
             filteredCount={filtered.length}
             testIdPrefix="one-c-manager-stores"
           />
-          {cardsView ? (
-            <OneCStoresCards
+          {effectiveDensity === "table" ? (
+            <OneCStoresTable
               items={filtered}
               act={act}
               emptyLabel="Торговые точки не найдены"
               testIdPrefix="one-c-manager-stores"
             />
           ) : (
-            <OneCStoresTable
+            <OneCStoresCardsList
               items={filtered}
+              density={effectiveDensity}
               act={act}
               emptyLabel="Торговые точки не найдены"
               testIdPrefix="one-c-manager-stores"

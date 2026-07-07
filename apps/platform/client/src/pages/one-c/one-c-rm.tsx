@@ -22,10 +22,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
-import { OneCStoresCards } from "./one-c-stores-cards";
-import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCStoresCardsList } from "./one-c-stores-cards";
+import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
-import { useOneCListView } from "./use-one-c-list-view";
+import { useOneCListDensity } from "./use-one-c-list-density";
 
 export default function OneCRmPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -41,13 +41,13 @@ export default function OneCRmPage() {
   const [teamName, setTeamName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [view, setView] = useOneCListView(`rm-${rmId}`, "cards");
+  const { density, setDensity, effectiveDensity } = useOneCListDensity(`rm-${rmId}`, "grid");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
-  const cardsView = view === "cards";
+  const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
     serverSideSearch: true,
-    cardsView,
+    nonTableView,
   });
 
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function OneCRmPage() {
           <section>
             <div className="mb-3 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold">Все ТТ РМа</h2>
-              <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-rm-stores" />
+              <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-rm-stores" />
             </div>
             <OneCStoresFilters
               items={stores}
@@ -155,22 +155,23 @@ export default function OneCRmPage() {
               onFiltersChange={setFilters}
               distAggregates={distAggregates}
               distLoading={distLoading}
-              disableDistributionFilters={cardsView}
+              disableDistributionFilters={nonTableView}
               hideRm
               serverSideSearch
               filteredCount={filtered.length}
               testIdPrefix="one-c-rm-stores"
             />
-            {cardsView ? (
-              <OneCStoresCards
+            {effectiveDensity === "table" ? (
+              <OneCStoresTable
                 items={filtered}
                 act={act}
                 emptyLabel="Торговые точки не найдены"
                 testIdPrefix="one-c-rm-stores"
               />
             ) : (
-              <OneCStoresTable
+              <OneCStoresCardsList
                 items={filtered}
+                density={effectiveDensity}
                 act={act}
                 emptyLabel="Торговые точки не найдены"
                 testIdPrefix="one-c-rm-stores"

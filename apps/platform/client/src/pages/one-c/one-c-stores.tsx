@@ -13,12 +13,12 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
-import { OneCStoresCards } from "./one-c-stores-cards";
-import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCStoresCardsList } from "./one-c-stores-cards";
+import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { OneCListKpi } from "./one-c-list-kpi";
 import { buildOneCStoresKpi } from "./one-c-list-kpi-data";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
-import { useOneCListView } from "./use-one-c-list-view";
+import { useOneCListDensity } from "./use-one-c-list-density";
 
 export default function OneCStoresPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -29,13 +29,13 @@ export default function OneCStoresPage() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [view, setView] = useOneCListView("stores", "cards");
+  const { density, setDensity, effectiveDensity } = useOneCListDensity("stores", "grid");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
-  const cardsView = view === "cards";
+  const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(items, {
     serverSideSearch: true,
-    cardsView,
+    nonTableView,
   });
 
   useEffect(() => {
@@ -92,7 +92,7 @@ export default function OneCStoresPage() {
             onCheckedChange={setOnlyActive}
             testId="toggle-one-c-stores-only-active"
           />
-          <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-stores" />
+          <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-stores" />
         </div>
       </div>
       <OneCStoresFilters
@@ -101,7 +101,7 @@ export default function OneCStoresPage() {
         onFiltersChange={setFilters}
         distAggregates={distAggregates}
         distLoading={distLoading}
-        disableDistributionFilters={cardsView}
+        disableDistributionFilters={nonTableView}
         serverSideSearch
         filteredCount={filtered.length}
         testIdPrefix="one-c-stores"
@@ -111,10 +111,15 @@ export default function OneCStoresPage() {
         <OneCLoadingBlock />
       ) : (
         <>
-          {cardsView ? (
-            <OneCStoresCards items={filtered} act={act} testIdPrefix="one-c-stores" />
-          ) : (
+          {effectiveDensity === "table" ? (
             <OneCStoresTable items={filtered} act={act} testIdPrefix="one-c-stores" />
+          ) : (
+            <OneCStoresCardsList
+              items={filtered}
+              density={effectiveDensity}
+              act={act}
+              testIdPrefix="one-c-stores"
+            />
           )}
           <OneCPagination
             total={total}

@@ -34,10 +34,10 @@ import {
 } from "./one-c-ui";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
-import { OneCStoresCards } from "./one-c-stores-cards";
-import { OneCListViewToggle } from "./one-c-list-view-toggle";
+import { OneCStoresCardsList } from "./one-c-stores-cards";
+import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
-import { useOneCListView } from "./use-one-c-list-view";
+import { useOneCListDensity } from "./use-one-c-list-density";
 
 function LkPersonLink({
   userId,
@@ -77,12 +77,12 @@ export default function OneCLegalPage() {
   const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["stores"]>([]);
   const [error, setError] = useState<string | null>(null);
   const [reqOpen, setReqOpen] = useState(true);
-  const [view, setView] = useOneCListView(`legal-${legalId}`, "table");
+  const { density, setDensity, effectiveDensity } = useOneCListDensity(`legal-${legalId}`, "table");
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
-  const cardsView = view === "cards";
+  const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
-    cardsView,
+    nonTableView,
   });
 
   useEffect(() => {
@@ -235,7 +235,7 @@ export default function OneCLegalPage() {
             ) : (
               <div className="space-y-3">
                 <div className="flex justify-end">
-                  <OneCListViewToggle value={view} onChange={setView} testIdPrefix="one-c-legal-stores" />
+                  <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-legal-stores" />
                 </div>
                 <OneCStoresFilters
                   items={stores}
@@ -243,20 +243,21 @@ export default function OneCLegalPage() {
                   onFiltersChange={setFilters}
                   distAggregates={distAggregates}
                   distLoading={distLoading}
-                  disableDistributionFilters={cardsView}
+                  disableDistributionFilters={nonTableView}
                   filteredCount={filtered.length}
                   testIdPrefix="one-c-legal-stores"
                 />
-                {cardsView ? (
-                  <OneCStoresCards
+                {effectiveDensity === "table" ? (
+                  <OneCStoresTable
                     items={filtered}
                     act={act}
                     emptyLabel="Торговые точки не найдены"
                     testIdPrefix="one-c-legal-stores"
                   />
                 ) : (
-                  <OneCStoresTable
+                  <OneCStoresCardsList
                     items={filtered}
+                    density={effectiveDensity}
                     act={act}
                     emptyLabel="Торговые точки не найдены"
                     testIdPrefix="one-c-legal-stores"
