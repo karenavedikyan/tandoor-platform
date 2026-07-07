@@ -8,8 +8,8 @@ import { createEmptyActualizationState } from "@/lib/client-base-actualization-s
 import type { OneCLegalListItem } from "@/lib/one-c-showroom-api";
 
 vi.mock("../one-c-legal-distribution-summary", () => ({
-  OneCLegalDistributionSummary: ({ testId }: { testId: string }) => (
-    <span data-testid={testId}>legal-dist-placeholder</span>
+  OneCLegalDistributionSummary: ({ testId, variant }: { testId: string; variant?: string }) => (
+    <span data-testid={testId}>{variant === "full" ? "legal-dist-full" : "legal-dist-compact"}</span>
   ),
 }));
 
@@ -38,15 +38,25 @@ afterEach(() => {
 });
 
 describe("OneCLegalCard", () => {
-  it("renders name, holding, badges and distribution summary placeholder", () => {
-    render(<OneCLegalCard row={row} act={act} />);
+  it("renders grid density", () => {
+    render(<OneCLegalCard row={row} density="grid" act={act} />);
 
-    expect(screen.getByTestId("card-one-c-legal-legal-1")).toBeTruthy();
-    expect(screen.getByText("Ромашка")).toBeTruthy();
-    expect(screen.getByText("Холдинг: Холдинг А")).toBeTruthy();
+    expect(screen.getByTestId("card-one-c-legal-legal-1").getAttribute("data-density")).toBe("grid");
     expect(screen.getByText("3 ТТ")).toBeTruthy();
-    expect(screen.getByText("ТОП 350")).toBeTruthy();
-    expect(screen.getByText("Безналичные")).toBeTruthy();
-    expect(screen.getByTestId("one-c-legal-tile-dist-legal-1").textContent).toContain("legal-dist-placeholder");
+    expect(screen.getByTestId("one-c-legal-tile-dist-legal-1").textContent).toContain("legal-dist-compact");
+  });
+
+  it("renders large density with full distribution summary", () => {
+    render(<OneCLegalCard row={row} density="large" act={act} />);
+
+    expect(screen.getByTestId("card-one-c-legal-legal-1").getAttribute("data-density")).toBe("large");
+    expect(screen.getByTestId("one-c-legal-large-dist-legal-1").textContent).toContain("legal-dist-full");
+  });
+
+  it("renders list density", () => {
+    render(<OneCLegalCard row={row} density="list" act={act} />);
+
+    expect(screen.getByTestId("card-one-c-legal-legal-1").getAttribute("data-density")).toBe("list");
+    expect(screen.getByTestId("one-c-legal-list-dist-legal-1").textContent).toContain("legal-dist-compact");
   });
 });

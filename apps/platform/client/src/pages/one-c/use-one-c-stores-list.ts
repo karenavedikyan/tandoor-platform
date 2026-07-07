@@ -10,13 +10,13 @@ import { useOneCStoresDistributionMap } from "./use-one-c-stores-distribution-ma
 
 export function useOneCStoresListView(
   items: OneCStoreListItem[],
-  options?: { serverSideSearch?: boolean; cardsView?: boolean },
+  options?: { serverSideSearch?: boolean; nonTableView?: boolean },
 ) {
   const actx = useClientBaseActualization();
   const act = actx.state;
   const [filters, setFilters] = useState<OneCStoresFilterState>(emptyOneCStoresFilters);
   const { map: distAggregates, loading: distLoading } = useOneCStoresDistributionMap(items, act, {
-    enabled: !options?.cardsView,
+    enabled: !options?.nonTableView,
   });
   const filtered = useMemo(
     () =>

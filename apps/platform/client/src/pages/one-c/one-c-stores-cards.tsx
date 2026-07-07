@@ -1,44 +1,53 @@
-import { useEffect, useRef, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, type ReactElement } from "react";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
 import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
 import { setShowcaseMatrixApiBase, resetShowcaseMatrixApiBase } from "@/lib/showcase-matrix-api";
 import {
-  DEALER_BASE_VIRTUAL_ESTIMATE,
   dealerBaseVirtualItemStyle,
   useDealerBaseListScrollMargin,
   useDealerBaseWindowVirtualizer,
   useDealerCompactGridColumnCount,
+  useDealerLargeGridColumnCount,
 } from "@/lib/dealer-base-list-window-virtualizer";
 import { Card } from "@/components/ui/card";
 import { OneCStoreCard } from "./one-c-store-card";
+import { getOneCCardsListLayout } from "./one-c-cards-list-layout";
+import type { OneCCardDensity } from "./use-one-c-list-density";
 
-type OneCStoresCardsProps = {
+type OneCStoresCardsListProps = {
   items: OneCStoreListItem[];
+  density: OneCCardDensity;
   loading?: boolean;
   emptyLabel?: string;
   testIdPrefix?: string;
   act: ActualizationState;
 };
 
-export function OneCStoresCards({
+export function OneCStoresCardsList({
   items,
+  density,
   loading = false,
   emptyLabel = "Ничего не найдено",
   testIdPrefix = "one-c-stores",
   act,
-}: OneCStoresCardsProps): ReactElement {
+}: OneCStoresCardsListProps): ReactElement {
   useEffect(() => {
     setShowcaseMatrixApiBase("/api/one-c/showcase-matrix");
     return () => resetShowcaseMatrixApiBase();
   }, []);
 
   const listRef = useRef<HTMLDivElement>(null);
-  const columns = useDealerCompactGridColumnCount();
-  const virtualRowCount = Math.ceil(items.length / columns);
-  const scrollMargin = useDealerBaseListScrollMargin(listRef, [items.length, columns]);
+  const compactColumns = useDealerCompactGridColumnCount();
+  const largeColumns = useDealerLargeGridColumnCount();
+  const layout = useMemo(
+    () => getOneCCardsListLayout(density, compactColumns, largeColumns),
+    [density, compactColumns, largeColumns],
+  );
+  const virtualRowCount = Math.ceil(items.length / layout.columns);
+  const scrollMargin = useDealerBaseListScrollMargin(listRef, [items.length, layout.columns, density]);
   const virtualizer = useDealerBaseWindowVirtualizer({
     count: virtualRowCount,
-    estimateSize: DEALER_BASE_VIRTUAL_ESTIMATE.gridRow,
+    estimateSize: layout.estimateSize,
     scrollMargin,
   });
   const virtualItems = virtualizer.getVirtualItems();
@@ -61,21 +70,22 @@ export function OneCStoresCards({
       className="relative w-full"
       style={{ height: virtualizer.getTotalSize() }}
       data-testid={`${testIdPrefix}-cards-virtual`}
+      data-density={density}
     >
       {virtualItems.map((vi) => {
-        const startIdx = vi.index * columns;
-        const slice = items.slice(startIdx, startIdx + columns);
+        const startIdx = vi.index * layout.columns;
+        const slice = items.slice(startIdx, startIdx + layout.columns);
         return (
           <div
             key={vi.key}
             data-index={vi.index}
             ref={virtualizer.measureElement}
-            className="pb-2"
+            className={layout.rowGapClassName}
             style={dealerBaseVirtualItemStyle(virtualizer, vi.start)}
           >
-            <div className="grid min-w-0 grid-cols-1 gap-2 min-[380px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className={layout.gridClassName}>
               {slice.map((row) => (
-                <OneCStoreCard key={row.id_1c} row={row} act={act} />
+                <OneCStoreCard key={row.id_1c} row={row} density={density} act={act} />
               ))}
             </div>
           </div>
@@ -84,3 +94,6 @@ export function OneCStoresCards({
     </div>
   );
 }
+
+/** @deprecated Use OneCStoresCardsList */
+export const OneCStoresCards = OneCStoresCardsList;

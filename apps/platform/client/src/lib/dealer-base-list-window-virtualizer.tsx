@@ -10,8 +10,10 @@ export const DEALER_BASE_VIRTUAL_OVERSCAN = 6;
 /** Оценки высоты по режимам (уточняются measureElement). */
 export const DEALER_BASE_VIRTUAL_ESTIMATE = {
   large: 820,
+  largeRow: 320,
   gridRow: 240,
   list: 112,
+  listRow: 96,
   table: 56,
 } as const;
 
@@ -79,6 +81,25 @@ export function useDealerCompactGridColumnCount(): number {
       if (w >= 1280) setColumns(4);
       else if (w >= 1024) setColumns(3);
       else if (w >= 380) setColumns(2);
+      else setColumns(1);
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return columns;
+}
+
+/** Колонки large-grid (1 / 2 / 3 по breakpoints trade-points). */
+export function useDealerLargeGridColumnCount(): number {
+  const [columns, setColumns] = useState(1);
+
+  useLayoutEffect(() => {
+    const update = () => {
+      const w = window.innerWidth;
+      if (w >= 1280) setColumns(3);
+      else if (w >= 768) setColumns(2);
       else setColumns(1);
     };
     update();
