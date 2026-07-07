@@ -154,6 +154,7 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
     p === "/admin/migrate-marketing-briefs" ||
     p === "/admin/migrate-dealer-tp" ||
     p === "/admin/migrate-catalog-1c" ||
+    p === "/admin/exchange-explorer" ||
     p === "/admin/migrate"
   ) {
     return role === "admin";
