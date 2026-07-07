@@ -1,7 +1,9 @@
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -120,6 +122,7 @@ export function TradePointShowcaseParamsSection({
   const [rmComment, setRmComment] = useState(rec?.rmRopComment ?? "");
   const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
   const [matrixBump, setMatrixBump] = useState(0);
+  const [extraOpen, setExtraOpen] = useState(false);
 
   const selectedModels = rec?.selectedShowcaseModels ?? [];
 
@@ -329,25 +332,28 @@ export function TradePointShowcaseParamsSection({
   const readOnlyLabel = (value: string | null | undefined, empty = "Не указано") =>
     value?.trim() ? value.trim() : empty;
 
-  const saveFooter = canEdit ? (
-    <div className="flex flex-col gap-1 pt-1">
+  const saveStatusLabel =
+    save.phase === "saving"
+      ? "Сохраняем…"
+      : save.phase === "success"
+        ? "Сохранено"
+        : save.isDirty
+          ? "Есть несохранённые изменения"
+          : "Нет несохранённых изменений";
+
+  const headerSaveControls = canEdit ? (
+    <div className="flex flex-col items-end gap-1">
       <SectionSaveButton
         testId="button-showcase-params-save"
         phase={save.phase}
         onSave={handleSaveWithGate}
       />
       <p
-        className="text-[10px] leading-snug text-muted-foreground"
+        className="text-[10px] leading-snug text-muted-foreground/90"
         data-testid="text-showcase-params-save-status"
         aria-live="polite"
       >
-        {save.phase === "saving"
-          ? "Сохраняем…"
-          : save.phase === "success"
-            ? "Сохранено"
-            : save.isDirty
-              ? "Есть несохранённые изменения"
-              : "Нет несохранённых изменений"}
+        {saveStatusLabel}
       </p>
     </div>
   ) : null;
@@ -371,13 +377,16 @@ export function TradePointShowcaseParamsSection({
       className="rounded-lg border border-border/50 bg-card p-2.5 sm:p-3"
       data-testid="section-trade-point-showcase-params"
     >
-      <div className="min-w-0 space-y-0.5">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 className="text-sm font-semibold leading-tight text-foreground">Параметры витрины</h3>
-        {rec?.updatedAt?.trim() ? (
-          <p className="text-[10px] text-muted-foreground/90">
-            Обновлено: {formatDisplayDateTime(rec.updatedAt)}
-          </p>
-        ) : null}
+        <div className="flex flex-col items-end gap-0.5 text-right">
+          {rec?.updatedAt?.trim() ? (
+            <p className="text-[10px] text-muted-foreground/90">
+              Обновлено: {formatDisplayDateTime(rec.updatedAt)}
+            </p>
+          ) : null}
+          {headerSaveControls}
+        </div>
       </div>
 
       <div className="mt-2 space-y-2">
@@ -404,107 +413,129 @@ export function TradePointShowcaseParamsSection({
             )}
           </div>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2" data-testid="section-showcase-equipment-capacity">
+          <>
+            <div
+              className="rounded-md border border-border/70 bg-card p-3"
+              data-testid="section-showcase-equipment-capacity-highlight"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   Витрины по типам оборудования
                 </p>
                 {canEdit ? (
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="h-7 px-2 text-[10px]"
+                    variant="default"
+                    className="h-8"
                     onClick={openEquipmentDialog}
                   >
-                    {hasEquipmentCapacity ? "Изменить" : "Указать кол-во витрин по типам"}
+                    {hasEquipmentCapacity ? "Изменить" : "Указать кол-во"}
                   </Button>
                 ) : null}
               </div>
 
-              {!hasEquipmentCapacity ? (
-                <p className="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-                  Витрины не заведены. Укажите количество витрин по каждому типу оборудования.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {hasLegacyOnlyCapacity ? (
-                    <p
-                      className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
-                      data-testid="text-legacy-capacity-hint-all"
-                    >
-                      Ёмкость задана по категориям. Детализация по типам оборудования не заведена — укажите
-                      распределение в диалоге.
+              <div className="mt-2 space-y-2" data-testid="section-showcase-equipment-capacity">
+                {!hasEquipmentCapacity ? (
+                  <div className="rounded-md border border-dashed border-primary/40 bg-primary/5 px-3 py-3 text-center text-sm text-foreground">
+                    <p>Заполните ёмкость витрины по типам — от этого зависит планирование дистрибуции</p>
+                    {canEdit ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="default"
+                        className="mt-2 h-8"
+                        onClick={openEquipmentDialog}
+                      >
+                        Указать кол-во
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {hasLegacyOnlyCapacity ? (
+                      <p
+                        className="rounded-md border border-border/60 bg-muted/10 px-3 py-2 text-xs text-muted-foreground"
+                        data-testid="text-legacy-capacity-hint-all"
+                      >
+                        Ёмкость задана по категориям. Детализация по типам оборудования не заведена — укажите
+                        распределение в диалоге.
+                      </p>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      {(["vh", "mk", "hardware"] as const).map((segment) => {
+                        const typeKey: ShowcaseTypeKey =
+                          segment === "vh" ? "entrance" : segment === "mk" ? "interior" : "hardware";
+                        const placementTotal =
+                          segment === "vh"
+                            ? categoryTotals.entrance
+                            : segment === "mk"
+                              ? categoryTotals.interior
+                              : categoryTotals.hardware;
+                        const legacyTotal =
+                          segment === "vh"
+                            ? legacyCategoryTotals.entrance
+                            : segment === "mk"
+                              ? legacyCategoryTotals.interior
+                              : legacyCategoryTotals.hardware;
+                        const total =
+                          segment === "vh"
+                            ? effectiveCategoryTotals.entrance
+                            : segment === "mk"
+                              ? effectiveCategoryTotals.interior
+                              : effectiveCategoryTotals.hardware;
+                        const rows = equipmentBySegment[segment].filter((r) => r.capacity > 0);
+                        const legacyOnlySegment = placementTotal === 0 && legacyTotal > 0;
+                        return (
+                          <div
+                            key={segment}
+                            className="rounded-md border border-border/50 bg-muted/10 p-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-semibold text-foreground">
+                                {PLACEMENT_SEGMENT_LABEL_RU[segment]}
+                              </p>
+                              <p
+                                className="text-[10px] tabular-nums text-muted-foreground"
+                                data-testid={`text-category-capacity-total-${segment}`}
+                              >
+                                {total}
+                              </p>
+                            </div>
+                            <p className="mt-1 text-2xl font-semibold tabular-nums text-foreground">{total}</p>
+                            {legacyOnlySegment ? (
+                              <p
+                                className="mt-1 text-xs text-muted-foreground"
+                                data-testid={`text-legacy-capacity-hint-${segment}`}
+                              >
+                                Детализация по типам не заведена. Категорийная ёмкость: {legacyTotal}.
+                              </p>
+                            ) : rows.length > 0 ? (
+                              <ul className="mt-1 space-y-0.5 text-[11px] tabular-nums text-muted-foreground">
+                                {rows.map((row) => (
+                                  <li key={row.placementType} className="flex justify-between gap-2">
+                                    <span>{PLACEMENT_TYPE_LABEL_RU[row.placementType]}</span>
+                                    <span className="font-medium text-foreground">{row.capacity}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-muted-foreground">Типы не указаны</p>
+                            )}
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              {SHOWCASE_TYPE_LABEL_RU[typeKey]}: {total}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-center text-[10px] tabular-nums text-muted-foreground">
+                      Входных: {effectiveCategoryTotals.entrance} · Межкомнатных:{" "}
+                      {effectiveCategoryTotals.interior} · Фурнитура: {effectiveCategoryTotals.hardware}
                     </p>
-                  ) : null}
-                  {(["vh", "mk", "hardware"] as const).map((segment) => {
-                    const typeKey: ShowcaseTypeKey =
-                      segment === "vh" ? "entrance" : segment === "mk" ? "interior" : "hardware";
-                    const placementTotal =
-                      segment === "vh"
-                        ? categoryTotals.entrance
-                        : segment === "mk"
-                          ? categoryTotals.interior
-                          : categoryTotals.hardware;
-                    const legacyTotal =
-                      segment === "vh"
-                        ? legacyCategoryTotals.entrance
-                        : segment === "mk"
-                          ? legacyCategoryTotals.interior
-                          : legacyCategoryTotals.hardware;
-                    const total =
-                      segment === "vh"
-                        ? effectiveCategoryTotals.entrance
-                        : segment === "mk"
-                          ? effectiveCategoryTotals.interior
-                          : effectiveCategoryTotals.hardware;
-                    const rows = equipmentBySegment[segment].filter((r) => r.capacity > 0);
-                    const legacyOnlySegment = placementTotal === 0 && legacyTotal > 0;
-                    return (
-                      <div key={segment} className="rounded-md border border-border/50 bg-muted/10 p-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-foreground">
-                            {PLACEMENT_SEGMENT_LABEL_RU[segment]}
-                          </p>
-                          <p
-                            className="text-[10px] tabular-nums text-muted-foreground"
-                            data-testid={`text-category-capacity-total-${segment}`}
-                          >
-                            Всего: {total}
-                          </p>
-                        </div>
-                        {legacyOnlySegment ? (
-                          <p
-                            className="mt-1 text-xs text-muted-foreground"
-                            data-testid={`text-legacy-capacity-hint-${segment}`}
-                          >
-                            Детализация по типам не заведена. Категорийная ёмкость: {legacyTotal}.
-                          </p>
-                        ) : rows.length > 0 ? (
-                          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                            {rows.map((row) => (
-                              <li key={row.placementType} className="flex justify-between gap-2 tabular-nums">
-                                <span>{PLACEMENT_TYPE_LABEL_RU[row.placementType]}</span>
-                                <span className="font-medium text-foreground">{row.capacity}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-1 text-xs text-muted-foreground">Типы не указаны</p>
-                        )}
-                        <p className="mt-1 text-[10px] text-muted-foreground">
-                          {SHOWCASE_TYPE_LABEL_RU[typeKey]}: {total}
-                        </p>
-                      </div>
-                    );
-                  })}
-                  <p className="text-[10px] tabular-nums text-muted-foreground">
-                    Входных: {effectiveCategoryTotals.entrance} · Межкомнатных:{" "}
-                    {effectiveCategoryTotals.interior} · Фурнитура: {effectiveCategoryTotals.hardware}
-                  </p>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <ShowcaseEquipmentCapacityDialog
@@ -518,166 +549,185 @@ export function TradePointShowcaseParamsSection({
               onCancel={() => setEquipmentDialogOpen(false)}
             />
 
-            <div className="space-y-1">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Площадь витрины, м²
-              </Label>
-              {canEdit ? (
-                <Input
-                  className="min-h-9"
-                  inputMode="decimal"
-                  data-testid="input-trade-point-showcase-area"
-                  value={area}
-                  onChange={(e) => {
-                    setArea(e.target.value);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {readOnlyLabel(area)}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Приоритет витрины
-              </Label>
-              {canEdit ? (
-                <Select
-                  value={priority || "__none__"}
-                  onValueChange={(v) => {
-                    setPriority(v === "__none__" ? "" : v);
-                    markDirty();
-                  }}
-                >
-                  <SelectTrigger className="min-h-9">
-                    <SelectValue placeholder="Не выбран" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Не выбран</SelectItem>
-                    <SelectItem value="high">Высокий</SelectItem>
-                    <SelectItem value="medium">Средний</SelectItem>
-                    <SelectItem value="low">Низкий</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {priority === "high"
-                    ? "Высокий"
-                    : priority === "medium"
-                      ? "Средний"
-                      : priority === "low"
-                        ? "Низкий"
-                        : "Не выбран"}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-              {canEdit ? (
-                <Checkbox
-                  id={`exp-pot-${point.id}`}
-                  checked={expPot === true}
-                  onCheckedChange={(v) => {
-                    setExpPot(v === true ? true : v === false ? false : null);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <Checkbox id={`exp-pot-ro-${point.id}`} checked={expPot === true} disabled />
-              )}
-              <Label
-                htmlFor={canEdit ? `exp-pot-${point.id}` : `exp-pot-ro-${point.id}`}
-                className="text-xs font-normal text-muted-foreground"
-              >
-                Есть потенциал расширения
-              </Label>
-            </div>
-
-            <div className="space-y-1 sm:col-span-2">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Что поставить в первую очередь
-              </Label>
-              {canEdit ? (
-                <Textarea
-                  rows={2}
-                  className="min-h-[4rem] resize-y"
-                  value={firstNeed}
-                  onChange={(e) => {
-                    setFirstNeed(e.target.value);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {readOnlyLabel(firstNeed)}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1 sm:col-span-2">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Комментарий для РМ/РОП
-              </Label>
-              {canEdit ? (
-                <Textarea
-                  rows={2}
-                  className="min-h-[4rem] resize-y"
-                  value={rmComment}
-                  onChange={(e) => {
-                    setRmComment(e.target.value);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {readOnlyLabel(rmComment)}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1 sm:col-span-2">
-              <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Комментарий по витрине
-              </Label>
-              {canEdit ? (
-                <Textarea
-                  rows={2}
-                  className="min-h-[4rem] resize-y"
-                  value={showcaseComment}
-                  onChange={(e) => {
-                    setShowcaseComment(e.target.value);
-                    markDirty();
-                  }}
-                />
-              ) : (
-                <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
-                  {readOnlyLabel(showcaseComment, "—")}
-                </p>
-              )}
-            </div>
-
-            {canEdit ? (
-              <div className="sm:col-span-2">
+            <Collapsible open={extraOpen} onOpenChange={setExtraOpen}>
+              <CollapsibleTrigger asChild>
                 <Button
                   type="button"
+                  variant="ghost"
                   size="sm"
-                  variant="outline"
-                  className={cn("h-8 text-xs font-medium")}
-                  onClick={() => {
-                    setHasShowcase(false);
-                    markDirty();
-                  }}
+                  className="h-8 w-full justify-between px-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  data-testid="button-showcase-params-extra-accordion"
                 >
-                  Отметить «Нет витрины»
+                  <span>Дополнительно · площадь, приоритет, комментарии</span>
+                  <ChevronDown
+                    className={cn("h-3.5 w-3.5 opacity-70 transition-transform", extraOpen && "rotate-180")}
+                    aria-hidden
+                  />
                 </Button>
-              </div>
-            ) : null}
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2" data-testid="section-showcase-params-extra">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Площадь витрины, м²
+                    </Label>
+                    {canEdit ? (
+                      <Input
+                        className="min-h-9"
+                        inputMode="decimal"
+                        data-testid="input-trade-point-showcase-area"
+                        value={area}
+                        onChange={(e) => {
+                          setArea(e.target.value);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        {readOnlyLabel(area)}
+                      </p>
+                    )}
+                  </div>
 
-            {saveFooter ? <div className="sm:col-span-2">{saveFooter}</div> : null}
-          </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Приоритет витрины
+                    </Label>
+                    {canEdit ? (
+                      <Select
+                        value={priority || "__none__"}
+                        onValueChange={(v) => {
+                          setPriority(v === "__none__" ? "" : v);
+                          markDirty();
+                        }}
+                      >
+                        <SelectTrigger className="min-h-9">
+                          <SelectValue placeholder="Не выбран" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Не выбран</SelectItem>
+                          <SelectItem value="high">Высокий</SelectItem>
+                          <SelectItem value="medium">Средний</SelectItem>
+                          <SelectItem value="low">Низкий</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="min-h-9 rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        {priority === "high"
+                          ? "Высокий"
+                          : priority === "medium"
+                            ? "Средний"
+                            : priority === "low"
+                              ? "Низкий"
+                              : "Не выбран"}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                    {canEdit ? (
+                      <Checkbox
+                        id={`exp-pot-${point.id}`}
+                        checked={expPot === true}
+                        onCheckedChange={(v) => {
+                          setExpPot(v === true ? true : v === false ? false : null);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <Checkbox id={`exp-pot-ro-${point.id}`} checked={expPot === true} disabled />
+                    )}
+                    <Label
+                      htmlFor={canEdit ? `exp-pot-${point.id}` : `exp-pot-ro-${point.id}`}
+                      className="text-xs font-normal text-muted-foreground"
+                    >
+                      Есть потенциал расширения
+                    </Label>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Что поставить в первую очередь
+                    </Label>
+                    {canEdit ? (
+                      <Textarea
+                        rows={2}
+                        className="min-h-[4rem] resize-y"
+                        value={firstNeed}
+                        onChange={(e) => {
+                          setFirstNeed(e.target.value);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        {readOnlyLabel(firstNeed)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Комментарий для РМ/РОП
+                    </Label>
+                    {canEdit ? (
+                      <Textarea
+                        rows={2}
+                        className="min-h-[4rem] resize-y"
+                        value={rmComment}
+                        onChange={(e) => {
+                          setRmComment(e.target.value);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        {readOnlyLabel(rmComment)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Комментарий по витрине
+                    </Label>
+                    {canEdit ? (
+                      <Textarea
+                        rows={2}
+                        className="min-h-[4rem] resize-y"
+                        value={showcaseComment}
+                        onChange={(e) => {
+                          setShowcaseComment(e.target.value);
+                          markDirty();
+                        }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap break-words rounded-md border border-border/40 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        {readOnlyLabel(showcaseComment, "—")}
+                      </p>
+                    )}
+                  </div>
+
+                  {canEdit ? (
+                    <div className="sm:col-span-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className={cn("h-8 text-xs font-medium")}
+                        onClick={() => {
+                          setHasShowcase(false);
+                          markDirty();
+                        }}
+                      >
+                        Отметить «Нет витрины»
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
         )}
       </div>
     </div>
