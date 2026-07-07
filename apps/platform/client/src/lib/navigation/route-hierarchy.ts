@@ -11,6 +11,7 @@ export type RouteHierarchyLabels = {
   order?: string;
   manager?: string;
   rop?: string;
+  rm?: string;
   ropHref?: string;
   city?: string;
   article?: string;
@@ -100,6 +101,8 @@ export function parentRouteFor(path: string): string {
   if (/^\/1c\/legal\/[^/]+$/.test(p)) return "/1c/legals";
   if (/^\/1c\/store\/[^/]+$/.test(p)) return "/1c/stores";
   if (/^\/1c\/manager\/[^/]+$/.test(p)) return "/1c/team";
+  if (/^\/1c\/rm\/[^/]+$/.test(p)) return "/1c/team";
+  if (/^\/1c\/rop\/[^/]+$/.test(p)) return "/1c/team";
   if (p === "/1c/team" || p === "/1c/stores" || p === "/1c/legals") return "/1c";
 
   if (p === "/profile/change-password") return "/profile";
@@ -277,11 +280,21 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
     items.length = 0;
     items.push(crumb("Витрина 1С", "/1c"));
     if (seg[1] === "team") {
-      items.push(crumb("Менеджеры"));
+      items.push(crumb("Команда"));
+      return finalize(items);
+    }
+    if (seg[1] === "rop" && seg[2]) {
+      items.push(crumb("Команда", "/1c/team"));
+      items.push(crumb(labels.rop ?? "РОП"));
+      return finalize(items);
+    }
+    if (seg[1] === "rm" && seg[2]) {
+      items.push(crumb("Команда", "/1c/team"));
+      items.push(crumb(labels.rm ?? "РМ"));
       return finalize(items);
     }
     if (seg[1] === "manager" && seg[2]) {
-      items.push(crumb("Менеджеры", "/1c/team"));
+      items.push(crumb("Команда", "/1c/team"));
       items.push(crumb(labels.manager ?? "Менеджер"));
       return finalize(items);
     }

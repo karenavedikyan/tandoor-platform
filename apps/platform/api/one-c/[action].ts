@@ -1,6 +1,5 @@
 /**
- * GET /api/one-c/overview | team | manager | stores | store | legals | legal
- * Read-only showroom from shadow tables.
+ * GET /api/one-c/overview | hierarchy | rop | rm | manager | stores | store | legals | legal
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -12,13 +11,15 @@ import {
 } from "../../shared/admin/admin-auth.js";
 import {
   canAccessOneCShowroom,
+  handleOneCHierarchy,
   handleOneCLegal,
   handleOneCLegals,
   handleOneCManager,
   handleOneCOverview,
+  handleOneCRm,
+  handleOneCRop,
   handleOneCStore,
   handleOneCStores,
-  handleOneCTeam,
 } from "../../shared/one-c-showroom-handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -51,8 +52,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       await handleOneCOverview(req, res, pool);
       return;
     }
-    if (action === "team") {
-      await handleOneCTeam(req, res, pool);
+    if (action === "hierarchy") {
+      await handleOneCHierarchy(req, res, pool);
+      return;
+    }
+    if (action === "rop") {
+      await handleOneCRop(req, res, pool);
+      return;
+    }
+    if (action === "rm") {
+      await handleOneCRm(req, res, pool);
       return;
     }
     if (action === "manager") {

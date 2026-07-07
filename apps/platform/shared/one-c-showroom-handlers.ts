@@ -1,10 +1,27 @@
 /**
- * Read-only handlers for /1c/* showroom (shadow tables only).
+ * Read-only handlers for /1c/* showroom (LK hierarchy + 1C shadow tables).
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { PoolLike } from "../server/db/neon-client.js";
 import { sendJson } from "./admin/admin-auth.js";
+import {
+  buildHierarchy,
+  countLegalsActive,
+  countLegalsForRegionalNames,
+  countLegalsForResponsibleNames,
+  countManagersWithMatch,
+  countRmsWithMatch,
+  countStoresActive,
+  legalMatchesActiveFilter,
+  loadOneCShowroomContext,
+  storeIdsForRegionalNames,
+  storeIdsForResponsibleNames,
+  teamContextForUser,
+  type OneCShowroomContext,
+} from "./one-c-showroom-context.js";
+
+export { normalizeName, nameMatches } from "./one-c-name-matching.js";
 
 export function canAccessOneCShowroom(role: string): boolean {
   return role === "admin" || role === "manager";
@@ -20,107 +37,286 @@ function parseLimitOffset(req: VercelRequest, defaultLimit = 100, maxLimit = 500
 }
 
 function parseSearch(req: VercelRequest): string {
-  return String(req.query.q ?? "").trim();
+  return String(req.query.q ?? req.query.search ?? "").trim();
 }
 
-export type OneCOverview = {
-  stores: number;
-  users: number;
-  legals: number;
+function parseUserId(req: VercelRequest): string {
+  return String(req.query.user_id ?? req.query.userId ?? "").trim();
+}
+
+function parseOnlyActive(req: VercelRequest): boolean {
+  const raw = req.query.onlyActive;
+  const v = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw ?? "1");
+  return v !== "0" && v.toLowerCase() !== "false";
+}
+
+export type OneCOverviewV2 = {
+  rops: number;
+  rms: number;
+  managers: number;
+  storesActive: number;
+  storesTotal: number;
+  legalsActive: number;
+  legalsTotal: number;
   last_imported_at: string | null;
 };
 
-export async function fetchOneCOverview(pool: PoolLike): Promise<OneCOverview> {
-  const res = await pool.query<OneCOverview>(
-    `SELECT
-       (SELECT COUNT(*)::int FROM exchange_stores_raw) AS stores,
-       (SELECT COUNT(*)::int FROM exchange_users_raw) AS users,
-       (SELECT COUNT(*)::int FROM exchange_legals_raw) AS legals,
-       GREATEST(
-         COALESCE((SELECT MAX(imported_at) FROM exchange_stores_raw), 'epoch'::timestamptz),
-         COALESCE((SELECT MAX(imported_at) FROM exchange_users_raw), 'epoch'::timestamptz),
-         COALESCE((SELECT MAX(imported_at) FROM exchange_legals_raw), 'epoch'::timestamptz)
-       ) AS last_imported_at`,
-  );
-  const row = res.rows[0];
+export async function fetchOneCOverview(pool: PoolLike): Promise<OneCOverviewV2> {
+  const ctx = await loadOneCShowroomContext(pool);
   return {
-    stores: row?.stores ?? 0,
-    users: row?.users ?? 0,
-    legals: row?.legals ?? 0,
-    last_imported_at:
-      row?.last_imported_at && row.last_imported_at !== "1970-01-01T00:00:00.000Z"
-        ? String(row.last_imported_at)
-        : null,
+    rops: ctx.teams.length,
+    rms: countRmsWithMatch(ctx),
+    managers: countManagersWithMatch(ctx),
+    storesActive: countStoresActive(ctx),
+    storesTotal: ctx.storesTotal,
+    legalsActive: countLegalsActive(ctx),
+    legalsTotal: ctx.legalsTotal,
+    last_imported_at: ctx.last_imported_at,
   };
 }
 
-export type OneCTeamMember = {
-  id_1c: string;
-  name: string;
-  phone: string | null;
-  store_count: number;
-};
-
-export async function fetchOneCTeam(pool: PoolLike, q: string) {
-  const pattern = q ? `%${q}%` : null;
-  const countRes = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM exchange_users_raw u
-     WHERE ($1::text IS NULL OR u.name ILIKE $1)`,
-    [pattern],
-  );
-  const rows = await pool.query<OneCTeamMember>(
-    `SELECT u.id_1c, u.name, u.phone, COUNT(s.id_1c)::int AS store_count
-     FROM exchange_users_raw u
-     LEFT JOIN exchange_stores_raw s ON s.manager_1c = u.id_1c
-     WHERE ($1::text IS NULL OR u.name ILIKE $1)
-     GROUP BY u.id_1c, u.name, u.phone
-     ORDER BY store_count DESC, u.name ASC`,
-    [pattern],
-  );
-  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
+export async function fetchOneCHierarchy(pool: PoolLike, q: string) {
+  const ctx = await loadOneCShowroomContext(pool);
+  return { items: buildHierarchy(ctx, q) };
 }
 
-export type OneCManagerDetail = {
-  id_1c: string;
-  name: string;
+export type OneCUserCard = {
+  userId: string;
+  fullName: string;
   phone: string | null;
-  store_count: number;
+  email: string | null;
+  teamName: string | null;
+  ropName: string | null;
+  rmNames: string[];
+  storeCount: number;
+  legalCount: number;
 };
+
+async function fetchUserCard(
+  pool: PoolLike,
+  userId: string,
+  kind: "rop" | "rm" | "manager",
+): Promise<OneCUserCard | null> {
+  const ctx = await loadOneCShowroomContext(pool);
+  const user = ctx.usersById.get(userId);
+  if (!user) return null;
+
+  const { team, rop, rms } = teamContextForUser(userId, ctx);
+  let storeCount = 0;
+  let legalCount = 0;
+
+  if (kind === "manager") {
+    const names = ctx.matchedResponsibleByUserId.get(userId) ?? [];
+    storeCount = storeIdsForResponsibleNames(names, ctx).size;
+    legalCount = countLegalsForResponsibleNames(names, ctx);
+  } else if (kind === "rm") {
+    const names = ctx.matchedRegionalByUserId.get(userId) ?? [];
+    storeCount = storeIdsForRegionalNames(names, ctx).size;
+    legalCount = countLegalsForRegionalNames(names, ctx);
+  } else {
+    const teamRms = team ? rms : [];
+    const storeIds = new Set<string>();
+    const legalIds = new Set<string>();
+    for (const rm of teamRms) {
+      const names = ctx.matchedRegionalByUserId.get(rm.id) ?? [];
+      for (const id of Array.from(storeIdsForRegionalNames(names, ctx))) storeIds.add(id);
+      const nameSet = new Set(names);
+      for (const l of Array.from(ctx.legalById.values())) {
+        if (l.regional_manager_name && nameSet.has(l.regional_manager_name)) legalIds.add(l.id_1c);
+      }
+    }
+    storeCount = storeIds.size;
+    legalCount = legalIds.size;
+  }
+
+  return {
+    userId: user.id,
+    fullName: user.full_name,
+    phone: user.phone,
+    email: user.email,
+    teamName: team?.name ?? null,
+    ropName: rop?.full_name ?? null,
+    rmNames: rms.map((r) => r.full_name),
+    storeCount,
+    legalCount,
+  };
+}
+
+export type OneCTeamMemberRow = {
+  userId: string;
+  fullName: string;
+  phone: string | null;
+  storeCount: number;
+  legalCount: number;
+};
+
+export async function fetchOneCRop(pool: PoolLike, userId: string) {
+  const ctx = await loadOneCShowroomContext(pool);
+  const user = ctx.usersById.get(userId);
+  if (!user) return null;
+  const team = ctx.teams.find((t) => t.rop_user_id === userId);
+  if (!team) return null;
+
+  const card = await fetchUserCard(pool, userId, "rop");
+  if (!card) return null;
+
+  const rms: OneCTeamMemberRow[] = (ctx.membershipsByTeam.get(team.id) ?? [])
+    .filter((m) => m.role_in_team === "regional_manager")
+    .map((rm) => {
+      const names = ctx.matchedRegionalByUserId.get(rm.id) ?? [];
+      return {
+        userId: rm.id,
+        fullName: rm.full_name,
+        phone: rm.phone,
+        storeCount: storeIdsForRegionalNames(names, ctx).size,
+        legalCount: countLegalsForRegionalNames(names, ctx),
+      };
+    });
+
+  const managers: OneCTeamMemberRow[] = (ctx.membershipsByTeam.get(team.id) ?? [])
+    .filter((m) => m.role_in_team === "manager")
+    .map((mgr) => {
+      const names = ctx.matchedResponsibleByUserId.get(mgr.id) ?? [];
+      return {
+        userId: mgr.id,
+        fullName: mgr.full_name,
+        phone: mgr.phone,
+        storeCount: storeIdsForResponsibleNames(names, ctx).size,
+        legalCount: countLegalsForResponsibleNames(names, ctx),
+      };
+    });
+
+  return { user: card, rms, managers };
+}
+
+export async function fetchOneCRm(pool: PoolLike, userId: string, q: string, limit: number, offset: number) {
+  const ctx = await loadOneCShowroomContext(pool);
+  const user = ctx.usersById.get(userId);
+  if (!user || user.role_in_team !== "regional_manager") return null;
+
+  const card = await fetchUserCard(pool, userId, "rm");
+  if (!card) return null;
+
+  const team = ctx.teams.find((t) => t.id === user.team_id);
+  const managers: OneCTeamMemberRow[] = (ctx.membershipsByTeam.get(user.team_id) ?? [])
+    .filter((m) => m.role_in_team === "manager")
+    .map((mgr) => {
+      const names = ctx.matchedResponsibleByUserId.get(mgr.id) ?? [];
+      return {
+        userId: mgr.id,
+        fullName: mgr.full_name,
+        phone: mgr.phone,
+        storeCount: storeIdsForResponsibleNames(names, ctx).size,
+        legalCount: countLegalsForResponsibleNames(names, ctx),
+      };
+    });
+
+  const names = ctx.matchedRegionalByUserId.get(userId) ?? [];
+  const stores = await queryRmStores(pool, names, q, limit, offset, ctx);
+  return { user: card, teamName: team?.name ?? null, ropName: card.ropName, managers, ...stores };
+}
 
 export type OneCManagerStoreRow = {
   id_1c: string;
   address: string | null;
-  legal_name: string | null;
-  legal_inn: string | null;
+  store_name: string;
+  legal_short: string | null;
+  inn: string | null;
+  kpp: string | null;
   legal_city: string | null;
 };
 
-export async function fetchOneCManager(pool: PoolLike, id1c: string, q: string) {
-  const userRes = await pool.query<OneCManagerDetail>(
-    `SELECT u.id_1c, u.name, u.phone,
-            (SELECT COUNT(*)::int FROM exchange_stores_raw s WHERE s.manager_1c = u.id_1c) AS store_count
-     FROM exchange_users_raw u WHERE u.id_1c = $1 LIMIT 1`,
-    [id1c],
-  );
-  const user = userRes.rows[0];
-  if (!user) return null;
+export async function fetchOneCManager(pool: PoolLike, userId: string, q: string, limit: number, offset: number) {
+  const ctx = await loadOneCShowroomContext(pool);
+  const user = ctx.usersById.get(userId);
+  if (!user || user.role_in_team !== "manager") return null;
 
+  const card = await fetchUserCard(pool, userId, "manager");
+  if (!card) return null;
+
+  const names = ctx.matchedResponsibleByUserId.get(userId) ?? [];
+  const stores = await queryManagerStores(pool, names, q, limit, offset);
+  return { user: card, ...stores };
+}
+
+async function queryManagerStores(
+  pool: PoolLike,
+  matchedNames: string[],
+  q: string,
+  limit: number,
+  offset: number,
+) {
+  if (matchedNames.length === 0) {
+    return { total: 0, items: [] as OneCManagerStoreRow[] };
+  }
   const pattern = q ? `%${q}%` : null;
-  const storesRes = await pool.query<OneCManagerStoreRow>(
-    `SELECT s.id_1c, s.address, l.name AS legal_name, l.inn AS legal_inn, l.city AS legal_city
-     FROM exchange_stores_raw s
-     LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
-     WHERE s.manager_1c = $1
-       AND (
-         $2::text IS NULL
-         OR s.address ILIKE $2
-         OR l.name ILIKE $2
-         OR l.legal_name ILIKE $2
-       )
-     ORDER BY s.address ASC NULLS LAST`,
-    [id1c, pattern],
+  const where = `WHERE l.responsible_manager_name = ANY($1::text[])
+    AND (
+      $2::text IS NULL
+      OR s.address ILIKE $2
+      OR l.name ILIKE $2
+      OR l.legal_name ILIKE $2
+      OR l.inn ILIKE $2
+    )`;
+  const countRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     ${where}`,
+    [matchedNames, pattern],
   );
-  return { user, stores: storesRes.rows };
+  const rows = await pool.query<OneCManagerStoreRow>(
+    `SELECT s.id_1c::text, s.address, s.name AS store_name,
+            l.name AS legal_short, l.inn, l.kpp, l.city AS legal_city
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     ${where}
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT $3 OFFSET $4`,
+    [matchedNames, pattern, limit, offset],
+  );
+  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
+}
+
+async function queryRmStores(
+  pool: PoolLike,
+  matchedNames: string[],
+  q: string,
+  limit: number,
+  offset: number,
+  _ctx: OneCShowroomContext,
+) {
+  if (matchedNames.length === 0) {
+    return { total: 0, items: [] as OneCManagerStoreRow[] };
+  }
+  const pattern = q ? `%${q}%` : null;
+  const where = `WHERE l.regional_manager_name = ANY($1::text[])
+    AND (
+      $2::text IS NULL
+      OR s.address ILIKE $2
+      OR l.name ILIKE $2
+      OR l.inn ILIKE $2
+      OR l.responsible_manager_name ILIKE $2
+    )`;
+  const countRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     ${where}`,
+    [matchedNames, pattern],
+  );
+  const rows = await pool.query<OneCManagerStoreRow & { resp: string | null }>(
+    `SELECT s.id_1c::text, s.address, s.name AS store_name,
+            l.name AS legal_short, l.inn, l.kpp, l.city AS legal_city,
+            l.responsible_manager_name AS resp
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     ${where}
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT $3 OFFSET $4`,
+    [matchedNames, pattern, limit, offset],
+  );
+  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
 }
 
 export type OneCStoreListItem = {
@@ -132,8 +328,27 @@ export type OneCStoreListItem = {
   legal_city: string | null;
 };
 
-export async function fetchOneCStores(pool: PoolLike, q: string, limit: number, offset: number) {
+export async function fetchOneCStores(
+  pool: PoolLike,
+  q: string,
+  limit: number,
+  offset: number,
+  onlyActive: boolean,
+) {
+  const ctx = await loadOneCShowroomContext(pool);
   const pattern = q ? `%${q}%` : null;
+
+  const activeClause = onlyActive
+    ? `AND (
+         l.responsible_manager_name = ANY($2::text[])
+         OR l.regional_manager_name = ANY($3::text[])
+       )`
+    : "";
+
+  const params: unknown[] = onlyActive
+    ? [pattern, ctx.activeManagerMatchedNames, ctx.activeRmMatchedNames]
+    : [pattern];
+
   const where = `WHERE (
     $1::text IS NULL
     OR s.address ILIKE $1
@@ -141,22 +356,25 @@ export async function fetchOneCStores(pool: PoolLike, q: string, limit: number, 
     OR l.name ILIKE $1
     OR l.legal_name ILIKE $1
     OR l.inn ILIKE $1
-  )`;
+  ) ${activeClause}`;
+
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n
      FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
      ${where}`,
-    [pattern],
+    params,
   );
+  const limitIdx = onlyActive ? 4 : 2;
+  const offsetIdx = onlyActive ? 5 : 3;
   const rows = await pool.query<OneCStoreListItem>(
-    `SELECT s.id_1c, s.address, s.manager_name, l.name AS legal_name, l.inn AS legal_inn, l.city AS legal_city
+    `SELECT s.id_1c::text, s.address, s.manager_name, l.name AS legal_name, l.inn AS legal_inn, l.city AS legal_city
      FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
      ${where}
      ORDER BY s.address ASC NULLS LAST
-     LIMIT $2 OFFSET $3`,
-    [pattern, limit, offset],
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    [...params, limit, offset],
   );
   return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
 }
@@ -194,14 +412,17 @@ export type OneCStoreDetail = {
   legal_parent_1c: string | null;
   legal_parent_name: string | null;
   legal_parent_inn: string | null;
+  responsible_manager_user_id: string | null;
+  regional_manager_user_id: string | null;
 };
 
 export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneCStoreDetail | null> {
-  const res = await pool.query<OneCStoreDetail>(
+  const ctx = await loadOneCShowroomContext(pool);
+  const res = await pool.query<Omit<OneCStoreDetail, "responsible_manager_user_id" | "regional_manager_user_id">>(
     `SELECT
-       s.id_1c, s.address, s.name, s.status, s.imported_at,
-       s.manager_1c, s.manager_name, s.manager_phone,
-       s.legal_entity_1c,
+       s.id_1c::text, s.address, s.name, s.status, s.imported_at,
+       s.manager_1c::text, s.manager_name, s.manager_phone,
+       s.legal_entity_1c::text,
        l.name AS legal_name,
        l.legal_name AS legal_legal_name,
        l.inn AS legal_inn,
@@ -222,7 +443,7 @@ export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneC
        l.ma_number AS legal_ma_number,
        l.plan_sum AS legal_plan_sum,
        l.plan_retro_bonus AS legal_plan_retro_bonus,
-       l.parent_1c AS legal_parent_1c,
+       l.parent_1c::text AS legal_parent_1c,
        p.name AS legal_parent_name,
        p.inn AS legal_parent_inn
      FROM exchange_stores_raw s
@@ -232,7 +453,17 @@ export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneC
      LIMIT 1`,
     [id1c],
   );
-  return res.rows[0] ?? null;
+  const row = res.rows[0];
+  if (!row) return null;
+
+  const responsible_manager_user_id = row.legal_responsible_manager_name
+    ? (ctx.userIdByResponsibleName.get(row.legal_responsible_manager_name) ?? null)
+    : null;
+  const regional_manager_user_id = row.legal_regional_manager_name
+    ? (ctx.userIdByRegionalName.get(row.legal_regional_manager_name) ?? null)
+    : null;
+
+  return { ...row, responsible_manager_user_id, regional_manager_user_id };
 }
 
 export type OneCLegalListItem = {
@@ -246,21 +477,41 @@ export type OneCLegalListItem = {
   plan_sum: number | null;
 };
 
-export async function fetchOneCLegals(pool: PoolLike, q: string, limit: number, offset: number) {
+export async function fetchOneCLegals(
+  pool: PoolLike,
+  q: string,
+  limit: number,
+  offset: number,
+  onlyActive: boolean,
+) {
+  const ctx = await loadOneCShowroomContext(pool);
   const pattern = q ? `%${q}%` : null;
-  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1)`;
+  const activeClause = onlyActive
+    ? `AND (
+         l.responsible_manager_name = ANY($2::text[])
+         OR l.regional_manager_name = ANY($3::text[])
+       )`
+    : "";
+  const params: unknown[] = onlyActive
+    ? [pattern, ctx.activeManagerMatchedNames, ctx.activeRmMatchedNames]
+    : [pattern];
+  const limitIdx = onlyActive ? 4 : 2;
+  const offsetIdx = onlyActive ? 5 : 3;
+
+  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1) ${activeClause}`;
+
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n FROM exchange_legals_raw l ${where}`,
-    [pattern],
+    params,
   );
   const rows = await pool.query<OneCLegalListItem>(
-    `SELECT l.id_1c, l.name, l.legal_name, l.inn, l.kpp, l.city,
+    `SELECT l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.city,
             l.responsible_manager_name, l.plan_sum
      FROM exchange_legals_raw l
      ${where}
      ORDER BY l.name ASC
-     LIMIT $2 OFFSET $3`,
-    [pattern, limit, offset],
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+    [...params, limit, offset],
   );
   return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
 }
@@ -293,11 +544,8 @@ export type OneCLegalDetail = {
   email: string | null;
   discount_code: string | null;
   discount_percent: number | null;
-  regional_manager_1c: string | null;
   regional_manager_name: string | null;
-  responsible_manager_1c: string | null;
   responsible_manager_name: string | null;
-  furniture_manager_1c: string | null;
   furniture_manager_name: string | null;
   furniture_manager_phone: string | null;
   parent_1c: string | null;
@@ -306,25 +554,21 @@ export type OneCLegalDetail = {
   plan_retro_bonus: string | null;
   plan_sum: number | null;
   imported_at: string;
-  regional_manager_in_users: boolean;
-  responsible_manager_in_users: boolean;
-  furniture_manager_in_users: boolean;
+  responsible_manager_user_id: string | null;
+  regional_manager_user_id: string | null;
 };
 
 export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
+  const ctx = await loadOneCShowroomContext(pool);
   const res = await pool.query<OneCLegalDetail>(
     `SELECT
-       l.id_1c, l.name, l.legal_name, l.inn, l.kpp, l.ogrn, l.ma_number, l.payment_form,
+       l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.ogrn, l.ma_number, l.payment_form,
        l.region, l.city, l.client_type, l.phone, l.email,
        l.discount_code, l.discount_percent,
-       l.regional_manager_1c, l.regional_manager_name,
-       l.responsible_manager_1c, l.responsible_manager_name,
-       l.furniture_manager_1c, l.furniture_manager_name, l.furniture_manager_phone,
-       l.parent_1c, p.name AS parent_name, p.inn AS parent_inn,
-       l.plan_retro_bonus, l.plan_sum, l.imported_at,
-       EXISTS(SELECT 1 FROM exchange_users_raw u WHERE u.id_1c = l.regional_manager_1c) AS regional_manager_in_users,
-       EXISTS(SELECT 1 FROM exchange_users_raw u WHERE u.id_1c = l.responsible_manager_1c) AS responsible_manager_in_users,
-       EXISTS(SELECT 1 FROM exchange_users_raw u WHERE u.id_1c = l.furniture_manager_1c) AS furniture_manager_in_users
+       l.regional_manager_name, l.responsible_manager_name,
+       l.furniture_manager_name, l.furniture_manager_phone,
+       l.parent_1c::text, p.name AS parent_name, p.inn AS parent_inn,
+       l.plan_retro_bonus, l.plan_sum, l.imported_at
      FROM exchange_legals_raw l
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
      WHERE l.id_1c = $1
@@ -334,12 +578,19 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
   const legal = res.rows[0];
   if (!legal) return null;
 
+  legal.responsible_manager_user_id = legal.responsible_manager_name
+    ? (ctx.userIdByResponsibleName.get(legal.responsible_manager_name) ?? null)
+    : null;
+  legal.regional_manager_user_id = legal.regional_manager_name
+    ? (ctx.userIdByRegionalName.get(legal.regional_manager_name) ?? null)
+    : null;
+
   const childrenRes = await pool.query<OneCLegalChild>(
-    `SELECT id_1c, name, inn FROM exchange_legals_raw WHERE parent_1c = $1 ORDER BY name ASC LIMIT 200`,
+    `SELECT id_1c::text, name, inn FROM exchange_legals_raw WHERE parent_1c = $1 ORDER BY name ASC LIMIT 200`,
     [id1c],
   );
   const storesRes = await pool.query<OneCLegalStoreRow>(
-    `SELECT id_1c, address, manager_name FROM exchange_stores_raw
+    `SELECT id_1c::text, address, manager_name FROM exchange_stores_raw
      WHERE legal_entity_1c = $1 ORDER BY address ASC NULLS LAST LIMIT 500`,
     [id1c],
   );
@@ -351,29 +602,59 @@ export async function handleOneCOverview(_req: VercelRequest, res: VercelRespons
   sendJson(res, 200, { success: true, ...data });
 }
 
-export async function handleOneCTeam(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
-  const data = await fetchOneCTeam(pool, parseSearch(req));
+export async function handleOneCHierarchy(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+  const data = await fetchOneCHierarchy(pool, parseSearch(req));
   sendJson(res, 200, { success: true, ...data });
 }
 
-export async function handleOneCManager(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
-  const id1c = String(req.query.id_1c ?? "").trim();
-  if (!id1c) {
-    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
+export async function handleOneCRop(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+  const userId = parseUserId(req);
+  if (!userId) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
-  const data = await fetchOneCManager(pool, id1c, parseSearch(req));
+  const data = await fetchOneCRop(pool, userId);
+  if (!data) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РОП не найден." });
+    return;
+  }
+  sendJson(res, 200, { success: true, ...data });
+}
+
+export async function handleOneCRm(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+  const userId = parseUserId(req);
+  if (!userId) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
+    return;
+  }
+  const { limit, offset } = parseLimitOffset(req);
+  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset);
+  if (!data) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РМ не найден." });
+    return;
+  }
+  sendJson(res, 200, { success: true, limit, offset, ...data });
+}
+
+export async function handleOneCManager(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+  const userId = parseUserId(req);
+  if (!userId) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
+    return;
+  }
+  const { limit, offset } = parseLimitOffset(req);
+  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Менеджер не найден." });
     return;
   }
-  sendJson(res, 200, { success: true, ...data });
+  sendJson(res, 200, { success: true, limit, offset, ...data });
 }
 
 export async function handleOneCStores(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCStores(pool, parseSearch(req), limit, offset);
-  sendJson(res, 200, { success: true, limit, offset, ...data });
+  const data = await fetchOneCStores(pool, parseSearch(req), limit, offset, parseOnlyActive(req));
+  sendJson(res, 200, { success: true, limit, offset, onlyActive: parseOnlyActive(req), ...data });
 }
 
 export async function handleOneCStore(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
@@ -392,8 +673,8 @@ export async function handleOneCStore(req: VercelRequest, res: VercelResponse, p
 
 export async function handleOneCLegals(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCLegals(pool, parseSearch(req), limit, offset);
-  sendJson(res, 200, { success: true, limit, offset, ...data });
+  const data = await fetchOneCLegals(pool, parseSearch(req), limit, offset, parseOnlyActive(req));
+  sendJson(res, 200, { success: true, limit, offset, onlyActive: parseOnlyActive(req), ...data });
 }
 
 export async function handleOneCLegal(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
@@ -410,14 +691,18 @@ export async function handleOneCLegal(req: VercelRequest, res: VercelResponse, p
   sendJson(res, 200, { success: true, ...data });
 }
 
-/** Count stores per manager — used in unit tests. */
-export async function countStoresForManager(
+/** Used in unit tests — manager stores via responsible_manager_name. */
+export async function countStoresForManagerNames(
   pool: PoolLike,
-  managerId: string,
+  matchedNames: string[],
 ): Promise<number> {
+  if (matchedNames.length === 0) return 0;
   const res = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM exchange_stores_raw WHERE manager_1c = $1`,
-    [managerId],
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_legals_raw l
+     JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
+     WHERE l.responsible_manager_name = ANY($1::text[])`,
+    [matchedNames],
   );
   return res.rows[0]?.n ?? 0;
 }

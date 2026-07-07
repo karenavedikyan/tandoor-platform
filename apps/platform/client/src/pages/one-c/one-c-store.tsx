@@ -78,19 +78,6 @@ export default function OneCStorePage() {
         <OneCLoadingBlock />
       ) : store ? (
         <div className="space-y-4">
-          <OneCDetailSection title="Менеджер" testId="section-one-c-store-manager">
-            <OneCFieldRow label="ФИО">
-              {store.manager_1c ? (
-                <Link href={`/1c/manager/${store.manager_1c}`} className="text-primary hover:underline">
-                  {dash(store.manager_name)}
-                </Link>
-              ) : (
-                dash(store.manager_name)
-              )}
-            </OneCFieldRow>
-            <OneCFieldRow label="Телефон">{dash(store.manager_phone)}</OneCFieldRow>
-          </OneCDetailSection>
-
           <OneCDetailSection title="Юрлицо" testId="section-one-c-store-legal">
             <OneCFieldRow label="Краткое имя">
               {store.legal_entity_1c ? (
@@ -120,8 +107,34 @@ export default function OneCStorePage() {
             <OneCFieldRow label="Скидка">
               {formatDiscount(store.legal_discount_code, store.legal_discount_percent)}
             </OneCFieldRow>
-            <OneCFieldRow label="Региональный менеджер">{dash(store.legal_regional_manager_name)}</OneCFieldRow>
-            <OneCFieldRow label="Ответственный менеджер">{dash(store.legal_responsible_manager_name)}</OneCFieldRow>
+            <OneCFieldRow label="Ответственный">
+              {store.responsible_manager_user_id ? (
+                <Link href={`/1c/manager/${store.responsible_manager_user_id}`} className="text-primary hover:underline">
+                  {dash(store.legal_responsible_manager_name)}
+                </Link>
+              ) : store.legal_responsible_manager_name ? (
+                <span>
+                  {store.legal_responsible_manager_name}{" "}
+                  <span className="text-muted-foreground">(нет в ЛК)</span>
+                </span>
+              ) : (
+                "—"
+              )}
+            </OneCFieldRow>
+            <OneCFieldRow label="Региональный">
+              {store.regional_manager_user_id ? (
+                <Link href={`/1c/rm/${store.regional_manager_user_id}`} className="text-primary hover:underline">
+                  {dash(store.legal_regional_manager_name)}
+                </Link>
+              ) : store.legal_regional_manager_name ? (
+                <span>
+                  {store.legal_regional_manager_name}{" "}
+                  <span className="text-muted-foreground">(нет в ЛК)</span>
+                </span>
+              ) : (
+                "—"
+              )}
+            </OneCFieldRow>
             <OneCFieldRow label="Менеджер фурнитуры">
               {store.legal_furniture_manager_name
                 ? `${store.legal_furniture_manager_name}${store.legal_furniture_manager_phone ? ` · ${store.legal_furniture_manager_phone}` : ""}`

@@ -115,6 +115,8 @@ const LazyAdminExchangeStores = lazy(() => import("@/pages/admin-exchange-stores
 const LazyOneCOverview = lazy(() => import("@/pages/one-c/one-c-overview"));
 const LazyOneCTeam = lazy(() => import("@/pages/one-c/one-c-team"));
 const LazyOneCManager = lazy(() => import("@/pages/one-c/one-c-manager"));
+const LazyOneCRop = lazy(() => import("@/pages/one-c/one-c-rop"));
+const LazyOneCRm = lazy(() => import("@/pages/one-c/one-c-rm"));
 const LazyOneCStores = lazy(() => import("@/pages/one-c/one-c-stores"));
 const LazyOneCStore = lazy(() => import("@/pages/one-c/one-c-store"));
 const LazyOneCLegals = lazy(() => import("@/pages/one-c/one-c-legals"));
@@ -235,6 +237,8 @@ const AdminExchangeStoresRoute = wrapProfileShell(suspensePage(LazyAdminExchange
 const OneCOverviewRoute = suspensePage(LazyOneCOverview);
 const OneCTeamRoute = suspensePage(LazyOneCTeam);
 const OneCManagerRoute = suspensePage(LazyOneCManager);
+const OneCRopRoute = suspensePage(LazyOneCRop);
+const OneCRmRoute = suspensePage(LazyOneCRm);
 const OneCStoresRoute = suspensePage(LazyOneCStores);
 const OneCStoreRoute = suspensePage(LazyOneCStore);
 const OneCLegalsRoute = suspensePage(LazyOneCLegals);
@@ -473,6 +477,8 @@ function AuthenticatedShell({
         <Route path="/admin/exchange-explorer" component={AdminExchangeExplorerRoute} />
         <Route path="/admin/exchange-stores" component={AdminExchangeStoresRoute} />
         <Route path="/1c/team" component={OneCTeamRoute} />
+        <Route path="/1c/rop/:id" component={OneCRopRoute} />
+        <Route path="/1c/rm/:id" component={OneCRmRoute} />
         <Route path="/1c/manager/:id" component={OneCManagerRoute} />
         <Route path="/1c/stores" component={OneCStoresRoute} />
         <Route path="/1c/store/:id" component={OneCStoreRoute} />
