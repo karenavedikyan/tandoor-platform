@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Redirect, useRoute } from "wouter";
-import { Copy, Maximize2, User } from "lucide-react";
+import { Copy, User } from "lucide-react";
 import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
@@ -104,7 +104,6 @@ export default function OneCStorePage() {
   const [store, setStore] = useState<Awaited<ReturnType<typeof fetchOneCStore>>["store"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
-  const distributionSectionRef = useRef<HTMLDivElement>(null);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
@@ -191,21 +190,6 @@ export default function OneCStorePage() {
     }
   }
 
-  function openDistributionFullscreen() {
-    const el = distributionSectionRef.current;
-    if (!el) return;
-    const btn = el.querySelector<HTMLButtonElement>(
-      '[data-testid$="open-fullscreen"], [data-testid*="fullscreen-open"], [data-testid="button-enter-distribution"], [aria-label*="полн" i]',
-    );
-    if (btn) {
-      btn.click();
-      return;
-    }
-    // Fallback: если fullscreen-кнопка не найдена, скроллим к секции.
-    // Не форкаем LK-компонент.
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
   if (!storeId) return <Redirect to="/1c/stores" />;
@@ -275,17 +259,6 @@ export default function OneCStorePage() {
                   )}
                 </div>
                 <span className="hidden text-xs text-muted-foreground md:inline">{regionCity}</span>
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  className="shrink-0 gap-1.5"
-                  data-testid="button-one-c-enter-distribution-summary"
-                  onClick={openDistributionFullscreen}
-                >
-                  <Maximize2 className="h-4 w-4" aria-hidden />
-                  Внести дистрибуцию
-                </Button>
               </div>
 
               <span className="w-full text-xs text-muted-foreground md:hidden">{regionCity}</span>
@@ -303,7 +276,6 @@ export default function OneCStorePage() {
           ) : null}
 
           <section
-            ref={distributionSectionRef}
             data-testid="section-one-c-distribution-lk"
             className="mt-4"
           >
@@ -316,7 +288,6 @@ export default function OneCStorePage() {
               hideOpenTasksSection
               hideOpenTradePointCard
               hideDistributionOnPointSection
-              hideEnterDistributionButton
               hidePlacementBlocksSection
               hideCounterpartyStickyHeader
               matrixSectionTitle="Контрагент и витрина"

@@ -341,7 +341,10 @@ export function TradePointShowcaseParamsSection({
           ? "Есть несохранённые изменения"
           : "Нет несохранённых изменений";
 
-  const headerSaveControls = canEdit ? (
+  const showSaveControls =
+    canEdit && (save.isDirty || save.phase === "saving" || save.phase === "success");
+
+  const headerSaveControls = showSaveControls ? (
     <div className="flex flex-col items-end gap-1">
       <SectionSaveButton
         testId="button-showcase-params-save"
