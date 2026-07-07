@@ -7,6 +7,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
+import { fetchWithRetry } from "../../shared/admin/exchange-fetch.js";
 
 const EXCHANGE_BASE = "https://s3.toopatch.ru/images/IMG/exchange";
 
@@ -76,11 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const url = listingUrlForPath(rawPath);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
     let html: string;
     try {
-      const r = await fetch(url, { signal: controller.signal, redirect: "follow" });
+      const r = await fetchWithRetry(url, "text/html,application/xhtml+xml");
       if (!r.ok) {
         sendJson(res, r.status === 404 ? 404 : 502, {
           success: false,
@@ -91,8 +90,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         return;
       }
       html = await r.text();
-    } finally {
-      clearTimeout(timer);
+    } catch (e) {
+      const m = e instanceof Error ? e.message : String(e);
+      sendJson(res, 502, {
+        success: false,
+        code: "UPSTREAM_UNREACHABLE",
+        message: `s3.toopatch.ru недоступен: ${m}`,
+        url,
+      });
+      return;
     }
 
     const baseHref = `/images/IMG/exchange${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
