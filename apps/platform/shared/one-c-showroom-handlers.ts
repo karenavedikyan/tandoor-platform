@@ -343,6 +343,13 @@ export type OneCStoreListItem = {
   legal_name: string | null;
   legal_inn: string | null;
   legal_city: string | null;
+  legal_parent_1c: string | null;
+  legal_parent_name: string | null;
+  legal_client_type: string | null;
+  legal_regional_manager_name: string | null;
+  status: string | null;
+  distribution_filled: number;
+  distribution_total: number;
 };
 
 export async function fetchOneCStores(
@@ -373,27 +380,55 @@ export async function fetchOneCStores(
     OR l.name ILIKE $1
     OR l.legal_name ILIKE $1
     OR l.inn ILIKE $1
+    OR p.name ILIKE $1
   ) ${activeClause}`;
 
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n
      FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
      ${where}`,
     params,
   );
   const limitIdx = onlyActive ? 4 : 2;
   const offsetIdx = onlyActive ? 5 : 3;
-  const rows = await pool.query<OneCStoreListItem>(
-    `SELECT s.id_1c::text, s.address, s.manager_name, l.name AS legal_name, l.inn AS legal_inn, l.city AS legal_city
+  const rows = await pool.query<
+    Omit<OneCStoreListItem, "distribution_filled" | "distribution_total">
+  >(
+    `SELECT
+       s.id_1c::text,
+       s.address,
+       s.manager_name,
+       l.name AS legal_name,
+       l.inn AS legal_inn,
+       l.city AS legal_city,
+       l.parent_1c::text AS legal_parent_1c,
+       p.name AS legal_parent_name,
+       l.client_type AS legal_client_type,
+       l.regional_manager_name AS legal_regional_manager_name,
+       s.status
      FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
      ${where}
      ORDER BY s.address ASC NULLS LAST
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
   );
-  return { total: countRes.rows[0]?.n ?? 0, items: rows.rows };
+  const fillByStore = await fetchDistributionFillForStores(
+    pool,
+    rows.rows.map((r) => r.id_1c),
+  );
+  const items: OneCStoreListItem[] = rows.rows.map((r) => {
+    const f = fillByStore.get(r.id_1c) ?? { filled: 0, total: 0 };
+    return {
+      ...r,
+      distribution_filled: f.filled,
+      distribution_total: f.total,
+    };
+  });
+  return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
 export type OneCStoreDetail = {

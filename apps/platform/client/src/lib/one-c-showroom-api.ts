@@ -123,6 +123,13 @@ export type OneCStoreListItem = {
   legal_name: string | null;
   legal_inn: string | null;
   legal_city: string | null;
+  legal_parent_1c: string | null;
+  legal_parent_name: string | null;
+  legal_client_type: string | null;
+  legal_regional_manager_name: string | null;
+  status: string | null;
+  distribution_filled: number;
+  distribution_total: number;
 };
 
 export type OneCStoresResponse = {

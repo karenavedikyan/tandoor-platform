@@ -3,6 +3,7 @@ import { Link, Redirect } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCStores } from "@/lib/one-c-showroom-api";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -80,7 +81,7 @@ export default function OneCStoresPage() {
         <OneCSearchInput
           value={searchQ}
           onChange={setSearchQ}
-          placeholder="Адрес, менеджер, юрлицо, ИНН…"
+          placeholder="Адрес, менеджер, юрлицо, ИНН, холдинг…"
           testId="input-one-c-stores-search"
         />
         <OneCOnlyActiveToggle
@@ -94,34 +95,88 @@ export default function OneCStoresPage() {
         <OneCLoadingBlock />
       ) : (
         <>
-          <div className="rounded-md border">
+          <div className="overflow-x-auto rounded-md border">
             <Table data-testid="table-one-c-stores">
               <TableHeader>
                 <TableRow>
                   <TableHead>Адрес</TableHead>
-                  <TableHead>Менеджер</TableHead>
+                  <TableHead>Холдинг</TableHead>
                   <TableHead>Юрлицо</TableHead>
-                  <TableHead>ИНН</TableHead>
+                  <TableHead>Тип клиента</TableHead>
                   <TableHead>Город</TableHead>
+                  <TableHead>РМ</TableHead>
+                  <TableHead>Менеджер (ТТ)</TableHead>
+                  <TableHead>Заполненность</TableHead>
+                  <TableHead>Статус</TableHead>
+                  <TableHead>ИНН</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((row) => (
-                  <TableRow key={row.id_1c} className="cursor-pointer" data-testid={`row-one-c-store-${row.id_1c}`}>
-                    <TableCell>
-                      <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
-                        {dash(row.address)}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{dash(row.manager_name)}</TableCell>
-                    <TableCell>{dash(row.legal_name)}</TableCell>
-                    <TableCell className="font-mono text-xs">{dash(row.legal_inn)}</TableCell>
-                    <TableCell>{dash(row.legal_city)}</TableCell>
-                  </TableRow>
-                ))}
+                {items.map((row) => {
+                  const fillPercent =
+                    row.distribution_total > 0
+                      ? Math.round((row.distribution_filled / row.distribution_total) * 100)
+                      : 0;
+                  return (
+                    <TableRow key={row.id_1c} className="cursor-pointer" data-testid={`row-one-c-store-${row.id_1c}`}>
+                      <TableCell>
+                        <Link href={`/1c/store/${row.id_1c}`} className="text-primary hover:underline">
+                          {dash(row.address)}
+                        </Link>
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[10rem] truncate"
+                        title={row.legal_parent_name ?? undefined}
+                        data-testid={`cell-one-c-store-${row.id_1c}-parent`}
+                      >
+                        {dash(row.legal_parent_name)}
+                      </TableCell>
+                      <TableCell className="max-w-[12rem] truncate">{dash(row.legal_name)}</TableCell>
+                      <TableCell data-testid={`cell-one-c-store-${row.id_1c}-client-type`}>
+                        {row.legal_client_type?.trim() ? (
+                          <Badge variant="outline" className="text-[10px] font-normal">
+                            {row.legal_client_type}
+                          </Badge>
+                        ) : (
+                          dash(row.legal_client_type)
+                        )}
+                      </TableCell>
+                      <TableCell>{dash(row.legal_city)}</TableCell>
+                      <TableCell data-testid={`cell-one-c-store-${row.id_1c}-rm`}>
+                        {dash(row.legal_regional_manager_name)}
+                      </TableCell>
+                      <TableCell>{dash(row.manager_name)}</TableCell>
+                      <TableCell data-testid={`cell-one-c-store-${row.id_1c}-fill`}>
+                        {row.distribution_total > 0 ? (
+                          <div className="flex min-w-[4.5rem] flex-col gap-1">
+                            <span className="text-xs font-medium tabular-nums">
+                              {row.distribution_filled}/{row.distribution_total}
+                            </span>
+                            <div className="h-1 w-16 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{ width: `${fillPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell data-testid={`cell-one-c-store-${row.id_1c}-status`}>
+                        {row.status?.trim() ? (
+                          <Badge variant="outline">{dash(row.status)}</Badge>
+                        ) : (
+                          dash(row.status)
+                        )}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{dash(row.legal_inn)}</TableCell>
+                    </TableRow>
+                  );
+                })}
                 {items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                       Ничего не найдено
                     </TableCell>
                   </TableRow>
