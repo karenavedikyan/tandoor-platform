@@ -112,6 +112,13 @@ const LazyAdminMigrateDealerTp = lazy(() => import("@/pages/admin-migrate-dealer
 const LazyAdminMigrateCatalog1c = lazy(() => import("@/pages/admin-migrate-catalog-1c"));
 const LazyAdminExchangeExplorer = lazy(() => import("@/pages/admin-exchange-explorer"));
 const LazyAdminExchangeStores = lazy(() => import("@/pages/admin-exchange-stores"));
+const LazyOneCOverview = lazy(() => import("@/pages/one-c/one-c-overview"));
+const LazyOneCTeam = lazy(() => import("@/pages/one-c/one-c-team"));
+const LazyOneCManager = lazy(() => import("@/pages/one-c/one-c-manager"));
+const LazyOneCStores = lazy(() => import("@/pages/one-c/one-c-stores"));
+const LazyOneCStore = lazy(() => import("@/pages/one-c/one-c-store"));
+const LazyOneCLegals = lazy(() => import("@/pages/one-c/one-c-legals"));
+const LazyOneCLegal = lazy(() => import("@/pages/one-c/one-c-legal"));
 const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminPerformance = lazy(() => import("@/pages/admin-performance"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
@@ -225,6 +232,13 @@ const AdminMigrateDealerTpRoute = wrapProfileShell(suspensePage(LazyAdminMigrate
 const AdminMigrateCatalog1cRoute = wrapProfileShell(suspensePage(LazyAdminMigrateCatalog1c));
 const AdminExchangeExplorerRoute = wrapProfileShell(suspensePage(LazyAdminExchangeExplorer));
 const AdminExchangeStoresRoute = wrapProfileShell(suspensePage(LazyAdminExchangeStores));
+const OneCOverviewRoute = suspensePage(LazyOneCOverview);
+const OneCTeamRoute = suspensePage(LazyOneCTeam);
+const OneCManagerRoute = suspensePage(LazyOneCManager);
+const OneCStoresRoute = suspensePage(LazyOneCStores);
+const OneCStoreRoute = suspensePage(LazyOneCStore);
+const OneCLegalsRoute = suspensePage(LazyOneCLegals);
+const OneCLegalRoute = suspensePage(LazyOneCLegal);
 const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
 const AdminPerformanceRoute = wrapProfileShell(suspensePage(LazyAdminPerformance));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
@@ -458,6 +472,13 @@ function AuthenticatedShell({
         <Route path="/admin/migrate-catalog-1c" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/exchange-explorer" component={AdminExchangeExplorerRoute} />
         <Route path="/admin/exchange-stores" component={AdminExchangeStoresRoute} />
+        <Route path="/1c/team" component={OneCTeamRoute} />
+        <Route path="/1c/manager/:id" component={OneCManagerRoute} />
+        <Route path="/1c/stores" component={OneCStoresRoute} />
+        <Route path="/1c/store/:id" component={OneCStoreRoute} />
+        <Route path="/1c/legals" component={OneCLegalsRoute} />
+        <Route path="/1c/legal/:id" component={OneCLegalRoute} />
+        <Route path="/1c" component={OneCOverviewRoute} />
         <Route path="/admin/migrate" component={AdminMigrateCatalog1cRoute} />
         <Route path="/admin/sync-health" component={AdminSyncHealthRoute} />
         <Route path="/admin/performance" component={AdminPerformanceRoute} />

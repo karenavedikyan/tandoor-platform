@@ -18,6 +18,7 @@ export type RouteHierarchyLabels = {
   brief?: string;
   admin?: string;
   product?: string;
+  legal?: string;
 };
 
 const ADMIN_LABELS: Record<string, string> = {
@@ -95,6 +96,11 @@ export function parentRouteFor(path: string): string {
   if (/^\/sales-control\/[^/]+$/.test(p) && p !== "/sales-control") return "/sales-control";
 
   if (/^\/admin\//.test(p)) return "/";
+
+  if (/^\/1c\/legal\/[^/]+$/.test(p)) return "/1c/legals";
+  if (/^\/1c\/store\/[^/]+$/.test(p)) return "/1c/stores";
+  if (/^\/1c\/manager\/[^/]+$/.test(p)) return "/1c/team";
+  if (p === "/1c/team" || p === "/1c/stores" || p === "/1c/legals") return "/1c";
 
   if (p === "/profile/change-password") return "/profile";
 
@@ -264,6 +270,40 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
       return finalize(items);
     }
     items[items.length - 1] = crumb("Главная");
+    return items;
+  }
+
+  if (seg[0] === "1c") {
+    items.length = 0;
+    items.push(crumb("Витрина 1С", "/1c"));
+    if (seg[1] === "team") {
+      items.push(crumb("Менеджеры"));
+      return finalize(items);
+    }
+    if (seg[1] === "manager" && seg[2]) {
+      items.push(crumb("Менеджеры", "/1c/team"));
+      items.push(crumb(labels.manager ?? "Менеджер"));
+      return finalize(items);
+    }
+    if (seg[1] === "stores") {
+      items.push(crumb("Торговые точки"));
+      return finalize(items);
+    }
+    if (seg[1] === "store" && seg[2]) {
+      items.push(crumb("Торговые точки", "/1c/stores"));
+      items.push(crumb(labels.tradePoint ?? "Торговая точка"));
+      return finalize(items);
+    }
+    if (seg[1] === "legals") {
+      items.push(crumb("Юрлица"));
+      return finalize(items);
+    }
+    if (seg[1] === "legal" && seg[2]) {
+      items.push(crumb("Юрлица", "/1c/legals"));
+      items.push(crumb(labels.legal ?? "Юрлицо"));
+      return finalize(items);
+    }
+    items[items.length - 1] = crumb("Витрина 1С");
     return items;
   }
 
