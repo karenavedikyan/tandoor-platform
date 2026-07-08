@@ -1,45 +1,9 @@
-import { Readable } from "node:stream";
-import * as ftp from "basic-ftp";
 import type { DistributionExportDto } from "./builder.js";
 
 export const DISTRIBUTION_FTP_DIR = "/s3/IMG/exchange/from_lk";
 export const DISTRIBUTION_LATEST_FILENAME = "distribution_latest.json";
-
-const SNAPSHOT_RE = /^distribution_(\d{4})-(\d{2})-(\d{2})_(\d{2})\.json$/;
+export const DISTRIBUTION_SNAPSHOT_PREFIX = "distribution_";
 const SNAPSHOT_RETENTION_DAYS = 30;
-
-export type DistributionFtpConfig = {
-  host: string;
-  user: string;
-  password: string;
-  secure: boolean;
-};
-
-export function resolveDistributionFtpConfig(): DistributionFtpConfig {
-  const host =
-    process.env.BITRIX_ORDERS_FTP_HOST?.trim() ||
-    process.env.FTP_HOST?.trim() ||
-    "gw.toopatch.ru";
-  const user =
-    process.env.TANDOOR_DISTRIBUTION_FTP_USER?.trim() ||
-    process.env.BITRIX_ORDERS_FTP_USER?.trim() ||
-    process.env.FTP_USER?.trim() ||
-    "";
-  const password =
-    process.env.TANDOOR_DISTRIBUTION_FTP_PASSWORD?.trim() ||
-    process.env.BITRIX_ORDERS_FTP_PASSWORD?.trim() ||
-    process.env.FTP_PASSWORD?.trim() ||
-    "";
-  if (!user || !password) {
-    throw new Error("FTP credentials are not configured (FTP_USER / FTP_PASSWORD).");
-  }
-  return {
-    host,
-    user,
-    password,
-    secure: process.env.FTP_SECURE === "1",
-  };
-}
 
 export function distributionSnapshotFilename(now: Date = new Date()): string {
   const y = now.getUTCFullYear();
@@ -49,54 +13,84 @@ export function distributionSnapshotFilename(now: Date = new Date()): string {
   return `distribution_${y}-${m}-${d}_${h}.json`;
 }
 
-function snapshotDateFromName(name: string): Date | null {
-  const m = SNAPSHOT_RE.exec(name);
-  if (!m) return null;
-  const [, y, mo, d, h] = m;
-  return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), 0, 0, 0));
+type ProxyConfig = {
+  baseUrl: string;
+  token: string;
+};
+
+function resolveProxyConfig(): ProxyConfig {
+  const baseUrl = process.env.EXCHANGE_PROXY_URL?.trim() || "";
+  const token =
+    process.env.EXCHANGE_PROXY_TOKEN?.trim() ||
+    process.env.SYNC_RUNNER_TOKEN?.trim() ||
+    "";
+  if (!baseUrl) throw new Error("EXCHANGE_PROXY_URL is not configured.");
+  if (!token) throw new Error("EXCHANGE_PROXY_TOKEN / SYNC_RUNNER_TOKEN is not configured.");
+  return { baseUrl: baseUrl.replace(/\/$/, ""), token };
 }
 
-async function purgeOldSnapshots(client: ftp.Client, now: Date): Promise<number> {
-  const cutoff = now.getTime() - SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-  let removed = 0;
-  const list = await client.list(DISTRIBUTION_FTP_DIR);
-  for (const item of list) {
-    if (item.type !== ftp.FileType.File) continue;
-    const snapAt = snapshotDateFromName(item.name);
-    if (!snapAt || snapAt.getTime() >= cutoff) continue;
-    await client.remove(`${DISTRIBUTION_FTP_DIR}/${item.name}`);
-    removed += 1;
+async function proxyUpload(
+  cfg: ProxyConfig,
+  path: string,
+  contentBase64: string,
+  options: { purgeSnapshotsOlderThanMs?: number; snapshotPrefix?: string } = {},
+): Promise<{ removedSnapshots: number }> {
+  const res = await fetch(`${cfg.baseUrl}/exchange/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.token}`,
+    },
+    body: JSON.stringify({
+      path,
+      contentBase64,
+      purgeSnapshotsOlderThanMs: options.purgeSnapshotsOlderThanMs,
+      snapshotPrefix: options.snapshotPrefix,
+    }),
+  });
+  const text = await res.text();
+  let parsed: { ok?: boolean; code?: string; message?: string; removedSnapshots?: number } | null = null;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    /* ignore */
   }
-  return removed;
+  if (!res.ok || !parsed?.ok) {
+    throw new Error(
+      `Proxy upload failed (${res.status}): ${parsed?.code ?? "?"} ${parsed?.message ?? text.slice(0, 200)}`,
+    );
+  }
+  return { removedSnapshots: Number(parsed.removedSnapshots ?? 0) };
 }
 
 export async function uploadDistributionToFtp(
   data: DistributionExportDto,
   now: Date = new Date(),
-): Promise<{ latestPath: string; snapshotPath: string; sizeBytes: number; removedSnapshots: number }> {
-  const cfg = resolveDistributionFtpConfig();
+): Promise<{
+  latestPath: string;
+  snapshotPath: string;
+  sizeBytes: number;
+  removedSnapshots: number;
+}> {
+  const cfg = resolveProxyConfig();
   const json = `${JSON.stringify(data, null, 2)}\n`;
   const sizeBytes = Buffer.byteLength(json, "utf8");
+  const contentBase64 = Buffer.from(json, "utf8").toString("base64");
+
   const snapshotName = distributionSnapshotFilename(now);
   const latestPath = `${DISTRIBUTION_FTP_DIR}/${DISTRIBUTION_LATEST_FILENAME}`;
   const snapshotPath = `${DISTRIBUTION_FTP_DIR}/${snapshotName}`;
 
-  const client = new ftp.Client(60_000);
-  try {
-    await client.access({
-      host: cfg.host,
-      user: cfg.user,
-      password: cfg.password,
-      secure: cfg.secure,
-    });
-    await client.ensureDir(DISTRIBUTION_FTP_DIR);
-    const body = Readable.from([json]);
-    await client.uploadFrom(body, latestPath);
-    const bodySnapshot = Readable.from([json]);
-    await client.uploadFrom(bodySnapshot, snapshotPath);
-    const removedSnapshots = await purgeOldSnapshots(client, now);
-    return { latestPath, snapshotPath, sizeBytes, removedSnapshots };
-  } finally {
-    client.close();
-  }
+  await proxyUpload(cfg, latestPath, contentBase64);
+  const snap = await proxyUpload(cfg, snapshotPath, contentBase64, {
+    purgeSnapshotsOlderThanMs: SNAPSHOT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    snapshotPrefix: DISTRIBUTION_SNAPSHOT_PREFIX,
+  });
+
+  return {
+    latestPath,
+    snapshotPath,
+    sizeBytes,
+    removedSnapshots: snap.removedSnapshots,
+  };
 }
