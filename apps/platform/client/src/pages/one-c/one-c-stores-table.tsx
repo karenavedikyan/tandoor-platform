@@ -169,6 +169,25 @@ const CELL_RENDERERS: Record<StoreColumnKey, (ctx: CellContext) => ReactNode> = 
     ) : (
       dash(row.status)
     ),
+  orders_1c: ({ row, testIdPrefix }) => {
+    const count = row.orders_count ?? 0;
+    if (count === 0) {
+      return (
+        <span className="text-muted-foreground" data-testid={`cell-${testIdPrefix}-${row.id_1c}-orders`}>
+          —
+        </span>
+      );
+    }
+    return (
+      <Link
+        href={`/1c/store/${row.id_1c}#one-c-store-orders`}
+        className="font-semibold tabular-nums text-primary hover:underline"
+        data-testid={`cell-${testIdPrefix}-${row.id_1c}-orders`}
+      >
+        {count}
+      </Link>
+    );
+  },
 };
 
 const COLUMN_HEAD_CLASS: Partial<Record<StoreColumnKey, string>> = {
@@ -180,6 +199,7 @@ const COLUMN_HEAD_CLASS: Partial<Record<StoreColumnKey, string>> = {
   contact: "w-28",
   manager: "w-24",
   status: "w-20",
+  orders_1c: "w-16 text-right",
 };
 
 const COLUMN_CELL_CLASS: Partial<Record<StoreColumnKey, string>> = {
@@ -198,6 +218,7 @@ const COLUMN_CELL_CLASS: Partial<Record<StoreColumnKey, string>> = {
   rot: "w-14 px-1 text-center",
   fill: "w-[4.5rem]",
   status: "w-20",
+  orders_1c: "w-16 text-right tabular-nums",
 };
 
 const StoreTableRow = memo(function StoreTableRow({

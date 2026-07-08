@@ -3,6 +3,7 @@ import { Link, Redirect, useRoute } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCLegal } from "@/lib/one-c-showroom-api";
+import { fetchBitrixOrdersForLegal } from "@/lib/one-c-bitrix-orders-api";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,6 +30,7 @@ import {
   OneCDetailSection,
   OneCFieldRow,
   OneCLoadingBlock,
+  OneCOrdersHeaderBadge,
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
@@ -78,6 +80,7 @@ export default function OneCLegalPage() {
   const [children, setChildren] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["children"]>([]);
   const [siblings, setSiblings] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["siblings"]>([]);
   const [stores, setStores] = useState<Awaited<ReturnType<typeof fetchOneCLegal>>["stores"]>([]);
+  const [ordersCount, setOrdersCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reqOpen, setReqOpen] = useState(true);
   const { density, setDensity, effectiveDensity } = useOneCListDensity(`legal-${legalId}`, "table");
@@ -118,6 +121,29 @@ export default function OneCLegalPage() {
     };
   }, [canAccess, legalId]);
 
+  useEffect(() => {
+    if (!canAccess || !legalId) return;
+    let cancelled = false;
+    void fetchBitrixOrdersForLegal(legalId, { limit: 1 })
+      .then((res) => {
+        if (cancelled) return;
+        setOrdersCount(res.success ? res.total : 0);
+      })
+      .catch(() => {
+        if (!cancelled) setOrdersCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccess, legalId]);
+
+  useEffect(() => {
+    if (loading || !legal) return;
+    if (window.location.hash === "#one-c-legal-orders") {
+      document.getElementById("one-c-legal-orders")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [loading, legal]);
+
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
   if (!legalId) return <Redirect to="/1c/legals" />;
@@ -153,7 +179,12 @@ export default function OneCLegalPage() {
         ) : undefined
       }
       testId="page-one-c-legal"
-      actions={<OneCRefreshStubButton />}
+      actions={
+        <>
+          <OneCOrdersHeaderBadge count={ordersCount} anchorId="one-c-legal-orders" />
+          <OneCRefreshStubButton />
+        </>
+      }
     >
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
@@ -202,6 +233,10 @@ export default function OneCLegalPage() {
               </CollapsibleContent>
             </CardLikeSection>
           </Collapsible>
+
+          <div id="one-c-legal-orders">
+            <OneCOrdersSection mode="legal" entityId1c={legalId} testIdPrefix="one-c-legal-orders" />
+          </div>
 
           <OneCDetailSection title="Команда" testId="section-one-c-legal-team">
             <OneCFieldRow label="Ответственный менеджер">
@@ -282,8 +317,6 @@ export default function OneCLegalPage() {
               </div>
             )}
           </OneCDetailSection>
-
-          <OneCOrdersSection mode="legal" entityId1c={legalId} testIdPrefix="one-c-legal-orders" />
 
           {legal.parent_1c ? (
             <OneCDetailSection title="Холдинг" testId="section-one-c-legal-holding">

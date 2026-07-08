@@ -13,7 +13,8 @@ export type StoreColumnKey =
   | "city"
   | "rm"
   | "manager"
-  | "status";
+  | "status"
+  | "orders_1c";
 
 export type StoreColumnConfig = {
   key: StoreColumnKey;
@@ -38,6 +39,7 @@ export const STORE_COLUMN_KEYS: StoreColumnKey[] = [
   "rm",
   "manager",
   "status",
+  "orders_1c",
 ];
 
 export const STORE_COLUMN_LABELS: Record<StoreColumnKey, string> = {
@@ -56,6 +58,7 @@ export const STORE_COLUMN_LABELS: Record<StoreColumnKey, string> = {
   rm: "РМ",
   manager: "Менеджер",
   status: "Статус",
+  orders_1c: "Заказы 1С",
 };
 
 export const DEFAULT_STORE_COLUMNS: StoreColumnsState = [
@@ -74,6 +77,7 @@ export const DEFAULT_STORE_COLUMNS: StoreColumnsState = [
   { key: "rm", visible: false },
   { key: "manager", visible: true },
   { key: "status", visible: false },
+  { key: "orders_1c", visible: true },
 ];
 
 export const ONE_C_STORES_COLUMNS_STORAGE_KEY = "oneC.storesColumns.v1";

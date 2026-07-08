@@ -37,6 +37,7 @@ export function OneCLegalsTable({
             <TableHead>ТТ</TableHead>
             <TableHead>Дистрибуция</TableHead>
             <TableHead className="text-right">План</TableHead>
+            <TableHead className="w-16 text-right">Заказы 1С</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -56,11 +57,24 @@ export function OneCLegalsTable({
               <TableCell className="tabular-nums">{row.stores_count}</TableCell>
               <TableCell>{row.has_distribution ? "✓" : ""}</TableCell>
               <TableCell className="text-right tabular-nums">{formatPlanSum(row.plan_sum)}</TableCell>
+              <TableCell className="w-16 text-right tabular-nums">
+                {(row.orders_count ?? 0) === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <Link
+                    href={`/1c/legal/${row.id_1c}#one-c-legal-orders`}
+                    className="font-semibold text-primary hover:underline"
+                    data-testid={`cell-${testIdPrefix}-${row.id_1c}-orders`}
+                  >
+                    {row.orders_count}
+                  </Link>
+                )}
+              </TableCell>
             </TableRow>
           ))}
           {items.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
+              <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">
                 {emptyLabel}
               </TableCell>
             </TableRow>

@@ -60,11 +60,12 @@ export default function OneCOverviewPage() {
         <OneCLoadingBlock />
       ) : data ? (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <OneCStatCard href="/1c/team" label="РОПы" count={data.rops} testId="card-one-c-rops" />
             <OneCStatCard href="/1c/team" label="РМы" count={data.rms} testId="card-one-c-rms" />
             <OneCStatCard href="/1c/team" label="Менеджеры" count={data.managers} testId="card-one-c-managers" />
             <OneCStatCard href="/1c/stores" label="ТТ (активные)" count={data.storesActive} testId="card-one-c-stores" />
+            <OneCStatCard href="/1c/orders" label="Заказы 1С" count={data.ordersTotal} testId="card-one-c-orders" />
           </div>
           <Card>
             <CardContent className="flex flex-wrap gap-4 pt-6 text-sm">
@@ -75,7 +76,7 @@ export default function OneCOverviewPage() {
                 Юрлица →
               </Link>
               <Link href="/1c/orders" className="text-primary hover:underline">
-                Заказы Bitrix →
+                Заказы 1С →
               </Link>
               <Link href="/1c/team" className="text-primary hover:underline">
                 Команда →

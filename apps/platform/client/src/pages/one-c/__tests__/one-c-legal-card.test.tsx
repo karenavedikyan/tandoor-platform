@@ -30,6 +30,7 @@ const row: OneCLegalListItem = {
   responsible_manager_name: "Иванов",
   plan_sum: 1000000,
   stores_count: 3,
+  orders_count: 0,
   has_distribution: true,
 };
 

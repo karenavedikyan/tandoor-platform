@@ -76,11 +76,15 @@ export type OneCOverviewV2 = {
   storesTotal: number;
   legalsActive: number;
   legalsTotal: number;
+  ordersTotal: number;
   last_imported_at: string | null;
 };
 
 export async function fetchOneCOverview(pool: PoolLike): Promise<OneCOverviewV2> {
   const ctx = await loadOneCShowroomContext(pool);
+  const ordersRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM bitrix_orders_snapshot`,
+  );
   return {
     rops: ctx.teams.length,
     rms: countRmsWithMatch(ctx),
@@ -89,6 +93,7 @@ export async function fetchOneCOverview(pool: PoolLike): Promise<OneCOverviewV2>
     storesTotal: ctx.storesTotal,
     legalsActive: countLegalsActive(ctx),
     legalsTotal: ctx.legalsTotal,
+    ordersTotal: ordersRes.rows[0]?.n ?? 0,
     last_imported_at: ctx.last_imported_at,
   };
 }
@@ -252,6 +257,7 @@ export type OneCStoreListItem = {
   legal_phone: string | null;
   legal_email: string | null;
   status: string | null;
+  orders_count: number;
   distribution_filled: number;
   distribution_total: number;
 };
@@ -270,11 +276,17 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
        l.payment_form AS legal_payment_form,
        l.phone AS legal_phone,
        l.email AS legal_email,
-       s.status`;
+       s.status,
+       COALESCE(bos.orders_count, 0)::int AS orders_count`;
 
 const ONE_C_STORE_LIST_JOINS = `FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
-     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c`;
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     LEFT JOIN (
+       SELECT store_uuid, COUNT(*)::int AS orders_count
+       FROM bitrix_orders_snapshot
+       GROUP BY store_uuid
+     ) bos ON bos.store_uuid = s.id_1c`;
 
 const ONE_C_STORE_LIST_SEARCH = `(
       $SEARCH::text IS NULL
@@ -579,6 +591,7 @@ export type OneCLegalListItem = {
   responsible_manager_name: string | null;
   plan_sum: number | null;
   stores_count: number;
+  orders_count: number;
   has_distribution: boolean;
 };
 
@@ -626,14 +639,21 @@ export async function fetchOneCLegals(
             l.parent_1c::text, p.name AS parent_name,
             l.client_type, l.payment_form,
             l.regional_manager_name, l.responsible_manager_name, l.plan_sum,
-            COUNT(s.id_1c)::int AS stores_count
+            COUNT(s.id_1c)::int AS stores_count,
+            COALESCE(bol.orders_count, 0)::int AS orders_count
      FROM exchange_legals_raw l
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
      LEFT JOIN exchange_stores_raw s ON s.legal_entity_1c = l.id_1c
+     LEFT JOIN (
+       SELECT legal_uuid, COUNT(*)::int AS orders_count
+       FROM bitrix_orders_snapshot
+       GROUP BY legal_uuid
+     ) bol ON bol.legal_uuid = l.id_1c
      ${where}
      GROUP BY l.id_1c, l.name, l.legal_name, l.inn, l.kpp, l.city,
               l.parent_1c, p.name, l.client_type, l.payment_form,
-              l.regional_manager_name, l.responsible_manager_name, l.plan_sum
+              l.regional_manager_name, l.responsible_manager_name, l.plan_sum,
+              bol.orders_count
      ORDER BY l.name ASC
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
