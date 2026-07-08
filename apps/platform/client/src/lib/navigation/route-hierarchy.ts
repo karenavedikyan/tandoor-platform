@@ -20,6 +20,7 @@ export type RouteHierarchyLabels = {
   admin?: string;
   product?: string;
   legal?: string;
+  holding?: string;
 };
 
 const ADMIN_LABELS: Record<string, string> = {
@@ -104,6 +105,12 @@ export function parentRouteFor(path: string): string {
   if (/^\/1c\/rm\/[^/]+$/.test(p)) return "/1c/team";
   if (/^\/1c\/rop\/[^/]+$/.test(p)) return "/1c/team";
   if (p === "/1c/team" || p === "/1c/stores" || p === "/1c/legals" || p === "/1c/orders") return "/1c";
+
+  if (/^\/clients-1c\/[^/]+\/tp\/[^/]+$/.test(p)) {
+    const m = p.match(/^\/clients-1c\/([^/]+)\/tp\/[^/]+$/);
+    return m ? `/clients-1c/${m[1]}` : "/clients-1c";
+  }
+  if (/^\/clients-1c\/[^/]+$/.test(p)) return "/clients-1c";
 
   if (p === "/profile/change-password") return "/profile";
 
@@ -321,6 +328,22 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
       return finalize(items);
     }
     items[items.length - 1] = crumb("Витрина 1С");
+    return items;
+  }
+
+  if (seg[0] === "clients-1c") {
+    items.length = 0;
+    items.push(crumb("Клиенты/ТТ 1С", "/clients-1c"));
+    if (seg[1] && seg[2] === "tp" && seg[3]) {
+      items.push(crumb(labels.holding ?? "Клиент", `/clients-1c/${seg[1]}`));
+      items.push(crumb(labels.tradePoint ?? "Торговая точка"));
+      return finalize(items);
+    }
+    if (seg[1]) {
+      items.push(crumb(labels.holding ?? "Клиент"));
+      return finalize(items);
+    }
+    items[items.length - 1] = crumb("Клиенты/ТТ 1С");
     return items;
   }
 

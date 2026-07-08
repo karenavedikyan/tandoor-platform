@@ -3,7 +3,12 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPool } from "../../shared/admin/admin-auth.js";
+import {
+  enforceCsrfOrigin,
+  getPool,
+  resolveCurrentUser,
+  vercelHeaders,
+} from "../../shared/admin/admin-auth.js";
 import { refreshClients1cMv } from "../../shared/clients-1c/refresh-mv.js";
 
 export const config = {
@@ -14,7 +19,7 @@ function sendJson(res: VercelResponse, status: number, body: Record<string, unkn
   res.status(status).json(body);
 }
 
-function isRefreshAuthorized(req: VercelRequest): boolean {
+function isCronOrTokenRefreshAuthorized(req: VercelRequest): boolean {
   const expected = process.env.SYNC_RUNNER_TOKEN?.trim();
   if (expected) {
     const auth = req.headers.authorization;
@@ -37,15 +42,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 405, { ok: false, code: "METHOD_NOT_ALLOWED" });
       return;
     }
-    if (!isRefreshAuthorized(req)) {
-      sendJson(res, 401, { ok: false, code: "UNAUTHORIZED" });
-      return;
-    }
-
     const pool = getPool();
     if (!pool) {
       sendJson(res, 503, { ok: false, code: "DB_UNAVAILABLE", message: "База данных недоступна." });
       return;
+    }
+
+    const cronOrToken = isCronOrTokenRefreshAuthorized(req);
+    if (!cronOrToken) {
+      if (!enforceCsrfOrigin(req)) {
+        sendJson(res, 403, { ok: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
+        return;
+      }
+      const me = await resolveCurrentUser(pool, vercelHeaders(req));
+      if (!me) {
+        sendJson(res, 401, { ok: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+        return;
+      }
+      if (me.role !== "admin") {
+        sendJson(res, 403, { ok: false, code: "FORBIDDEN", message: "Только для администратора." });
+        return;
+      }
     }
 
     const result = await refreshClients1cMv(pool);
