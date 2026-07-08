@@ -45,6 +45,7 @@ model CatalogProduct {
   images      CatalogProductImage[]
   stocks      CatalogStock[]
   prices      CatalogPrice[]
+  bitrixOrderItems BitrixOrderItemSnapshot[]
 
   @@map("catalog_products")
 }
@@ -140,4 +141,79 @@ model CatalogSyncLog {
   details      Json?
 
   @@map("catalog_sync_log")
+}
+
+model BitrixOrdersSnapshot {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  bitrixOrderId     String    @unique @map("bitrix_order_id")
+  orderNumber       String    @map("order_number")
+  siteId            String?   @map("site_id")
+  clientUuid        String?   @map("client_uuid")
+  clientNumber1c    String?   @map("client_number_1c")
+  storeUuid         String?   @map("store_uuid") @db.Uuid
+  legalUuid         String?   @map("legal_uuid") @db.Uuid
+  managerUuid       String?   @map("manager_uuid") @db.Uuid
+  status            String
+  deliveryType      String?   @map("delivery_type")
+  deliveryAddress   String?   @map("delivery_address")
+  paymentMethod     String?   @map("payment_method")
+  paymentPercent    Decimal?  @map("payment_percent") @db.Decimal(6, 2)
+  totalWithDiscount Decimal?  @map("total_with_discount") @db.Decimal(14, 2)
+  totalDiscount     Decimal?  @map("total_discount") @db.Decimal(14, 2)
+  createdAtBitrix   DateTime? @map("created_at_bitrix") @db.Timestamptz(6)
+  rawPayload        Json      @map("raw_payload")
+  sourceFile        String?   @map("source_file")
+  importedAt        DateTime  @default(now()) @map("imported_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items             BitrixOrderItemSnapshot[]
+
+  @@index([clientNumber1c], map: "bitrix_orders_snapshot_client_number_1c_idx")
+  @@index([storeUuid], map: "bitrix_orders_snapshot_store_uuid_idx")
+  @@index([legalUuid], map: "bitrix_orders_snapshot_legal_uuid_idx")
+  @@index([managerUuid], map: "bitrix_orders_snapshot_manager_uuid_idx")
+  @@index([status], map: "bitrix_orders_snapshot_status_idx")
+  @@index([createdAtBitrix(sort: Desc)], map: "bitrix_orders_snapshot_created_at_bitrix_idx")
+  @@map("bitrix_orders_snapshot")
+}
+
+model BitrixOrderItemSnapshot {
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId               String             @map("order_id") @db.Uuid
+  lineNo                Int                @map("line_no")
+  productXmlId          String             @map("product_xml_id")
+  productId             String?            @map("product_id") @db.Uuid
+  productName1c         String?            @map("product_name_1c")
+  quantity              Decimal            @db.Decimal(14, 3)
+  discountPerItem       Decimal?           @map("discount_per_item") @db.Decimal(14, 2)
+  priceNoDiscount       Decimal?           @map("price_no_discount") @db.Decimal(14, 2)
+  discountId            String?            @map("discount_id")
+  productId1cInternal   String?            @map("product_id_1c_internal")
+  priceTypeUuid         String?            @map("price_type_uuid")
+  supplyVariant         String?            @map("supply_variant")
+  supplyDate            DateTime?          @map("supply_date") @db.Timestamptz(6)
+  order                 BitrixOrdersSnapshot @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product               CatalogProduct?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId], map: "bitrix_order_items_snapshot_order_id_idx")
+  @@index([productId], map: "bitrix_order_items_snapshot_product_id_idx")
+  @@index([productXmlId], map: "bitrix_order_items_snapshot_product_xml_id_idx")
+  @@map("bitrix_order_items_snapshot")
+}
+
+model BitrixOrdersSyncLog {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  startedAt         DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime? @map("finished_at") @db.Timestamptz(6)
+  source            String
+  sourceFile        String?   @map("source_file")
+  ordersSeen        Int       @default(0) @map("orders_seen")
+  ordersUpserted    Int       @default(0) @map("orders_upserted")
+  ordersMatchedStore Int      @default(0) @map("orders_matched_store")
+  ordersUnmatched   Int       @default(0) @map("orders_unmatched")
+  status            String    @default("ok")
+  message           String?
+  durationMs        Int?      @map("duration_ms")
+
+  @@index([startedAt(sort: Desc)], map: "bitrix_orders_sync_log_started_at_idx")
+  @@map("bitrix_orders_sync_log")
 }
