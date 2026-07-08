@@ -597,12 +597,12 @@ function withOneCShowroomNavItem(
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
   if (!canAccessOneCShowroomForUser(platformUserRole)) return model;
   const leading = model.leadingItems ?? [];
-  const next = [...leading];
+  let next = leading;
   if (!next.some((item) => item.testId === ONE_C_SHOWROOM_NAV_ITEM.testId)) {
-    next.push(ONE_C_SHOWROOM_NAV_ITEM);
+    next = [ONE_C_SHOWROOM_NAV_ITEM, ...next];
   }
   if (!next.some((item) => item.testId === ONE_C_ORDERS_NAV_ITEM.testId)) {
-    next.push(ONE_C_ORDERS_NAV_ITEM);
+    next = [...next, ONE_C_ORDERS_NAV_ITEM];
   }
   if (next.length === leading.length) return model;
   return { ...model, leadingItems: next };
@@ -716,13 +716,6 @@ export function getPilotNavigation(
     layout: "grouped",
     leadingItems: [
       {
-        href: homeHref,
-        label: "Клиенты / ТТ",
-        testId: "nav-item-clients-tps",
-        navBehaviorId: "nav-dealer-base",
-        ...dealerNavExtras(),
-      },
-      {
         href: "/distribution",
         label: "Дистрибуция",
         testId: "nav-item-distribution",
@@ -782,13 +775,14 @@ export function getPilotNavigation(
     const items: PilotNavItem[] = [];
     const push = (x: PilotNavItem) => items.push(x);
     if (role === "analyst") {
-      push({
-        href: "/dealer-base",
-        label: "Клиенты / ТТ",
-        testId: "nav-clients-tps",
-        navBehaviorId: "nav-dealer-base",
-        ...dealerNavExtras(),
-      });
+      if (canAccessOneCShowroomForUser(platformUserRole)) {
+        push({
+          href: "/1c",
+          label: "1С витрина",
+          testId: "nav-item-one-c-showroom",
+          navBehaviorId: "nav-one-c-showroom",
+        });
+      }
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
       push({ href: "/assignments", label: "Задачи", testId: "nav-item-tasks-inbox", navBehaviorId: "nav-tasks-inbox" });
       push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
