@@ -15,6 +15,8 @@ import {
   canEditDistributionForStore1c,
   type OneCDistributionUser,
 } from "./one-c-distribution-permissions.js";
+import { loadOneCShowroomContext } from "./one-c-showroom-context.js";
+import { isStoreInOneCScope, resolveOneCScope, type OneCViewer } from "./one-c-showroom-scope.js";
 import {
   PLACEMENT_SEGMENTS,
   PLACEMENT_TYPES,
@@ -515,10 +517,30 @@ function toActor(me: { id: string; full_name: string; role: string; status: stri
   return { id: me.id, full_name: me.full_name, role: me.role, status: me.status };
 }
 
-export async function handleOneCStoreHistory(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+async function assertStoreInViewerScope(
+  pool: PoolLike,
+  storeId1c: string,
+  viewer: OneCViewer,
+): Promise<boolean> {
+  if (viewer.role === "admin" || viewer.role === "director") return true;
+  const ctx = await loadOneCShowroomContext(pool);
+  const scope = resolveOneCScope(viewer.role, viewer.id, ctx);
+  return isStoreInOneCScope(pool, storeId1c, scope, ctx);
+}
+
+export async function handleOneCStoreHistory(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer?: OneCViewer,
+) {
   const storeId1c = String(req.query.id_1c ?? "").trim();
   if (!storeId1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
+    return;
+  }
+  if (viewer && !(await assertStoreInViewerScope(pool, storeId1c, viewer))) {
+    sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Торговая точка не найдена." });
     return;
   }
   const limitParam = Number(req.query.limit ?? 50);
@@ -538,6 +560,10 @@ export async function handleOneCStoreMatrixPost(
   const storeId1c = String(req.query.id_1c ?? "").trim();
   if (!storeId1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
+    return;
+  }
+  if (!(await assertStoreInViewerScope(pool, storeId1c, { id: me.id, role: me.role }))) {
+    sendJson(res, 403, { success: false, code: "SCOPE_FORBIDDEN", message: "Торговая точка вне вашего скоупа." });
     return;
   }
   const allowed = await canEditDistributionForStore1c(pool, me.id, storeId1c);
@@ -580,6 +606,10 @@ export async function handleOneCStoreOverridePost(
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
+  if (!(await assertStoreInViewerScope(pool, storeId1c, { id: me.id, role: me.role }))) {
+    sendJson(res, 403, { success: false, code: "SCOPE_FORBIDDEN", message: "Торговая точка вне вашего скоупа." });
+    return;
+  }
   const allowed = await canEditDistributionForStore1c(pool, me.id, storeId1c);
   if (!allowed) {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Нет прав на редактирование." });
@@ -609,6 +639,10 @@ export async function handleOneCStoreOverrideDelete(
   const overrideId = String(req.query.override_id ?? "").trim();
   if (!storeId1c || !overrideId) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c и override_id обязательны." });
+    return;
+  }
+  if (!(await assertStoreInViewerScope(pool, storeId1c, { id: me.id, role: me.role }))) {
+    sendJson(res, 403, { success: false, code: "SCOPE_FORBIDDEN", message: "Торговая точка вне вашего скоупа." });
     return;
   }
   const allowed = await canEditDistributionForStore1c(pool, me.id, storeId1c);

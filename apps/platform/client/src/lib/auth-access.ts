@@ -132,7 +132,13 @@ export function canAccessTeamActivityForUser(role: UserRole | null | undefined):
 /** Read-only витрина shadow-таблиц 1С (/1c/*). */
 export function canAccessOneCShowroomForUser(role: UserRole | null | undefined): boolean {
   if (!role) return false;
-  return role === "admin" || role === "manager";
+  return (
+    role === "admin" ||
+    role === "director" ||
+    role === "rop" ||
+    role === "regional_manager" ||
+    role === "manager"
+  );
 }
 
 export function canAccessPathForUser(role: UserRole, path: string): boolean {

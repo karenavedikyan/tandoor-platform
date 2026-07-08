@@ -24,7 +24,6 @@ import {
   countManagersWithMatch,
   countRmsWithMatch,
   countStoresActive,
-  legalMatchesActiveFilter,
   loadOneCShowroomContext,
   ropCountsFromTeamManagers,
   storeIdsForRegionalNames,
@@ -32,11 +31,30 @@ import {
   teamContextForUser,
   type OneCShowroomContext,
 } from "./one-c-showroom-context.js";
+import {
+  canViewOneCTeamMember,
+  filterHierarchyForViewer,
+  legalIdsForScope,
+  legalMatchesScope,
+  resolveOneCScope,
+  scopeIsUnrestricted,
+  scopeWhereClause,
+  storeIdsForScope,
+  type OneCScope,
+  type OneCViewer,
+} from "./one-c-showroom-scope.js";
 
 export { normalizeName, nameMatches } from "./one-c-name-matching.js";
+export type { OneCViewer } from "./one-c-showroom-scope.js";
 
 export function canAccessOneCShowroom(role: string): boolean {
-  return role === "admin" || role === "manager";
+  return (
+    role === "admin" ||
+    role === "director" ||
+    role === "rop" ||
+    role === "regional_manager" ||
+    role === "manager"
+  );
 }
 
 function parseLimitOffset(req: VercelRequest, defaultLimit = 100, maxLimit = 500) {
@@ -121,27 +139,65 @@ export type OneCOverviewV2 = {
   last_imported_at: string | null;
 };
 
-export async function fetchOneCOverview(pool: PoolLike): Promise<OneCOverviewV2> {
+export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Promise<OneCOverviewV2> {
   const ctx = await loadOneCShowroomContext(pool);
-  const ordersRes = await pool.query<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM bitrix_orders_snapshot`,
+  const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
+
+  if (scopeIsUnrestricted(scope)) {
+    const ordersRes = await pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM bitrix_orders_snapshot`,
+    );
+    return {
+      rops: ctx.teams.length,
+      rms: countRmsWithMatch(ctx),
+      managers: countManagersWithMatch(ctx),
+      storesActive: countStoresActive(ctx),
+      storesTotal: ctx.storesTotal,
+      legalsActive: countLegalsActive(ctx),
+      legalsTotal: ctx.legalsTotal,
+      ordersTotal: ordersRes.rows[0]?.n ?? 0,
+      last_imported_at: ctx.last_imported_at,
+    };
+  }
+
+  const storeIds = storeIdsForScope(scope, ctx);
+  const legalIds = legalIdsForScope(scope, ctx);
+  const hierarchy = filterHierarchyForViewer(
+    buildHierarchy(ctx, ""),
+    viewer!.role,
+    viewer!.id,
+    ctx,
   );
+
+  let ordersTotal = 0;
+  if (storeIds.size > 0) {
+    const ordersRes = await pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM bitrix_orders_snapshot WHERE store_uuid = ANY($1::uuid[])`,
+      [Array.from(storeIds)],
+    );
+    ordersTotal = ordersRes.rows[0]?.n ?? 0;
+  }
+
   return {
-    rops: ctx.teams.length,
-    rms: countRmsWithMatch(ctx),
-    managers: countManagersWithMatch(ctx),
-    storesActive: countStoresActive(ctx),
-    storesTotal: ctx.storesTotal,
-    legalsActive: countLegalsActive(ctx),
-    legalsTotal: ctx.legalsTotal,
-    ordersTotal: ordersRes.rows[0]?.n ?? 0,
+    rops: hierarchy.length,
+    rms: hierarchy.reduce((sum, n) => sum + n.rms.length, 0),
+    managers: hierarchy.reduce((sum, n) => sum + n.managers.length, 0),
+    storesActive: storeIds.size,
+    storesTotal: storeIds.size,
+    legalsActive: legalIds.size,
+    legalsTotal: legalIds.size,
+    ordersTotal,
     last_imported_at: ctx.last_imported_at,
   };
 }
 
-export async function fetchOneCHierarchy(pool: PoolLike, q: string) {
+export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: OneCViewer) {
   const ctx = await loadOneCShowroomContext(pool);
-  return { items: buildHierarchy(ctx, q) };
+  let items = buildHierarchy(ctx, q);
+  if (viewer) {
+    items = filterHierarchyForViewer(items, viewer.role, viewer.id, ctx);
+  }
+  return { items };
 }
 
 export type OneCUserCard = {
@@ -204,8 +260,11 @@ export type OneCTeamMemberRow = {
   legalCount: number;
 };
 
-export async function fetchOneCRop(pool: PoolLike, userId: string) {
+export async function fetchOneCRop(pool: PoolLike, userId: string, viewer?: OneCViewer) {
   const ctx = await loadOneCShowroomContext(pool);
+  if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rop", ctx)) {
+    return null;
+  }
   const user = ctx.usersById.get(userId);
   if (!user) return null;
   const team = ctx.teams.find((t) => t.rop_user_id === userId);
@@ -243,8 +302,18 @@ export async function fetchOneCRop(pool: PoolLike, userId: string) {
   return { user: card, rms, managers };
 }
 
-export async function fetchOneCRm(pool: PoolLike, userId: string, q: string, limit: number, offset: number) {
+export async function fetchOneCRm(
+  pool: PoolLike,
+  userId: string,
+  q: string,
+  limit: number,
+  offset: number,
+  viewer?: OneCViewer,
+) {
   const ctx = await loadOneCShowroomContext(pool);
+  if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rm", ctx)) {
+    return null;
+  }
   const user = ctx.usersById.get(userId);
   if (!user || user.role_in_team !== "regional_manager") return null;
 
@@ -265,21 +334,31 @@ export async function fetchOneCRm(pool: PoolLike, userId: string, q: string, lim
       };
     });
 
-  const names = ctx.matchedRegionalByUserId.get(userId) ?? [];
-  const stores = await queryRmStores(pool, names, q, limit, offset, ctx);
+  const rmScope = resolveOneCScope("regional_manager", userId, ctx);
+  const stores = await queryStoresWithScope(pool, rmScope, q, limit, offset);
   return { user: card, teamName: team?.name ?? null, ropName: card.ropName, managers, ...stores };
 }
 
-export async function fetchOneCManager(pool: PoolLike, userId: string, q: string, limit: number, offset: number) {
+export async function fetchOneCManager(
+  pool: PoolLike,
+  userId: string,
+  q: string,
+  limit: number,
+  offset: number,
+  viewer?: OneCViewer,
+) {
   const ctx = await loadOneCShowroomContext(pool);
+  if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "manager", ctx)) {
+    return null;
+  }
   const user = ctx.usersById.get(userId);
   if (!user || user.role_in_team !== "manager") return null;
 
   const card = await fetchUserCard(pool, userId, "manager");
   if (!card) return null;
 
-  const names = ctx.matchedResponsibleByUserId.get(userId) ?? [];
-  const stores = await queryManagerStores(pool, names, q, limit, offset);
+  const mgrScope = resolveOneCScope("manager", userId, ctx);
+  const stores = await queryStoresWithScope(pool, mgrScope, q, limit, offset);
   return { user: card, ...stores };
 }
 
@@ -357,6 +436,66 @@ async function attachDistributionFill(
       distribution_total: f.total,
     };
   });
+}
+
+async function queryStoresWithScope(
+  pool: PoolLike,
+  scope: OneCScope,
+  q: string,
+  limit: number,
+  offset: number,
+  ordersFilter: OneCStoresOrdersFilter = "any",
+) {
+  if (!scopeIsUnrestricted(scope)) {
+    const respNames = scope.responsibleNames ?? [];
+    const regNames = scope.regionalNames ?? [];
+    if (respNames.length === 0 && regNames.length === 0) {
+      return { total: 0, items: [] as OneCStoreListItem[] };
+    }
+  }
+
+  const pattern = q ? `%${q}%` : null;
+  const ordersClause = buildOrdersFilterClause(ordersFilter);
+  const params: unknown[] = [pattern];
+  let paramIdx = 2;
+
+  const { sql: scopeSql, params: scopeParams } = scopeWhereClause(
+    scope,
+    "l.responsible_manager_name",
+    "l.regional_manager_name",
+    paramIdx,
+  );
+  params.push(...scopeParams);
+  paramIdx += scopeParams.length;
+
+  const where = `WHERE (
+    $1::text IS NULL
+    OR s.address ILIKE $1
+    OR s.manager_name ILIKE $1
+    OR l.name ILIKE $1
+    OR l.legal_name ILIKE $1
+    OR l.inn ILIKE $1
+    OR p.name ILIKE $1
+  )${scopeSql} ${ordersClause}`;
+
+  const countRes = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n
+     FROM exchange_stores_raw s
+     LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+     LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     ${where}`,
+    params,
+  );
+  const rows = await pool.query<OneCStoreListRow>(
+    `${ONE_C_STORE_LIST_SELECT}
+     ${ONE_C_STORE_LIST_JOINS}
+     ${where}
+     ORDER BY s.address ASC NULLS LAST
+     LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+    [...params, limit, offset],
+  );
+  const items = await attachDistributionFill(pool, rows.rows);
+  return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
 async function queryManagerStores(
@@ -447,8 +586,15 @@ export async function fetchOneCStores(
   offset: number,
   onlyActive: boolean,
   ordersFilter: OneCStoresOrdersFilter = "any",
+  viewer?: OneCViewer,
 ) {
   const ctx = await loadOneCShowroomContext(pool);
+  const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
+
+  if (!scopeIsUnrestricted(scope)) {
+    return queryStoresWithScope(pool, scope, q, limit, offset, ordersFilter);
+  }
+
   const pattern = q ? `%${q}%` : null;
   const ordersClause = buildOrdersFilterClause(ordersFilter);
 
@@ -542,7 +688,11 @@ export type OneCStoreDetailWithDistribution = OneCStoreDetail & {
   canEditDistribution: boolean;
 };
 
-export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneCStoreDetail | null> {
+export async function fetchOneCStore(
+  pool: PoolLike,
+  id1c: string,
+  scope?: OneCScope,
+): Promise<OneCStoreDetail | null> {
   const ctx = await loadOneCShowroomContext(pool);
   const res = await pool.query<Omit<OneCStoreDetail, "responsible_manager_user_id" | "regional_manager_user_id">>(
     `SELECT
@@ -582,6 +732,19 @@ export async function fetchOneCStore(pool: PoolLike, id1c: string): Promise<OneC
   const row = res.rows[0];
   if (!row) return null;
 
+  if (
+    scope &&
+    !legalMatchesScope(
+      {
+        regional_manager_name: row.legal_regional_manager_name,
+        responsible_manager_name: row.legal_responsible_manager_name,
+      },
+      scope,
+    )
+  ) {
+    return null;
+  }
+
   const responsible_manager_user_id = row.legal_responsible_manager_name
     ? (ctx.userIdByResponsibleName.get(row.legal_responsible_manager_name) ?? null)
     : null;
@@ -609,8 +772,14 @@ export async function fetchOneCStoreWithDistribution(
   pool: PoolLike,
   id1c: string,
   viewerUserId: string | null,
+  viewerRole?: string,
 ): Promise<OneCStoreDetailWithDistribution | null> {
-  const store = await fetchOneCStore(pool, id1c);
+  let scope: OneCScope | undefined;
+  if (viewerUserId && viewerRole) {
+    const ctx = await loadOneCShowroomContext(pool);
+    scope = resolveOneCScope(viewerRole, viewerUserId, ctx);
+  }
+  const store = await fetchOneCStore(pool, id1c, scope);
   if (!store) return null;
   const [{ matrix, overrides, distributionFill }, historyRes] = await Promise.all([
     fetchStoreDistributionState(pool, id1c),
@@ -655,20 +824,37 @@ export async function fetchOneCLegals(
   offset: number,
   onlyActive: boolean,
   hasDistribution = false,
+  viewer?: OneCViewer,
 ) {
   const ctx = await loadOneCShowroomContext(pool);
+  const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
   const pattern = q ? `%${q}%` : null;
-  const activeClause = onlyActive
-    ? `AND (
-         l.responsible_manager_name = ANY($2::text[])
-         OR l.regional_manager_name = ANY($3::text[])
-       )`
-    : "";
-  const params: unknown[] = onlyActive
-    ? [pattern, ctx.activeManagerMatchedNames, ctx.activeRmMatchedNames]
-    : [pattern];
-  const limitIdx = onlyActive ? 4 : 2;
-  const offsetIdx = onlyActive ? 5 : 3;
+
+  const params: unknown[] = [pattern];
+  let paramIdx = 2;
+  let extraClause = "";
+
+  if (!scopeIsUnrestricted(scope)) {
+    const { sql, params: scopeParams } = scopeWhereClause(
+      scope,
+      "l.responsible_manager_name",
+      "l.regional_manager_name",
+      paramIdx,
+    );
+    extraClause += sql;
+    params.push(...scopeParams);
+    paramIdx += scopeParams.length;
+  } else if (onlyActive) {
+    extraClause += `AND (
+         l.responsible_manager_name = ANY($${paramIdx}::text[])
+         OR l.regional_manager_name = ANY($${paramIdx + 1}::text[])
+       )`;
+    params.push(ctx.activeManagerMatchedNames, ctx.activeRmMatchedNames);
+    paramIdx += 2;
+  }
+
+  const limitIdx = paramIdx;
+  const offsetIdx = paramIdx + 1;
 
   const distClause = hasDistribution
     ? `AND EXISTS (
@@ -678,7 +864,7 @@ export async function fetchOneCLegals(
        )`
     : "";
 
-  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1 OR p.name ILIKE $1) ${activeClause} ${distClause}`;
+  const where = `WHERE ($1::text IS NULL OR l.name ILIKE $1 OR l.legal_name ILIKE $1 OR l.inn ILIKE $1 OR p.name ILIKE $1) ${extraClause} ${distClause}`;
 
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n
@@ -774,8 +960,9 @@ export type OneCLegalSibling = {
   inn: string | null;
 };
 
-export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
+export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneCViewer) {
   const ctx = await loadOneCShowroomContext(pool);
+  const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
   const res = await pool.query<OneCLegalDetail>(
     `SELECT
        l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.ogrn, l.ma_number, l.payment_form,
@@ -793,6 +980,8 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
   );
   const legal = res.rows[0];
   if (!legal) return null;
+
+  if (!legalMatchesScope(legal, scope)) return null;
 
   legal.responsible_manager_user_id = legal.responsible_manager_name
     ? (ctx.userIdByResponsibleName.get(legal.responsible_manager_name) ?? null)
@@ -840,23 +1029,38 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string) {
   return { legal, children: childrenRes.rows, siblings: siblingsRes.rows, stores };
 }
 
-export async function handleOneCOverview(_req: VercelRequest, res: VercelResponse, pool: PoolLike) {
-  const data = await fetchOneCOverview(pool);
+export async function handleOneCOverview(
+  _req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
+  const data = await fetchOneCOverview(pool, viewer);
   sendJson(res, 200, { success: true, ...data });
 }
 
-export async function handleOneCHierarchy(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
-  const data = await fetchOneCHierarchy(pool, parseSearch(req));
+export async function handleOneCHierarchy(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
+  const data = await fetchOneCHierarchy(pool, parseSearch(req), viewer);
   sendJson(res, 200, { success: true, ...data });
 }
 
-export async function handleOneCRop(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCRop(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const userId = parseUserId(req);
   if (!userId) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
-  const data = await fetchOneCRop(pool, userId);
+  const data = await fetchOneCRop(pool, userId, viewer);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РОП не найден." });
     return;
@@ -864,14 +1068,19 @@ export async function handleOneCRop(req: VercelRequest, res: VercelResponse, poo
   sendJson(res, 200, { success: true, ...data });
 }
 
-export async function handleOneCRm(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCRm(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const userId = parseUserId(req);
   if (!userId) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset);
+  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset, viewer);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РМ не найден." });
     return;
@@ -879,14 +1088,19 @@ export async function handleOneCRm(req: VercelRequest, res: VercelResponse, pool
   sendJson(res, 200, { success: true, limit, offset, ...data });
 }
 
-export async function handleOneCManager(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCManager(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const userId = parseUserId(req);
   if (!userId) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset);
+  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset, viewer);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Менеджер не найден." });
     return;
@@ -894,10 +1108,23 @@ export async function handleOneCManager(req: VercelRequest, res: VercelResponse,
   sendJson(res, 200, { success: true, limit, offset, ...data });
 }
 
-export async function handleOneCStores(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCStores(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const { limit, offset } = parseLimitOffset(req);
   const ordersFilter = parseOrdersFilter(req);
-  const data = await fetchOneCStores(pool, parseSearch(req), limit, offset, parseOnlyActive(req), ordersFilter);
+  const data = await fetchOneCStores(
+    pool,
+    parseSearch(req),
+    limit,
+    offset,
+    parseOnlyActive(req),
+    ordersFilter,
+    viewer,
+  );
   sendJson(res, 200, {
     success: true,
     limit,
@@ -912,14 +1139,14 @@ export async function handleOneCStore(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewerUserId?: string | null,
+  viewer: OneCViewer,
 ) {
   const id1c = String(req.query.id_1c ?? "").trim();
   if (!id1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
-  const store = await fetchOneCStoreWithDistribution(pool, id1c, viewerUserId ?? null);
+  const store = await fetchOneCStoreWithDistribution(pool, id1c, viewer.id, viewer.role);
   if (!store) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Торговая точка не найдена." });
     return;
@@ -927,7 +1154,12 @@ export async function handleOneCStore(
   sendJson(res, 200, { success: true, store });
 }
 
-export async function handleOneCLegals(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCLegals(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const { limit, offset } = parseLimitOffset(req);
   const data = await fetchOneCLegals(
     pool,
@@ -936,6 +1168,7 @@ export async function handleOneCLegals(req: VercelRequest, res: VercelResponse, 
     offset,
     parseOnlyActive(req),
     parseHasDistribution(req),
+    viewer,
   );
   sendJson(res, 200, {
     success: true,
@@ -947,13 +1180,18 @@ export async function handleOneCLegals(req: VercelRequest, res: VercelResponse, 
   });
 }
 
-export async function handleOneCLegal(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
+export async function handleOneCLegal(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewer: OneCViewer,
+) {
   const id1c = String(req.query.id_1c ?? "").trim();
   if (!id1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
-  const data = await fetchOneCLegal(pool, id1c);
+  const data = await fetchOneCLegal(pool, id1c, viewer);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Юрлицо не найдено." });
     return;
