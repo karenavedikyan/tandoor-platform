@@ -32,6 +32,7 @@ import {
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
+import { OneCOrdersSection } from "./one-c-orders-section";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
 import { OneCStoresCardsList } from "./one-c-stores-cards";
@@ -281,6 +282,8 @@ export default function OneCLegalPage() {
               </div>
             )}
           </OneCDetailSection>
+
+          <OneCOrdersSection mode="legal" entityId1c={legalId} testIdPrefix="one-c-legal-orders" />
 
           {legal.parent_1c ? (
             <OneCDetailSection title="Холдинг" testId="section-one-c-legal-holding">

@@ -122,6 +122,7 @@ const LazyOneCStore = lazy(() => import("@/pages/one-c/one-c-store"));
 const LazyOneCStoreHistory = lazy(() => import("@/pages/one-c/one-c-store-history"));
 const LazyOneCLegals = lazy(() => import("@/pages/one-c/one-c-legals"));
 const LazyOneCLegal = lazy(() => import("@/pages/one-c/one-c-legal"));
+const LazyOneCOrders = lazy(() => import("@/pages/one-c/one-c-orders"));
 const LazyAdminSyncHealth = lazy(() => import("@/pages/admin-sync-health"));
 const LazyAdminPerformance = lazy(() => import("@/pages/admin-performance"));
 const LazyAdminTpCountDiag = lazy(() => import("@/pages/admin-tp-count-diag"));
@@ -245,6 +246,7 @@ const OneCStoreRoute = suspensePage(LazyOneCStore);
 const OneCStoreHistoryRoute = suspensePage(LazyOneCStoreHistory);
 const OneCLegalsRoute = suspensePage(LazyOneCLegals);
 const OneCLegalRoute = suspensePage(LazyOneCLegal);
+const OneCOrdersRoute = suspensePage(LazyOneCOrders);
 const AdminSyncHealthRoute = wrapProfileShell(suspensePage(LazyAdminSyncHealth));
 const AdminPerformanceRoute = wrapProfileShell(suspensePage(LazyAdminPerformance));
 const AdminTpCountDiagRoute = wrapProfileShell(suspensePage(LazyAdminTpCountDiag));
@@ -486,6 +488,7 @@ function AuthenticatedShell({
         <Route path="/1c/store/:id/history" component={OneCStoreHistoryRoute} />
         <Route path="/1c/store/:id" component={OneCStoreRoute} />
         <Route path="/1c/legals" component={OneCLegalsRoute} />
+        <Route path="/1c/orders" component={OneCOrdersRoute} />
         <Route path="/1c/legal/:id" component={OneCLegalRoute} />
         <Route path="/1c" component={OneCOverviewRoute} />
         <Route path="/admin/migrate" component={AdminMigrateCatalog1cRoute} />
