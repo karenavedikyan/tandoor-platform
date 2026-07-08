@@ -1,0 +1,124 @@
+import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
+import type { DistributionEntryTradePointRow } from "@/lib/distribution-entry-tradepoint-view-model";
+import type { TradePointListRow } from "@/lib/dealer-base-management-view-model";
+import {
+  build1cDealerRow,
+  build1cPoint,
+  type OneCLegalShapeInput,
+} from "@/lib/one-c-dealer-shape";
+import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
+
+function legalFromStoreListItem(item: OneCStoreListItem): OneCLegalShapeInput {
+  const legalId = item.legal_parent_1c ?? item.id_1c;
+  return {
+    id_1c: legalId,
+    name: item.legal_parent_name?.trim() || item.legal_name?.trim() || "Клиент 1С",
+    legal_name: item.legal_name,
+    inn: item.legal_inn,
+    kpp: null,
+    ogrn: null,
+    region: null,
+    city: item.legal_city,
+    client_type: item.legal_client_type,
+    payment_form: item.legal_payment_form,
+    phone: item.legal_phone,
+    email: item.legal_email,
+    discount_code: null,
+    discount_percent: null,
+    responsible_manager_name: item.manager_name,
+    regional_manager_name: item.legal_regional_manager_name,
+    plan_sum: null,
+    plan_retro_bonus: null,
+  };
+}
+
+export function oneCStoreListItemToDealerWithPoint(item: OneCStoreListItem): {
+  dealer: DealerRow & { source1c: true };
+  point: DealerTradePoint;
+} {
+  const legal = legalFromStoreListItem(item);
+  const legalId = legal.id_1c;
+  const dealer = build1cDealerRow(legal);
+  const point = build1cPoint(
+    {
+      id_1c: item.id_1c,
+      address: item.address,
+      name: item.address?.trim() || item.legal_name?.trim() || "ТТ",
+      manager_name: item.manager_name,
+      manager_phone: null,
+      legal_entity_1c: legalId,
+    },
+    legal,
+  );
+  dealer.tradePoints = [point];
+  return { dealer, point };
+}
+
+export function oneCStoreListItemToTradePointListRow(item: OneCStoreListItem): TradePointListRow {
+  const { dealer, point } = oneCStoreListItemToDealerWithPoint(item);
+  return {
+    tpId: item.id_1c,
+    name: point.name,
+    city: item.legal_city?.trim() || point.city || "—",
+    dealerId: dealer.id,
+    dealerName: dealer.name,
+    manager: item.legal_regional_manager_name?.trim() || item.manager_name?.trim() || "—",
+  };
+}
+
+export function buildDistributionEntryTradePointRowFromOneC(
+  item: OneCStoreListItem,
+): DistributionEntryTradePointRow {
+  const { dealer, point } = oneCStoreListItemToDealerWithPoint(item);
+  const total = item.distribution_total > 0 ? item.distribution_total : 0;
+  const filled = item.distribution_filled > 0 ? item.distribution_filled : 0;
+  const coveragePct = total > 0 ? Math.round((filled / total) * 100) : 0;
+  return {
+    dealerId: dealer.id,
+    tradePointId: item.id_1c,
+    tradePointName: point.name,
+    clientName: item.legal_parent_name?.trim() || item.legal_name?.trim() || dealer.name,
+    city: item.legal_city?.trim() || null,
+    clientCategory: dealer.clientCategory,
+    managerName: item.legal_regional_manager_name?.trim() || item.manager_name?.trim() || null,
+    templateModelsCount: total,
+    filledCount: filled,
+    coveragePct,
+    lastUpdatedAt: null,
+    installedOursTotal: filled,
+    installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+  };
+}
+
+export function buildDistributionEntryTradePointRowsFromOneC(
+  items: readonly OneCStoreListItem[],
+  query = "",
+): DistributionEntryTradePointRow[] {
+  const q = query.trim().toLowerCase();
+  const rows = items.map((item) => buildDistributionEntryTradePointRowFromOneC(item));
+  if (!q) return rows.sort((a, b) => a.tradePointName.localeCompare(b.tradePointName, "ru"));
+  return rows
+    .filter((row) => {
+      const hay = [
+        row.tradePointName,
+        row.clientName,
+        row.city ?? "",
+        row.managerName ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    })
+    .sort((a, b) => a.tradePointName.localeCompare(b.tradePointName, "ru"));
+}
+
+export function buildOneCRowRefsMap(
+  items: readonly OneCStoreListItem[],
+): Map<string, { dealer: DealerRow; point: DealerTradePoint }> {
+  const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
+  for (const item of items) {
+    const { dealer, point } = oneCStoreListItemToDealerWithPoint(item);
+    map.set(item.id_1c, { dealer, point });
+  }
+  return map;
+}

@@ -13,6 +13,8 @@ import { DistributionEntryProductPanel } from "@/components/distribution/distrib
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
+import { useOneCScopedStores } from "@/hooks/use-one-c-scoped-stores";
+import { buildDistributionEntryTradePointRowsFromOneC } from "@/lib/one-c-distribution-adapter";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import {
   defaultDistributionEntryTradePointFilterState,
@@ -43,6 +45,12 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
     defaultDistributionEntryTradePointFilterState,
   );
   const scoped = useDistributionScopedDealers(profile);
+  const oneCStores = useOneCScopedStores();
+
+  const oneCEntryRows = useMemo(
+    () => buildDistributionEntryTradePointRowsFromOneC(oneCStores.items),
+    [oneCStores.items],
+  );
 
   useEffect(() => {
     onAxisChange?.(axis !== null);
@@ -135,6 +143,13 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
       {!axis ? (
         <DistributionEntryAxisPicker onSelect={onAxisSelect} />
       ) : axis === "tradePoint" ? (
+        oneCStores.loading ? (
+          <p className="text-sm text-muted-foreground" data-testid="distribution-entry-one-c-loading">
+            Загрузка магазинов 1С…
+          </p>
+        ) : oneCStores.error ? (
+          <p className="text-sm text-destructive">{oneCStores.error}</p>
+        ) : (
         <DistributionEntryTradePointPanel
           profile={profile}
           dealers={filteredDealers}
@@ -142,7 +157,11 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
           filter={ttFilter}
           onFilterChange={setTtFilter}
           hideRegion={filterScope.hideRegion}
+          oneCEntryRows={oneCEntryRows}
+          oneCRowRefs={oneCStores.rowRefs}
+          oneCStoreNavigation
         />
+        )
       ) : axis === "product" ? (
         <DistributionEntryProductPanel profile={profile} dealers={filteredDealers} filter={filter} />
       ) : (
