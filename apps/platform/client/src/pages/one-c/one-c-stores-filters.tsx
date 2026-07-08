@@ -2,6 +2,13 @@ import type { ReactElement, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
 import type { DistributionTradePointMetrics } from "@/lib/distribution-analytics/distribution-analytics-math";
@@ -11,6 +18,7 @@ import {
   hasActiveOneCStoresFilters,
   type MatrixFillFilter,
   type OneCStoresFilterState,
+  type OneCStoresOrdersFilter,
   type SegmentPresenceFilter,
   uniqueStoreFilterOptions,
 } from "./one-c-stores-filter-logic";
@@ -25,6 +33,7 @@ type OneCStoresFiltersProps = {
   hideRm?: boolean;
   serverSideSearch?: boolean;
   disableDistributionFilters?: boolean;
+  showOrdersFilter?: boolean;
   filteredCount: number;
   testIdPrefix?: string;
   headerActions?: ReactNode;
@@ -87,6 +96,7 @@ export function OneCStoresFilters({
   hideRm = false,
   serverSideSearch = false,
   disableDistributionFilters = false,
+  showOrdersFilter = false,
   filteredCount,
   testIdPrefix = "one-c-stores",
   headerActions,
@@ -179,6 +189,29 @@ export function OneCStoresFilters({
           testId={`filter-${testIdPrefix}-status`}
           triggerClassName="h-9 min-h-9 text-xs"
         />
+        {showOrdersFilter ? (
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-[10px] text-muted-foreground">Заказы 1С за</span>
+            <Select
+              value={filters.ordersFilter}
+              onValueChange={(value) => patch({ ordersFilter: value as OneCStoresOrdersFilter })}
+            >
+              <SelectTrigger
+                className="h-9 min-h-9 text-xs"
+                data-testid={`filter-${testIdPrefix}-orders`}
+              >
+                <SelectValue placeholder="Все" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Все</SelectItem>
+                <SelectItem value="30d">Есть за 30 дней</SelectItem>
+                <SelectItem value="90d">Есть за 90 дней</SelectItem>
+                <SelectItem value="none_90d">Нет за 90 дней</SelectItem>
+                <SelectItem value="any_orders">Есть хоть один</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

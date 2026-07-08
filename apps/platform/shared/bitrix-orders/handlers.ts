@@ -637,3 +637,308 @@ export async function handleBitrixOrder(
 
   sendJson(res, 200, { success: true, order });
 }
+
+export type OneCOrdersSummaryDto = {
+  count_30d: number;
+  count_90d: number;
+  total_30d: string;
+  total_90d: string;
+  last_order_at: string | null;
+  last_order_number: string | null;
+};
+
+export type OneCManagerOrdersSummaryDto = OneCOrdersSummaryDto & {
+  active_stores_30d: number;
+  total_stores: number;
+  avg_check_30d: string;
+};
+
+type SummaryRow = OneCOrdersSummaryDto;
+
+const STORE_SUMMARY_SQL = `
+WITH filtered AS (
+  SELECT o.total_with_discount, o.created_at_bitrix, o.order_number
+  FROM bitrix_orders_snapshot o
+  WHERE o.store_uuid = $1::uuid
+    AND o.created_at_bitrix >= NOW() - INTERVAL '90 days'
+),
+last_row AS (
+  SELECT order_number, created_at_bitrix
+  FROM bitrix_orders_snapshot
+  WHERE store_uuid = $1::uuid
+  ORDER BY created_at_bitrix DESC NULLS LAST
+  LIMIT 1
+)
+SELECT
+  (SELECT COUNT(*)::int FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS count_30d,
+  (SELECT COUNT(*)::int FROM filtered) AS count_90d,
+  (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS total_30d,
+  (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered) AS total_90d,
+  (SELECT created_at_bitrix FROM last_row) AS last_order_at,
+  (SELECT order_number FROM last_row) AS last_order_number`;
+
+const LEGAL_SUMMARY_SQL = `
+WITH filtered AS (
+  SELECT o.total_with_discount, o.created_at_bitrix, o.order_number
+  FROM bitrix_orders_snapshot o
+  WHERE (
+    o.legal_uuid = $1::uuid
+    OR o.store_uuid IN (SELECT id_1c FROM exchange_stores_raw WHERE legal_entity_1c = $1::uuid)
+  )
+  AND o.created_at_bitrix >= NOW() - INTERVAL '90 days'
+),
+last_row AS (
+  SELECT order_number, created_at_bitrix
+  FROM bitrix_orders_snapshot
+  WHERE legal_uuid = $1::uuid
+    OR store_uuid IN (SELECT id_1c FROM exchange_stores_raw WHERE legal_entity_1c = $1::uuid)
+  ORDER BY created_at_bitrix DESC NULLS LAST
+  LIMIT 1
+)
+SELECT
+  (SELECT COUNT(*)::int FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS count_30d,
+  (SELECT COUNT(*)::int FROM filtered) AS count_90d,
+  (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS total_30d,
+  (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered) AS total_90d,
+  (SELECT created_at_bitrix FROM last_row) AS last_order_at,
+  (SELECT order_number FROM last_row) AS last_order_number`;
+
+function managerScopeNames(
+  ctx: Awaited<ReturnType<typeof loadOneCShowroomContext>>,
+  targetUserId: string,
+  scope: "manager" | "rm",
+): string[] {
+  if (scope === "manager") {
+    return ctx.matchedResponsibleByUserId.get(targetUserId) ?? [];
+  }
+  return ctx.matchedRegionalByUserId.get(targetUserId) ?? [];
+}
+
+function managerScopeWhereClause(scope: "manager" | "rm"): string {
+  return scope === "manager"
+    ? "l.responsible_manager_name = ANY($1::text[])"
+    : "l.regional_manager_name = ANY($1::text[])";
+}
+
+async function queryManagerScopeSummary(
+  pool: PoolLike,
+  matchedNames: string[],
+  scope: "manager" | "rm",
+): Promise<OneCManagerOrdersSummaryDto> {
+  if (matchedNames.length === 0) {
+    return {
+      count_30d: 0,
+      count_90d: 0,
+      total_30d: "0",
+      total_90d: "0",
+      last_order_at: null,
+      last_order_number: null,
+      active_stores_30d: 0,
+      total_stores: 0,
+      avg_check_30d: "0",
+    };
+  }
+
+  const whereClause = managerScopeWhereClause(scope);
+  const res = await pool.query<{
+    count_30d: number;
+    count_90d: number;
+    total_30d: string;
+    total_90d: string;
+    active_stores_30d: number;
+    total_stores: number;
+  }>(
+    `WITH manager_stores AS (
+       SELECT DISTINCT s.id_1c, s.manager_1c
+       FROM exchange_stores_raw s
+       INNER JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+       WHERE ${whereClause}
+     ),
+     filtered AS (
+       SELECT o.total_with_discount, o.created_at_bitrix, o.store_uuid
+       FROM bitrix_orders_snapshot o
+       WHERE (
+         o.store_uuid IN (SELECT id_1c FROM manager_stores)
+         OR o.manager_uuid IN (SELECT manager_1c FROM manager_stores WHERE manager_1c IS NOT NULL)
+       )
+       AND o.created_at_bitrix >= NOW() - INTERVAL '90 days'
+     )
+     SELECT
+       (SELECT COUNT(*)::int FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS count_30d,
+       (SELECT COUNT(*)::int FROM filtered) AS count_90d,
+       (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered WHERE created_at_bitrix >= NOW() - INTERVAL '30 days') AS total_30d,
+       (SELECT COALESCE(SUM(total_with_discount), 0)::text FROM filtered) AS total_90d,
+       (SELECT COUNT(DISTINCT store_uuid)::int FROM filtered
+        WHERE created_at_bitrix >= NOW() - INTERVAL '30 days' AND store_uuid IS NOT NULL) AS active_stores_30d,
+       (SELECT COUNT(*)::int FROM manager_stores) AS total_stores`,
+    [matchedNames],
+  );
+
+  const row = res.rows[0];
+  const count30d = row?.count_30d ?? 0;
+  const total30d = Number(row?.total_30d ?? 0);
+  const avgCheck =
+    count30d > 0 && Number.isFinite(total30d) ? String(total30d / count30d) : "0";
+
+  return {
+    count_30d: count30d,
+    count_90d: row?.count_90d ?? 0,
+    total_30d: row?.total_30d ?? "0",
+    total_90d: row?.total_90d ?? "0",
+    last_order_at: null,
+    last_order_number: null,
+    active_stores_30d: row?.active_stores_30d ?? 0,
+    total_stores: row?.total_stores ?? 0,
+    avg_check_30d: avgCheck,
+  };
+}
+
+async function canViewLegalSummary(
+  pool: PoolLike,
+  viewerUserId: string,
+  legalId1c: string,
+  viewer: OneCDistributionUser,
+): Promise<boolean> {
+  if (viewer.role === "admin" || viewer.role === "director") return true;
+  const storesRes = await pool.query<{ id_1c: string }>(
+    `SELECT id_1c::text FROM exchange_stores_raw WHERE legal_entity_1c = $1::uuid LIMIT 50`,
+    [legalId1c],
+  );
+  for (const row of storesRes.rows) {
+    if (await canEditDistributionForStore1c(pool, viewerUserId, row.id_1c)) return true;
+  }
+  return false;
+}
+
+async function canViewManagerOrdersSummary(
+  pool: PoolLike,
+  viewer: OneCDistributionUser,
+  targetUserId: string,
+  scope: "manager" | "rm",
+): Promise<boolean> {
+  if (viewer.role === "admin" || viewer.role === "director") return true;
+
+  const ctx = await loadOneCShowroomContext(pool);
+  const targetUser = ctx.usersById.get(targetUserId);
+  if (!targetUser) return false;
+
+  if (scope === "manager") {
+    if (viewer.id === targetUserId) return true;
+    const { rop, rms } = teamContextForUser(targetUserId, ctx);
+    if (rop?.id === viewer.id) return true;
+    if (rms.some((rm) => rm.id === viewer.id)) return true;
+    return false;
+  }
+
+  if (viewer.id === targetUserId && targetUser.role_in_team === "regional_manager") return true;
+  const { rop } = teamContextForUser(targetUserId, ctx);
+  return rop?.id === viewer.id;
+}
+
+export async function handleBitrixOrdersSummaryForStore(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewerUserId: string,
+): Promise<void> {
+  const storeId1c = String(req.query.store_id_1c ?? req.query.storeId1c ?? "").trim();
+  if (!storeId1c) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "store_id_1c обязателен." });
+    return;
+  }
+
+  const viewer = await resolveViewer(pool, viewerUserId);
+  if (!viewer) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Пользователь не найден." });
+    return;
+  }
+
+  const canView = await canEditDistributionForStore1c(pool, viewerUserId, storeId1c);
+  if (!canView && viewer.role !== "admin" && viewer.role !== "director") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Нет доступа к этой торговой точке." });
+    return;
+  }
+
+  const summaryRes = await pool.query<SummaryRow>(STORE_SUMMARY_SQL, [storeId1c]);
+  const summary = summaryRes.rows[0] ?? {
+    count_30d: 0,
+    count_90d: 0,
+    total_30d: "0",
+    total_90d: "0",
+    last_order_at: null,
+    last_order_number: null,
+  };
+
+  sendJson(res, 200, { success: true, summary });
+}
+
+export async function handleBitrixOrdersSummaryForLegal(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewerUserId: string,
+): Promise<void> {
+  const legalId1c = String(req.query.legal_id_1c ?? req.query.legalId1c ?? "").trim();
+  if (!legalId1c) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "legal_id_1c обязателен." });
+    return;
+  }
+
+  const viewer = await resolveViewer(pool, viewerUserId);
+  if (!viewer) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Пользователь не найден." });
+    return;
+  }
+
+  const canView = await canViewLegalSummary(pool, viewerUserId, legalId1c, viewer);
+  if (!canView) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Нет доступа к этому юрлицу." });
+    return;
+  }
+
+  const summaryRes = await pool.query<SummaryRow>(LEGAL_SUMMARY_SQL, [legalId1c]);
+  const summary = summaryRes.rows[0] ?? {
+    count_30d: 0,
+    count_90d: 0,
+    total_30d: "0",
+    total_90d: "0",
+    last_order_at: null,
+    last_order_number: null,
+  };
+
+  sendJson(res, 200, { success: true, summary });
+}
+
+export async function handleBitrixOrdersSummaryForManager(
+  req: VercelRequest,
+  res: VercelResponse,
+  pool: PoolLike,
+  viewerUserId: string,
+): Promise<void> {
+  const managerId = String(req.query.manager_id ?? req.query.managerId ?? "").trim();
+  if (!managerId) {
+    sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "manager_id обязателен." });
+    return;
+  }
+
+  const scopeRaw = String(req.query.scope ?? "manager").trim().toLowerCase();
+  const scope: "manager" | "rm" = scopeRaw === "rm" ? "rm" : "manager";
+
+  const viewer = await resolveViewer(pool, viewerUserId);
+  if (!viewer) {
+    sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Пользователь не найден." });
+    return;
+  }
+
+  const canView = await canViewManagerOrdersSummary(pool, viewer, managerId, scope);
+  if (!canView) {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Нет доступа к сводке заказов." });
+    return;
+  }
+
+  const ctx = await loadOneCShowroomContext(pool);
+  const matchedNames = managerScopeNames(ctx, managerId, scope);
+  const summary = await queryManagerScopeSummary(pool, matchedNames, scope);
+
+  sendJson(res, 200, { success: true, summary });
+}

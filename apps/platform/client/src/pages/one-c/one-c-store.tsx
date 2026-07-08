@@ -20,6 +20,7 @@ import { DistributionCardHeaderBlock } from "@/components/distribution/distribut
 import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { OneCOrdersSection } from "./one-c-orders-section";
+import { OneCOrdersSummary } from "./one-c-orders-summary";
 import {
   CopyField,
   dash,
@@ -294,6 +295,7 @@ export default function OneCStorePage() {
           </div>
 
           <div id="one-c-store-orders">
+            <OneCOrdersSummary mode="store" entityId1c={storeId} />
             <OneCOrdersSection mode="store" entityId1c={storeId} testIdPrefix="one-c-store-orders" />
           </div>
 
