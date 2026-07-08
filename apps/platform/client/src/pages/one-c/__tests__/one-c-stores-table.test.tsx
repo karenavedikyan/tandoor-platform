@@ -37,6 +37,7 @@ const row: OneCStoreListItem = {
   legal_phone: "+7 900 000-00-00",
   legal_email: "shop@example.com",
   status: "active",
+  orders_count: 0,
   distribution_filled: 2,
   distribution_total: 4,
 };

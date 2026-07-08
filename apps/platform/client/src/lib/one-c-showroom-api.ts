@@ -11,6 +11,7 @@ export type OneCOverview = {
   storesTotal: number;
   legalsActive: number;
   legalsTotal: number;
+  ordersTotal: number;
   last_imported_at: string | null;
   message?: string;
 };
@@ -121,6 +122,7 @@ export type OneCStoreListItem = {
   legal_phone: string | null;
   legal_email: string | null;
   status: string | null;
+  orders_count: number;
   distribution_filled: number;
   distribution_total: number;
 };
@@ -245,6 +247,7 @@ export type OneCLegalListItem = {
   responsible_manager_name: string | null;
   plan_sum: number | null;
   stores_count: number;
+  orders_count: number;
   has_distribution: boolean;
 };
 

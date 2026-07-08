@@ -540,14 +540,28 @@ const ONE_C_SHOWROOM_NAV_ITEM: PilotNavItem = {
   navBehaviorId: "nav-one-c-showroom",
 };
 
+const ONE_C_ORDERS_NAV_ITEM: PilotNavItem = {
+  href: "/1c/orders",
+  label: "Заказы 1С",
+  testId: "nav-item-one-c-orders",
+  navBehaviorId: "nav-one-c-orders",
+};
+
 function withOneCShowroomNavItem(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
   if (!canAccessOneCShowroomForUser(platformUserRole)) return model;
   const leading = model.leadingItems ?? [];
-  if (leading.some((item) => item.testId === ONE_C_SHOWROOM_NAV_ITEM.testId)) return model;
-  return { ...model, leadingItems: [...leading, ONE_C_SHOWROOM_NAV_ITEM] };
+  const next = [...leading];
+  if (!next.some((item) => item.testId === ONE_C_SHOWROOM_NAV_ITEM.testId)) {
+    next.push(ONE_C_SHOWROOM_NAV_ITEM);
+  }
+  if (!next.some((item) => item.testId === ONE_C_ORDERS_NAV_ITEM.testId)) {
+    next.push(ONE_C_ORDERS_NAV_ITEM);
+  }
+  if (next.length === leading.length) return model;
+  return { ...model, leadingItems: next };
 }
 
 function withOptionalAdminGroup(

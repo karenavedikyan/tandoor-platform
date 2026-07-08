@@ -23,6 +23,7 @@ function makeItem(overrides: Partial<OneCStoreListItem> = {}): OneCStoreListItem
     legal_phone: null,
     legal_email: null,
     status: "active",
+    orders_count: 0,
     distribution_filled: 2,
     distribution_total: 4,
     ...overrides,

@@ -62,7 +62,7 @@ export function OneCOrdersSection({
   if (!loading && total === 0 && !error) return null;
 
   return (
-    <OneCDetailSection title={`Заказы${total > 0 ? ` (${total})` : ""}`} testId={`${testIdPrefix}-section`}>
+    <OneCDetailSection title={`Заказы 1С${total > 0 ? ` (${total})` : ""}`} testId={`${testIdPrefix}-section`}>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Загрузка заказов…</p> : null}
       {!loading && orders.length > 0 ? (

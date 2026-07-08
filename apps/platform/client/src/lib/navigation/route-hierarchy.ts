@@ -312,7 +312,7 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
       return finalize(items);
     }
     if (seg[1] === "orders") {
-      items.push(crumb("Заказы"));
+      items.push(crumb("Заказы 1С"));
       return finalize(items);
     }
     if (seg[1] === "legal" && seg[2]) {

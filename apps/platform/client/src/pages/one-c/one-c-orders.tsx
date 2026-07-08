@@ -127,7 +127,7 @@ export default function OneCOrdersPage() {
   return (
     <OneCPageShell
       path="/1c/orders"
-      title="Заказы Bitrix"
+      title="Заказы 1С"
       subtitle={`${total.toLocaleString("ru-RU")} заказов из выгрузки orders11.xml`}
       testId="page-one-c-orders"
       actions={<OneCRefreshStubButton />}

@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { Link } from "wouter";
 import { Copy, Loader2, RefreshCw, Search } from "lucide-react";
 import { BackNav } from "@/components/navigation/back-nav";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -90,6 +91,34 @@ export function CopyField({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+export function OneCOrdersHeaderBadge({
+  count,
+  anchorId,
+}: {
+  count: number | null;
+  anchorId: string;
+}): ReactElement | null {
+  if (count === null) return null;
+  if (count > 0) {
+    return (
+      <Badge
+        className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+        onClick={() => {
+          document.getElementById(anchorId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }}
+        data-testid="badge-one-c-orders-count"
+      >
+        Заказы 1С: {count}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-muted-foreground" data-testid="badge-one-c-orders-empty">
+      Без заказов 1С
+    </Badge>
   );
 }
 

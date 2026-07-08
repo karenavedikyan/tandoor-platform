@@ -5,6 +5,7 @@ import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCStore } from "@/lib/one-c-showroom-api";
+import { fetchBitrixOrdersForStore } from "@/lib/one-c-bitrix-orders-api";
 import { build1cDealerRow, build1cPoint } from "@/lib/one-c-dealer-shape";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { buildHashPath } from "@/lib/hash-route-utils";
@@ -26,6 +27,7 @@ import {
   formatPlanSum,
   OneCInfoBlock,
   OneCLoadingBlock,
+  OneCOrdersHeaderBadge,
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
@@ -103,6 +105,7 @@ export default function OneCStorePage() {
   const storeId = params?.id ?? "";
   const [loading, setLoading] = useState(true);
   const [store, setStore] = useState<Awaited<ReturnType<typeof fetchOneCStore>>["store"] | null>(null);
+  const [ordersCount, setOrdersCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [infoExpanded, setInfoExpanded] = useState(false);
 
@@ -138,6 +141,29 @@ export default function OneCStorePage() {
       cancelled = true;
     };
   }, [canAccess, storeId]);
+
+  useEffect(() => {
+    if (!canAccess || !storeId) return;
+    let cancelled = false;
+    void fetchBitrixOrdersForStore(storeId, { limit: 1 })
+      .then((res) => {
+        if (cancelled) return;
+        setOrdersCount(res.success ? res.total : 0);
+      })
+      .catch(() => {
+        if (!cancelled) setOrdersCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canAccess, storeId]);
+
+  useEffect(() => {
+    if (loading || !store) return;
+    if (window.location.hash === "#one-c-store-orders") {
+      document.getElementById("one-c-store-orders")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [loading, store]);
 
   const dealerPoint = useMemo(() => {
     if (!store || !store.legal_entity_1c) return null;
@@ -224,6 +250,7 @@ export default function OneCStorePage() {
       testId="page-one-c-store"
       actions={
         <>
+          <OneCOrdersHeaderBadge count={ordersCount} anchorId="one-c-store-orders" />
           <Button type="button" variant="outline" size="sm" className="gap-2" onClick={() => void copyAddress()}>
             <Copy className="h-4 w-4" />
             Копировать адрес
@@ -264,6 +291,10 @@ export default function OneCStorePage() {
 
               <span className="w-full text-xs text-muted-foreground md:hidden">{regionCity}</span>
             </div>
+          </div>
+
+          <div id="one-c-store-orders">
+            <OneCOrdersSection mode="store" entityId1c={storeId} testIdPrefix="one-c-store-orders" />
           </div>
 
           {dealerPoint ? (
@@ -414,8 +445,6 @@ export default function OneCStorePage() {
               ) : null}
             </div>
           </section>
-
-          <OneCOrdersSection mode="store" entityId1c={storeId} testIdPrefix="one-c-store-orders" />
         </div>
       ) : null}
     </OneCPageShell>
