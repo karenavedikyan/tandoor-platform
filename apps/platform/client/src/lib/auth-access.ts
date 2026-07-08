@@ -141,10 +141,17 @@ export function canAccessOneCShowroomForUser(role: UserRole | null | undefined):
   );
 }
 
+export function canAccessClients1cForUser(role: UserRole | null | undefined): boolean {
+  return role === "admin";
+}
+
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
   if (p === "/1c" || isUnder(p, "/1c")) {
     return canAccessOneCShowroomForUser(role);
+  }
+  if (p === "/clients-1c" || isUnder(p, "/clients-1c")) {
+    return canAccessClients1cForUser(role);
   }
   if (p === "/team-activity") return canAccessTeamActivityForUser(role);
   if (p === "/forgot") return true;
@@ -553,6 +560,23 @@ const ONE_C_ORDERS_NAV_ITEM: PilotNavItem = {
   navBehaviorId: "nav-one-c-orders",
 };
 
+const CLIENTS_1C_NAV_ITEM: PilotNavItem = {
+  href: "/clients-1c",
+  label: "Клиенты/ТТ 1С",
+  testId: "nav-item-clients-1c",
+  navBehaviorId: "nav-clients-1c",
+};
+
+function withClients1cNavItem(
+  platformUserRole: UserRole | null | undefined,
+  model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+): Extract<PilotNavigationModel, { layout: "grouped" }> {
+  if (!canAccessClients1cForUser(platformUserRole)) return model;
+  const leading = model.leadingItems ?? [];
+  if (leading.some((item) => item.testId === CLIENTS_1C_NAV_ITEM.testId)) return model;
+  return { ...model, leadingItems: [...leading, CLIENTS_1C_NAV_ITEM] };
+}
+
 function withOneCShowroomNavItem(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
@@ -586,12 +610,15 @@ function finalizeGroupedPilotNavigation(
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
   adminPurgeQueueCount?: number | null,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
-  return withOneCShowroomNavItem(
+  return withClients1cNavItem(
     platformUserRole,
-    withOptionalAdminGroup(
+    withOneCShowroomNavItem(
       platformUserRole,
-      withAdminBriefMigrateTopShortcut(platformUserRole, role, model),
-      adminPurgeQueueCount,
+      withOptionalAdminGroup(
+        platformUserRole,
+        withAdminBriefMigrateTopShortcut(platformUserRole, role, model),
+        adminPurgeQueueCount,
+      ),
     ),
   );
 }
