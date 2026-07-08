@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "dev": "NODE_ENV=development tsx server/index.ts",
-    "build": "tsx script/build.ts",
+    "build": "prisma generate && tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc && node scripts/check-shadow-write-coverage.mjs && node scripts/check-no-void-overrides-calls.mjs && node scripts/check-strict-coverage.mjs && node scripts/check-ls-storage-owners.mjs && node scripts/check-db-source-invariant.mjs",
     "test": "vitest run",
