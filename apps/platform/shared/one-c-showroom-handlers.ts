@@ -344,6 +344,11 @@ async function queryManagerStores(
      FROM exchange_legals_raw l
      JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     LEFT JOIN (
+       SELECT store_uuid, COUNT(*)::int AS orders_count
+       FROM bitrix_orders_snapshot
+       GROUP BY store_uuid
+     ) bos ON bos.store_uuid = s.id_1c
      ${where}
      ORDER BY s.address ASC NULLS LAST
      LIMIT $3 OFFSET $4`,
@@ -380,6 +385,11 @@ async function queryRmStores(
      FROM exchange_legals_raw l
      JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     LEFT JOIN (
+       SELECT store_uuid, COUNT(*)::int AS orders_count
+       FROM bitrix_orders_snapshot
+       GROUP BY store_uuid
+     ) bos ON bos.store_uuid = s.id_1c
      ${where}
      ORDER BY s.address ASC NULLS LAST
      LIMIT $3 OFFSET $4`,
