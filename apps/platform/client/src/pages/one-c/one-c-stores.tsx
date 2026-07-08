@@ -19,6 +19,8 @@ import { OneCListKpi } from "./one-c-list-kpi";
 import { buildOneCStoresKpi } from "./one-c-list-kpi-data";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
 import { useOneCListDensity } from "./use-one-c-list-density";
+import { useOneCStoresColumns } from "./use-one-c-stores-columns";
+import { OneCStoresColumnPicker } from "./one-c-stores-column-picker";
 
 export default function OneCStoresPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -30,6 +32,7 @@ export default function OneCStoresPage() {
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const { density, setDensity, effectiveDensity } = useOneCListDensity("stores", "grid");
+  const { columns, toggleColumn, reorderColumns, resetColumns } = useOneCStoresColumns();
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
   const nonTableView = effectiveDensity !== "table";
@@ -105,6 +108,17 @@ export default function OneCStoresPage() {
         serverSideSearch
         filteredCount={filtered.length}
         testIdPrefix="one-c-stores"
+        headerActions={
+          effectiveDensity === "table" ? (
+            <OneCStoresColumnPicker
+              columns={columns}
+              onToggleColumn={toggleColumn}
+              onReorderColumns={reorderColumns}
+              onResetColumns={resetColumns}
+              testIdPrefix="one-c-stores"
+            />
+          ) : null
+        }
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {loading ? (
@@ -112,7 +126,7 @@ export default function OneCStoresPage() {
       ) : (
         <>
           {effectiveDensity === "table" ? (
-            <OneCStoresTable items={filtered} act={act} testIdPrefix="one-c-stores" />
+            <OneCStoresTable items={filtered} columns={columns} act={act} testIdPrefix="one-c-stores" />
           ) : (
             <OneCStoresCardsList
               items={filtered}

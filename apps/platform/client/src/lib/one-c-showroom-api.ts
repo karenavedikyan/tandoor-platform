@@ -118,6 +118,8 @@ export type OneCStoreListItem = {
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
   legal_payment_form: string | null;
+  legal_phone: string | null;
+  legal_email: string | null;
   status: string | null;
   distribution_filled: number;
   distribution_total: number;

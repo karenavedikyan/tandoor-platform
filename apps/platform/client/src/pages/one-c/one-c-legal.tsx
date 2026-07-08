@@ -38,6 +38,8 @@ import { OneCStoresCardsList } from "./one-c-stores-cards";
 import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
 import { useOneCListDensity } from "./use-one-c-list-density";
+import { useOneCStoresColumns } from "./use-one-c-stores-columns";
+import { OneCStoresColumnPicker } from "./one-c-stores-column-picker";
 
 function LkPersonLink({
   userId,
@@ -78,6 +80,7 @@ export default function OneCLegalPage() {
   const [error, setError] = useState<string | null>(null);
   const [reqOpen, setReqOpen] = useState(true);
   const { density, setDensity, effectiveDensity } = useOneCListDensity(`legal-${legalId}`, "table");
+  const { columns, toggleColumn, reorderColumns, resetColumns } = useOneCStoresColumns();
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
   const nonTableView = effectiveDensity !== "table";
@@ -246,10 +249,22 @@ export default function OneCLegalPage() {
                   disableDistributionFilters={nonTableView}
                   filteredCount={filtered.length}
                   testIdPrefix="one-c-legal-stores"
+                  headerActions={
+                    effectiveDensity === "table" ? (
+                      <OneCStoresColumnPicker
+                        columns={columns}
+                        onToggleColumn={toggleColumn}
+                        onReorderColumns={reorderColumns}
+                        onResetColumns={resetColumns}
+                        testIdPrefix="one-c-legal-stores"
+                      />
+                    ) : null
+                  }
                 />
                 {effectiveDensity === "table" ? (
                   <OneCStoresTable
                     items={filtered}
+                    columns={columns}
                     act={act}
                     emptyLabel="Торговые точки не найдены"
                     testIdPrefix="one-c-legal-stores"

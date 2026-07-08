@@ -26,6 +26,8 @@ import { OneCStoresCardsList } from "./one-c-stores-cards";
 import { OneCListDensityToggle } from "./one-c-list-density-toggle";
 import { useOneCStoresListView } from "./use-one-c-stores-list";
 import { useOneCListDensity } from "./use-one-c-list-density";
+import { useOneCStoresColumns } from "./use-one-c-stores-columns";
+import { OneCStoresColumnPicker } from "./one-c-stores-column-picker";
 
 export default function OneCRmPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -42,6 +44,7 @@ export default function OneCRmPage() {
   const [error, setError] = useState<string | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const { density, setDensity, effectiveDensity } = useOneCListDensity(`rm-${rmId}`, "grid");
+  const { columns, toggleColumn, reorderColumns, resetColumns } = useOneCStoresColumns();
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
   const nonTableView = effectiveDensity !== "table";
@@ -160,10 +163,22 @@ export default function OneCRmPage() {
               serverSideSearch
               filteredCount={filtered.length}
               testIdPrefix="one-c-rm-stores"
+              headerActions={
+                effectiveDensity === "table" ? (
+                  <OneCStoresColumnPicker
+                    columns={columns}
+                    onToggleColumn={toggleColumn}
+                    onReorderColumns={reorderColumns}
+                    onResetColumns={resetColumns}
+                    testIdPrefix="one-c-rm-stores"
+                  />
+                ) : null
+              }
             />
             {effectiveDensity === "table" ? (
               <OneCStoresTable
                 items={filtered}
+                columns={columns}
                 act={act}
                 emptyLabel="Торговые точки не найдены"
                 testIdPrefix="one-c-rm-stores"

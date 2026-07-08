@@ -249,6 +249,8 @@ export type OneCStoreListItem = {
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
   legal_payment_form: string | null;
+  legal_phone: string | null;
+  legal_email: string | null;
   status: string | null;
   distribution_filled: number;
   distribution_total: number;
@@ -266,6 +268,8 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
        l.client_type AS legal_client_type,
        l.regional_manager_name AS legal_regional_manager_name,
        l.payment_form AS legal_payment_form,
+       l.phone AS legal_phone,
+       l.email AS legal_email,
        s.status`;
 
 const ONE_C_STORE_LIST_JOINS = `FROM exchange_stores_raw s
