@@ -90,6 +90,10 @@ assert.ok(
 );
 assert.equal(adminAdministrationIds?.at(-1), "nav-item-reset-requests", "admin: reset requests last");
 
+const adminLeading = leadingTestIds("sales_director", "admin");
+assert.equal(adminLeading[0], "nav-item-one-c-showroom", "admin: 1C showroom first in leadingItems");
+assert.ok(!adminLeading.includes("nav-item-clients-tps"), "admin: no clients/tps in leadingItems");
+
 for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
   const platformUserRole =
     salesRole === "sales_director" ? "director" : salesRole === "team_lead" ? "rop" : "manager";
