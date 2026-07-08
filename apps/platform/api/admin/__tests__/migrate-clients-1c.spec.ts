@@ -45,9 +45,9 @@ vi.mock("@neondatabase/serverless", () => ({
 
 import handler, {
   CLIENTS_1C_MIGRATION_SQL,
+  CLIENTS_1C_STMTS,
   CLIENTS_1C_EXPECTED_OBJECTS,
   isClients1cNeonApplyOk,
-  isClients1cYandexApplyOk,
 } from "../migrate-clients-1c.js";
 
 type MockRes = {
@@ -74,7 +74,6 @@ describe("migrate-clients-1c", () => {
     mockEnforceCsrfOrigin.mockReturnValue(true);
     mockGetPool.mockReturnValue({});
     mockResolveNeonUrl.mockReturnValue("postgres://test");
-    mockRunOnYandex.mockResolvedValue(neonOk);
     mockPoolQuery.mockImplementation(async (sql: string) => {
       if (sql.includes("to_regclass")) {
         return {
@@ -105,11 +104,13 @@ describe("migrate-clients-1c", () => {
     });
   });
 
-  describe("CLIENTS_1C_MIGRATION_SQL", () => {
-    it("loads foundation migration as single script", () => {
+  describe("CLIENTS_1C_STMTS", () => {
+    it("splits migration into multiple executable statements", () => {
+      expect(CLIENTS_1C_STMTS.length).toBeGreaterThan(5);
+      expect(CLIENTS_1C_STMTS.some((s) => s.includes("CREATE OR REPLACE VIEW v_store_distribution"))).toBe(true);
+      expect(CLIENTS_1C_STMTS.some((s) => s.includes("CREATE MATERIALIZED VIEW mv_stores_1c"))).toBe(true);
+      expect(CLIENTS_1C_STMTS.some((s) => s.includes("refresh_clients_1c_mv"))).toBe(true);
       expect(CLIENTS_1C_MIGRATION_SQL).toContain("mv_clients_1c");
-      expect(CLIENTS_1C_MIGRATION_SQL).toContain("refresh_clients_1c_mv");
-      expect(CLIENTS_1C_MIGRATION_SQL).toContain("v_store_distribution");
     });
   });
 
@@ -136,19 +137,6 @@ describe("migrate-clients-1c", () => {
     });
   });
 
-  describe("isClients1cYandexApplyOk", () => {
-    it("accepts applied with ok statements or skipped", () => {
-      expect(isClients1cYandexApplyOk(neonOk)).toBe(true);
-      expect(isClients1cYandexApplyOk({ skipped: true, reason: "no url" })).toBe(true);
-      expect(
-        isClients1cYandexApplyOk({
-          applied: [{ sql: "x", ok: false, error: "fail" }],
-          tables: [],
-        }),
-      ).toBe(false);
-    });
-  });
-
   describe("POST handler", () => {
     it("rejects unauthenticated requests with 401", async () => {
       mockResolveCurrentUser.mockResolvedValue(null);
@@ -157,6 +145,7 @@ describe("migrate-clients-1c", () => {
       expect(res.statusCode).toBe(401);
       expect(res.body).toMatchObject({ ok: false, code: "UNAUTHENTICATED" });
       expect(mockRunOnNeon).not.toHaveBeenCalled();
+      expect(mockRunOnYandex).not.toHaveBeenCalled();
     });
 
     it("rejects non-admin with 403", async () => {
@@ -166,9 +155,10 @@ describe("migrate-clients-1c", () => {
       expect(res.statusCode).toBe(403);
       expect(res.body).toMatchObject({ ok: false, code: "FORBIDDEN" });
       expect(mockRunOnNeon).not.toHaveBeenCalled();
+      expect(mockRunOnYandex).not.toHaveBeenCalled();
     });
 
-    it("applies migration on Neon and Yandex for admin", async () => {
+    it("applies migration on Neon only for admin", async () => {
       mockResolveCurrentUser.mockResolvedValue({ id: "admin1", role: "admin" });
       mockRunOnNeon.mockResolvedValue(neonOk);
 
@@ -180,6 +170,7 @@ describe("migrate-clients-1c", () => {
         ok: true,
         neon: {
           applied: true,
+          objectsOk: true,
           smoke: {
             stores: 10,
             clients: 5,
@@ -188,19 +179,16 @@ describe("migrate-clients-1c", () => {
             stores_with_orders: 2,
           },
         },
-        yandex: { applied: true },
       });
+      expect(res.body).not.toHaveProperty("yandex");
 
       expect(mockRunOnNeon).toHaveBeenCalledTimes(1);
       const [stmts, tables] = mockRunOnNeon.mock.calls[0] as [string[], string[]];
-      expect(stmts).toHaveLength(1);
-      expect(stmts[0]).toContain("mv_clients_1c");
-      expect(stmts[0]).toBe(CLIENTS_1C_MIGRATION_SQL);
+      expect(stmts).toBe(CLIENTS_1C_STMTS);
+      expect(stmts.length).toBeGreaterThan(5);
       expect(tables).toEqual([]);
 
-      expect(mockRunOnYandex).toHaveBeenCalledTimes(1);
-      const [yStmts] = mockRunOnYandex.mock.calls[0] as [string[]];
-      expect(yStmts[0]).toBe(CLIENTS_1C_MIGRATION_SQL);
+      expect(mockRunOnYandex).not.toHaveBeenCalled();
     });
   });
 });
