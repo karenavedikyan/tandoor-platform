@@ -83,6 +83,10 @@
     {
       "path": "/api/cron/distribution-export",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/admin/refresh-clients-1c-mv",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
