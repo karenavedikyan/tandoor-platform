@@ -567,14 +567,28 @@ const CLIENTS_1C_NAV_ITEM: PilotNavItem = {
   navBehaviorId: "nav-clients-1c",
 };
 
+const CLIENTS_1C_OVERVIEW_NAV_ITEM: PilotNavItem = {
+  href: "/clients-1c/overview",
+  label: "Клиентская база 1С",
+  testId: "nav-item-clients-1c-overview",
+  navBehaviorId: "nav-clients-1c-overview",
+};
+
 function withClients1cNavItem(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
   if (!canAccessClients1cForUser(platformUserRole)) return model;
   const leading = model.leadingItems ?? [];
-  if (leading.some((item) => item.testId === CLIENTS_1C_NAV_ITEM.testId)) return model;
-  return { ...model, leadingItems: [...leading, CLIENTS_1C_NAV_ITEM] };
+  let next = leading;
+  if (!next.some((item) => item.testId === CLIENTS_1C_NAV_ITEM.testId)) {
+    next = [...next, CLIENTS_1C_NAV_ITEM];
+  }
+  if (!next.some((item) => item.testId === CLIENTS_1C_OVERVIEW_NAV_ITEM.testId)) {
+    next = [...next, CLIENTS_1C_OVERVIEW_NAV_ITEM];
+  }
+  if (next.length === leading.length) return model;
+  return { ...model, leadingItems: next };
 }
 
 function withOneCShowroomNavItem(

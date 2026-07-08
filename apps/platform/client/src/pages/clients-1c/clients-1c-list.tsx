@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Redirect } from "wouter";
+import { Link, Redirect } from "wouter";
+import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessClients1cForUser } from "@/lib/auth-access";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import {
   fetchClients1cList,
   type Clients1cListItem,
@@ -104,7 +106,16 @@ export default function Clients1cListPage() {
       title="Клиенты/ТТ 1С"
       subtitle={`${total.toLocaleString("ru-RU")} клиентов${refreshedAt ? ` · обновлено ${refreshedAt}` : ""}`}
       testId="page-clients-1c-list"
-      actions={<Clients1cRefreshButton onRefreshed={() => setReloadKey((k) => k + 1)} />}
+      actions={
+        <>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={buildHashPath("/clients-1c/overview")} data-testid="button-clients-1c-overview">
+              Клиентская база 1С
+            </Link>
+          </Button>
+          <Clients1cRefreshButton onRefreshed={() => setReloadKey((k) => k + 1)} />
+        </>
+      }
     >
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
