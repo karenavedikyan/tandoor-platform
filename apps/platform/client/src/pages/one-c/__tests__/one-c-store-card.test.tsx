@@ -33,6 +33,8 @@ const row: OneCStoreListItem = {
   legal_client_type: "ТОП 350",
   legal_regional_manager_name: "Петров",
   legal_payment_form: "Безналичные",
+  legal_phone: null,
+  legal_email: null,
   status: "active",
   distribution_filled: 0,
   distribution_total: 4,

@@ -20,6 +20,8 @@ function makeItem(overrides: Partial<OneCStoreListItem> = {}): OneCStoreListItem
     legal_client_type: "ТОП 350",
     legal_regional_manager_name: "Петров РМ",
     legal_payment_form: "Безналичные",
+    legal_phone: null,
+    legal_email: null,
     status: "active",
     distribution_filled: 2,
     distribution_total: 4,

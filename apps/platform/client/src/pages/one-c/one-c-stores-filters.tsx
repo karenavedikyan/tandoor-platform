@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MultiSelect } from "@/components/ui/multi-select";
@@ -27,6 +27,7 @@ type OneCStoresFiltersProps = {
   disableDistributionFilters?: boolean;
   filteredCount: number;
   testIdPrefix?: string;
+  headerActions?: ReactNode;
 };
 
 const MATRIX_FILL_OPTIONS: { value: MatrixFillFilter; label: string }[] = [
@@ -88,6 +89,7 @@ export function OneCStoresFilters({
   disableDistributionFilters = false,
   filteredCount,
   testIdPrefix = "one-c-stores",
+  headerActions,
 }: OneCStoresFiltersProps): ReactElement {
   const patch = (partial: Partial<OneCStoresFilterState>) => onFiltersChange({ ...filters, ...partial });
   const holdings = uniqueStoreFilterOptions(items, (i) => i.legal_parent_name);
@@ -107,18 +109,21 @@ export function OneCStoresFilters({
           placeholder="Адрес, менеджер, юрлицо, ИНН, холдинг…"
           testId={`input-${testIdPrefix}-search`}
         />
-        {showReset ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            onClick={() => onFiltersChange(emptyOneCStoresFilters())}
-            data-testid={`${testIdPrefix}-filters-reset`}
-          >
-            Сбросить
-          </Button>
-        ) : null}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {headerActions}
+          {showReset ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
+              onClick={() => onFiltersChange(emptyOneCStoresFilters())}
+              data-testid={`${testIdPrefix}-filters-reset`}
+            >
+              Сбросить
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
