@@ -4,11 +4,15 @@
 
 import type { ClientCategoryId } from "./client-category.js";
 import type { DealerRow, DealerTradePoint } from "./dealer-base-mock-data.js";
-import { getDealerManagerDisplay } from "./dealer-base-mock-data.js";
+import {
+  getDealerManagerDisplay,
+  getDealerRegionalManagerDisplay,
+  getDealerRopDisplay,
+} from "./dealer-base-mock-data.js";
 import { getMergedDealerTradePoints, type DealerTradePointsState } from "./dealer-trade-points-overrides.js";
 import type { ShowcaseMatrixEntryDto } from "./showcase-matrix-api.js";
 import { loadCachedMatrix } from "./showcase-matrix-store.js";
-import { countInstalledOursBySegment } from "./trade-point-showcase-segment-models.js";
+import { countInstalledOursBySegment, countInstalledLegacyOurs } from "./trade-point-showcase-segment-models.js";
 import { resolveTradePointMatrixModels } from "./trade-point-matrix-resolver.js";
 import { resolveTradePointDisplayName } from "./trade-point-display-labels.js";
 
@@ -26,12 +30,19 @@ export type DistributionEntryTradePointRow = {
   city: string | null;
   clientCategory: ClientCategoryId;
   managerName: string | null;
+  regionalManagerName: string | null;
+  responsibleManagerName: string | null;
+  furnitureManagerName: string | null;
+  ropName: string | null;
+  legalInn: string | null;
+  address: string | null;
   templateModelsCount: number;
   filledCount: number;
   coveragePct: number;
   lastUpdatedAt: string | null;
   installedOursTotal: number;
   installedOursBySegment: DistributionEntryInstalledOursBySegment;
+  installedOursRotation: number;
 };
 
 export type BuildDistributionEntryTradePointRowsParams = {
@@ -83,7 +94,24 @@ function maxUpdatedAt(entries: readonly ShowcaseMatrixEntryDto[]): string | null
 }
 
 function rowHaystack(row: DistributionEntryTradePointRow): string {
-  return `${row.tradePointName} ${row.clientName} ${row.city ?? ""}`.toLowerCase();
+  return entryTradePointRowSearchHaystack(row);
+}
+
+export function entryTradePointRowSearchHaystack(row: DistributionEntryTradePointRow): string {
+  return [
+    row.tradePointName,
+    row.clientName,
+    row.city ?? "",
+    row.managerName ?? "",
+    row.regionalManagerName ?? "",
+    row.responsibleManagerName ?? "",
+    row.furnitureManagerName ?? "",
+    row.ropName ?? "",
+    row.legalInn ?? "",
+    row.address ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
 function compareRows(a: DistributionEntryTradePointRow, b: DistributionEntryTradePointRow): number {
@@ -127,6 +155,10 @@ export function buildDistributionEntryTradePointRows(
     const clientName = dealer.name?.trim() || dealer.id;
     const managerRaw = getDealerManagerDisplay(dealer).trim();
     const managerName = managerRaw && managerRaw !== "—" ? managerRaw : null;
+    const regionalRaw = getDealerRegionalManagerDisplay(dealer).trim();
+    const regionalManagerName = regionalRaw && regionalRaw !== "—" ? regionalRaw : null;
+    const ropRaw = getDealerRopDisplay(dealer).trim();
+    const ropName = ropRaw && ropRaw !== "—" ? ropRaw : null;
 
     for (const { point } of getMergedDealerTradePoints(dealer, { includeArchived: false })) {
       if (point.status?.trim() === "Архив") continue;
@@ -138,6 +170,7 @@ export function buildDistributionEntryTradePointRows(
       const coveragePct =
         templateModelsCount > 0 ? Math.round((filledCount / templateModelsCount) * 100) : 0;
       const installedOursBySegment = countInstalledOursBySegment(entries);
+      const installedOursRotation = countInstalledLegacyOurs(entries);
       const installedOursTotal =
         installedOursBySegment.vh + installedOursBySegment.mk + installedOursBySegment.hardware;
 
@@ -149,12 +182,19 @@ export function buildDistributionEntryTradePointRows(
         city: normalizeCity(point.city?.trim() || dealer.city),
         clientCategory: dealer.clientCategory,
         managerName,
+        regionalManagerName,
+        responsibleManagerName: null,
+        furnitureManagerName: null,
+        ropName,
+        legalInn: null,
+        address: point.address?.trim() || null,
         templateModelsCount,
         filledCount,
         coveragePct,
         lastUpdatedAt: maxUpdatedAt(entries),
         installedOursTotal,
         installedOursBySegment,
+        installedOursRotation,
       });
     }
   }

@@ -28,13 +28,20 @@ const baseRow: DistributionEntryTradePointRow = {
   clientName: "Клиент ООО",
   city: "Город",
   clientCategory: "top350",
-  managerName: null,
+  managerName: "Иванов И.И.",
+  regionalManagerName: "Петров П.П.",
+  responsibleManagerName: null,
+  furnitureManagerName: "Мебельщиков М.М.",
+  ropName: "Сидоров С.С.",
+  legalInn: null,
+  address: "ул. Баумана, 12",
   templateModelsCount: 0,
   filledCount: 0,
   coveragePct: 0,
   lastUpdatedAt: "2026-06-16T10:00:00.000Z",
   installedOursTotal: 30,
   installedOursBySegment: { vh: 9, mk: 11, hardware: 10 },
+  installedOursRotation: 2,
 };
 
 function renderRow(view: DistributionEntryTradePointView, row = baseRow, tradePoint = point): string {
@@ -68,6 +75,7 @@ describe("DistributionEntryTradePointCard", () => {
       ...baseRow,
       installedOursTotal: 0,
       installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+      installedOursRotation: 0,
     });
     expect(html).toContain("нет матрицы");
     expect(html).not.toContain("На витрине:");
@@ -82,6 +90,18 @@ describe("DistributionEntryTradePointCard", () => {
     expect(html).not.toContain("sm:hidden");
     expect(html).toContain("Клиент ООО");
     expect(html).toContain("ТТ Центральная");
+  });
+
+  it("detailed mode renders responsibles and segment badges", () => {
+    const html = renderRow("detailed");
+    expect(html).toContain("Менеджер: Иванов И.И.");
+    expect(html).toContain("Регионал: Петров П.П.");
+    expect(html).toContain("РОП: Сидоров С.С.");
+    expect(html).toContain("Мебельщик: Мебельщиков М.М.");
+    expect(html).toContain("ВХ: 9");
+    expect(html).toContain("МК: 11");
+    expect(html).toContain("Фурн: 10");
+    expect(html).toContain("Ротация: 2");
   });
 
   it("detailed mode renders city and address without large avatar", () => {

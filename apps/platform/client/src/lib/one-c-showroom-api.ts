@@ -126,6 +126,10 @@ export type OneCStoreListItem = {
   legal_parent_name: string | null;
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
+  legal_responsible_manager_name: string | null;
+  legal_furniture_manager_name: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
   legal_payment_form: string | null;
   legal_phone: string | null;
   legal_email: string | null;

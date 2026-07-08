@@ -9,6 +9,7 @@ import {
   defaultDistributionFilterState,
   extractCityOptions,
   extractRegionOptions,
+  filterEntryRowsByEntryTradePointFilters,
   filterMatrixEntries,
   filterScopeDealers,
   filterScopeDealersByEntryTradePointFilters,
@@ -16,6 +17,7 @@ import {
   periodWindowIso,
   buildAnalyticsFilterContext,
 } from "../distribution-filters";
+import type { DistributionEntryTradePointRow } from "../distribution-entry-tradepoint-view-model.js";
 import type { ShowcaseMatrixModelDefinition } from "../trade-point-showcase-matrix-models";
 
 const NOW = Date.parse("2026-06-01T12:00:00.000Z");
@@ -209,6 +211,78 @@ assert.equal(
 assert.equal(
   filterScopeDealersByEntryTradePointFilters([dealerMsk, dealerKzn, dealerSouth], resetAfterFilter).length,
   3,
+);
+
+function entryRow(
+  partial: Partial<DistributionEntryTradePointRow> & Pick<DistributionEntryTradePointRow, "tradePointId" | "tradePointName">,
+): DistributionEntryTradePointRow {
+  return {
+    dealerId: "d1",
+    clientName: "Клиент",
+    city: "Москва",
+    clientCategory: "top350",
+    managerName: "Иванов И.И.",
+    regionalManagerName: "Петров П.П.",
+    responsibleManagerName: null,
+    furnitureManagerName: null,
+    ropName: null,
+    legalInn: "7700000000",
+    address: "ул. Ленина, 1",
+    templateModelsCount: 4,
+    filledCount: 2,
+    coveragePct: 50,
+    lastUpdatedAt: null,
+    installedOursTotal: 2,
+    installedOursBySegment: { vh: 1, mk: 1, hardware: 0 },
+    installedOursRotation: 0,
+    ...partial,
+  };
+}
+
+const entryRows = [
+  entryRow({ tradePointId: "tp1", tradePointName: "ТТ 1", city: "Москва", managerName: "Иванов И.И." }),
+  entryRow({
+    tradePointId: "tp2",
+    tradePointName: "ТТ 2",
+    city: "Казань",
+    managerName: "Сидоров С.С.",
+    regionalManagerName: "Смирнов С.С.",
+    clientCategory: "top150",
+  }),
+];
+
+assert.equal(filterEntryRowsByEntryTradePointFilters(entryRows, defaultDistributionEntryTradePointFilterState()).length, 2);
+
+assert.equal(
+  filterEntryRowsByEntryTradePointFilters(entryRows, {
+    ...defaultDistributionEntryTradePointFilterState(),
+    managerIds: ["Иванов И.И."],
+  }).length,
+  1,
+);
+
+assert.equal(
+  filterEntryRowsByEntryTradePointFilters(entryRows, {
+    ...defaultDistributionEntryTradePointFilterState(),
+    regionalManagerIds: ["Смирнов С.С."],
+  })[0]?.tradePointId,
+  "tp2",
+);
+
+assert.equal(
+  filterEntryRowsByEntryTradePointFilters(entryRows, {
+    ...defaultDistributionEntryTradePointFilterState(),
+    cityValues: ["Казань"],
+  })[0]?.tradePointId,
+  "tp2",
+);
+
+assert.equal(
+  filterEntryRowsByEntryTradePointFilters(entryRows, {
+    ...defaultDistributionEntryTradePointFilterState(),
+    clientCategoryIds: ["top150"],
+  })[0]?.tradePointId,
+  "tp2",
 );
 
 console.log("✓ distribution-filters tests passed");

@@ -30,6 +30,7 @@ import { useRoleScopedDealerRowsAuto } from "@/hooks/use-role-scoped-dealer-rows
 import {
   buildDistributionEntryTradePointRows,
   collectScopedTradePointIds,
+  entryTradePointRowSearchHaystack,
   findDealerTradePointForEntryRow,
   scopedTradePointIdsStableKey,
   type DistributionEntryTradePointRow,
@@ -46,6 +47,7 @@ import {
 } from "@/lib/distribution-entry-tradepoint-status";
 import {
   defaultDistributionEntryTradePointFilterState,
+  filterEntryRowsByEntryTradePointFilters,
   listActiveEntryTradePointFilterChips,
   type DistributionEntryTradePointFilterState,
 } from "@/lib/distribution-filters";
@@ -171,6 +173,30 @@ export function DistributionEntryTradePointPanel({
 
   const scopedDealers = dealersProp ?? scopedDealersInternal;
 
+  function uniqueSortedStrings(values: (string | null | undefined)[]): string[] {
+    const set = new Set<string>();
+    for (const value of values) {
+      const trimmed = value?.trim();
+      if (trimmed) set.add(trimmed);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
+  const oneCManagerOptions = useMemo(() => {
+    if (!oneCEntryRows) return undefined;
+    return uniqueSortedStrings(oneCEntryRows.map((row) => row.managerName));
+  }, [oneCEntryRows]);
+
+  const oneCRegionalOptions = useMemo(() => {
+    if (!oneCEntryRows) return undefined;
+    return uniqueSortedStrings(oneCEntryRows.map((row) => row.regionalManagerName));
+  }, [oneCEntryRows]);
+
+  const oneCCityOptions = useMemo(() => {
+    if (!oneCEntryRows) return undefined;
+    return uniqueSortedStrings(oneCEntryRows.map((row) => row.city));
+  }, [oneCEntryRows]);
+
   const scopedTradePointIds = useMemo(
     () => collectScopedTradePointIds(scopedDealers),
     [scopedDealers],
@@ -219,17 +245,16 @@ export function DistributionEntryTradePointPanel({
     if (oneCEntryRows) {
       void cacheBump;
       const q = query.trim().toLowerCase();
-      if (!q) return [...oneCEntryRows];
-      return oneCEntryRows.filter((row) => {
-        const hay = [row.tradePointName, row.clientName, row.city ?? "", row.managerName ?? ""]
-          .join(" ")
-          .toLowerCase();
-        return hay.includes(q);
-      });
+      let rows = [...oneCEntryRows];
+      if (q) {
+        rows = rows.filter((row) => entryTradePointRowSearchHaystack(row).includes(q));
+      }
+      rows = filterEntryRowsByEntryTradePointFilters(rows, filter);
+      return rows;
     }
     void cacheBump;
     return buildDistributionEntryTradePointRows({ dealers: scopedDealers, query });
-  }, [oneCEntryRows, scopedDealers, query, cacheBump]);
+  }, [oneCEntryRows, scopedDealers, query, filter, cacheBump]);
 
   const tabCounts = useMemo(() => countByStatusTab(baseRows), [baseRows]);
 
@@ -585,6 +610,10 @@ export function DistributionEntryTradePointPanel({
               value={filter}
               onChange={onFilterChange}
               hideRegion={hideRegion}
+              oneCSource={Boolean(oneCEntryRows)}
+              oneCManagerOptions={oneCManagerOptions}
+              oneCRegionalOptions={oneCRegionalOptions}
+              oneCCityOptions={oneCCityOptions}
             />
           </div>
         </SheetContent>

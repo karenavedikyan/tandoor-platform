@@ -182,6 +182,16 @@ export function countInstalledOursBySegment(
   };
 }
 
+/** Сумма placementLegacyOurs по всем placement-блокам (модели под ротацию). */
+export function countInstalledLegacyOurs(entries: readonly ShowcaseMatrixEntryDto[]): number {
+  let sum = 0;
+  for (const e of entries) {
+    if (e.targetKind !== "placement") continue;
+    sum += Math.max(0, e.placementLegacyOurs ?? 0);
+  }
+  return sum;
+}
+
 /** Полная детализация по сегменту: разбивка по типу размещения, модели, конкуренты. */
 export function buildSegmentDetail(
   entries: readonly ShowcaseMatrixEntryDto[],

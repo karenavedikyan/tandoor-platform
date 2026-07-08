@@ -26,8 +26,16 @@ type DistributionEntryTradePointFiltersPanelProps = {
   value: DistributionEntryTradePointFilterState;
   onChange: (next: DistributionEntryTradePointFilterState) => void;
   hideRegion?: boolean;
+  oneCSource?: boolean;
+  oneCManagerOptions?: string[];
+  oneCRegionalOptions?: string[];
+  oneCCityOptions?: string[];
   className?: string;
 };
+
+function stringsToSelectOptions(values: string[]) {
+  return values.map((value) => ({ value, label: value }));
+}
 
 function FilterField({
   label,
@@ -60,17 +68,26 @@ export function DistributionEntryTradePointFiltersPanel({
   value,
   onChange,
   hideRegion,
+  oneCSource = false,
+  oneCManagerOptions,
+  oneCRegionalOptions,
+  oneCCityOptions,
   className,
 }: DistributionEntryTradePointFiltersPanelProps): ReactElement {
   const { data: snap } = useOrgSnapshot();
-  const {
-    cityOptions,
-    regionOptions,
-    managerOptions,
-    regionalManagerOptions,
-    ropOptions,
-  } = buildDistributionAnalyticsFilterOptionsFromDealers(scopedDealers, snap);
+  const dealerOptions = buildDistributionAnalyticsFilterOptionsFromDealers(scopedDealers, snap);
+  const managerOptions =
+    oneCManagerOptions != null ? stringsToSelectOptions(oneCManagerOptions) : dealerOptions.managerOptions;
+  const regionalManagerOptions =
+    oneCRegionalOptions != null
+      ? stringsToSelectOptions(oneCRegionalOptions)
+      : dealerOptions.regionalManagerOptions;
+  const cityOptions =
+    oneCCityOptions != null ? stringsToSelectOptions(oneCCityOptions) : dealerOptions.cityOptions;
+  const regionOptions = dealerOptions.regionOptions;
+  const ropOptions = dealerOptions.ropOptions;
   const categoryOptions = getEntryTradePointClientCategoryOptions();
+  const hideRegionSection = hideRegion || oneCSource;
 
   return (
     <div className={cn("space-y-4", className)} data-testid="distribution-entry-tt-filters-panel">
@@ -98,23 +115,25 @@ export function DistributionEntryTradePointFiltersPanel({
               triggerClassName="w-full"
             />
           </FilterField>
-          <FilterField label="РОП" className="md:col-span-2">
-            <MultiSelect
-              options={ropOptions}
-              value={value.ropIds}
-              onChange={(ropIds) => onChange({ ...value, ropIds })}
-              placeholder="Все РОП"
-              allLabel="Все РОП"
-              testId="filter-tt-rop"
-              triggerClassName="w-full"
-            />
-          </FilterField>
+          {oneCSource ? null : (
+            <FilterField label="РОП" className="md:col-span-2">
+              <MultiSelect
+                options={ropOptions}
+                value={value.ropIds}
+                onChange={(ropIds) => onChange({ ...value, ropIds })}
+                placeholder="Все РОП"
+                allLabel="Все РОП"
+                testId="filter-tt-rop"
+                triggerClassName="w-full"
+              />
+            </FilterField>
+          )}
         </div>
       </Section>
 
       <Section title="География">
         <div className="grid gap-3 md:grid-cols-2">
-          {hideRegion ? null : (
+          {hideRegionSection ? null : (
             <FilterField label="Регион">
               <MultiSelect
                 options={regionOptions}
@@ -127,7 +146,7 @@ export function DistributionEntryTradePointFiltersPanel({
               />
             </FilterField>
           )}
-          <FilterField label="Город" className={hideRegion ? "md:col-span-2" : undefined}>
+          <FilterField label="Город" className={hideRegionSection ? "md:col-span-2" : undefined}>
             <MultiSelect
               options={cityOptions}
               value={value.cityValues}

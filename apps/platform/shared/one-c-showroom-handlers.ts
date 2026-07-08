@@ -389,6 +389,10 @@ export type OneCStoreListItem = {
   legal_parent_name: string | null;
   legal_client_type: string | null;
   legal_regional_manager_name: string | null;
+  legal_responsible_manager_name: string | null;
+  legal_furniture_manager_name: string | null;
+  rop_user_id: string | null;
+  rop_name: string | null;
   legal_payment_form: string | null;
   legal_phone: string | null;
   legal_email: string | null;
@@ -409,6 +413,10 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
        p.name AS legal_parent_name,
        l.client_type AS legal_client_type,
        l.regional_manager_name AS legal_regional_manager_name,
+       l.responsible_manager_name AS legal_responsible_manager_name,
+       l.furniture_manager_name AS legal_furniture_manager_name,
+       team.rop_user_id::text AS rop_user_id,
+       urop.full_name AS rop_name,
        l.payment_form AS legal_payment_form,
        l.phone AS legal_phone,
        l.email AS legal_email,
@@ -418,6 +426,15 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
 const ONE_C_STORE_LIST_JOINS = `FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+     LEFT JOIN users urm ON urm.full_name = l.regional_manager_name AND urm.status = 'active'
+     LEFT JOIN LATERAL (
+       SELECT t.rop_user_id
+       FROM user_team_memberships utm
+       INNER JOIN teams t ON t.id = utm.team_id
+       WHERE utm.user_id = urm.id AND t.rop_user_id IS NOT NULL
+       LIMIT 1
+     ) team ON urm.id IS NOT NULL
+     LEFT JOIN users urop ON urop.id = team.rop_user_id
      LEFT JOIN (
        SELECT store_uuid, COUNT(*)::int AS orders_count
        FROM bitrix_orders_snapshot

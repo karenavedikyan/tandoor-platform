@@ -1,5 +1,6 @@
 import type { DealerRow, DealerTradePoint } from "@/lib/dealer-base-mock-data";
 import type { DistributionEntryTradePointRow } from "@/lib/distribution-entry-tradepoint-view-model";
+import { entryTradePointRowSearchHaystack } from "@/lib/distribution-entry-tradepoint-view-model";
 import type { TradePointListRow } from "@/lib/dealer-base-management-view-model";
 import {
   build1cDealerRow,
@@ -7,6 +8,11 @@ import {
   type OneCLegalShapeInput,
 } from "@/lib/one-c-dealer-shape";
 import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
+import { loadCachedMatrix } from "@/lib/showcase-matrix-store";
+import {
+  countInstalledLegacyOurs,
+  countInstalledOursBySegment,
+} from "@/lib/trade-point-showcase-segment-models";
 
 function legalFromStoreListItem(item: OneCStoreListItem): OneCLegalShapeInput {
   const legalId = item.legal_parent_1c ?? item.id_1c;
@@ -25,7 +31,7 @@ function legalFromStoreListItem(item: OneCStoreListItem): OneCLegalShapeInput {
     email: item.legal_email,
     discount_code: null,
     discount_percent: null,
-    responsible_manager_name: item.manager_name,
+    responsible_manager_name: item.legal_responsible_manager_name ?? item.manager_name,
     regional_manager_name: item.legal_regional_manager_name,
     plan_sum: null,
     plan_retro_bonus: null,
@@ -62,7 +68,11 @@ export function oneCStoreListItemToTradePointListRow(item: OneCStoreListItem): T
     city: item.legal_city?.trim() || point.city || "—",
     dealerId: dealer.id,
     dealerName: dealer.name,
-    manager: item.legal_regional_manager_name?.trim() || item.manager_name?.trim() || "—",
+    manager:
+      item.legal_responsible_manager_name?.trim() ||
+      item.manager_name?.trim() ||
+      item.legal_regional_manager_name?.trim() ||
+      "—",
   };
 }
 
@@ -73,6 +83,11 @@ export function buildDistributionEntryTradePointRowFromOneC(
   const total = item.distribution_total > 0 ? item.distribution_total : 0;
   const filled = item.distribution_filled > 0 ? item.distribution_filled : 0;
   const coveragePct = total > 0 ? Math.round((filled / total) * 100) : 0;
+  const entries = loadCachedMatrix(item.id_1c);
+  const installedOursBySegment = countInstalledOursBySegment(entries);
+  const installedOursRotation = countInstalledLegacyOurs(entries);
+  const installedOursTotal =
+    installedOursBySegment.vh + installedOursBySegment.mk + installedOursBySegment.hardware;
   return {
     dealerId: dealer.id,
     tradePointId: item.id_1c,
@@ -80,13 +95,20 @@ export function buildDistributionEntryTradePointRowFromOneC(
     clientName: item.legal_parent_name?.trim() || item.legal_name?.trim() || dealer.name,
     city: item.legal_city?.trim() || null,
     clientCategory: dealer.clientCategory,
-    managerName: item.legal_regional_manager_name?.trim() || item.manager_name?.trim() || null,
+    managerName: item.manager_name?.trim() || null,
+    regionalManagerName: item.legal_regional_manager_name?.trim() || null,
+    responsibleManagerName: item.legal_responsible_manager_name?.trim() || null,
+    furnitureManagerName: item.legal_furniture_manager_name?.trim() || null,
+    ropName: item.rop_name?.trim() || null,
+    legalInn: item.legal_inn?.trim() || null,
+    address: item.address?.trim() || null,
     templateModelsCount: total,
     filledCount: filled,
     coveragePct,
     lastUpdatedAt: null,
-    installedOursTotal: filled,
-    installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+    installedOursTotal: installedOursTotal > 0 ? installedOursTotal : filled,
+    installedOursBySegment,
+    installedOursRotation,
   };
 }
 
@@ -98,17 +120,7 @@ export function buildDistributionEntryTradePointRowsFromOneC(
   const rows = items.map((item) => buildDistributionEntryTradePointRowFromOneC(item));
   if (!q) return rows.sort((a, b) => a.tradePointName.localeCompare(b.tradePointName, "ru"));
   return rows
-    .filter((row) => {
-      const hay = [
-        row.tradePointName,
-        row.clientName,
-        row.city ?? "",
-        row.managerName ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q);
-    })
+    .filter((row) => entryTradePointRowSearchHaystack(row).includes(q))
     .sort((a, b) => a.tradePointName.localeCompare(b.tradePointName, "ru"));
 }
 
