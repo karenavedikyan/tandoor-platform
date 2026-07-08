@@ -111,3 +111,56 @@ export function fetchBitrixOrdersForLegal(
 export function fetchBitrixOrder(orderId: string): Promise<BitrixOrderResponse> {
   return fetchOneCOrders<BitrixOrderResponse>("order", { order_id: orderId });
 }
+
+export type OneCOrdersSummary = {
+  count_30d: number;
+  count_90d: number;
+  total_30d: string;
+  total_90d: string;
+  last_order_at: string | null;
+  last_order_number: string | null;
+};
+
+export type OneCManagerOrdersSummary = OneCOrdersSummary & {
+  active_stores_30d: number;
+  total_stores: number;
+  avg_check_30d: string;
+};
+
+type OrdersSummaryResponse = {
+  success: boolean;
+  summary: OneCOrdersSummary;
+  message?: string;
+};
+
+type ManagerOrdersSummaryResponse = {
+  success: boolean;
+  summary: OneCManagerOrdersSummary;
+  message?: string;
+};
+
+export function fetchOrdersSummaryForStore(
+  storeId1c: string,
+): Promise<OrdersSummaryResponse> {
+  return fetchOneCOrders<OrdersSummaryResponse>("orders-summary-for-store", {
+    store_id_1c: storeId1c,
+  });
+}
+
+export function fetchOrdersSummaryForLegal(
+  legalId1c: string,
+): Promise<OrdersSummaryResponse> {
+  return fetchOneCOrders<OrdersSummaryResponse>("orders-summary-for-legal", {
+    legal_id_1c: legalId1c,
+  });
+}
+
+export function fetchOrdersSummaryForManager(
+  managerId: string,
+  scope: "manager" | "rm",
+): Promise<ManagerOrdersSummaryResponse> {
+  return fetchOneCOrders<ManagerOrdersSummaryResponse>("orders-summary-for-manager", {
+    manager_id: managerId,
+    scope,
+  });
+}

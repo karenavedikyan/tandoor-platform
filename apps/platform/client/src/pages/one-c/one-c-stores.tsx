@@ -48,13 +48,19 @@ export default function OneCStoresPage() {
 
   useEffect(() => {
     setOffset(0);
-  }, [debouncedSearch, onlyActive]);
+  }, [debouncedSearch, onlyActive, filters.ordersFilter]);
 
   useEffect(() => {
     if (!canAccess) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCStores({ q: debouncedSearch, limit: ONE_C_PAGE_LIMIT, offset, onlyActive })
+    void fetchOneCStores({
+      q: debouncedSearch,
+      limit: ONE_C_PAGE_LIMIT,
+      offset,
+      onlyActive,
+      ordersFilter: filters.ordersFilter,
+    })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -74,7 +80,7 @@ export default function OneCStoresPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, debouncedSearch, offset, onlyActive]);
+  }, [canAccess, debouncedSearch, offset, onlyActive, filters.ordersFilter]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -105,6 +111,7 @@ export default function OneCStoresPage() {
         distAggregates={distAggregates}
         distLoading={distLoading}
         disableDistributionFilters={nonTableView}
+        showOrdersFilter
         serverSideSearch
         filteredCount={filtered.length}
         testIdPrefix="one-c-stores"

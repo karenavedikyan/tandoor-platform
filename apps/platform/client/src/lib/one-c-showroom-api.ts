@@ -133,9 +133,12 @@ export type OneCStoresResponse = {
   limit: number;
   offset: number;
   onlyActive: boolean;
+  ordersFilter?: OneCStoresOrdersFilter;
   items: OneCStoreListItem[];
   message?: string;
 };
+
+export type OneCStoresOrdersFilter = "any" | "30d" | "90d" | "none_90d" | "any_orders";
 
 export type OneCStoreDetail = {
   id_1c: string;
@@ -381,6 +384,7 @@ export function fetchOneCStores(opts?: {
   limit?: number;
   offset?: number;
   onlyActive?: boolean;
+  ordersFilter?: OneCStoresOrdersFilter;
 }): Promise<OneCStoresResponse> {
   const params: Record<string, string> = {
     limit: String(opts?.limit ?? 100),
@@ -388,6 +392,9 @@ export function fetchOneCStores(opts?: {
     onlyActive: opts?.onlyActive === false ? "0" : "1",
   };
   if (opts?.q?.trim()) params.q = opts.q.trim();
+  if (opts?.ordersFilter && opts.ordersFilter !== "any") {
+    params.orders_filter = opts.ordersFilter;
+  }
   return fetchOneC<OneCStoresResponse>("stores", params);
 }
 

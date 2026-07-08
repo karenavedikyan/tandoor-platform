@@ -35,6 +35,7 @@ import {
   OneCRefreshStubButton,
 } from "./one-c-ui";
 import { OneCOrdersSection } from "./one-c-orders-section";
+import { OneCOrdersSummary } from "./one-c-orders-summary";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
 import { OneCStoresCardsList } from "./one-c-stores-cards";
@@ -235,6 +236,7 @@ export default function OneCLegalPage() {
           </Collapsible>
 
           <div id="one-c-legal-orders">
+            <OneCOrdersSummary mode="legal" entityId1c={legalId} />
             <OneCOrdersSection mode="legal" entityId1c={legalId} testIdPrefix="one-c-legal-orders" />
           </div>
 

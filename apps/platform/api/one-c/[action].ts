@@ -34,6 +34,9 @@ import {
   handleBitrixOrders,
   handleBitrixOrdersForLegal,
   handleBitrixOrdersForStore,
+  handleBitrixOrdersSummaryForLegal,
+  handleBitrixOrdersSummaryForManager,
+  handleBitrixOrdersSummaryForStore,
 } from "../../shared/bitrix-orders/handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -128,6 +131,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "order" && req.method === "GET") {
       await handleBitrixOrder(req, res, pool, me.id);
+      return;
+    }
+    if (action === "orders-summary-for-store" && req.method === "GET") {
+      await handleBitrixOrdersSummaryForStore(req, res, pool, me.id);
+      return;
+    }
+    if (action === "orders-summary-for-legal" && req.method === "GET") {
+      await handleBitrixOrdersSummaryForLegal(req, res, pool, me.id);
+      return;
+    }
+    if (action === "orders-summary-for-manager" && req.method === "GET") {
+      await handleBitrixOrdersSummaryForManager(req, res, pool, me.id);
       return;
     }
 

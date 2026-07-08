@@ -8,6 +8,8 @@ import {
 export type MatrixFillFilter = "all" | "empty" | "partial" | "full";
 export type SegmentPresenceFilter = "all" | "yes" | "no";
 
+export type OneCStoresOrdersFilter = "any" | "30d" | "90d" | "none_90d" | "any_orders";
+
 export type OneCStoresFilterState = {
   search: string;
   holdings: string[];
@@ -21,6 +23,7 @@ export type OneCStoresFilterState = {
   mkPresence: SegmentPresenceFilter;
   hwPresence: SegmentPresenceFilter;
   rotPresence: SegmentPresenceFilter;
+  ordersFilter: OneCStoresOrdersFilter;
 };
 
 export function emptyOneCStoresFilters(): OneCStoresFilterState {
@@ -37,6 +40,7 @@ export function emptyOneCStoresFilters(): OneCStoresFilterState {
     mkPresence: "all",
     hwPresence: "all",
     rotPresence: "all",
+    ordersFilter: "any",
   };
 }
 
@@ -126,7 +130,8 @@ export function hasActiveOneCStoresFilters(
     filters.vhPresence !== "all" ||
     filters.mkPresence !== "all" ||
     filters.hwPresence !== "all" ||
-    filters.rotPresence !== "all"
+    filters.rotPresence !== "all" ||
+    filters.ordersFilter !== "any"
   );
 }
 

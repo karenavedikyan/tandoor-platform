@@ -12,6 +12,7 @@ import {
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
+import { OneCManagerOrdersSummary } from "./one-c-manager-orders-summary";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
 import { OneCStoresCardsList } from "./one-c-stores-cards";
@@ -113,6 +114,7 @@ export default function OneCManagerPage() {
         <OneCLoadingBlock />
       ) : (
         <>
+          <OneCManagerOrdersSummary managerId={managerId} scope="manager" />
           <div className="mb-3 flex justify-end">
             <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-manager-stores" />
           </div>

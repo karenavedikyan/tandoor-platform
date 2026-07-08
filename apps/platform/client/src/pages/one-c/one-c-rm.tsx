@@ -20,6 +20,7 @@ import {
   OneCPageShell,
   OneCRefreshStubButton,
 } from "./one-c-ui";
+import { OneCManagerOrdersSummary } from "./one-c-manager-orders-summary";
 import { OneCStoresFilters } from "./one-c-stores-filters";
 import { OneCStoresTable } from "./one-c-stores-table";
 import { OneCStoresCardsList } from "./one-c-stores-cards";
@@ -120,6 +121,7 @@ export default function OneCRmPage() {
         <OneCLoadingBlock />
       ) : (
         <div className="space-y-6">
+          <OneCManagerOrdersSummary managerId={rmId} scope="rm" />
           <section>
             <h2 className="mb-3 text-lg font-semibold">Менеджеры под ним</h2>
             <div className="rounded-md border">

@@ -68,6 +68,47 @@ function parseHasDistribution(req: VercelRequest): boolean {
   return v === "1" || v.toLowerCase() === "true";
 }
 
+export type OneCStoresOrdersFilter = "any" | "30d" | "90d" | "none_90d" | "any_orders";
+
+function parseOrdersFilter(req: VercelRequest): OneCStoresOrdersFilter {
+  const raw = String(req.query.orders_filter ?? req.query.ordersFilter ?? "any").trim().toLowerCase();
+  if (raw === "30d") return "30d";
+  if (raw === "90d") return "90d";
+  if (raw === "none_90d") return "none_90d";
+  if (raw === "any_orders") return "any_orders";
+  return "any";
+}
+
+function buildOrdersFilterClause(ordersFilter: OneCStoresOrdersFilter): string {
+  switch (ordersFilter) {
+    case "30d":
+      return `AND EXISTS (
+        SELECT 1 FROM bitrix_orders_snapshot bo
+        WHERE bo.store_uuid = s.id_1c
+          AND bo.created_at_bitrix >= NOW() - INTERVAL '30 days'
+      )`;
+    case "90d":
+      return `AND EXISTS (
+        SELECT 1 FROM bitrix_orders_snapshot bo
+        WHERE bo.store_uuid = s.id_1c
+          AND bo.created_at_bitrix >= NOW() - INTERVAL '90 days'
+      )`;
+    case "none_90d":
+      return `AND NOT EXISTS (
+        SELECT 1 FROM bitrix_orders_snapshot bo
+        WHERE bo.store_uuid = s.id_1c
+          AND bo.created_at_bitrix >= NOW() - INTERVAL '90 days'
+      )`;
+    case "any_orders":
+      return `AND EXISTS (
+        SELECT 1 FROM bitrix_orders_snapshot bo
+        WHERE bo.store_uuid = s.id_1c
+      )`;
+    default:
+      return "";
+  }
+}
+
 export type OneCOverviewV2 = {
   rops: number;
   rms: number;
@@ -405,9 +446,11 @@ export async function fetchOneCStores(
   limit: number,
   offset: number,
   onlyActive: boolean,
+  ordersFilter: OneCStoresOrdersFilter = "any",
 ) {
   const ctx = await loadOneCShowroomContext(pool);
   const pattern = q ? `%${q}%` : null;
+  const ordersClause = buildOrdersFilterClause(ordersFilter);
 
   const activeClause = onlyActive
     ? `AND (
@@ -428,7 +471,7 @@ export async function fetchOneCStores(
     OR l.legal_name ILIKE $1
     OR l.inn ILIKE $1
     OR p.name ILIKE $1
-  ) ${activeClause}`;
+  ) ${activeClause} ${ordersClause}`;
 
   const countRes = await pool.query<{ n: number }>(
     `SELECT COUNT(*)::int AS n
@@ -853,8 +896,16 @@ export async function handleOneCManager(req: VercelRequest, res: VercelResponse,
 
 export async function handleOneCStores(req: VercelRequest, res: VercelResponse, pool: PoolLike) {
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCStores(pool, parseSearch(req), limit, offset, parseOnlyActive(req));
-  sendJson(res, 200, { success: true, limit, offset, onlyActive: parseOnlyActive(req), ...data });
+  const ordersFilter = parseOrdersFilter(req);
+  const data = await fetchOneCStores(pool, parseSearch(req), limit, offset, parseOnlyActive(req), ordersFilter);
+  sendJson(res, 200, {
+    success: true,
+    limit,
+    offset,
+    onlyActive: parseOnlyActive(req),
+    ordersFilter,
+    ...data,
+  });
 }
 
 export async function handleOneCStore(
