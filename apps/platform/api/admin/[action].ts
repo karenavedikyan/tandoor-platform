@@ -46,6 +46,11 @@ import {
   tradePointsOverviewCacheKey,
 } from "../../shared/client-base-overview-cache.js";
 import { filterManagerDetailByRopViewerScope, shouldIntersectManagerDetailWithRopViewerScope } from "../../shared/trade-points-manager-detail-scope.js";
+import {
+  handleClientBaseOverview1c,
+  handleClientBaseManagerDetail1c,
+  handleClientBaseClientsList1c,
+} from "../../shared/client-base-overview-1c/handlers.js";
 
 type UserRole =
   | "director"
@@ -5380,6 +5385,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "client-base-clients-list" && req.method === "GET") {
       await handleClientBaseClientsList(req, res, pool, headers);
+      return;
+    }
+    if (action === "client-base-overview-1c" && req.method === "GET") {
+      await handleClientBaseOverview1c(req, res, pool);
+      return;
+    }
+    if (action === "client-base-manager-detail-1c" && req.method === "GET") {
+      await handleClientBaseManagerDetail1c(req, res, pool);
+      return;
+    }
+    if (action === "client-base-clients-list-1c" && req.method === "GET") {
+      await handleClientBaseClientsList1c(req, res, pool);
       return;
     }
     if (action === "manager-activity-detail" && req.method === "GET") {
