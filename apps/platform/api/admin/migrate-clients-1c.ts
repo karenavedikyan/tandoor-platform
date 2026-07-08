@@ -1,6 +1,8 @@
 /**
  * Admin: применить DDL clients-1c foundation (view + materialized views).
  * POST /api/admin/migrate-clients-1c
+ *
+ * Neon-only: Yandex не содержит showcase_distribution_overrides_1c, необходимую для view.
  */
 
 import { readFileSync } from "node:fs";
@@ -18,10 +20,9 @@ import {
 import {
   resolveNeonUrl,
   runOnNeon,
-  runOnYandex,
   type DbMigrateRunResult,
-  type DbMigrateSkipped,
 } from "../../shared/dual-db-migrate.js";
+import { splitSqlStatements } from "../../server/db-migrate/restore-yandex.js";
 import { makePoolFromNeon, type PoolLike } from "../../server/db/neon-client.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +36,7 @@ export const CLIENTS_1C_EXPECTED_OBJECTS = [
 ] as const;
 
 export const CLIENTS_1C_MIGRATION_SQL = readFileSync(migrationPath, "utf8");
-const STMTS = [CLIENTS_1C_MIGRATION_SQL];
+export const CLIENTS_1C_STMTS = splitSqlStatements(CLIENTS_1C_MIGRATION_SQL);
 
 export const CLIENTS_1C_SMOKE_SQL = `
   SELECT
@@ -82,62 +83,11 @@ export async function verifyClients1cObjects(pool: PoolLike): Promise<boolean> {
   );
 }
 
-export async function runClients1cSmoke(
-  pool: PoolLike,
-): Promise<Clients1cSmokeCounts | { error: string }> {
-  try {
-    const r = await pool.query<Clients1cSmokeCounts>(CLIENTS_1C_SMOKE_SQL);
-    const row = r.rows[0];
-    if (!row) {
-      return {
-        stores: 0,
-        clients: 0,
-        distribution_rows: 0,
-        stores_with_distribution: 0,
-        stores_with_orders: 0,
-      };
-    }
-    return {
-      stores: Number(row.stores),
-      clients: Number(row.clients),
-      distribution_rows: Number(row.distribution_rows),
-      stores_with_distribution: Number(row.stores_with_distribution),
-      stores_with_orders: Number(row.stores_with_orders),
-    };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : String(e) };
-  }
-}
-
 export function isClients1cNeonApplyOk(
   neonRes: DbMigrateRunResult | { error: string },
 ): boolean {
   if ("error" in neonRes) return false;
   return neonRes.applied.length > 0 && neonRes.applied.every((x) => x.ok);
-}
-
-export function isClients1cYandexApplyOk(
-  yandexRes: DbMigrateRunResult | DbMigrateSkipped | { error: string },
-): boolean {
-  if ("skipped" in yandexRes && yandexRes.skipped) return true;
-  if ("error" in yandexRes) return false;
-  return yandexRes.applied.length > 0 && yandexRes.applied.every((x) => x.ok);
-}
-
-async function postApplyNeonChecks(ms: number): Promise<{
-  applied: boolean;
-  ms: number;
-  objectsVerified: boolean;
-  smoke: Clients1cSmokeCounts | { error: string } | null;
-}> {
-  const url = resolveNeonUrl();
-  if (!url) {
-    return { applied: false, ms, objectsVerified: false, smoke: { error: "DATABASE_URL is not configured" } };
-  }
-  const pool = makePoolFromNeon(neon(url));
-  const objectsVerified = await verifyClients1cObjects(pool);
-  const smoke = objectsVerified ? await runClients1cSmoke(pool) : null;
-  return { applied: objectsVerified, ms, objectsVerified, smoke };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -174,56 +124,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       }
     }
 
-    const neonStarted = Date.now();
-    const neonRes = await runOnNeon(STMTS, []);
-    const neonMs = Date.now() - neonStarted;
-
-    const yandexStarted = Date.now();
-    const yandexRes = await runOnYandex(STMTS, []);
-    const yandexMs = Date.now() - yandexStarted;
+    const started = Date.now();
+    const neonRes = await runOnNeon(CLIENTS_1C_STMTS, []);
+    const durationMs = Date.now() - started;
 
     if (!isClients1cNeonApplyOk(neonRes)) {
       sendJson(res, 500, {
         ok: false,
         error: "error" in neonRes ? neonRes.error : "Neon migration statements failed",
         neon: neonRes,
-        yandex: yandexRes,
       });
       return;
     }
 
-    const neonChecks = await postApplyNeonChecks(neonMs);
-    if (!neonChecks.objectsVerified) {
+    const url = resolveNeonUrl();
+    if (!url) {
+      sendJson(res, 500, { ok: false, error: "DATABASE_URL is not configured" });
+      return;
+    }
+
+    const pool = makePoolFromNeon(neon(url));
+    const objectsOk = await verifyClients1cObjects(pool);
+    const smoke = objectsOk
+      ? ((await pool.query<Clients1cSmokeCounts>(CLIENTS_1C_SMOKE_SQL)).rows[0] ?? null)
+      : null;
+
+    if (!objectsOk) {
       sendJson(res, 500, {
         ok: false,
         error: "clients_1c objects missing after migration on Neon",
-        neon: { ...neonChecks, apply: neonRes },
-        yandex: {
-          applied: isClients1cYandexApplyOk(yandexRes),
-          ms: yandexMs,
-          result: yandexRes,
-        },
+        neon: { applied: false, ms: durationMs, objectsOk, smoke, apply: neonRes },
       });
       return;
     }
 
-    const yandexOk = isClients1cYandexApplyOk(yandexRes);
-
     sendJson(res, 200, {
       ok: true,
-      neon: {
-        applied: true,
-        ms: neonChecks.ms,
-        objectsVerified: neonChecks.objectsVerified,
-        smoke: neonChecks.smoke,
-        statements: neonRes,
-      },
-      yandex: {
-        applied: yandexOk,
-        ms: yandexMs,
-        result: yandexRes,
-      },
-      expected_objects: CLIENTS_1C_EXPECTED_OBJECTS,
+      neon: { applied: true, ms: durationMs, objectsOk, smoke },
     });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
