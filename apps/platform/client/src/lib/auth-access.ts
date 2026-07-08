@@ -83,9 +83,8 @@ export function defaultHomePathForRole(role: SalesRole): string {
   switch (role) {
     case "sales_manager":
     case "team_lead":
-      return "/dealer-base";
     case "sales_director":
-      return "/dealer-base";
+      return "/1c";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -97,16 +96,10 @@ export function defaultHomePathForRole(role: SalesRole): string {
 
 /** Домашняя страница после входа по `UserRole` (сервер, PR 04). */
 export function defaultHomePathForUserRole(role: UserRole): string {
+  if (canAccessOneCShowroomForUser(role)) {
+    return "/1c";
+  }
   switch (role) {
-    case "admin":
-      return "/admin/users";
-    case "director":
-      return "/dealer-base";
-    case "rop":
-    case "regional_manager":
-      return "/dealer-base";
-    case "manager":
-      return "/dealer-base";
     case "marketer":
       return "/marketing-briefs";
     case "analyst":
@@ -574,6 +567,32 @@ const CLIENTS_1C_OVERVIEW_NAV_ITEM: PilotNavItem = {
   navBehaviorId: "nav-clients-1c-overview",
 };
 
+const LEGACY_CLIENTS_TP_NAV_ITEM: PilotNavItem = {
+  href: "/dealer-base",
+  label: "Клиенты / ТТ",
+  testId: "nav-item-clients-tps",
+  navBehaviorId: "nav-dealer-base",
+};
+
+function withLegacyClientsTpNavItem(
+  platformUserRole: UserRole | null | undefined,
+  model: Extract<PilotNavigationModel, { layout: "grouped" }>,
+): Extract<PilotNavigationModel, { layout: "grouped" }> {
+  if (platformUserRole !== "admin") return model;
+  const leading = model.leadingItems ?? [];
+  if (leading.some((item) => item.testId === LEGACY_CLIENTS_TP_NAV_ITEM.testId)) {
+    return model;
+  }
+  const oneCIdx = leading.findIndex((item) => item.testId === ONE_C_SHOWROOM_NAV_ITEM.testId);
+  const insertAt = oneCIdx >= 0 ? oneCIdx + 1 : 0;
+  const next = [
+    ...leading.slice(0, insertAt),
+    LEGACY_CLIENTS_TP_NAV_ITEM,
+    ...leading.slice(insertAt),
+  ];
+  return { ...model, leadingItems: next };
+}
+
 function withClients1cNavItem(
   platformUserRole: UserRole | null | undefined,
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
@@ -624,14 +643,17 @@ function finalizeGroupedPilotNavigation(
   model: Extract<PilotNavigationModel, { layout: "grouped" }>,
   adminPurgeQueueCount?: number | null,
 ): Extract<PilotNavigationModel, { layout: "grouped" }> {
-  return withClients1cNavItem(
+  return withLegacyClientsTpNavItem(
     platformUserRole,
-    withOneCShowroomNavItem(
+    withClients1cNavItem(
       platformUserRole,
-      withOptionalAdminGroup(
+      withOneCShowroomNavItem(
         platformUserRole,
-        withAdminBriefMigrateTopShortcut(platformUserRole, role, model),
-        adminPurgeQueueCount,
+        withOptionalAdminGroup(
+          platformUserRole,
+          withAdminBriefMigrateTopShortcut(platformUserRole, role, model),
+          adminPurgeQueueCount,
+        ),
       ),
     ),
   );

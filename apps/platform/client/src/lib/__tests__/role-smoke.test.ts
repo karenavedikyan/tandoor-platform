@@ -18,7 +18,7 @@
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
 import { userRoleToSalesRole } from "../role-mapping";
-import { getPilotNavigation, flattenGroupedPilotNavigation } from "../auth-access";
+import { getPilotNavigation, flattenGroupedPilotNavigation, defaultHomePathForUserRole } from "../auth-access";
 import { loadReleaseDemoProfile } from "../release-demo-profile";
 import { resolveSidebarWorkingDealerClientCount } from "../dealer-base-sidebar-client-count";
 import { createEmptyActualizationState } from "../client-base-actualization-state";
@@ -42,6 +42,10 @@ type RoleExpectation = {
   expectedFallbackPersona: string;
   /** Должны ли быть навигационные пункты. */
   navMustContain: string[];
+  /** Не должны быть в навигации (testId или navBehaviorId). */
+  navMustNotContain?: string[];
+  /** Ожидаемый home path после логина. */
+  expectedHomePath?: string;
   /** Если у роли есть собственный scope (counter > 0 при mock-данных). */
   hasOwnScope: boolean;
 };
@@ -51,7 +55,9 @@ const CASES: RoleExpectation[] = [
     role: "admin",
     expectedSalesRole: "sales_director",
     expectedFallbackPersona: "user-dir-goncharenko",
-    navMustContain: ["nav-one-c-showroom"],
+    navMustContain: ["nav-one-c-showroom", "nav-item-clients-tps"],
+    navMustNotContain: [],
+    expectedHomePath: "/1c",
     hasOwnScope: false,
   },
   {
@@ -59,6 +65,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "sales_director",
     expectedFallbackPersona: "user-dir-goncharenko",
     navMustContain: ["nav-one-c-showroom", "nav-sales-control"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/1c",
     hasOwnScope: false,
   },
   {
@@ -66,6 +74,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "team_lead",
     expectedFallbackPersona: "user-tl-kupiansky",
     navMustContain: ["nav-one-c-showroom"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/1c",
     hasOwnScope: true,
   },
   {
@@ -73,6 +83,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "team_lead",
     expectedFallbackPersona: "user-tl-kupiansky",
     navMustContain: ["nav-one-c-showroom"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/1c",
     hasOwnScope: true,
   },
   {
@@ -80,6 +92,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "sales_manager",
     expectedFallbackPersona: "mgr-boyko-em",
     navMustContain: ["nav-one-c-showroom"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/1c",
     hasOwnScope: true,
   },
   {
@@ -87,6 +101,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "marketer",
     expectedFallbackPersona: "user-mkt-morozova",
     navMustContain: ["nav-listings"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/marketing-briefs",
     hasOwnScope: false,
   },
   {
@@ -94,6 +110,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "analyst",
     expectedFallbackPersona: "user-anl-ivanets",
     navMustContain: ["nav-item-distribution"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/dealer-base",
     hasOwnScope: false,
   },
   {
@@ -101,6 +119,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "marketer",
     expectedFallbackPersona: "user-mkt-morozova",
     navMustContain: ["nav-listings"],
+    navMustNotContain: ["nav-item-clients-tps"],
+    expectedHomePath: "/dealer-base",
     hasOwnScope: false,
   },
 ];
@@ -124,7 +144,14 @@ function test(name: string, fn: () => void) {
   }
 }
 
-function navIds(role: UserRole) {
+function navTestIds(role: UserRole) {
+  const sr = userRoleToSalesRole(role);
+  const nav = getPilotNavigation(sr, 100, 50, role);
+  const items = nav.layout === "grouped" ? flattenGroupedPilotNavigation(nav) : nav.items;
+  return items.map((x) => x.testId ?? x.navBehaviorId);
+}
+
+function navBehaviorIds(role: UserRole) {
   const sr = userRoleToSalesRole(role);
   const nav = getPilotNavigation(sr, 100, 50, role);
   const items = nav.layout === "grouped" ? flattenGroupedPilotNavigation(nav) : nav.items;
@@ -240,14 +267,27 @@ test("loadReleaseDemoProfile(rop, Купянский UUID) → user-tl-kupiansky
 // ============ 3. getPilotNavigation ============
 for (const c of CASES) {
   test(`getPilotNavigation(${c.role}): не падает + содержит ожидаемые nav-items`, () => {
-    const ids = navIds(c.role);
+    const ids = navBehaviorIds(c.role);
+    const testIds = navTestIds(c.role);
     assert.ok(ids.length > 0, `navigation для ${c.role} не должен быть пустым`);
     for (const must of c.navMustContain) {
+      const found = ids.includes(must) || testIds.includes(must);
       assert.ok(
-        ids.includes(must),
+        found,
         `nav для ${c.role} должен содержать ${must}; найдены: ${ids.join(", ")}`,
       );
     }
+    for (const mustNot of c.navMustNotContain ?? []) {
+      const found = testIds.includes(mustNot) || ids.includes(mustNot);
+      assert.ok(!found, `nav для ${c.role} не должен содержать ${mustNot}`);
+    }
+  });
+}
+
+for (const c of CASES) {
+  if (!c.expectedHomePath) continue;
+  test(`defaultHomePathForUserRole(${c.role}) === ${c.expectedHomePath}`, () => {
+    assert.equal(defaultHomePathForUserRole(c.role), c.expectedHomePath);
   });
 }
 
