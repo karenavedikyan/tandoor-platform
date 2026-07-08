@@ -21,7 +21,7 @@ export function OneCOrdersSection({
   mode,
   entityId1c,
   testIdPrefix = "one-c-orders-section",
-}: OneCOrdersSectionProps): ReactElement | null {
+}: OneCOrdersSectionProps): ReactElement {
   const [orders, setOrders] = useState<BitrixOrderListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(PAGE_SIZE);
@@ -58,8 +58,6 @@ export function OneCOrdersSection({
       cancelled = true;
     };
   }, [mode, entityId1c, limit]);
-
-  if (!loading && total === 0 && !error) return null;
 
   return (
     <OneCDetailSection title={`Заказы 1С${total > 0 ? ` (${total})` : ""}`} testId={`${testIdPrefix}-section`}>
