@@ -8,7 +8,6 @@ import { fetchOneCStore } from "@/lib/one-c-showroom-api";
 import { fetchBitrixOrdersForStore } from "@/lib/one-c-bitrix-orders-api";
 import { build1cDealerRow, build1cPoint } from "@/lib/one-c-dealer-shape";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
-import { buildHashPath } from "@/lib/hash-route-utils";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -317,15 +316,6 @@ export default function OneCStorePage() {
                     <Link href={`/1c/legal/${store.legal_entity_1c}`}>Открыть карточку клиента</Link>
                   </Button>
                 ) : null}
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <a
-                    href={buildHashPath(`/dealers/${dealerPoint.dealer.id}/trade-points/${dealerPoint.point.id}`, {
-                      tradePointShowcase: "1",
-                    })}
-                  >
-                    Открыть карточку ТТ
-                  </a>
-                </Button>
                 <Button
                   type="button"
                   variant="ghost"
