@@ -64,10 +64,6 @@ export default function OneCOverviewPage() {
             <OneCStatCard href="/1c/team" label="РОПы" count={data.rops} testId="card-one-c-rops" />
             <OneCStatCard href="/1c/team" label="РМы" count={data.rms} testId="card-one-c-rms" />
             <OneCStatCard href="/1c/team" label="Менеджеры" count={data.managers} testId="card-one-c-managers" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <OneCStatCard href="/1c/team" label="РОПы" count={data.rops} testId="card-one-c-rops" />
-            <OneCStatCard href="/1c/team" label="РМы" count={data.rms} testId="card-one-c-rms" />
-            <OneCStatCard href="/1c/team" label="Менеджеры" count={data.managers} testId="card-one-c-managers" />
             <OneCStatCard href="/1c/stores" label="ТТ (активные)" count={data.storesActive} testId="card-one-c-stores" />
           </div>
           <Card>
