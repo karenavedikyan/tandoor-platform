@@ -47,6 +47,13 @@ export default function OneCOverviewPage() {
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
 
+  const visibility = data?.visibility ?? {
+    showRops: false,
+    showRms: false,
+    showManagers: false,
+    showTeamLink: false,
+  };
+
   return (
     <OneCPageShell
       path="/1c"
@@ -61,9 +68,15 @@ export default function OneCOverviewPage() {
       ) : data ? (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <OneCStatCard href="/1c/team" label="РОПы" count={data.rops} testId="card-one-c-rops" />
-            <OneCStatCard href="/1c/team" label="РМы" count={data.rms} testId="card-one-c-rms" />
-            <OneCStatCard href="/1c/team" label="Менеджеры" count={data.managers} testId="card-one-c-managers" />
+            {visibility.showRops && data.rops != null ? (
+              <OneCStatCard href="/1c/team" label="РОПы" count={data.rops} testId="card-one-c-rops" />
+            ) : null}
+            {visibility.showRms && data.rms != null ? (
+              <OneCStatCard href="/1c/team" label="РМы" count={data.rms} testId="card-one-c-rms" />
+            ) : null}
+            {visibility.showManagers && data.managers != null ? (
+              <OneCStatCard href="/1c/team" label="Менеджеры" count={data.managers} testId="card-one-c-managers" />
+            ) : null}
             <OneCStatCard href="/1c/stores" label="ТТ (активные)" count={data.storesActive} testId="card-one-c-stores" />
             <OneCStatCard href="/1c/orders" label="Заказы 1С" count={data.ordersTotal} testId="card-one-c-orders" />
           </div>
@@ -78,9 +91,11 @@ export default function OneCOverviewPage() {
               <Link href="/1c/orders" className="text-primary hover:underline">
                 Заказы 1С →
               </Link>
-              <Link href="/1c/team" className="text-primary hover:underline">
-                Команда →
-              </Link>
+              {visibility.showTeamLink ? (
+                <Link href="/1c/team" className="text-primary hover:underline">
+                  Команда →
+                </Link>
+              ) : null}
             </CardContent>
           </Card>
           <Card>
@@ -94,11 +109,13 @@ export default function OneCOverviewPage() {
                 По действующим сотрудникам ЛК: {data.storesActive.toLocaleString("ru-RU")} ТТ /{" "}
                 {data.legalsActive.toLocaleString("ru-RU")} юрлиц.
               </p>
-              <p className="mt-2">
-                <Link href="/1c/team" className="text-primary hover:underline">
-                  Команда →
-                </Link>
-              </p>
+              {visibility.showTeamLink ? (
+                <p className="mt-2">
+                  <Link href="/1c/team" className="text-primary hover:underline">
+                    Команда →
+                  </Link>
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         </div>
