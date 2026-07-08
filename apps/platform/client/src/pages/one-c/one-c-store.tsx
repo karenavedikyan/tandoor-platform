@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
 import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
+import { OneCOrdersSection } from "./one-c-orders-section";
 import {
   CopyField,
   dash,
@@ -413,6 +414,8 @@ export default function OneCStorePage() {
               ) : null}
             </div>
           </section>
+
+          <OneCOrdersSection mode="store" entityId1c={storeId} testIdPrefix="one-c-store-orders" />
         </div>
       ) : null}
     </OneCPageShell>

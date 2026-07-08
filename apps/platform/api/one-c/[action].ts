@@ -29,6 +29,12 @@ import {
   handleOneCStore,
   handleOneCStores,
 } from "../../shared/one-c-showroom-handlers.js";
+import {
+  handleBitrixOrder,
+  handleBitrixOrders,
+  handleBitrixOrdersForLegal,
+  handleBitrixOrdersForStore,
+} from "../../shared/bitrix-orders/handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -106,6 +112,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
     if (action === "legal" && req.method === "GET") {
       await handleOneCLegal(req, res, pool);
+      return;
+    }
+    if (action === "orders" && req.method === "GET") {
+      await handleBitrixOrders(req, res, pool, me.id);
+      return;
+    }
+    if (action === "orders-for-store" && req.method === "GET") {
+      await handleBitrixOrdersForStore(req, res, pool, me.id);
+      return;
+    }
+    if (action === "orders-for-legal" && req.method === "GET") {
+      await handleBitrixOrdersForLegal(req, res, pool, me.id);
+      return;
+    }
+    if (action === "order" && req.method === "GET") {
+      await handleBitrixOrder(req, res, pool, me.id);
       return;
     }
 

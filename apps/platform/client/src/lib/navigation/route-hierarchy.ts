@@ -103,7 +103,7 @@ export function parentRouteFor(path: string): string {
   if (/^\/1c\/manager\/[^/]+$/.test(p)) return "/1c/team";
   if (/^\/1c\/rm\/[^/]+$/.test(p)) return "/1c/team";
   if (/^\/1c\/rop\/[^/]+$/.test(p)) return "/1c/team";
-  if (p === "/1c/team" || p === "/1c/stores" || p === "/1c/legals") return "/1c";
+  if (p === "/1c/team" || p === "/1c/stores" || p === "/1c/legals" || p === "/1c/orders") return "/1c";
 
   if (p === "/profile/change-password") return "/profile";
 
@@ -309,6 +309,10 @@ export function breadcrumbsFor(path: string, labels: RouteHierarchyLabels = {}):
     }
     if (seg[1] === "legals") {
       items.push(crumb("Юрлица"));
+      return finalize(items);
+    }
+    if (seg[1] === "orders") {
+      items.push(crumb("Заказы"));
       return finalize(items);
     }
     if (seg[1] === "legal" && seg[2]) {
