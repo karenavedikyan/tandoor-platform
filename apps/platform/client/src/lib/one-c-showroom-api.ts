@@ -2,17 +2,25 @@
  * Read-only API client for /1c/* showroom.
  */
 
+export type OneCOverviewVisibility = {
+  showRops: boolean;
+  showRms: boolean;
+  showManagers: boolean;
+  showTeamLink: boolean;
+};
+
 export type OneCOverview = {
   success: boolean;
-  rops: number;
-  rms: number;
-  managers: number;
+  rops: number | null;
+  rms: number | null;
+  managers: number | null;
   storesActive: number;
   storesTotal: number;
   legalsActive: number;
   legalsTotal: number;
   ordersTotal: number;
   last_imported_at: string | null;
+  visibility: OneCOverviewVisibility;
   message?: string;
 };
 

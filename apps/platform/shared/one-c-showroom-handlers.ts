@@ -43,6 +43,10 @@ import {
   type OneCScope,
   type OneCViewer,
 } from "./one-c-showroom-scope.js";
+import {
+  computeOneCOverviewVisibility,
+  type OneCOverviewVisibility,
+} from "./one-c-overview-visibility.js";
 
 export { normalizeName, nameMatches } from "./one-c-name-matching.js";
 export type { OneCViewer } from "./one-c-showroom-scope.js";
@@ -128,18 +132,24 @@ function buildOrdersFilterClause(ordersFilter: OneCStoresOrdersFilter): string {
 }
 
 export type OneCOverviewV2 = {
-  rops: number;
-  rms: number;
-  managers: number;
+  rops: number | null;
+  rms: number | null;
+  managers: number | null;
   storesActive: number;
   storesTotal: number;
   legalsActive: number;
   legalsTotal: number;
   ordersTotal: number;
   last_imported_at: string | null;
+  visibility: OneCOverviewVisibility;
 };
 
+export { computeOneCOverviewVisibility } from "./one-c-overview-visibility.js";
+export type { OneCOverviewVisibility } from "./one-c-overview-visibility.js";
+
 export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Promise<OneCOverviewV2> {
+  const role = viewer?.role ?? "";
+  const visibility = computeOneCOverviewVisibility(role);
   const ctx = await loadOneCShowroomContext(pool);
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
 
@@ -148,15 +158,16 @@ export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Pr
       `SELECT COUNT(*)::int AS n FROM bitrix_orders_snapshot`,
     );
     return {
-      rops: ctx.teams.length,
-      rms: countRmsWithMatch(ctx),
-      managers: countManagersWithMatch(ctx),
+      rops: visibility.showRops ? ctx.teams.length : null,
+      rms: visibility.showRms ? countRmsWithMatch(ctx) : null,
+      managers: visibility.showManagers ? countManagersWithMatch(ctx) : null,
       storesActive: countStoresActive(ctx),
       storesTotal: ctx.storesTotal,
       legalsActive: countLegalsActive(ctx),
       legalsTotal: ctx.legalsTotal,
       ordersTotal: ordersRes.rows[0]?.n ?? 0,
       last_imported_at: ctx.last_imported_at,
+      visibility,
     };
   }
 
@@ -178,16 +189,21 @@ export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Pr
     ordersTotal = ordersRes.rows[0]?.n ?? 0;
   }
 
+  const scopedRops = hierarchy.length;
+  const scopedRms = hierarchy.reduce((sum, n) => sum + n.rms.length, 0);
+  const scopedManagers = hierarchy.reduce((sum, n) => sum + n.managers.length, 0);
+
   return {
-    rops: hierarchy.length,
-    rms: hierarchy.reduce((sum, n) => sum + n.rms.length, 0),
-    managers: hierarchy.reduce((sum, n) => sum + n.managers.length, 0),
+    rops: visibility.showRops ? scopedRops : null,
+    rms: visibility.showRms ? scopedRms : null,
+    managers: visibility.showManagers ? scopedManagers : null,
     storesActive: storeIds.size,
     storesTotal: storeIds.size,
     legalsActive: legalIds.size,
     legalsTotal: legalIds.size,
     ordersTotal,
     last_imported_at: ctx.last_imported_at,
+    visibility,
   };
 }
 
@@ -1045,6 +1061,10 @@ export async function handleOneCHierarchy(
   pool: PoolLike,
   viewer: OneCViewer,
 ) {
+  if (viewer.role === "manager") {
+    sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Страница команды недоступна для менеджера." });
+    return;
+  }
   const data = await fetchOneCHierarchy(pool, parseSearch(req), viewer);
   sendJson(res, 200, { success: true, ...data });
 }

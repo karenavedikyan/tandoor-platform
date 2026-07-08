@@ -83,7 +83,7 @@ export default function OneCManagerPage() {
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
-  if (!managerId) return <Redirect to="/1c/team" />;
+  if (!managerId) return <Redirect to={user.role === "manager" ? "/1c" : "/1c/team"} />;
 
   return (
     <OneCPageShell
