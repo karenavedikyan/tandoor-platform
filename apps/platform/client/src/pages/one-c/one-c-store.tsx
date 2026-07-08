@@ -9,15 +9,13 @@ import { fetchBitrixOrdersForStore } from "@/lib/one-c-bitrix-orders-api";
 import { build1cDealerRow, build1cPoint } from "@/lib/one-c-dealer-shape";
 import { formatDisplayDateTime } from "@/lib/format-display-date";
 import { buildHashPath } from "@/lib/hash-route-utils";
-import { setShowcaseMatrixApiBase, resetShowcaseMatrixApiBase } from "@/lib/showcase-matrix-api";
-import { refreshMatrixFromServer } from "@/lib/showcase-matrix-store";
 import { userLabelFromProfile } from "@/lib/showcase-distribution-data";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
-import { DistributionTradePointMatrixEntry } from "@/components/distribution/distribution-tradepoint-matrix-entry";
+import { OneCStoreDistributionEntry } from "@/components/distribution/one-c-store-distribution-entry";
 import { useClientBaseActualization } from "@/context/client-base-actualization-context";
 import { OneCOrdersSection } from "./one-c-orders-section";
 import { OneCOrdersSummary } from "./one-c-orders-summary";
@@ -113,11 +111,6 @@ export default function OneCStorePage() {
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
 
   useEffect(() => {
-    setShowcaseMatrixApiBase("/api/one-c/showcase-matrix");
-    return () => resetShowcaseMatrixApiBase();
-  }, []);
-
-  useEffect(() => {
     if (!canAccess || !storeId) return;
     let cancelled = false;
     setLoading(true);
@@ -202,11 +195,6 @@ export default function OneCStorePage() {
     );
     return { dealer, point };
   }, [store]);
-
-  useEffect(() => {
-    if (!dealerPoint) return;
-    void refreshMatrixFromServer(dealerPoint.point.id, dealerPoint.dealer.id);
-  }, [dealerPoint]);
 
   async function copyAddress() {
     if (!store?.address?.trim()) return;
@@ -309,21 +297,13 @@ export default function OneCStorePage() {
             </div>
           ) : null}
 
-          <section
-            data-testid="section-one-c-distribution-lk"
-            className="mt-4"
-          >
-            <DistributionTradePointMatrixEntry
-              dealer={dealerPoint.dealer}
-              point={dealerPoint.point}
+          <section data-testid="section-one-c-distribution" className="mt-4">
+            <OneCStoreDistributionEntry
+              storeId1c={storeId}
+              store={store}
               profile={profile}
               actorUserId={actorUserId}
               actorName={actorName}
-              hideOpenTasksSection
-              hideOpenTradePointCard
-              hideDistributionOnPointSection
-              hidePlacementBlocksSection
-              hideCounterpartyStickyHeader
               matrixSectionTitle="Контрагент и витрина"
             />
           </section>

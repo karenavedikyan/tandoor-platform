@@ -98,6 +98,12 @@ type DistributionEntryTradePointPanelProps = {
   filter: DistributionEntryTradePointFilterState;
   onFilterChange: (next: DistributionEntryTradePointFilterState) => void;
   hideRegion?: boolean;
+  /** Строки списка из 1С витрины (вместо LK buildDistributionEntryTradePointRows). */
+  oneCEntryRows?: readonly DistributionEntryTradePointRow[];
+  /** Refs dealer/point для 1С строк. */
+  oneCRowRefs?: Map<string, { dealer: DealerRow; point: DealerTradePoint }>;
+  /** При выборе ТТ — переход на /1c/store/:id вместо inline-формы. */
+  oneCStoreNavigation?: boolean;
 };
 
 export function DistributionEntryTradePointPanel({
@@ -107,6 +113,9 @@ export function DistributionEntryTradePointPanel({
   filter,
   onFilterChange,
   hideRegion,
+  oneCEntryRows,
+  oneCRowRefs,
+  oneCStoreNavigation = false,
 }: DistributionEntryTradePointPanelProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
@@ -179,7 +188,7 @@ export function DistributionEntryTradePointPanel({
   }, []);
 
   useEffect(() => {
-    if (scopedTradePointIds.length === 0) return;
+    if (oneCStoreNavigation || scopedTradePointIds.length === 0) return;
     if (lastPrefetchedScopeKeyRef.current === scopedTradePointIdsKey) return;
 
     let cancelled = false;
@@ -204,12 +213,23 @@ export function DistributionEntryTradePointPanel({
     return () => {
       cancelled = true;
     };
-  }, [scopedTradePointIdsKey, scopedTradePointIds]);
+  }, [oneCStoreNavigation, scopedTradePointIdsKey, scopedTradePointIds]);
 
   const baseRows = useMemo(() => {
+    if (oneCEntryRows) {
+      void cacheBump;
+      const q = query.trim().toLowerCase();
+      if (!q) return [...oneCEntryRows];
+      return oneCEntryRows.filter((row) => {
+        const hay = [row.tradePointName, row.clientName, row.city ?? "", row.managerName ?? ""]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
+    }
     void cacheBump;
     return buildDistributionEntryTradePointRows({ dealers: scopedDealers, query });
-  }, [scopedDealers, query, cacheBump]);
+  }, [oneCEntryRows, scopedDealers, query, cacheBump]);
 
   const tabCounts = useMemo(() => countByStatusTab(baseRows), [baseRows]);
 
@@ -247,13 +267,14 @@ export function DistributionEntryTradePointPanel({
   }, []);
 
   const rowRefs = useMemo(() => {
+    if (oneCRowRefs) return oneCRowRefs;
     const map = new Map<string, { dealer: DealerRow; point: DealerTradePoint }>();
     for (const row of baseRows) {
       const ref = findDealerTradePointForEntryRow(scopedDealers, row);
       if (ref) map.set(row.tradePointId, ref);
     }
     return map;
-  }, [baseRows, scopedDealers]);
+  }, [oneCRowRefs, baseRows, scopedDealers]);
 
   const selectedRow = useMemo(
     () => baseRows.find((r) => r.tradePointId === selectedTradePointId) ?? null,
@@ -313,19 +334,26 @@ export function DistributionEntryTradePointPanel({
   const actorUserId = user?.id ?? profile.personaUserId;
   const actorName = (user ? displayUserName(user) : null) ?? userLabelFromProfile(profile);
 
-  const handleSelectRow = useCallback((row: DistributionEntryTradePointRow) => {
-    setSelectedTradePointId(row.tradePointId);
-  }, [setSelectedTradePointId]);
+  const handleSelectRow = useCallback(
+    (row: DistributionEntryTradePointRow) => {
+      if (oneCStoreNavigation) {
+        navigateHashPathInHash(`/1c/store/${encodeURIComponent(row.tradePointId)}`);
+        return;
+      }
+      setSelectedTradePointId(row.tradePointId);
+    },
+    [oneCStoreNavigation, setSelectedTradePointId],
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const displayRows = useMemo(() => {
     const visible = sortedRows.filter((r) => rowRefs.has(r.tradePointId));
-    if (filter.status === "all") return visible;
+    if (oneCStoreNavigation || filter.status === "all") return visible;
     return visible.filter((row) => {
       const entries = loadCachedMatrix(row.tradePointId);
       return entries.some((entry) => entry.status === filter.status);
     });
-  }, [filter.status, rowRefs, sortedRows, cacheBump]);
+  }, [oneCStoreNavigation, filter.status, rowRefs, sortedRows, cacheBump]);
 
   const virtualRowCount = displayRows.length;
 
@@ -615,7 +643,15 @@ export function DistributionEntryTradePointPanel({
     </Card>
   );
 
-  const entryColumn = selectedRow && selectedRef ? (
+  const entryColumn = oneCStoreNavigation ? (
+    <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
+      <CardContent className="px-4 py-10 text-center">
+        <p className="text-sm text-muted-foreground">
+          Выберите торговую точку в списке — откроется карточка магазина в 1С витрине для внесения дистрибуции.
+        </p>
+      </CardContent>
+    </Card>
+  ) : selectedRow && selectedRef ? (
     <DistributionTradePointMatrixEntry
       dealer={selectedRef.dealer}
       point={selectedRef.point}

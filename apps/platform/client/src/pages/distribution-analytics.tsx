@@ -59,6 +59,12 @@ export function DistributionAnalyticsPage({
 
   return (
     <div className="space-y-3" data-testid="page-distribution-analytics">
+      <div
+        className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground"
+        data-testid="banner-distribution-analytics-lk-source"
+      >
+        Аналитика ещё на LK-каталоге, скоро переедет на 1С.
+      </div>
       <DistributionAnalyticsFiltersPanel
         scopedDealers={scopedDealers}
         filters={filters}

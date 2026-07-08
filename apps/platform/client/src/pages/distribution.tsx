@@ -5,7 +5,7 @@ import type { DistributionEntryAxis } from "@/components/distribution/distributi
 import { DistributionEntryWizard } from "@/components/distribution/distribution-entry-wizard";
 import { DistributionScopeSummary } from "@/components/distribution/distribution-scope-summary";
 import { DistributionAnalyticsPage, type DistributionAnalyticsTab } from "@/pages/distribution-analytics";
-import { useDistributionScopedTradePoints } from "@/hooks/use-distribution-scoped-dealers";
+import { useOneCScopedStores } from "@/hooks/use-one-c-scoped-stores";
 import { useReleaseDemoProfile } from "@/hooks/use-release-demo-profile";
 import {
   buildHashWithQuery,
@@ -46,7 +46,7 @@ export default function DistributionPage() {
   const routeQs = useHashQuery();
   const [entryAxisActive, setEntryAxisActive] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const tradePoints = useDistributionScopedTradePoints(profile);
+  const { tradePoints, loading: oneCStoresLoading, error: oneCStoresError } = useOneCScopedStores();
 
   const mode = parseMode(routeQs);
   const analyticsTab = parseAnalyticsTab(routeQs);
@@ -114,6 +114,11 @@ export default function DistributionPage() {
         data-testid="page-distribution"
       >
         <DistributionScopeSummary tradePoints={tradePoints} onClose={() => setSummaryOpen(false)} />
+        {oneCStoresError ? (
+          <p className="text-sm text-destructive">{oneCStoresError}</p>
+        ) : oneCStoresLoading ? (
+          <p className="text-sm text-muted-foreground">Загрузка магазинов 1С…</p>
+        ) : null}
       </div>
     );
   }
@@ -179,6 +184,9 @@ export default function DistributionPage() {
             </ModePill>
             <ModePill active={mode === "analytics"} onClick={() => setMode("analytics")} testId="button-distribution-mode-analytics">
               Аналитика
+              <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                LK-данные
+              </span>
             </ModePill>
           </div>
         </div>
