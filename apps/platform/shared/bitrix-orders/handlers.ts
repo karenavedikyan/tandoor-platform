@@ -3,16 +3,16 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { PoolLike } from "../server/db/neon-client.js";
-import { sendJson } from "./admin/admin-auth.js";
+import type { PoolLike } from "../../server/db/neon-client.js";
+import { sendJson } from "../admin/admin-auth.js";
 import {
   canEditDistributionForStore1c,
   type OneCDistributionUser,
-} from "./one-c-distribution-permissions.js";
+} from "../one-c-distribution-permissions.js";
 import {
   loadOneCShowroomContext,
   teamContextForUser,
-} from "./one-c-showroom-context.js";
+} from "../one-c-showroom-context.js";
 
 type OrderListRow = {
   id: string;
