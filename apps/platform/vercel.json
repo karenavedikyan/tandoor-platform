@@ -75,6 +75,10 @@
     {
       "path": "/api/cron/cleanup-web-vitals",
       "schedule": "0 2 * * 0"
+    },
+    {
+      "path": "/api/cron/bitrix-orders-sync",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

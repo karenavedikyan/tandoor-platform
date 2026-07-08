@@ -56,3 +56,34 @@ export function resolveExchangeProxyConfig(): ExchangeProxyConfig | null {
 export function exchangeProxyAuthHeaders(token: string): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+export const BITRIX_ORDERS_SOURCE_FILE = "orders11.xml";
+export const BITRIX_ORDERS_FTP_PATH = "/s3/IMG/exchange/import_orders/orders11.xml";
+
+export function stripUtf8Bom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/** Fetch latest Bitrix orders XML via Yandex VM proxy (`/bitrix-orders/latest`). */
+export async function fetchBitrixOrdersXml(): Promise<{ xml: string; sourceFile: string }> {
+  const proxy = resolveExchangeProxyConfig();
+  if (!proxy) {
+    throw new Error("EXCHANGE_PROXY_URL не настроен (Yandex VM proxy).");
+  }
+
+  const url = `${proxy.proxyUrl}/bitrix-orders/latest`;
+  const r = await fetchWithRetry(url, "application/xml, text/xml, */*", exchangeProxyAuthHeaders(proxy.token));
+  if (!r.ok) {
+    const ct = r.headers.get("content-type") ?? "";
+    if (ct.includes("application/json")) {
+      const json = (await r.json().catch(() => ({}))) as { message?: string };
+      throw new Error(json.message ?? `Proxy HTTP ${r.status}`);
+    }
+    throw new Error(`Proxy HTTP ${r.status}`);
+  }
+
+  return {
+    xml: stripUtf8Bom(await r.text()),
+    sourceFile: BITRIX_ORDERS_SOURCE_FILE,
+  };
+}
