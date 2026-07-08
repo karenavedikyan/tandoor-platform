@@ -79,6 +79,10 @@
     {
       "path": "/api/cron/bitrix-orders-sync",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/distribution-export",
+      "schedule": "0 * * * *"
     }
   ]
 }
