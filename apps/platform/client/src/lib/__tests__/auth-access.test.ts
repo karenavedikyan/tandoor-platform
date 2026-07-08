@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
-import { buildTrashNavBadge, canCreateResetLink, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
+import { buildTrashNavBadge, canCreateResetLink, defaultHomePathForUserRole, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
 
 const U = (id: string, role: UserRole) => ({ id, role });
 
@@ -92,7 +92,31 @@ assert.equal(adminAdministrationIds?.at(-1), "nav-item-reset-requests", "admin: 
 
 const adminLeading = leadingTestIds("sales_director", "admin");
 assert.equal(adminLeading[0], "nav-item-one-c-showroom", "admin: 1C showroom first in leadingItems");
-assert.ok(!adminLeading.includes("nav-item-clients-tps"), "admin: no clients/tps in leadingItems");
+assert.equal(adminLeading[1], "nav-item-clients-tps", "admin: legacy clients/tps after 1C showroom");
+
+for (const [salesRole, platformUserRole] of [
+  ["sales_manager", "manager"],
+  ["team_lead", "rop"],
+  ["team_lead", "regional_manager"],
+  ["sales_director", "director"],
+  ["marketer", "marketer"],
+] as const) {
+  assert.ok(
+    !leadingTestIds(salesRole, platformUserRole).includes("nav-item-clients-tps"),
+    `${platformUserRole}: no legacy clients/tps in leadingItems`,
+  );
+}
+assert.ok(
+  !navTestIds("analyst", "analyst").includes("nav-item-clients-tps"),
+  "analyst: no legacy clients/tps in nav",
+);
+
+for (const role of ["admin", "director", "rop", "regional_manager", "manager"] as const) {
+  assert.equal(defaultHomePathForUserRole(role), "/1c", `${role}: home is /1c`);
+}
+assert.equal(defaultHomePathForUserRole("marketer"), "/marketing-briefs", "marketer: home unchanged");
+assert.equal(defaultHomePathForUserRole("analyst"), "/dealer-base", "analyst: home unchanged");
+assert.equal(defaultHomePathForUserRole("category_manager"), "/dealer-base", "category_manager: home unchanged");
 
 for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
   const platformUserRole =
