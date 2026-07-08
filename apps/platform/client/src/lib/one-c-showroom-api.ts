@@ -46,6 +46,7 @@ export type OneCRopNode = {
   storeCount: number;
   legalCount: number;
   rms: OneCRmNode[];
+  managers: OneCManagerNode[];
 };
 
 export type OneCHierarchyResponse = {

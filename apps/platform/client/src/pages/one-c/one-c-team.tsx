@@ -13,10 +13,6 @@ import {
   useDebouncedSearch,
 } from "./one-c-ui";
 
-function countLabel(n: number, word: string): string {
-  return `${n} ${word}`;
-}
-
 function RopRow({
   node,
   searchActive,
@@ -51,62 +47,57 @@ function RopRow({
         </div>
       </div>
       {isOpen ? (
-        <div className="ml-6 space-y-1 border-l pl-3 pb-2">
-          {node.rms.map((rm) => (
-            <RmBlock key={`${node.teamId}-${rm.userId}`} rm={rm} searchActive={searchActive} defaultOpen={defaultOpen} />
-          ))}
+        <div className="ml-6 space-y-3 border-l pl-3 pb-2">
+          {node.rms.length > 0 ? (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">РМ ({node.rms.length})</p>
+              <div className="space-y-0.5">
+                {node.rms.map((rm) => (
+                  <RmRow key={`${node.teamId}-${rm.userId}`} rm={rm} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {node.managers.length > 0 ? (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">
+                Менеджеры ({node.managers.length})
+              </p>
+              <div className="space-y-0.5">
+                {node.managers.map((mgr) => (
+                  <ManagerRow key={mgr.userId} mgr={mgr} />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
 }
 
-function RmBlock({
-  rm,
-  searchActive,
-  defaultOpen,
-}: {
-  rm: OneCRopNode["rms"][number];
-  searchActive: boolean;
-  defaultOpen: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const isOpen = searchActive ? true : open;
-  const muted = rm.storeCount === 0 && rm.managers.every((m) => m.storeCount === 0);
+function RmRow({ rm }: { rm: OneCRopNode["rms"][number] }) {
+  const muted = rm.storeCount === 0;
 
   return (
-    <div className={cn(muted && "opacity-60")} data-testid={`one-c-rm-${rm.userId}`}>
-      <div className="flex items-start gap-2 py-1.5">
-        <button
-          type="button"
-          className="mt-0.5 shrink-0 rounded p-1 hover:bg-muted"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={isOpen}
-        >
-          {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </button>
-        <div className="min-w-0 flex-1">
-          <Link href={`/1c/rm/${rm.userId}`} className="font-medium text-primary hover:underline">
-            {rm.fullName}
-          </Link>
-          <span className="ml-2 text-xs text-muted-foreground">(РМ)</span>
-          <p className="text-xs text-muted-foreground">
-            {countLabel(rm.managers.length, "менедж.")} · {rm.storeCount.toLocaleString("ru-RU")} ТТ
-          </p>
-        </div>
+    <div
+      className={cn("flex items-center justify-between gap-2 py-1.5 text-sm", muted && "opacity-60")}
+      data-testid={`one-c-rm-${rm.userId}`}
+    >
+      <div className="min-w-0">
+        <Link href={`/1c/rm/${rm.userId}`} className="font-medium text-primary hover:underline">
+          {rm.fullName}
+        </Link>
+        <span className="ml-2 text-xs text-muted-foreground">(РМ)</span>
       </div>
-      {isOpen ? (
-        <div className="ml-6 space-y-0.5 border-l pl-3 pb-1">
-          {rm.managers.map((mgr) => (
-            <ManagerRow key={mgr.userId} mgr={mgr} />
-          ))}
-        </div>
-      ) : null}
+      <span className="shrink-0 tabular-nums text-muted-foreground">
+        {rm.storeCount.toLocaleString("ru-RU")} ТТ
+      </span>
     </div>
   );
 }
 
-function ManagerRow({ mgr }: { mgr: OneCRopNode["rms"][number]["managers"][number] }) {
+function ManagerRow({ mgr }: { mgr: OneCRopNode["managers"][number] }) {
   const muted = mgr.storeCount === 0;
   return (
     <div
@@ -159,7 +150,7 @@ export default function OneCTeamPage() {
   const subtitle = useMemo(() => {
     const rops = items.length;
     const rms = items.reduce((s, r) => s + r.rms.length, 0);
-    const mgrs = items.reduce((s, r) => s + r.rms.reduce((ss, rm) => ss + rm.managers.length, 0), 0);
+    const mgrs = items.reduce((s, r) => s + r.managers.length, 0);
     return `${rops} РОП · ${rms} РМ · ${mgrs} менеджеров (из ЛК)`;
   }, [items]);
 

@@ -26,6 +26,7 @@ import {
   countStoresActive,
   legalMatchesActiveFilter,
   loadOneCShowroomContext,
+  ropCountsFromTeamManagers,
   storeIdsForRegionalNames,
   storeIdsForResponsibleNames,
   teamContextForUser,
@@ -130,20 +131,10 @@ async function fetchUserCard(
     const names = ctx.matchedRegionalByUserId.get(userId) ?? [];
     storeCount = storeIdsForRegionalNames(names, ctx).size;
     legalCount = countLegalsForRegionalNames(names, ctx);
-  } else {
-    const teamRms = team ? rms : [];
-    const storeIds = new Set<string>();
-    const legalIds = new Set<string>();
-    for (const rm of teamRms) {
-      const names = ctx.matchedRegionalByUserId.get(rm.id) ?? [];
-      for (const id of Array.from(storeIdsForRegionalNames(names, ctx))) storeIds.add(id);
-      const nameSet = new Set(names);
-      for (const l of Array.from(ctx.legalById.values())) {
-        if (l.regional_manager_name && nameSet.has(l.regional_manager_name)) legalIds.add(l.id_1c);
-      }
-    }
-    storeCount = storeIds.size;
-    legalCount = legalIds.size;
+  } else if (team) {
+    const counts = ropCountsFromTeamManagers(team.id, ctx);
+    storeCount = counts.storeCount;
+    legalCount = counts.legalCount;
   }
 
   return {
