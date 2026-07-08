@@ -120,7 +120,7 @@ import {
   sortManagersByHeat,
   type ManagerHeatLevel,
 } from "@/lib/manager-load-heat";
-import { fetchTradePointsOverview1c, fetchTradePointsManagerDetail1c } from "@/lib/trade-points-overview-api";
+import { fetchTradePointsOverview1c, fetchTradePointsManagerDetail1c } from "@/lib/client-base-overview-1c-api";
 import type { TradePointsManagerDetailClient } from "@/lib/trade-points-overview-api";
 import {
   buildTradePointsOverviewDisplayIndex,
