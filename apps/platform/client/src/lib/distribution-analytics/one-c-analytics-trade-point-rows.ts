@@ -9,6 +9,19 @@ function isOneCStoreArchived(item: OneCStoreListItem): boolean {
   return status === "archived" || status === "closed" || status === "неактивен";
 }
 
+function shortIdSuffix(id_1c: string): string {
+  const tail = id_1c.slice(-8);
+  return `[${tail}]`;
+}
+
+function pickOneCStoreDisplayCode(item: OneCStoreListItem): string {
+  const addr = item.address?.trim();
+  if (addr) return addr;
+  const legal = item.legal_name?.trim();
+  if (legal) return legal;
+  return shortIdSuffix(item.id_1c);
+}
+
 /** Полные строки ТТ для analytics-фильтров и агрегатов из списка 1С. */
 export function buildOneCAnalyticsTradePointRows(items: readonly OneCStoreListItem[]): TradePointListRow[] {
   const rows: TradePointListRow[] = [];
@@ -30,7 +43,7 @@ export function buildOneCAnalyticsTradePointRows(items: readonly OneCStoreListIt
       dealer,
       point,
       entry: { point, isArchived: false } as MergedTradePointEntry,
-      tradePointDisplayCode: item.id_1c,
+      tradePointDisplayCode: pickOneCStoreDisplayCode(item),
       dealerClientCode: dealer.id,
       dealerName: dealer.name,
       tradePointName: point.name,
