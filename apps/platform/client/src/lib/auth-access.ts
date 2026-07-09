@@ -101,10 +101,11 @@ export function defaultHomePathForUserRole(role: UserRole): string {
   }
   switch (role) {
     case "marketer":
+    case "category_manager":
       return "/marketing-briefs";
     case "analyst":
-      return "/dealer-base";
-    case "category_manager":
+      return "/catalog";
+    case "admin":
       return "/dealer-base";
     default:
       return "/";
@@ -138,6 +139,10 @@ export function canAccessClients1cForUser(role: UserRole | null | undefined): bo
   return role === "admin";
 }
 
+export function canAccessLegacyDealerBaseForUser(role: UserRole | null | undefined): boolean {
+  return role === "admin";
+}
+
 export function canAccessPathForUser(role: UserRole, path: string): boolean {
   const p = normPath(path);
   if (p === "/1c" || isUnder(p, "/1c")) {
@@ -145,6 +150,18 @@ export function canAccessPathForUser(role: UserRole, path: string): boolean {
   }
   if (p === "/clients-1c" || isUnder(p, "/clients-1c")) {
     return canAccessClients1cForUser(role);
+  }
+  if (
+    p === "/dealer-base" ||
+    isUnder(p, "/dealer-base") ||
+    p === "/dealers" ||
+    isUnder(p, "/dealers") ||
+    p === "/trade-points" ||
+    isUnder(p, "/trade-points") ||
+    p === "/client-map" ||
+    isUnder(p, "/client-map")
+  ) {
+    return canAccessLegacyDealerBaseForUser(role);
   }
   if (p === "/team-activity") return canAccessTeamActivityForUser(role);
   if (p === "/forgot") return true;
@@ -223,7 +240,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "sales_manager") {
     return any([
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
       (x) => isUnder(x, "/assignment"),
@@ -245,12 +261,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "team_lead") {
     return any([
       (x) => x === "/main" || isUnder(x, "/main"),
-      (x) =>
-        isUnder(x, "/dealer-base") ||
-        isUnder(x, "/dealers") ||
-        isUnder(x, "/trade-points") ||
-        isUnder(x, "/client-map") ||
-        x === "/client-base-activity",
+      (x) => x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
       (x) => isUnder(x, "/assignment"),
@@ -273,12 +284,7 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "sales_director") {
     return any([
       (x) => x === "/" || isUnder(x, "/main") || isUnder(x, "/sales-manager"),
-      (x) =>
-        isUnder(x, "/dealer-base") ||
-        isUnder(x, "/dealers") ||
-        isUnder(x, "/trade-points") ||
-        isUnder(x, "/client-map") ||
-        x === "/client-base-activity",
+      (x) => x === "/client-base-activity",
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
       (x) => isUnder(x, "/assignment"),
@@ -301,9 +307,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
   if (role === "marketer") {
     return any([
       (x) => x === "/",
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers"),
-      (x) => isUnder(x, "/trade-points"),
-      (x) => isUnder(x, "/client-map"),
       (x) => isUnder(x, "/sales-control"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
@@ -321,7 +324,6 @@ export function canAccessPath(role: SalesRole, path: string): boolean {
 
   if (role === "analyst") {
     return any([
-      (x) => isUnder(x, "/dealer-base") || isUnder(x, "/dealers") || isUnder(x, "/trade-points") || isUnder(x, "/client-map"),
       (x) => isUnder(x, "/tasks"),
       (x) => isUnder(x, "/distribution") || isUnder(x, "/model"),
       (x) => isUnder(x, "/assignment"),
@@ -702,10 +704,13 @@ export function getPilotNavigation(
 
   const buildInDevelopmentNavGroup = (options: {
     includeMarketingBriefsInDev: boolean;
+    includeClientMap: boolean;
   }): PilotNavGroup => {
     const items: PilotNavItem[] = [
       { href: "/training", label: "Обучение", testId: "nav-item-training", navBehaviorId: "nav-training" },
-      { href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" },
+      ...(options.includeClientMap
+        ? [{ href: "/client-map", label: "Карта клиентов", testId: "nav-item-client-map", navBehaviorId: "nav-client-map" }]
+        : []),
       { href: "/communications", label: "Коммуникации", testId: "nav-item-communications", navBehaviorId: "nav-communications" },
       {
         href: "/sales-control/plan-fact",
@@ -733,7 +738,11 @@ export function getPilotNavigation(
   /** Промт 55: плоский список рабочих разделов + аккордеон «В разработке». */
   const unifiedSalesNavigation = (
     homeHref: string,
-    options?: { includeMarketingBriefsInDev?: boolean; extraLeadingItems?: PilotNavItem[] },
+    options?: {
+      includeMarketingBriefsInDev?: boolean;
+      extraLeadingItems?: PilotNavItem[];
+      includeClientMap?: boolean;
+    },
   ): Extract<PilotNavigationModel, { layout: "grouped" }> => ({
     layout: "grouped",
     leadingItems: [
@@ -763,23 +772,41 @@ export function getPilotNavigation(
       },
       ...(options?.extraLeadingItems ?? []),
     ],
-    groups: [buildInDevelopmentNavGroup({ includeMarketingBriefsInDev: options?.includeMarketingBriefsInDev ?? false })],
+    groups: [
+      buildInDevelopmentNavGroup({
+        includeMarketingBriefsInDev: options?.includeMarketingBriefsInDev ?? false,
+        includeClientMap: options?.includeClientMap ?? false,
+      }),
+    ],
   });
 
+  const includeLegacyClientMap = platformUserRole === "admin";
+
   if (role === "sales_director" || role === "team_lead") {
-    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"), adminPurgeQueueCount);
+    return finalizeGroupedPilotNavigation(
+      platformUserRole,
+      role,
+      unifiedSalesNavigation("/1c", { includeClientMap: includeLegacyClientMap }),
+      adminPurgeQueueCount,
+    );
   }
 
   if (role === "sales_manager") {
-    return finalizeGroupedPilotNavigation(platformUserRole, role, unifiedSalesNavigation("/dealer-base"), adminPurgeQueueCount);
+    return finalizeGroupedPilotNavigation(
+      platformUserRole,
+      role,
+      unifiedSalesNavigation("/1c", { includeClientMap: includeLegacyClientMap }),
+      adminPurgeQueueCount,
+    );
   }
 
   if (role === "marketer") {
     return finalizeGroupedPilotNavigation(
       platformUserRole,
       role,
-      unifiedSalesNavigation("/dealer-base", {
+      unifiedSalesNavigation("/1c", {
         includeMarketingBriefsInDev: false,
+        includeClientMap: includeLegacyClientMap,
         extraLeadingItems: [
           {
             href: "/listings",
@@ -807,7 +834,9 @@ export function getPilotNavigation(
       }
       push({ href: "/distribution", label: "Дистрибуция", testId: "nav-item-distribution" });
       push({ href: "/assignments", label: "Задачи", testId: "nav-item-tasks-inbox", navBehaviorId: "nav-tasks-inbox" });
-      push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
+      if (platformUserRole === "admin") {
+        push({ href: "/client-map", label: "Карта клиентов", testId: "nav-client-map" });
+      }
       push({ href: "/communications", label: "Коммуникации", testId: "nav-communications" });
       push({ href: "/catalog", label: "Каталог", testId: "nav-catalog" });
       push({ href: "/marketing-briefs", label: "Маркетинговые брифы", testId: "nav-marketing-briefs" });

@@ -110,8 +110,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "analyst",
     expectedFallbackPersona: "user-anl-ivanets",
     navMustContain: ["nav-item-distribution"],
-    navMustNotContain: ["nav-item-clients-tps"],
-    expectedHomePath: "/dealer-base",
+    navMustNotContain: ["nav-item-clients-tps", "nav-client-map"],
+    expectedHomePath: "/catalog",
     hasOwnScope: false,
   },
   {
@@ -119,8 +119,8 @@ const CASES: RoleExpectation[] = [
     expectedSalesRole: "marketer",
     expectedFallbackPersona: "user-mkt-morozova",
     navMustContain: ["nav-listings"],
-    navMustNotContain: ["nav-item-clients-tps"],
-    expectedHomePath: "/dealer-base",
+    navMustNotContain: ["nav-item-clients-tps", "nav-client-map"],
+    expectedHomePath: "/marketing-briefs",
     hasOwnScope: false,
   },
 ];
