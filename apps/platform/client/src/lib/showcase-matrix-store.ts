@@ -12,6 +12,7 @@ import {
 } from "./showcase-matrix-api.js";
 import { enqueuePendingSync, makePendingId } from "./overrides-pending-sync.js";
 import { runOverridesPendingSyncOnce } from "./overrides-pending-sync-worker.js";
+import { isDistributionDebugEnabled } from "./distribution-entry-debug.js";
 
 export const SHOWCASE_MATRIX_STORE_CACHE_KEY = "tandoor:showcase-matrix:cache-v1";
 export const SHOWCASE_MATRIX_STORE_CHANGED_EVENT = "tandoor:showcase-matrix:changed";
@@ -163,10 +164,25 @@ const NULL_PLACEMENT_FIELDS = {
   placementLegacyOurs: null,
 } as const;
 
+const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function enqueueShowcaseMatrixUpsert(
   clientOpId: string,
   payload: Record<string, unknown>,
 ): void {
+  const targetKind = typeof payload.targetKind === "string" ? payload.targetKind : "";
+  const targetId = typeof payload.targetId === "string" ? payload.targetId : "";
+  const needsUuid = targetKind === "model" || targetKind === "variant";
+  if (needsUuid && !UUID_RX.test(targetId)) {
+    if (isDistributionDebugEnabled()) {
+      console.debug("[dist-recon] enqueue:skip:non-uuid-target", {
+        clientOpId,
+        targetKind,
+        targetId,
+      });
+    }
+    return;
+  }
   enqueuePendingSync({
     id: makePendingId("showcase-matrix-upsert", clientOpId),
     kind: "showcase-matrix-upsert",
