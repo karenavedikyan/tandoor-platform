@@ -57,6 +57,7 @@ export function oneCStoreListItemToDealerWithPoint(item: OneCStoreListItem): {
     legal,
   );
   dealer.tradePoints = [point];
+  dealer.ropId = item.rop_user_id ?? null;
   return { dealer, point };
 }
 
