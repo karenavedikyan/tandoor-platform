@@ -298,3 +298,70 @@ describe("DistributionEntryTradePointPanel tp hash persistence", () => {
     expect(screen.queryByTestId("list-distribution-entry-tradepoints")).toBeNull();
   });
 });
+
+describe("DistributionEntryTradePointPanel oneCStoreNavigation", () => {
+  let navigateSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockActx.enabled = false;
+    mockActx.loading = false;
+    mockTeamPlane.teamFetchLoading = false;
+    mockIsMobile.value = false;
+    mockDesktopLayout.value = true;
+    navigateSpy = vi.spyOn(hashLocationRouter, "navigateHashPathInHash");
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    window.location.hash = "";
+  });
+
+  it("navigates to /1c/store on row click and does not render inline matrix entry", async () => {
+    const tpId = "one-c-store-uuid";
+    const oneCEntryRows = [
+      {
+        dealerId: "dealer-1",
+        tradePointId: tpId,
+        tradePointName: "ТТ 1С",
+        clientName: "Клиент",
+        city: "Москва",
+        clientCategory: "top350" as const,
+        managerName: null,
+        templateModelsCount: 1,
+        filledCount: 0,
+        coveragePct: 0,
+        lastUpdatedAt: null,
+        installedOursTotal: 0,
+        installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
+      },
+    ];
+    const rowRefs = new Map([
+      [
+        tpId,
+        {
+          dealer: makeDealer(tpId, "ТТ 1С"),
+          point: makeDealer(tpId, "ТТ 1С").tradePoints[0],
+        },
+      ],
+    ]);
+
+    render(
+      <DistributionEntryTradePointPanel
+        profile={profile}
+        dealers={[]}
+        filter={filter}
+        onFilterChange={() => {}}
+        oneCEntryRows={oneCEntryRows}
+        oneCRowRefs={rowRefs}
+        oneCStoreNavigation
+      />,
+    );
+
+    const row = await screen.findByTestId(`distribution-entry-tradepoint-row-${tpId}`);
+    fireEvent.click(row);
+
+    expect(navigateSpy).toHaveBeenCalledWith(`/1c/store/${encodeURIComponent(tpId)}`);
+    expect(screen.queryByTestId("distribution-tradepoint-matrix-entry")).toBeNull();
+  });
+});

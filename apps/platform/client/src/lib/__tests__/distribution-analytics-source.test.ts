@@ -5,11 +5,17 @@ import assert from "node:assert/strict";
 import {
   readDistributionAnalyticsSourceFromHash,
   resolveDistributionAnalyticsSource,
+  resolveDistributionEntrySource,
 } from "../distribution-analytics/distribution-analytics-source.js";
 
 assert.equal(resolveDistributionAnalyticsSource("manager"), "one-c");
 assert.equal(resolveDistributionAnalyticsSource("director"), "one-c");
 assert.equal(resolveDistributionAnalyticsSource("admin"), "one-c");
+assert.equal(resolveDistributionEntrySource("manager"), "one-c");
+assert.equal(
+  resolveDistributionEntrySource("admin", new URLSearchParams("source=legacy")),
+  "legacy",
+);
 assert.equal(
   resolveDistributionAnalyticsSource("admin", new URLSearchParams("source=legacy")),
   "legacy",
