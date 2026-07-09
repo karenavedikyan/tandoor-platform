@@ -64,7 +64,6 @@ import type { MatrixTask, MatrixTaskRecommendation } from "@/lib/trade-point-tas
 import { ShowcaseModelPresentationDialog } from "@/components/showcase-model-presentation-dialog";
 import { ModelDoorPhotoFrame } from "@/components/showcase/model-door-photo-frame";
 import { TradePointShowcaseAssignmentsPanel } from "@/components/distribution/trade-point-showcase-assignments-panel";
-import { TradePointPlacementBlocksSection } from "@/components/distribution/trade-point-placement-blocks-section";
 import { TradePointShowcaseHistorySection } from "@/components/distribution/trade-point-showcase-history-section";
 import { TradePointShowcaseSegmentSummary } from "@/components/distribution/trade-point-showcase-segment-summary";
 import {
@@ -314,7 +313,6 @@ type Props = {
   onOpenEntry?: (productId?: string) => void;
   hideOpenTasksSection?: boolean;
   hideDistributionOnPointSection?: boolean;
-  hidePlacementBlocksSection?: boolean;
   matrixSectionTitle?: string;
 };
 
@@ -330,7 +328,6 @@ export function TradePointShowcaseMatrixSection({
   onOpenEntry,
   hideOpenTasksSection = false,
   hideDistributionOnPointSection = false,
-  hidePlacementBlocksSection = false,
   matrixSectionTitle = "Витрина торговой точки",
 }: Props) {
   const canView = useMemo(() => canViewTradePointShowcaseMatrix(profile, dealer), [profile, dealer]);
@@ -1530,16 +1527,6 @@ export function TradePointShowcaseMatrixSection({
         )}
           </div>
 
-          {!hidePlacementBlocksSection ? (
-            <TradePointPlacementBlocksSection
-              dealerId={dealer.id}
-              tradePointId={point.id}
-              canEdit={canEdit}
-              actorUserId={actorUserId}
-              actorName={actorName}
-            />
-          ) : null}
-
           <TradePointShowcaseHistorySection tradePointId={point.id} density={density} />
 
           {!hideDistributionOnPointSection ? (
@@ -1613,7 +1600,7 @@ export function TradePointShowcaseMatrixSection({
                     data-testid="text-trade-point-distribution-conclusion"
                   >
                     {!distributionFromPlacements.hasData
-                      ? "Данные по витринам ещё не внесены — добавьте блоки в разделе «Типы размещения витрины» (всего витрин и сколько из них наши)."
+                      ? "Данные по витринам ещё не внесены — заполните раздел «Параметры витрины» (всего витрин и сколько из них наши)."
                       : distributionFromPlacements.total.pct >= 70
                         ? "Показатели в комфортной зоне, точечные доработки по сегментам."
                         : distributionFromPlacements.total.pct >= 50

@@ -194,7 +194,6 @@ export default function Clients1cStorePage() {
                 hideOpenTasksSection
                 hideOpenTradePointCard
                 hideDistributionOnPointSection
-                hidePlacementBlocksSection
                 hideCounterpartyStickyHeader
               />
             </OneCDetailSection>
