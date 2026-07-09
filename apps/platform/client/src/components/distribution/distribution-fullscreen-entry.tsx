@@ -79,6 +79,11 @@ import {
   searchCatalog,
   type CatalogProduct,
 } from "@/lib/catalog-data";
+import {
+  getOneCCatalogProductFromCache,
+  isCatalogUuid,
+  preloadOneCCatalogByIds,
+} from "@/lib/onec-catalog-resolver";
 import { useCatalogReady } from "@/lib/catalog-warmup";
 import {
   readCatalogCardSizeFromStorage,
@@ -399,6 +404,7 @@ export function DistributionFullscreenEntry({
   const [exitGateGaps, setExitGateGaps] = useState<ShowcaseTypeKey[]>([]);
   const pendingCloseRef = useRef<(() => void) | null>(null);
   const [bump, setBump] = useState(0);
+  const [oneCCatalogVersion, setOneCCatalogVersion] = useState(0);
   const {
     filters: catalogFilters,
     setFilter: setCatalogFilter,
@@ -586,6 +592,29 @@ export function DistributionFullscreenEntry({
     return m;
   }, [matrixModels]);
 
+  const resolveCatalogProduct = useCallback((id: string): CatalogProduct | null => {
+    const seed = getProductById(id);
+    if (seed) return seed;
+    if (isCatalogUuid(id)) return getOneCCatalogProductFromCache(id);
+    return null;
+  }, []);
+
+  useEffect(() => {
+    const uuids: string[] = [];
+    for (const m of matrixModels) {
+      if (isCatalogUuid(m.id)) uuids.push(m.id);
+    }
+    if (uuids.length === 0) return;
+    let cancelled = false;
+    void preloadOneCCatalogByIds(uuids).then(() => {
+      if (cancelled) return;
+      setOneCCatalogVersion((v) => v + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [matrixModels]);
+
   useEffect(() => {
     if (!initialProductId) return;
     const inMatrix = matrixModels.some((m) => m.id === initialProductId);
@@ -639,18 +668,18 @@ export function DistributionFullscreenEntry({
       }
     }
     return out;
-  }, [matrixModels, baselineForProduct, catalogReady]);
+  }, [matrixModels, baselineForProduct, catalogReady, oneCCatalogVersion]);
 
   const selectedCategories = selectedCategoryIds as DistributionCatalogCategoryId[];
 
   const matrixCatalogProducts = useMemo(() => {
     const products: CatalogProduct[] = [];
     for (const m of matrixModels) {
-      const p = getProductById(m.id);
+      const p = resolveCatalogProduct(m.id);
       if (p) products.push(p);
     }
     return products;
-  }, [matrixModels]);
+  }, [matrixModels, resolveCatalogProduct, oneCCatalogVersion]);
 
   const catalogProducts = useMemo(() => {
     if (!catalogReady) return [];
@@ -710,7 +739,7 @@ export function DistributionFullscreenEntry({
       const products: CatalogProduct[] = [];
       for (const m of matrixModels) {
         if (!modelMatchesCategories(matrixModelCategory(m), selectedCategories)) continue;
-        const p = getProductById(m.id);
+        const p = resolveCatalogProduct(m.id);
         if (!p) continue;
         if (!filterCatalogProductsByFilters([p], catalogFilters, []).length) continue;
         if (q) {
@@ -735,6 +764,8 @@ export function DistributionFullscreenEntry({
     catalogProducts,
     draft,
     matrixModels,
+    oneCCatalogVersion,
+    resolveCatalogProduct,
     searchQuery,
     selectedCategories,
     sourceTab,
@@ -1312,12 +1343,12 @@ export function DistributionFullscreenEntry({
           console.debug("[dist-recon] handleSave:item", {
             productId,
             isProductIdUUID: productUuidRx.test(productId),
-            hasProduct: !!getProductById(productId),
+            hasProduct: !!resolveCatalogProduct(productId),
             hasMatrixModel: matrixModelById.has(productId),
           });
         }
         const baseline = baselines[productId];
-        const product = getProductById(productId);
+        const product = resolveCatalogProduct(productId);
         const model =
           matrixModelById.get(productId) ??
           (product ? stubMatrixModelFromProduct(product) : null);
@@ -1426,7 +1457,7 @@ export function DistributionFullscreenEntry({
                 placementSegment: null,
                 comment: getEffectiveMatrixEntry(dealer.id, point.id, productId, freshStorage).comment,
               };
-          const prod = getProductById(productId);
+          const prod = resolveCatalogProduct(productId);
           const seg =
             matrixModelById.get(productId) != null
               ? segmentFromMatrixModel(matrixModelById.get(productId)!)
@@ -1477,6 +1508,7 @@ export function DistributionFullscreenEntry({
     needInstallMarkedIds,
     needInstallMode,
     point.id,
+    resolveCatalogProduct,
     saving,
     showSaveSyncToast,
     showcaseRec?.hasShowcase,
