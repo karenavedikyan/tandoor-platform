@@ -58,6 +58,8 @@ export function oneCStoreListItemToDealerWithPoint(item: OneCStoreListItem): {
   );
   dealer.tradePoints = [point];
   dealer.ropId = item.rop_user_id ?? null;
+  dealer.managerUserId = item.responsible_manager_user_id ?? null;
+  dealer.regionalManagerId = item.regional_manager_user_id ?? null;
   return { dealer, point };
 }
 

@@ -39,7 +39,7 @@ export function collectTradePointIdsForDealers(
   return ids;
 }
 
-function buildManagerGroups(
+function buildManagerGroupsUnified(
   scopedDealers: readonly DealerRow[],
   snap: OrgSnapshot,
   ropUserId: string,
@@ -51,9 +51,19 @@ function buildManagerGroups(
   const groups: RopManagerDistributionGroup[] = [];
 
   for (const manager of managers) {
-    const managerRows = realRowsForManagerByUUID([...scopedDealers], snap, manager.id).filter((r) =>
+    const directRows = ropDealerRows.filter((r) => r.managerUserId === manager.id);
+    const legacyRows = realRowsForManagerByUUID([...scopedDealers], snap, manager.id).filter((r) =>
       ropDealerIds.has(r.id),
     );
+    const seen = new Set<string>();
+    const managerRows: DealerRow[] = [];
+    for (const r of [...directRows, ...legacyRows]) {
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        managerRows.push(r);
+      }
+    }
+
     const tradePointIds = collectTradePointIdsForDealers(managerRows, act);
     if (tradePointIds.length === 0) continue;
     groups.push({
@@ -78,12 +88,33 @@ export function buildRopGroups(
 ): RopDistributionGroup[] {
   if (!snap) return [];
 
+  const rowsByRopId = new Map<string, DealerRow[]>();
+  const legacyRows: DealerRow[] = [];
+  for (const row of scopedDealers) {
+    if (row.ropId) {
+      const arr = rowsByRopId.get(row.ropId) ?? [];
+      arr.push(row);
+      rowsByRopId.set(row.ropId, arr);
+    } else {
+      legacyRows.push(row);
+    }
+  }
+
   const realRops = snap.users.filter((u) => u.role === "rop" && isRopUserInSnapshot(snap, u.id));
   const assignedDealerIds = new Set<string>();
   const groups: RopDistributionGroup[] = [];
 
   for (const rop of realRops) {
-    const ropRows = realRowsForRopTeam([...scopedDealers], snap, rop.id);
+    const directRows = rowsByRopId.get(rop.id) ?? [];
+    const legacyMatches = realRowsForRopTeam([...legacyRows], snap, rop.id);
+    const seen = new Set<string>();
+    const ropRows: DealerRow[] = [];
+    for (const r of [...directRows, ...legacyMatches]) {
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        ropRows.push(r);
+      }
+    }
     for (const r of ropRows) assignedDealerIds.add(r.id);
 
     const tradePointIds = collectTradePointIdsForDealers(ropRows, act);
@@ -93,7 +124,7 @@ export function buildRopGroups(
       ropId: rop.id,
       ropName: rop.fullName.trim() || rop.id,
       tradePointIds,
-      managers: buildManagerGroups(scopedDealers, snap, rop.id, ropRows, act),
+      managers: buildManagerGroupsUnified(scopedDealers, snap, rop.id, ropRows, act),
       isUnassigned: false,
     });
   }
