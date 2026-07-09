@@ -95,6 +95,7 @@ export function OneCStoreDistributionEntry({
   }, [toast]);
 
   useEffect(() => {
+    if (!store.canEditDistribution) return;
     const onMatrixChanged = () => scheduleExport();
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onMatrixChanged);
     window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onMatrixChanged);
@@ -103,7 +104,7 @@ export function OneCStoreDistributionEntry({
       window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onMatrixChanged);
       if (exportDebounceRef.current) clearTimeout(exportDebounceRef.current);
     };
-  }, [scheduleExport]);
+  }, [scheduleExport, store.canEditDistribution]);
 
   if (!dealerPoint) {
     return (
@@ -124,7 +125,6 @@ export function OneCStoreDistributionEntry({
         hideOpenTasksSection
         hideOpenTradePointCard
         hideDistributionOnPointSection
-        hidePlacementBlocksSection
         hideCounterpartyStickyHeader
         matrixSectionTitle={matrixSectionTitle}
       />
