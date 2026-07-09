@@ -8,6 +8,7 @@ import { refreshMatrixFromServer, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/
 import { SHOWCASE_MATRIX_CHANGED_EVENT } from "@/lib/trade-point-showcase-matrix-storage";
 import type { OneCStoreDetailWithDistribution } from "@/lib/one-c-showroom-api";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrentUser } from "@/hooks/use-current-user";
 
 export type OneCStoreDistributionEntryProps = {
   storeId1c: string;
@@ -51,6 +52,8 @@ export function OneCStoreDistributionEntry({
   matrixSectionTitle = "Контрагент и витрина",
 }: OneCStoreDistributionEntryProps) {
   const { toast } = useToast();
+  const { user } = useCurrentUser();
+  const canAutoExportToOneC = user?.role === "admin";
   const exportDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dealerPoint = useMemo(() => {
@@ -96,6 +99,7 @@ export function OneCStoreDistributionEntry({
 
   useEffect(() => {
     if (!store.canEditDistribution) return;
+    if (!canAutoExportToOneC) return;
     const onMatrixChanged = () => scheduleExport();
     window.addEventListener(SHOWCASE_MATRIX_CHANGED_EVENT, onMatrixChanged);
     window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onMatrixChanged);
@@ -104,7 +108,7 @@ export function OneCStoreDistributionEntry({
       window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onMatrixChanged);
       if (exportDebounceRef.current) clearTimeout(exportDebounceRef.current);
     };
-  }, [scheduleExport, store.canEditDistribution]);
+  }, [scheduleExport, store.canEditDistribution, canAutoExportToOneC]);
 
   if (!dealerPoint) {
     return (

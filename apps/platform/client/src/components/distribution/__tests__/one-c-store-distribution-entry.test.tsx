@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { OneCStoreDetailWithDistribution } from "@/lib/one-c-showroom-api";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { SHOWCASE_MATRIX_CHANGED_EVENT } from "@/lib/trade-point-showcase-matrix-storage";
@@ -10,6 +10,8 @@ import { SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store
 
 const triggerExportMock = vi.fn();
 const toastMock = vi.fn();
+
+let mockUserRole: string | undefined;
 
 vi.mock("@/lib/one-c-distribution-export", () => ({
   triggerDistributionExportTo1cFireAndForget: (cb?: (r: { ok: boolean; message: string }) => void) => {
@@ -30,6 +32,17 @@ vi.mock("@/components/distribution/distribution-tradepoint-matrix-entry", () => 
 
 vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toast: toastMock }),
+}));
+
+vi.mock("@/hooks/use-current-user", () => ({
+  useCurrentUser: () => ({
+    user: mockUserRole ? { role: mockUserRole, status: "active" } : undefined,
+    isAuthenticated: !!mockUserRole,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+    logout: vi.fn(),
+  }),
 }));
 
 import { OneCStoreDistributionEntry } from "@/components/distribution/one-c-store-distribution-entry";
@@ -76,6 +89,10 @@ function makeStore(canEditDistribution: boolean): OneCStoreDetailWithDistributio
   };
 }
 
+beforeEach(() => {
+  mockUserRole = undefined;
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -96,28 +113,9 @@ describe("OneCStoreDistributionEntry", () => {
     expect(screen.getByTestId("mock-matrix-entry")).toBeTruthy();
   });
 
-  it("triggers export after matrix change event when canEditDistribution=true", async () => {
-    render(
-      <OneCStoreDistributionEntry
-        storeId1c="store-uuid-1"
-        store={makeStore(true)}
-        profile={profile}
-        actorUserId="user-1"
-        actorName="Тест"
-      />,
-    );
-
-    window.dispatchEvent(new CustomEvent(SHOWCASE_MATRIX_CHANGED_EVENT));
-
-    await waitFor(
-      () => {
-        expect(triggerExportMock).toHaveBeenCalled();
-      },
-      { timeout: 2000 },
-    );
-  });
-
   it("does not trigger export or toast when canEditDistribution=false", async () => {
+    mockUserRole = "admin";
+
     render(
       <OneCStoreDistributionEntry
         storeId1c="store-uuid-1"
@@ -135,5 +133,49 @@ describe("OneCStoreDistributionEntry", () => {
       expect(triggerExportMock).not.toHaveBeenCalled();
     });
     expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it("не триггерит автоэкспорт в 1С у роли manager", async () => {
+    mockUserRole = "manager";
+
+    render(
+      <OneCStoreDistributionEntry
+        storeId1c="store-uuid-1"
+        store={makeStore(true)}
+        profile={profile}
+        actorUserId="user-1"
+        actorName="Тест"
+      />,
+    );
+
+    window.dispatchEvent(new CustomEvent(SHOWCASE_MATRIX_STORE_CHANGED_EVENT));
+
+    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    expect(triggerExportMock).not.toHaveBeenCalled();
+    expect(toastMock).not.toHaveBeenCalled();
+  });
+
+  it("триггерит автоэкспорт в 1С у роли admin", async () => {
+    mockUserRole = "admin";
+
+    render(
+      <OneCStoreDistributionEntry
+        storeId1c="store-uuid-1"
+        store={makeStore(true)}
+        profile={profile}
+        actorUserId="user-1"
+        actorName="Тест"
+      />,
+    );
+
+    window.dispatchEvent(new CustomEvent(SHOWCASE_MATRIX_STORE_CHANGED_EVENT));
+
+    await waitFor(
+      () => {
+        expect(triggerExportMock).toHaveBeenCalledTimes(1);
+      },
+      { timeout: 2000 },
+    );
   });
 });
