@@ -4,7 +4,9 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMainDashboardCityFilter } from "@/context/main-dashboard-city-filter-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
+import { canAccessLegacyDealerBaseForUser } from "@/lib/auth-access";
 import { loadClientNextStepsStorage } from "@/lib/client-next-step-data";
 import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import { dealerRowMatchesCityFilter } from "@/lib/main-dashboard-city-stats";
@@ -46,6 +48,7 @@ export function MainDashboardFocusClientsPanel({
   onClearSegment,
   panelRef,
 }: MainDashboardFocusClientsPanelProps) {
+  const { user } = useCurrentUser();
   const { selectedCity, clearCity } = useMainDashboardCityFilter();
   const nextStepsStorage = useMemo(() => loadClientNextStepsStorage(), []);
 
@@ -136,11 +139,13 @@ export function MainDashboardFocusClientsPanel({
                 focusList={focusList}
               />
             )}
-            <div className="flex justify-end">
-              <Button asChild variant="outline" size="sm" data-testid="button-main-open-dealer-base-focus">
-                <Link href="/dealer-base">Открыть в клиентской базе</Link>
-              </Button>
-            </div>
+            {canAccessLegacyDealerBaseForUser(user?.role) ? (
+              <div className="flex justify-end">
+                <Button asChild variant="outline" size="sm" data-testid="button-main-open-dealer-base-focus">
+                  <Link href="/dealer-base">Открыть в клиентской базе</Link>
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </section>

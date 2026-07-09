@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import type { UserRole } from "@shared/auth";
-import { buildTrashNavBadge, canCreateResetLink, defaultHomePathForUserRole, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
+import { buildTrashNavBadge, canCreateResetLink, canAccessPathForUser, defaultHomePathForUserRole, flattenGroupedPilotNavigation, getPilotNavigation } from "../auth-access";
 
 const U = (id: string, role: UserRole) => ({ id, role });
 
@@ -115,8 +115,19 @@ for (const role of ["admin", "director", "rop", "regional_manager", "manager"] a
   assert.equal(defaultHomePathForUserRole(role), "/1c", `${role}: home is /1c`);
 }
 assert.equal(defaultHomePathForUserRole("marketer"), "/marketing-briefs", "marketer: home unchanged");
-assert.equal(defaultHomePathForUserRole("analyst"), "/dealer-base", "analyst: home unchanged");
-assert.equal(defaultHomePathForUserRole("category_manager"), "/dealer-base", "category_manager: home unchanged");
+assert.equal(defaultHomePathForUserRole("analyst"), "/catalog", "analyst: home is /catalog");
+assert.equal(defaultHomePathForUserRole("category_manager"), "/marketing-briefs", "category_manager: home is /marketing-briefs");
+
+for (const role of ["manager", "director", "rop", "regional_manager", "marketer", "analyst", "category_manager"] as const) {
+  assert.equal(canAccessPathForUser(role, "/dealer-base"), false, `${role}: no legacy dealer-base`);
+  assert.equal(canAccessPathForUser(role, "/trade-points"), false, `${role}: no legacy trade-points`);
+  assert.equal(canAccessPathForUser(role, "/client-map"), false, `${role}: no legacy client-map`);
+}
+assert.equal(canAccessPathForUser("admin", "/dealer-base"), true, "admin: legacy dealer-base");
+assert.equal(canAccessPathForUser("admin", "/trade-points"), true, "admin: legacy trade-points");
+assert.equal(canAccessPathForUser("admin", "/client-map"), true, "admin: legacy client-map");
+assert.equal(canAccessPathForUser("manager", "/1c"), true, "manager: 1c showroom");
+assert.equal(canAccessPathForUser("analyst", "/1c"), false, "analyst: no 1c showroom");
 
 for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as const) {
   const platformUserRole =
@@ -129,6 +140,7 @@ for (const salesRole of ["sales_manager", "team_lead", "sales_director"] as cons
     !leadingTestIds(salesRole, platformUserRole).includes("nav-item-team-activity"),
     `${salesRole}: team not in leadingItems`,
   );
+  assert.ok(!ids.includes("nav-item-client-map"), `${salesRole}: no client-map for non-admin`);
 }
 
 for (const [salesRole, platformUserRole] of [

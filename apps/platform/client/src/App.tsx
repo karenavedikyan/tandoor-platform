@@ -273,7 +273,7 @@ function HomeRedirect() {
   const { user } = useCurrentUser();
   if (!user) return <PageLoadingFallback />;
   const to = defaultHomePathForUserRole(user.role);
-  const safeTo = to === "/" ? "/dealer-base" : to;
+  const safeTo = to === "/" ? (user.role === "admin" ? "/dealer-base" : "/1c") : to;
   return <HashRedirect to={safeTo} />;
 }
 
