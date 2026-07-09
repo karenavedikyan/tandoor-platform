@@ -140,6 +140,7 @@ export async function apiUpsertMatrixDefStrict(
   body: ShowcaseMatrixDefUpsertInput,
 ): Promise<{
   ok: boolean;
+  def?: ShowcaseMatrixDefDto;
   status?: number;
   code?: string;
   message?: string;
@@ -163,7 +164,7 @@ export async function apiUpsertMatrixDefStrict(
         message: "message" in data ? data.message : `HTTP ${res.status}`,
       };
     }
-    return { ok: true };
+    return { ok: true, def: data.def };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return { ok: false, network: true, message };

@@ -58,6 +58,20 @@ function saveCache(cache: CatalogCache): void {
   window.dispatchEvent(new CustomEvent(SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT));
 }
 
+export function resolveLocalMatrixDefId(localId: string, serverId: string): void {
+  if (localId === serverId) return;
+  if (!localId.startsWith("local-")) return;
+  const cache = loadCache();
+  const localFull = cache.defsById[localId];
+  const nextDefsById = { ...cache.defsById };
+  if (localFull) {
+    nextDefsById[serverId] = { ...localFull, id: serverId };
+    delete nextDefsById[localId];
+  }
+  const nextHeaders = cache.headers.map((h) => (h.id === localId ? { ...h, id: serverId } : h));
+  saveCache({ headers: nextHeaders, defsById: nextDefsById });
+}
+
 function listSnapshot(headers: ShowcaseMatrixDefDto[]): string {
   if (headers.length === 0) return "0:";
   const maxUpdatedAt = headers.reduce(

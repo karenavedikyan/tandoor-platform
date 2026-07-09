@@ -23,6 +23,7 @@ globalThis.localStorage = localStorageMock;
 // @ts-expect-error test shim
 globalThis.window = {
   localStorage: localStorageMock,
+  location: { search: "" },
   dispatchEvent: (ev: Event) => {
     if (ev.type === "tandoor:showcase-matrix-catalog:remote-update") {
       remoteEvents.push((ev as CustomEvent).detail);
@@ -88,6 +89,7 @@ const {
   replaceMatrixDefModelsLocal,
   deleteMatrixDefLocal,
   setMatrixDefStatusLocal,
+  resolveLocalMatrixDefId,
   SHOWCASE_MATRIX_CATALOG_CACHE_KEY,
   SHOWCASE_MATRIX_CATALOG_CHANGED_EVENT,
 } = await import("../showcase-matrix-catalog-store.js");
@@ -244,6 +246,7 @@ const upsertStrict = await apiUpsertMatrixDefStrict({
   scopeRegion: "москва",
 });
 assert.equal(upsertStrict.ok, true);
+assert.equal(upsertStrict.def?.id, "x");
 assert.ok(strictUrl.includes("/upsert"));
 assert.equal((strictBody as Record<string, unknown>).clientCategory, "top350");
 
@@ -263,5 +266,31 @@ await apiReplaceMatrixDefModelsStrict("def-1", [
   { targetKind: "model", targetId: "a", segment: "vh" },
 ]);
 assert.ok(strictUrl.includes("/replace-models"));
+
+const resolveLocalId = "local-resolve-test";
+const resolveServerId = "8cc870fe-6fd0-4399-9ac0-f34f1053fb2c";
+store.set(
+  SHOWCASE_MATRIX_CATALOG_CACHE_KEY,
+  JSON.stringify({
+    headers: [{ id: resolveLocalId, clientCategory: "top150", scopeKind: "global", status: "draft", updatedAt: "2026-01-01T00:00:00.000Z" }],
+    defsById: {
+      [resolveLocalId]: {
+        id: resolveLocalId,
+        clientCategory: "top150",
+        scopeKind: "global",
+        status: "draft",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        models: [],
+      },
+    },
+  }),
+);
+resolveLocalMatrixDefId(resolveLocalId, resolveServerId);
+assert.equal(loadCachedMatrixDefs()[0]?.id, resolveServerId);
+assert.equal(loadCachedMatrixDef(resolveServerId)?.id, resolveServerId);
+assert.equal(loadCachedMatrixDef(resolveLocalId), null);
+resolveLocalMatrixDefId(resolveServerId, resolveServerId);
+resolveLocalMatrixDefId("real-uuid-not-local", "other-uuid");
+assert.equal(loadCachedMatrixDefs()[0]?.id, resolveServerId);
 
 console.log("✓ showcase-matrix-catalog-store tests passed");
