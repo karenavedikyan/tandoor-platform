@@ -3,6 +3,7 @@
  */
 
 import { triggerDistributionSnapshotAfterMatrixSave, triggerDistributionSnapshotsAfterBatchSave } from "./distribution-snapshot-client.js";
+import { isDistributionDebugEnabled } from "./distribution-entry-debug.js";
 import { getShowcaseMatrixApiBase, isOneCShowcaseMatrixApiBase } from "./showcase-matrix-api-base.js";
 
 export {
@@ -398,6 +399,19 @@ export async function apiUpsertShowcaseMatrixEntryStrict(
   message?: string;
   network?: boolean;
 }> {
+  const targetUuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (isDistributionDebugEnabled()) {
+    console.debug("[dist-recon] matrix-upsert:req", {
+      dealerId: body.dealerId,
+      tradePointId: body.tradePointId,
+      targetKind: body.targetKind,
+      targetId: body.targetId,
+      status: body.status,
+      isTargetUUID: targetUuidRx.test(body.targetId),
+      placementType: body.placementType,
+      placementSegment: body.placementSegment,
+    });
+  }
   try {
     const res = await fetch(`${getShowcaseMatrixApiBase()}/upsert`, {
       method: "POST",
@@ -406,6 +420,18 @@ export async function apiUpsertShowcaseMatrixEntryStrict(
       body: JSON.stringify(body),
     });
     const data = await parseJson<ApiOk<{ entry: ShowcaseMatrixEntryDto }> | ApiErr>(res);
+    if (isDistributionDebugEnabled()) {
+      console.debug("[dist-recon] matrix-upsert:res", {
+        httpStatus: res.status,
+        ok: res.ok,
+        dataSuccess: (data as { success?: boolean }).success,
+        code: "code" in data ? data.code : undefined,
+        message: "message" in data ? data.message : undefined,
+        tradePointId: body.tradePointId,
+        targetId: body.targetId,
+        targetKind: body.targetKind,
+      });
+    }
     if (!res.ok || !data.success) {
       return {
         ok: false,

@@ -1297,7 +1297,25 @@ export function DistributionFullscreenEntry({
     setSaving(true);
     let grownTypesOnSave: ShowcaseCapacityGrownType[] = [];
     try {
+      if (DISTRIBUTION_ENTRY_DEBUG) {
+        console.debug("[dist-recon] handleSave:begin", {
+          tradePointId: point.id,
+          dealerId: dealer.id,
+          saveIdsCount: saveIds.length,
+          needInstallMode,
+          sampleSaveIds: saveIds.slice(0, 5),
+        });
+      }
+      const productUuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       for (const productId of saveIds) {
+        if (DISTRIBUTION_ENTRY_DEBUG) {
+          console.debug("[dist-recon] handleSave:item", {
+            productId,
+            isProductIdUUID: productUuidRx.test(productId),
+            hasProduct: !!getProductById(productId),
+            hasMatrixModel: matrixModelById.has(productId),
+          });
+        }
         const baseline = baselines[productId];
         const product = getProductById(productId);
         const model =
