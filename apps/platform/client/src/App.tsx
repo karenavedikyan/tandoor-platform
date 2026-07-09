@@ -496,6 +496,9 @@ function AuthenticatedShell({
         <Route path="/1c/rop/:id" component={OneCRopRoute} />
         <Route path="/1c/rm/:id" component={OneCRmRoute} />
         <Route path="/1c/manager/:id" component={OneCManagerRoute} />
+        <Route path="/1c/stores/:id">
+          {(params) => <HashRedirect to={`/1c/store/${params.id}`} />}
+        </Route>
         <Route path="/1c/stores" component={OneCStoresRoute} />
         <Route path="/1c/store/:id/history" component={OneCStoreHistoryRoute} />
         <Route path="/1c/store/:id" component={OneCStoreRoute} />
