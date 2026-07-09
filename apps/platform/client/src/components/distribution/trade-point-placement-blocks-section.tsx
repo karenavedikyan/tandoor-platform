@@ -395,7 +395,10 @@ export function TradePointPlacementBlocksSection({
                     {models.length > 0 ? (
                       <ul className="space-y-1 rounded-lg border border-border/60 bg-muted/10 px-2 py-2">
                         {models.map((entry) => {
-                          const name = getProductById(entry.targetId)?.name?.trim() || entry.targetId;
+                          const name =
+                            getProductById(entry.targetId)?.name?.trim() ||
+                            entry.targetName?.trim() ||
+                            entry.targetId;
                           return (
                             <li
                               key={entry.id}

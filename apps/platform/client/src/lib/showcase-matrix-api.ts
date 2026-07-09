@@ -36,6 +36,7 @@ export type ShowcaseMatrixEntryDto = {
   tradePointId: string;
   targetKind: ShowcaseMatrixTargetKind;
   targetId: string;
+  targetName?: string | null;
   status: ShowcaseMatrixStatus;
   comment: string | null;
   updatedAt: string;
@@ -99,6 +100,7 @@ function mapShowcaseMatrixEntryDto(raw: Record<string, unknown>): ShowcaseMatrix
     tradePointId: String(raw.tradePointId),
     targetKind: raw.targetKind as ShowcaseMatrixEntryDto["targetKind"],
     targetId: String(raw.targetId),
+    targetName: raw.targetName != null ? String(raw.targetName) : null,
     status: raw.status as ShowcaseMatrixEntryDto["status"],
     comment: raw.comment != null ? String(raw.comment) : null,
     updatedAt: String(raw.updatedAt),

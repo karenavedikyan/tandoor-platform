@@ -6,7 +6,7 @@ import {
 } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { useTradePointDistributionAggregate } from "@/hooks/use-trade-point-distribution-aggregate";
 import { setShowcaseMatrixApiBase, resetShowcaseMatrixApiBase } from "@/lib/showcase-matrix-api";
-import { loadCachedMatrix, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
+import { loadCachedMatrix, refreshMatrixFromServer, SHOWCASE_MATRIX_STORE_CHANGED_EVENT } from "@/lib/showcase-matrix-store";
 import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
 
 export function useOneCStoresDistributionMap(
@@ -34,6 +34,20 @@ export function useOneCStoresDistributionMap(
     window.addEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
     return () => window.removeEventListener(SHOWCASE_MATRIX_STORE_CHANGED_EVENT, onCache);
   }, []);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void (async () => {
+      for (const id of ids) {
+        if (cancelled) return;
+        await refreshMatrixFromServer(id).catch(() => null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ids, enabled]);
 
   const map = useMemo(() => {
     void cacheBump;

@@ -77,6 +77,15 @@ export function resolveShowcaseMatrixPositionForEntry(
   entry: ShowcaseMatrixEntryDto,
   dealer: DealerRow,
 ): { productId: string; productName: string; showcaseMatrixImageSrc?: string } {
+  const targetNameFromApi = entry.targetName?.trim();
+  if (targetNameFromApi) {
+    const catalogProduct = getProductById(entry.targetId);
+    return {
+      productId: entry.targetId,
+      productName: targetNameFromApi,
+      showcaseMatrixImageSrc: catalogProduct?.image?.trim() || undefined,
+    };
+  }
   if (entry.targetKind === "model") {
     const scope = matrixScopeForDealerPoint(dealer, entry.tradePointId);
     const models = resolveTradePointMatrixModels({

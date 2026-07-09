@@ -53,6 +53,9 @@ function parseJsonArray<T>(raw: unknown, fallback: T[]): T[] {
   return fallback;
 }
 
+const ONE_C_MATRIX_CATALOG_JOIN = `LEFT JOIN catalog_products cp ON cp.id = o.target_id
+             AND o.target_kind IN ('model', 'variant')`;
+
 function mapOverrideRow(row: Record<string, unknown>, dealerId: string): ShowcaseMatrixEntryDto {
   return {
     id: String(row.id),
@@ -60,6 +63,7 @@ function mapOverrideRow(row: Record<string, unknown>, dealerId: string): Showcas
     tradePointId: String(row.store_id_1c),
     targetKind: String(row.target_kind) as ShowcaseMatrixTargetKind,
     targetId: String(row.target_id),
+    targetName: row.target_name != null ? String(row.target_name) : null,
     status: String(row.status ?? "need_install") as ShowcaseMatrixStatus,
     comment: row.comment != null ? String(row.comment) : null,
     updatedAt: String(row.updated_at),
@@ -402,9 +406,10 @@ export async function handleOneCShowcaseMatrixList(
   assertUuid(tradePointId, "tradePointId");
 
   const queryParams: unknown[] = [tradePointId];
-  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id_resolved
+  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id_resolved, cp.name AS target_name
              FROM showcase_distribution_overrides_1c o
              INNER JOIN exchange_stores_raw s ON s.id_1c = o.store_id_1c
+             ${ONE_C_MATRIX_CATALOG_JOIN}
              WHERE o.store_id_1c = $1::uuid
                AND o.target_kind IN ('model','variant','placement')`;
   if (dealerId) {
@@ -460,9 +465,10 @@ export async function handleOneCShowcaseMatrixScope(
   const statuses = parseScopeStatuses(params.statuses);
 
   const queryParams: unknown[] = [tradePointIds];
-  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id
+  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id, cp.name AS target_name
              FROM showcase_distribution_overrides_1c o
              INNER JOIN exchange_stores_raw s ON s.id_1c = o.store_id_1c
+             ${ONE_C_MATRIX_CATALOG_JOIN}
              WHERE o.store_id_1c = ANY($1::uuid[])
                AND o.target_kind IN ('model','variant','placement')`;
   if (statuses && statuses.length > 0) {
@@ -484,9 +490,10 @@ export async function handleOneCShowcaseMatrixScopeAll(
 ): Promise<{ success: true; entries: ShowcaseMatrixEntryDto[]; tradePointIds: string[] }> {
   const statuses = parseScopeStatuses(params.statuses);
   const queryParams: unknown[] = [];
-  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id
+  let sql = `SELECT o.*, s.legal_entity_1c::text AS dealer_id, cp.name AS target_name
              FROM showcase_distribution_overrides_1c o
              INNER JOIN exchange_stores_raw s ON s.id_1c = o.store_id_1c
+             ${ONE_C_MATRIX_CATALOG_JOIN}
              WHERE o.target_kind IN ('model','variant','placement')`;
   if (statuses && statuses.length > 0) {
     queryParams.push(statuses);

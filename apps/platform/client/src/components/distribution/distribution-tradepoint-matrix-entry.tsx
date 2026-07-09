@@ -399,9 +399,9 @@ export function DistributionTradePointMatrixEntry({
             <Card className="rounded-xl border border-border bg-muted/20 shadow-xs" data-testid="card-no-matrix-hint">
               <CardContent className="px-4 py-3">
                 <p className="text-xs text-muted-foreground">
-                  Матрица моделей для этой ТТ не назначена. Матрица — это рекомендация, какие модели поставить.
-                  Дистрибуцию по витринам можно вносить ниже, в разделе «Типы размещения витрины» (всего витрин и
-                  сколько из них наши).
+                  Матрица клиента ещё не заполнена. Вносите фактическую витрину ниже: типы размещения
+                  (портал/куб/книга), сегмент (ВХ/МК/фурнитура), ёмкость и наши модели. Числа сразу
+                  учитываются в дистрибуции.
                 </p>
               </CardContent>
             </Card>

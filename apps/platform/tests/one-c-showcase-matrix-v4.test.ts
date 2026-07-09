@@ -187,6 +187,38 @@ describe("one-c-showcase-matrix handlers", () => {
     expect(res.entries[0]?.tradePointId).toBe(storeId);
     expect(res.entries[0]?.targetKind).toBe("model");
     expect(res.entries[0]?.targetId).toBe(modelId);
+    expect(res.entries[0]?.targetName).toBeNull();
+  });
+
+  it("list resolves catalog product name for model targets", async () => {
+    const pool = makePool([
+      {
+        id: "e1",
+        store_id_1c: storeId,
+        target_kind: "model",
+        target_id: modelId,
+        status: "installed",
+        comment: null,
+        updated_at: new Date().toISOString(),
+        updated_by: null,
+        updated_by_name: null,
+        placement_type: "portal",
+        placement_segment: "vh",
+        placement_capacity: null,
+        placement_actual: null,
+        placement_ref: null,
+        placement_our_models: [],
+        placement_competitors: [],
+        placement_legacy_ours: null,
+        dealer_id_resolved: legalId,
+        target_name: "Дверь Тестовая",
+      },
+    ]);
+    const res = await handleOneCShowcaseMatrixList(pool, {
+      tradePointId: storeId,
+      dealerId: legalId,
+    });
+    expect(res.entries[0]?.targetName).toBe("Дверь Тестовая");
   });
 
   it("upsert writes entry and checks permissions", async () => {

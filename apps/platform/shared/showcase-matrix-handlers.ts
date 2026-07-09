@@ -62,6 +62,7 @@ export type ShowcaseMatrixEntryDto = {
   tradePointId: string;
   targetKind: ShowcaseMatrixTargetKind;
   targetId: string;
+  targetName?: string | null;
   status: ShowcaseMatrixStatus;
   comment: string | null;
   updatedAt: string;
