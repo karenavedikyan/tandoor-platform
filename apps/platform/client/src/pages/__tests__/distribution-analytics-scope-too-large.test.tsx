@@ -6,6 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyActualizationState } from "@/lib/client-base-actualization-state";
 import {
+  DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD,
   emptyDistributionAnalyticsFilters,
   hasAnyDistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
@@ -69,14 +70,35 @@ vi.mock("@/hooks/use-distribution-analytics-data", () => ({
   useDistributionAnalyticsData: () => ({ ...emptyData, act: createEmptyActualizationState() }),
 }));
 
+vi.mock("@/hooks/use-distribution-analytics-data-1c", () => ({
+  useDistributionAnalyticsData1c: () => ({ ...emptyData, act: createEmptyActualizationState() }),
+}));
+
 vi.mock("@/hooks/use-auth-user", () => ({
   useAuthUser: () => ({ user: { role: "director" }, isLoading: false, isError: false }),
 }));
 
 const mockScopedDealers = vi.fn(() => [] as DealerRow[]);
+const mockOneCDealers = vi.fn(() => [] as DealerRow[]);
 
 vi.mock("@/hooks/use-distribution-scoped-dealers", () => ({
   useDistributionScopedDealers: () => mockScopedDealers(),
+}));
+
+vi.mock("@/hooks/use-one-c-scoped-stores", () => ({
+  useOneCScopedStores: () => ({
+    items: [],
+    dealers: mockOneCDealers(),
+    tradePoints: [],
+    rowRefs: new Map(),
+    loading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
+
+vi.mock("@/lib/use-org-snapshot", () => ({
+  useOrgSnapshot: () => ({ data: null, isLoading: false }),
 }));
 
 vi.mock("@/context/client-base-actualization-context", () => ({
@@ -101,6 +123,8 @@ describe("DistributionAnalyticsPage large scope guard (441-fix2)", () => {
   beforeEach(() => {
     mockScopedDealers.mockReset();
     mockScopedDealers.mockReturnValue([]);
+    mockOneCDealers.mockReset();
+    mockOneCDealers.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -109,7 +133,8 @@ describe("DistributionAnalyticsPage large scope guard (441-fix2)", () => {
   });
 
   it("shows scope-too-large empty state when dealers exceed threshold without filters", () => {
-    mockScopedDealers.mockReturnValue(makeDealers(801));
+    const dealerCount = DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD + 1;
+    mockOneCDealers.mockReturnValue(makeDealers(dealerCount));
     render(
       <DistributionAnalyticsPage
         profile={{ role: "sales_director", personaUserId: "dir-1" }}
@@ -123,11 +148,11 @@ describe("DistributionAnalyticsPage large scope guard (441-fix2)", () => {
 
     expect(screen.getByTestId("distribution-analytics-scope-too-large")).toBeTruthy();
     expect(screen.getByText("Слишком большой scope")).toBeTruthy();
-    expect(screen.getByText(/801 дилеров/)).toBeTruthy();
+    expect(screen.getByText(new RegExp(`${dealerCount} дилеров`))).toBeTruthy();
   });
 
   it("does not show scope-too-large when filters are applied", () => {
-    mockScopedDealers.mockReturnValue(makeDealers(801));
+    mockOneCDealers.mockReturnValue(makeDealers(DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD + 1));
     const filters = { ...emptyDistributionAnalyticsFilters(), regions: ["ЦФО"] };
     expect(hasAnyDistributionAnalyticsFilters(filters)).toBe(true);
     render(
