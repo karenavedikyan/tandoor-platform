@@ -1296,7 +1296,13 @@ export function DistributionFullscreenEntry({
         }
 
         const row = draft[productId];
-        if (!row || !baseline) continue;
+        if (!row) continue;
+        const effectiveBaseline: FullscreenEntryBaseline = baseline ?? {
+          status: "need_install",
+          placementType: null,
+          placementSegment: null,
+          comment: "",
+        };
 
         const status = row.status;
         const isInstalled = status === "installed";
@@ -1311,7 +1317,7 @@ export function DistributionFullscreenEntry({
           targetKind: "model",
           targetId: productId,
           status,
-          comment: baseline.comment || null,
+          comment: effectiveBaseline.comment || null,
           updatedBy: actorUserId,
           updatedByName: actorName,
           placementType,
@@ -1323,7 +1329,7 @@ export function DistributionFullscreenEntry({
           tradePointId: point.id,
           model,
           status,
-          comment: baseline.comment,
+          comment: effectiveBaseline.comment,
           actorUserId,
           actorName,
         });

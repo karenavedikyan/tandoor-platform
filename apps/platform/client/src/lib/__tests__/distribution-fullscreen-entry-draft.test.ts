@@ -73,6 +73,23 @@ const draftMap: FullscreenEntryDraftMap = {
 assert.deepEqual(collectChangedProductIds(draftMap, baselines), []);
 draftMap.a = draftInstalled;
 assert.deepEqual(collectChangedProductIds(draftMap, baselines), ["a"]);
+
+const catalogOnlyDraft: FullscreenEntryDraftMap = {
+  catalogNew: {
+    status: "installed",
+    placementType: "portal",
+    placementSegment: "vh",
+  },
+};
+assert.deepEqual(collectChangedProductIds(catalogOnlyDraft, {}), ["catalogNew"]);
+assert.deepEqual(
+  collectChangedProductIds(
+    { catalogNew: buildInitialDraftRow(baseline) },
+    {},
+  ),
+  [],
+);
+
 assert.equal(countInstalledInDraft(draftMap), 2);
 
 console.log("distribution-fullscreen-entry-draft.test.ts: ok");
