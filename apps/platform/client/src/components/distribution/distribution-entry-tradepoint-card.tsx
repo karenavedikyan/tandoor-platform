@@ -91,9 +91,53 @@ function FilledDateHint({ row }: { row: DistributionEntryTradePointRow }) {
 
 function CoverageWithDate({ row }: { row: DistributionEntryTradePointRow }) {
   return (
-    <div className="flex max-w-full flex-wrap items-center justify-end gap-x-1">
-      <CoverageBadge row={row} />
-      <FilledDateHint row={row} />
+    <div className="flex max-w-full flex-col items-end gap-1">
+      <div className="flex max-w-full flex-wrap items-center justify-end gap-x-1">
+        <CoverageBadge row={row} />
+        <FilledDateHint row={row} />
+      </div>
+      <SegmentDistributionLine row={row} />
+    </div>
+  );
+}
+
+function ResponsiblesLine({ row }: { row: DistributionEntryTradePointRow }) {
+  const parts: string[] = [];
+  if (row.managerName?.trim()) parts.push(`Менеджер: ${row.managerName.trim()}`);
+  if (row.regionalManagerName?.trim()) parts.push(`Регионал: ${row.regionalManagerName.trim()}`);
+  if (row.ropName?.trim()) parts.push(`РОП: ${row.ropName.trim()}`);
+  if (row.furnitureManagerName?.trim()) parts.push(`Мебельщик: ${row.furnitureManagerName.trim()}`);
+  if (parts.length === 0) return null;
+  return (
+    <p
+      className="line-clamp-1 text-[11px] text-muted-foreground"
+      data-testid={`distribution-entry-tradepoint-responsibles-${row.tradePointId}`}
+    >
+      {parts.join(" · ")}
+    </p>
+  );
+}
+
+function SegmentDistributionLine({ row }: { row: DistributionEntryTradePointRow }) {
+  const { vh, mk, hardware } = row.installedOursBySegment;
+  const rotation = row.installedOursRotation;
+  const hasSegments = vh > 0 || mk > 0 || hardware > 0 || rotation > 0;
+  if (!hasSegments) return null;
+  const parts: string[] = [];
+  if (vh > 0) parts.push(`ВХ: ${vh}`);
+  if (mk > 0) parts.push(`МК: ${mk}`);
+  if (hardware > 0) parts.push(`Фурн: ${hardware}`);
+  if (rotation > 0) parts.push(`Ротация: ${rotation}`);
+  return (
+    <div
+      className="flex max-w-full flex-wrap justify-end gap-x-1.5 text-[10px] text-muted-foreground tabular-nums"
+      data-testid={`distribution-entry-tradepoint-segments-${row.tradePointId}`}
+    >
+      {parts.map((part) => (
+        <Badge key={part} variant="outline" className="px-1.5 py-0 text-[10px] font-medium">
+          {part}
+        </Badge>
+      ))}
     </div>
   );
 }
@@ -245,6 +289,7 @@ export function DistributionEntryTradePointCard({
               {cityAddressLine}
             </p>
           ) : null}
+          <ResponsiblesLine row={row} />
           {detailMetaLine ? (
             <p className="truncate text-[11px] text-muted-foreground">{detailMetaLine}</p>
           ) : null}

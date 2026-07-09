@@ -2,6 +2,7 @@
  * Фильтры раздела «Дистрибуция» (чистый view-model, без сервера).
  */
 
+import type { DistributionEntryTradePointRow } from "./distribution-entry-tradepoint-view-model.js";
 import type { ClientCategoryId } from "./client-category.js";
 import { CLIENT_CATEGORY_META, getClientCategoryLabel } from "./client-category.js";
 import {
@@ -232,6 +233,32 @@ export function filterScopeDealersByEntryTradePointFilters(
     if (!dealerMatchesManagerIds(dealer, filter.managerIds)) return false;
     if (!dealerMatchesRegionalManagerIds(dealer, filter.regionalManagerIds)) return false;
     if (!dealerMatchesRopIds(dealer, filter.ropIds, ropOverridesState)) return false;
+    return true;
+  });
+}
+
+export function filterEntryRowsByEntryTradePointFilters(
+  rows: readonly DistributionEntryTradePointRow[],
+  filter: DistributionEntryTradePointFilterState,
+): DistributionEntryTradePointRow[] {
+  return rows.filter((row) => {
+    if (filter.clientCategoryIds.length > 0 && !filter.clientCategoryIds.includes(row.clientCategory)) {
+      return false;
+    }
+    if (filter.cityValues.length > 0) {
+      const city = row.city ? normalizeGeoValue(row.city) : null;
+      if (!city || !filter.cityValues.includes(city)) return false;
+    }
+    if (filter.managerIds.length > 0) {
+      const mgr = row.managerName ?? "";
+      if (!filter.managerIds.includes(mgr) && !filter.managerIds.includes(`mgr:${mgr}`)) return false;
+    }
+    if (filter.regionalManagerIds.length > 0) {
+      const rm = row.regionalManagerName ?? "";
+      if (!filter.regionalManagerIds.includes(rm) && !filter.regionalManagerIds.includes(`rm:${rm}`)) {
+        return false;
+      }
+    }
     return true;
   });
 }
