@@ -26,6 +26,7 @@ export default defineConfig({
       "__tests__/**/*.test.tsx",
       "client/**/*.test.ts",
       "client/**/*.test.tsx",
+      "scripts/**/__tests__/**/*.test.mjs",
     ],
   },
 });

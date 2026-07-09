@@ -26,6 +26,11 @@ import {
   loadCachedMatrix,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT,
 } from "@/lib/showcase-matrix-store";
+import { useTradePointShowcaseSharedStore } from "@/hooks/use-trade-point-showcase-shared-store";
+import {
+  mergeActualizationWithSharedShowcaseStore,
+  sharedShowcaseStoreContentKey,
+} from "@/lib/trade-point-showcase-shared-merge";
 
 const EMPTY_GROUP_AGGREGATE: DistributionAnalyticsData["groupAggregate"] = {
   byType: {
@@ -92,22 +97,45 @@ export function useDistributionAnalyticsData(
     scopedDealers.length > DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD &&
     !hasAnyDistributionAnalyticsFilters(filters);
 
+  const tradePointIdsForSharedStore = useMemo(() => {
+    if (scopeTooLarge) return [] as string[];
+    return buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope).map(
+      (r) => r.tradePointId,
+    );
+  }, [scopeTooLarge, actStable, profile, scopedDealers, realScope]);
+
+  const { recordByTradePointId } = useTradePointShowcaseSharedStore(tradePointIdsForSharedStore);
+
+  const actForAnalytics = useMemo(
+    () => mergeActualizationWithSharedShowcaseStore(actStable, recordByTradePointId),
+    [actStable, recordByTradePointId],
+  );
+
+  const sharedContentKey = useMemo(
+    () => sharedShowcaseStoreContentKey(recordByTradePointId),
+    [recordByTradePointId],
+  );
+
+  const actForAnalyticsKey = `${actContentKey}|${sharedContentKey}`;
+  const actForAnalyticsStableRef = useRef(actForAnalytics);
+  const actForAnalyticsKeyRef = useRef(actForAnalyticsKey);
+  if (actForAnalyticsKeyRef.current !== actForAnalyticsKey) {
+    actForAnalyticsKeyRef.current = actForAnalyticsKey;
+    actForAnalyticsStableRef.current = actForAnalytics;
+  }
+  const actForAnalyticsStable = actForAnalyticsStableRef.current;
+
   const scopedRows = useMemo(
     () =>
       scopeTooLarge
         ? []
-        : buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope),
-    [scopeTooLarge, actStable, profile, scopedDealers, realScope],
+        : buildScopedAnalyticsTradePointRows(actForAnalyticsStable, profile, scopedDealers, realScope),
+    [scopeTooLarge, actForAnalyticsStable, profile, scopedDealers, realScope],
   );
 
   const sourceScopeKey = useMemo(
-    () =>
-      scopedTradePointIdsStableKey(
-        buildScopedAnalyticsTradePointRows(actStable, profile, scopedDealers, realScope).map(
-          (r) => r.tradePointId,
-        ),
-      ),
-    [actStable, profile, scopedDealers, realScope],
+    () => scopedTradePointIdsStableKey(scopedRows.map((r) => r.tradePointId)),
+    [scopedRows],
   );
 
   if (prevSourceScopeKeyRef.current !== sourceScopeKey) {
@@ -153,16 +181,16 @@ export function useDistributionAnalyticsData(
   return useMemo(
     () =>
       scopeTooLarge
-        ? { ...EMPTY_DISTRIBUTION_ANALYTICS_DATA, act: actStable }
+        ? { ...EMPTY_DISTRIBUTION_ANALYTICS_DATA, act: actForAnalyticsStable }
         : {
             ...buildDistributionAnalyticsData({
               scopedRows,
               filters,
-              act: actStable,
+              act: actForAnalyticsStable,
               installedEntriesByTradePointId,
             }),
-            act: actStable,
+            act: actForAnalyticsStable,
           },
-    [scopeTooLarge, scopedRows, filters, actStable, installedEntriesByTradePointId],
+    [scopeTooLarge, scopedRows, filters, actForAnalyticsStable, installedEntriesByTradePointId],
   );
 }

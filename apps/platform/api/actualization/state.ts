@@ -1213,6 +1213,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         const saved = coerceState(first?.state);
         const updatedAt = rowUpdatedAtIso(first?.updated_at) ?? now;
         try {
+          const { dualWriteShowcaseRecordsFromActualizationState } = await import(
+            "../../shared/trade-point-showcase-shared-store.js"
+          );
+          await dualWriteShowcaseRecordsFromActualizationState(sql, prevState, saved);
+        } catch (e) {
+          const m = e instanceof Error ? e.message : String(e);
+          console.warn("[actualization-api] showcase shared-store dual-write failed", m.slice(0, 200));
+        }
+        try {
           const { neon } = await import("@neondatabase/serverless");
           const { makePoolFromNeon, wrapNeonWithShadow } = await import("../../server/db/neon-client.js");
           const { shadowWriteCitiesFromActualization } = await import("../../shared/actualization-city-shadow.js");
