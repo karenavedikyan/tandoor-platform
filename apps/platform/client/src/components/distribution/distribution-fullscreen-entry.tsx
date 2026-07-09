@@ -160,6 +160,7 @@ import {
   pendingSyncCount,
 } from "@/lib/overrides-pending-sync";
 import { runOverridesPendingSyncOnce } from "@/lib/overrides-pending-sync-worker";
+import { DISTRIBUTION_ENTRY_DEBUG } from "@/lib/distribution-entry-debug";
 
 const CARD_SIZE_STORAGE_KEY = "distribution-fullscreen-entry-card-size";
 const COMPACT_STORAGE_KEY = "distribution-fullscreen-entry-compact";
@@ -845,7 +846,22 @@ export function DistributionFullscreenEntry({
     return "Показан весь каталог. Найдите модели, отметьте статусом и сохраните.";
   }, [workStatus]);
 
-  const changedIds = useMemo(() => collectChangedProductIds(draft, baselines), [draft, baselines]);
+  const changedIds = useMemo(() => {
+    const ids = collectChangedProductIds(draft, baselines);
+    if (DISTRIBUTION_ENTRY_DEBUG) {
+      console.log("[dist-entry:changedIds]", {
+        draftSize: Object.keys(draft).length,
+        baselinesSize: Object.keys(baselines).length,
+        changedIds: ids,
+        draftSample: Object.entries(draft).slice(0, 5).map(([id, row]) => ({
+          id,
+          row,
+          baseline: baselines[id] ?? null,
+        })),
+      });
+    }
+    return ids;
+  }, [draft, baselines]);
   const changedSet = useMemo(() => new Set(changedIds), [changedIds]);
   const needInstallMarkedIds = useMemo(() => {
     if (!needInstallMode) return new Set<string>();
@@ -997,6 +1013,15 @@ export function DistributionFullscreenEntry({
         updatedBy: uid,
         updatedByName: uname,
       });
+      if (DISTRIBUTION_ENTRY_DEBUG) {
+        console.log("[dist-entry:growPlacement]", {
+          marked,
+          segment: placementSegmentContext,
+          placementType: activePlacementType,
+          grown,
+          placementsCount: placements.length,
+        });
+      }
       if (!grown) return;
       void syncCategoryCapacityAfterPlacementChange();
       setBump((n) => n + 1);
@@ -1133,18 +1158,29 @@ export function DistributionFullscreenEntry({
     (productId: string, patch: Partial<FullscreenEntryDraftMap[string]>) => {
       let growNext: FullscreenEntryDraftMap | null = null;
       setDraft((prev) => {
+        if (DISTRIBUTION_ENTRY_DEBUG) {
+          console.log("[dist-entry:updateDraft:in]", { productId, patch, prevRow: prev[productId] });
+        }
         const next = { ...prev, [productId]: { ...prev[productId]!, ...patch } };
-        if (
+        const triggersGrow = Boolean(
           placementTypeMode &&
-          patch.status === "installed" &&
-          !isInstalledInPlacementType(
+            patch.status === "installed" &&
+            !isInstalledInPlacementType(
+              productId,
+              prev,
+              baselines,
+              placementSegmentContext,
+              activePlacementType,
+            ),
+        );
+        if (DISTRIBUTION_ENTRY_DEBUG) {
+          console.log("[dist-entry:updateDraft:out]", {
             productId,
-            prev,
-            baselines,
-            placementSegmentContext,
-            activePlacementType,
-          )
-        ) {
+            nextRow: next[productId],
+            triggersGrow,
+          });
+        }
+        if (triggersGrow) {
           growNext = next;
         }
         return next;
@@ -2188,6 +2224,10 @@ export function DistributionFullscreenEntry({
                 disabled={!compactHasChanges || saving}
                 onClick={() => void handleSave()}
                 data-testid="button-fullscreen-entry-save"
+                data-debug-compact-has-changes={compactHasChanges ? "1" : "0"}
+                data-debug-compact-save-count={compactSaveCount}
+                data-debug-need-install-mode={needInstallMode ? "1" : "0"}
+                data-debug-work-status={workStatus}
               >
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
                 Сохранить ({compactSaveCount})
@@ -2237,6 +2277,10 @@ export function DistributionFullscreenEntry({
           disabled={saving}
           onClick={() => void handleSave()}
           data-testid="button-fullscreen-entry-save-floating"
+          data-debug-compact-has-changes={compactHasChanges ? "1" : "0"}
+          data-debug-compact-save-count={compactSaveCount}
+          data-debug-need-install-mode={needInstallMode ? "1" : "0"}
+          data-debug-work-status={workStatus}
         >
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
           Сохранить ({compactSaveCount})
@@ -2672,6 +2716,7 @@ function StatusSelectControl({
       <SelectTrigger
         className={cn("h-8 text-xs", className)}
         data-testid={`select-fullscreen-entry-status-${productId}`}
+        data-debug-value={value}
       >
         <SelectValue>{STATUS_LABEL_RU[value]}</SelectValue>
       </SelectTrigger>
@@ -2730,6 +2775,23 @@ function FullscreenProductCard({
   const handleQuickTap = () => {
     const seg = segmentForProduct(product, matrixModel);
     const isToggledOn = (isExplicitMark || isChanged) && effectiveStatus === quickStatus;
+    if (DISTRIBUTION_ENTRY_DEBUG) {
+      console.log("[dist-entry:quickTap]", {
+        productId: product.id,
+        productName: product.name,
+        quickStatus,
+        baselineStatus,
+        effectiveStatus,
+        isChanged,
+        isExplicitMark,
+        isToggledOn,
+        seg,
+        hasMatrixModel: Boolean(matrixModel),
+        placementTypeMode,
+        activePlacementType,
+        row,
+      });
+    }
     if (isToggledOn) {
       if (quickStatus === "need_install" && baselineStatus === quickStatus) {
         onSetExplicitMark(product.id, false);
@@ -2770,6 +2832,12 @@ function FullscreenProductCard({
       onClick={quickMode ? handleQuickTap : undefined}
       role={quickMode ? "button" : undefined}
       data-testid={quickMode ? `card-fullscreen-entry-quick-${product.id}` : undefined}
+      data-debug-effective-status={effectiveStatus}
+      data-debug-baseline-status={baselineStatus}
+      data-debug-is-marked={isMarked ? "1" : "0"}
+      data-debug-is-changed={isChanged ? "1" : "0"}
+      data-debug-is-explicit={isExplicitMark ? "1" : "0"}
+      data-debug-has-matrix={Boolean(matrixModel) ? "1" : "0"}
     >
       <div
         className={cn(
