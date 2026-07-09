@@ -43,8 +43,10 @@ import {
   markPendingSyncDead,
   markPendingSyncFailed,
   purgeStaleDeadPendingSync,
+  remapPendingSyncDefId,
   type PendingSyncItem,
 } from "./overrides-pending-sync.js";
+import { resolveLocalMatrixDefId } from "./showcase-matrix-catalog-store.js";
 import { refreshDbCommentsForClient } from "./client-comments-db-cache.js";
 import { invalidateTradePointsScopedQueries } from "./trade-points-scoped-api.js";
 import { isDistributionDebugEnabled } from "./distribution-entry-debug.js";
@@ -91,12 +93,13 @@ function notifyShowcaseMatrixSyncDead(err: string): void {
 }
 
 async function processItem(item: PendingSyncItem): Promise<void> {
-  if (item.dead) return;
+  const fresh = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
+  if (!fresh || fresh.dead) return;
 
-  const p = item.payload as Record<string, unknown>;
+  const p = fresh.payload as Record<string, unknown>;
   let result: { ok: boolean; status?: number; code?: string; message?: string; network?: boolean } = { ok: false };
 
-  switch (item.kind) {
+  switch (fresh.kind) {
     case "dealer-upsert": {
       const rawFields = (p.fields ?? {}) as Record<string, unknown>;
       const fields = sanitizeDealerOverrideFieldsForApi(rawFields);
@@ -227,7 +230,20 @@ async function processItem(item: PendingSyncItem): Promise<void> {
       break;
     }
     case "showcase-matrix-catalog-upsert": {
-      result = await apiUpsertMatrixDefStrict(p as unknown as ShowcaseMatrixDefUpsertInput);
+      const upsertBody = p as unknown as ShowcaseMatrixDefUpsertInput;
+      const upsertResult = await apiUpsertMatrixDefStrict(upsertBody);
+      if (upsertResult.ok && upsertResult.def) {
+        const serverId = upsertResult.def.id;
+        const localId =
+          typeof upsertBody.id === "string" && upsertBody.id.length > 0
+            ? upsertBody.id
+            : `local-${upsertBody.clientOpId ?? ""}`;
+        if (localId && localId !== serverId) {
+          resolveLocalMatrixDefId(localId, serverId);
+          remapPendingSyncDefId(localId, serverId);
+        }
+      }
+      result = upsertResult;
       break;
     }
     case "showcase-matrix-catalog-set-status": {

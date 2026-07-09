@@ -104,6 +104,36 @@ export function dequeuePendingSync(id: string): void {
   saveState(state);
 }
 
+export function updatePendingSyncItemPayload(itemId: string, nextPayload: unknown): void {
+  const state = loadState();
+  const item = state.items.find((x) => x.id === itemId);
+  if (!item) return;
+  item.payload = nextPayload;
+  saveState(state);
+}
+
+export function remapPendingSyncDefId(oldDefId: string, newDefId: string): void {
+  if (oldDefId === newDefId) return;
+  const items = listPendingSyncItems({ includeDead: true });
+  for (const item of items) {
+    if (
+      item.kind !== "showcase-matrix-catalog-replace-models" &&
+      item.kind !== "showcase-matrix-catalog-set-status" &&
+      item.kind !== "showcase-matrix-catalog-delete"
+    ) {
+      continue;
+    }
+    const p = item.payload as Record<string, unknown>;
+    const currentDefId =
+      typeof p.defId === "string" ? p.defId : typeof p.id === "string" ? p.id : null;
+    if (currentDefId !== oldDefId) continue;
+    const nextPayload = { ...p };
+    if ("defId" in nextPayload) nextPayload.defId = newDefId;
+    if ("id" in nextPayload) nextPayload.id = newDefId;
+    updatePendingSyncItemPayload(item.id, nextPayload);
+  }
+}
+
 export function markPendingSyncDead(id: string, err: string): void {
   const state = loadState();
   const item = state.items.find((x) => x.id === id);

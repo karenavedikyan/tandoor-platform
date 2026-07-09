@@ -21,6 +21,7 @@ globalThis.localStorage = localStorageMock;
 // @ts-expect-error test shim
 globalThis.window = {
   localStorage: localStorageMock,
+  location: { search: "" },
   dispatchEvent: () => true,
   addEventListener: () => undefined,
   removeEventListener: () => undefined,
@@ -39,6 +40,7 @@ const {
   OVERRIDES_PENDING_STORAGE_KEY,
   pendingSyncCount,
   removePendingSyncWithUuidErrors,
+  remapPendingSyncDefId,
 } = await import("../overrides-pending-sync.js");
 
 store.clear();
@@ -134,6 +136,7 @@ Object.defineProperty(globalThis, "fetch", {
 });
 
 const { runOverridesPendingSyncOnce } = await import("../overrides-pending-sync-worker.js");
+const { SHOWCASE_MATRIX_CATALOG_CACHE_KEY } = await import("../showcase-matrix-catalog-store.js");
 const runResult = await runOverridesPendingSyncOnce();
 assert.ok(runResult, "worker should run when queue has catalog ops");
 assert.equal(runResult!.succeeded, 4);
@@ -177,5 +180,114 @@ assert.ok(matrixUpsertCall, "showcase-matrix upsert API should be called");
 const matrixBody = matrixUpsertCall!.body as Record<string, unknown>;
 assert.equal(matrixBody.placementLegacyOurs, 3);
 assert.equal(matrixBody.placementCapacity, 66);
+
+store.clear();
+
+const localDefId = "local-op-remap-1";
+const serverDefId = "8cc870fe-6fd0-4399-9ac0-f34f1053fb2c";
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-replace-models:op-remap-1",
+  kind: "showcase-matrix-catalog-replace-models",
+  payload: { defId: localDefId, models: [], clientOpId: "op-remap-1" },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-set-status:op-remap-2",
+  kind: "showcase-matrix-catalog-set-status",
+  payload: { id: localDefId, status: "published", clientOpId: "op-remap-2" },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-delete:op-remap-3",
+  kind: "showcase-matrix-catalog-delete",
+  payload: { id: localDefId, clientOpId: "op-remap-3" },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-replace-models:op-other",
+  kind: "showcase-matrix-catalog-replace-models",
+  payload: { defId: "local-other", models: [], clientOpId: "op-other" },
+});
+remapPendingSyncDefId(localDefId, serverDefId);
+const remapped = listPendingSyncItems({ includeDead: true });
+const replaceRemapped = remapped.find((x) => x.id === "showcase-matrix-catalog-replace-models:op-remap-1");
+assert.equal((replaceRemapped?.payload as Record<string, unknown>).defId, serverDefId);
+const statusRemapped = remapped.find((x) => x.id === "showcase-matrix-catalog-set-status:op-remap-2");
+assert.equal((statusRemapped?.payload as Record<string, unknown>).id, serverDefId);
+const deleteRemapped = remapped.find((x) => x.id === "showcase-matrix-catalog-delete:op-remap-3");
+assert.equal((deleteRemapped?.payload as Record<string, unknown>).id, serverDefId);
+const otherReplace = remapped.find((x) => x.id === "showcase-matrix-catalog-replace-models:op-other");
+assert.equal((otherReplace?.payload as Record<string, unknown>).defId, "local-other");
+
+store.clear();
+workerFetchLog.length = 0;
+Object.defineProperty(globalThis, "fetch", {
+  value: async (url: string, init?: RequestInit) => {
+    workerFetchLog.push({
+      url,
+      body: init?.body ? JSON.parse(String(init.body)) : null,
+    });
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        if (url.includes("/upsert")) {
+          return {
+            success: true,
+            def: { id: serverDefId, clientCategory: "new_client", scopeKind: "global", status: "draft" },
+            idempotent: false,
+          };
+        }
+        return { success: true, def: { id: serverDefId }, idempotent: false, models: [] };
+      },
+    };
+  },
+  configurable: true,
+});
+
+const remapClientOpId = "op-remap-flow";
+const remapLocalDefId = `local-${remapClientOpId}`;
+localStorageMock.setItem(
+  SHOWCASE_MATRIX_CATALOG_CACHE_KEY,
+  JSON.stringify({
+    headers: [
+      {
+        id: remapLocalDefId,
+        clientCategory: "new_client",
+        scopeKind: "global",
+        status: "draft",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ],
+    defsById: {
+      [remapLocalDefId]: {
+        id: remapLocalDefId,
+        clientCategory: "new_client",
+        scopeKind: "global",
+        status: "draft",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        models: [],
+      },
+    },
+  }),
+);
+enqueuePendingSync({
+  id: `showcase-matrix-catalog-upsert:${remapClientOpId}`,
+  kind: "showcase-matrix-catalog-upsert",
+  payload: { clientCategory: "new_client", scopeKind: "global", clientOpId: remapClientOpId },
+});
+enqueuePendingSync({
+  id: "showcase-matrix-catalog-replace-models:op-remap-flow-2",
+  kind: "showcase-matrix-catalog-replace-models",
+  payload: {
+    defId: remapLocalDefId,
+    models: [{ targetKind: "model", targetId: "m-1", segment: "vh" }],
+    clientOpId: "op-remap-flow-2",
+  },
+});
+const workerRun = await runOverridesPendingSyncOnce();
+assert.ok(workerRun);
+assert.equal(workerRun!.succeeded, 2);
+const replaceCall = workerFetchLog.find((c) => c.url.includes("/replace-models"));
+assert.equal((replaceCall?.body as Record<string, unknown>).defId, serverDefId);
+const remappedCache = JSON.parse(localStorageMock.getItem(SHOWCASE_MATRIX_CATALOG_CACHE_KEY)!);
+assert.equal(remappedCache.headers[0]?.id, serverDefId);
 
 console.log("✓ overrides-pending-sync tests passed");
