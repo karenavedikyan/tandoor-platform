@@ -50,7 +50,12 @@ export function collectChangedProductIds(
   const changed: string[] = [];
   for (const [productId, row] of Object.entries(draft)) {
     const baseline = baselines[productId];
-    if (!baseline) continue;
+    if (!baseline) {
+      // Модель, которой нет в матрице ТТ (например, добавлена из «Весь каталог»).
+      // Считаем изменением всё, что отклонилось от дефолта need_install.
+      if (row.status !== "need_install") changed.push(productId);
+      continue;
+    }
     if (!draftRowEqualsBaseline(row, baseline)) changed.push(productId);
   }
   return changed;
