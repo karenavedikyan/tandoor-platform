@@ -68,6 +68,19 @@ export function OneCStoresDistributionKpiCards({
           />
         );
       })}
+      <KpiCard
+        title="Под ротацию"
+        value={loading ? "—" : formatDistributionPercent(aggregate.rotationPotentialPercent)}
+        hint={`Неактуальные: ${aggregate.totalLegacyOurs} шт`}
+        valueClassName={
+          loading
+            ? undefined
+            : aggregate.totalLegacyOurs > 0
+              ? "text-amber-700 dark:text-amber-300"
+              : "text-muted-foreground"
+        }
+        testId="kpi-one-c-stores-rotation"
+      />
     </div>
   );
 }
