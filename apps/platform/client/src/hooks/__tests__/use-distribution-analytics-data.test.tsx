@@ -39,6 +39,12 @@ const analyticsResult: DistributionAnalyticsData = {
 const buildAnalyticsDataMock = vi.hoisted(() => vi.fn(() => analyticsResult));
 const scopedRowsResult = vi.hoisted(() => [] as TradePointListRow[]);
 const buildScopedRowsMock = vi.hoisted(() => vi.fn(() => scopedRowsResult));
+const sharedStoreMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    ready: true,
+    recordByTradePointId: {} as Record<string, import("@/lib/client-base-actualization-state").TradePointShowcaseActualization>,
+  })),
+);
 
 const fetchShowcaseMatrixScopeMock = vi.hoisted(() => vi.fn(async () => [] as ShowcaseMatrixEntryDto[]));
 const loadCachedMatrixMock = vi.hoisted(() => vi.fn((_tradePointId?: string) => [] as ShowcaseMatrixEntryDto[]));
@@ -57,6 +63,10 @@ vi.mock("@/lib/showcase-matrix-store", () => ({
   applyScopeEntriesToMatrixCache: applyScopeEntriesToMatrixCacheMock,
   loadCachedMatrix: loadCachedMatrixMock,
   SHOWCASE_MATRIX_STORE_CHANGED_EVENT: "showcase-matrix-store-changed",
+}));
+
+vi.mock("@/hooks/use-trade-point-showcase-shared-store", () => ({
+  useTradePointShowcaseSharedStore: sharedStoreMock,
 }));
 
 const SCOPED_DEALERS = vi.hoisted(() => [
@@ -124,6 +134,8 @@ describe("useDistributionAnalyticsData actStable (441-fix5)", () => {
     fetchShowcaseMatrixScopeMock.mockClear();
     loadCachedMatrixMock.mockClear();
     applyScopeEntriesToMatrixCacheMock.mockClear();
+    sharedStoreMock.mockClear();
+    sharedStoreMock.mockReturnValue({ ready: true, recordByTradePointId: {} });
     scopedRowsResult.length = 0;
     fetchShowcaseMatrixScopeMock.mockResolvedValue([]);
     loadCachedMatrixMock.mockReturnValue([]);
@@ -266,5 +278,85 @@ describe("useDistributionAnalyticsData matrix prefetch", () => {
         }),
       ).toBe(true);
     });
+  });
+});
+
+describe("useDistributionAnalyticsData shared showcase store merge", () => {
+  const profile = { role: "admin" as const, personaUserId: "admin-1" };
+  const filters = emptyDistributionAnalyticsFilters();
+
+  function makeShowcase(tradePointId: string, updatedAt: string, entrancePortals: number) {
+    return {
+      tradePointId,
+      dealerId: "d1",
+      hasShowcase: true,
+      totalPortals: entrancePortals,
+      entrancePortals,
+      interiorPortals: null,
+      hardwareSections: null,
+      showcaseAreaSqm: null,
+      showcaseComment: "",
+      tandoorTotalPortals: null,
+      tandoorEntrancePortals: null,
+      tandoorInteriorPortals: null,
+      competitorPortals: null,
+      competitorsListed: "",
+      fillingComment: "",
+      hasExpansionPotential: null,
+      additionalPortalsPotential: null,
+      showcasePriority: "",
+      firstPriorityNeed: "",
+      rmRopComment: "",
+      updatedAt,
+      updatedBy: "user-1",
+      updatedByName: "Test",
+    } as import("@/lib/client-base-actualization-state").TradePointShowcaseActualization;
+  }
+
+  beforeEach(() => {
+    __clearDistributionScopePrefetchKeys();
+    buildAnalyticsDataMock.mockClear();
+    buildScopedRowsMock.mockReset();
+    buildScopedRowsMock.mockReturnValue(scopedRowsResult);
+    fetchShowcaseMatrixScopeMock.mockClear();
+    loadCachedMatrixMock.mockClear();
+    applyScopeEntriesToMatrixCacheMock.mockClear();
+    sharedStoreMock.mockClear();
+    scopedRowsResult.length = 0;
+    scopedRowsResult.push(makeScopedRow("tp-1"));
+    fetchShowcaseMatrixScopeMock.mockResolvedValue([]);
+    loadCachedMatrixMock.mockReturnValue([]);
+    mockAct = createEmptyActualizationState();
+    mockAct.tradePointShowcaseActualizationById = {
+      "tp-1": makeShowcase("tp-1", "2026-07-01T10:00:00.000Z", 3),
+    };
+    mockActx = {
+      enabled: false,
+      loading: false,
+      state: mockAct,
+      persist: vi.fn(),
+      refresh: vi.fn(),
+    };
+    mockTeam = { mergedState: mockAct };
+  });
+
+  it("passes merged act with newer shared-store showcase to buildDistributionAnalyticsData", async () => {
+    sharedStoreMock.mockReturnValue({
+      ready: true,
+      recordByTradePointId: {
+        "tp-1": makeShowcase("tp-1", "2026-07-05T12:00:00.000Z", 7),
+      },
+    });
+
+    renderHook(() => useDistributionAnalyticsData(profile, filters));
+
+    await waitFor(() => {
+      expect(buildAnalyticsDataMock).toHaveBeenCalled();
+    });
+
+    const lastCall = buildAnalyticsDataMock.mock.calls.at(-1)?.[0] as {
+      act?: { tradePointShowcaseActualizationById?: Record<string, { entrancePortals?: number | null }> };
+    };
+    expect(lastCall.act?.tradePointShowcaseActualizationById?.["tp-1"]?.entrancePortals).toBe(7);
   });
 });
