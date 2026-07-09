@@ -47,6 +47,7 @@ import {
 } from "./overrides-pending-sync.js";
 import { refreshDbCommentsForClient } from "./client-comments-db-cache.js";
 import { invalidateTradePointsScopedQueries } from "./trade-points-scoped-api.js";
+import { isDistributionDebugEnabled } from "./distribution-entry-debug.js";
 import { refreshMatrixFromServer } from "./showcase-matrix-store.js";
 
 const INTERVAL_MS = 15_000;
@@ -181,6 +182,15 @@ async function processItem(item: PendingSyncItem): Promise<void> {
       return;
     }
     case "showcase-matrix-upsert": {
+      if (isDistributionDebugEnabled()) {
+        console.debug("[dist-recon] pending-sync:matrix-upsert:begin", {
+          itemId: item.id,
+          payloadKeys: Object.keys(item.payload),
+          tradePointId: (item.payload as { tradePointId?: unknown }).tradePointId,
+          targetKind: (item.payload as { targetKind?: unknown }).targetKind,
+          targetId: (item.payload as { targetId?: unknown }).targetId,
+        });
+      }
       result = await apiUpsertShowcaseMatrixEntryStrict({
         dealerId: String(p.dealerId),
         tradePointId: String(p.tradePointId),
@@ -198,6 +208,16 @@ async function processItem(item: PendingSyncItem): Promise<void> {
         placementCompetitors: Array.isArray(p.placementCompetitors) ? p.placementCompetitors : undefined,
         placementLegacyOurs: typeof p.placementLegacyOurs === "number" ? p.placementLegacyOurs : null,
       });
+      if (isDistributionDebugEnabled()) {
+        console.debug("[dist-recon] pending-sync:matrix-upsert:result", {
+          itemId: item.id,
+          ok: result.ok,
+          status: result.status,
+          code: result.code,
+          message: result.message,
+          network: result.network,
+        });
+      }
       if (result.ok) {
         dequeuePendingSync(item.id);
         invalidateTradePointsScopedQueries();
@@ -241,15 +261,42 @@ async function processItem(item: PendingSyncItem): Promise<void> {
   const err = failureMessage(result as { ok: false; message?: string; code?: string; status?: number });
   if (isPermanentApiFailure(result as { ok: false; status?: number; code?: string; message?: string })) {
     markPendingSyncDead(item.id, err);
-    if (item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead(err);
+    if (item.kind === "showcase-matrix-upsert") {
+      if (isDistributionDebugEnabled()) {
+        console.debug("[dist-recon] pending-sync:matrix-upsert:dead", {
+          itemId: item.id,
+          reason: err,
+          stillDead: true,
+        });
+      }
+      notifyShowcaseMatrixSyncDead(err);
+    }
   } else if ("network" in result && result.network) {
     markPendingSyncFailed(item.id, "network");
     const still = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
-    if (still?.dead && item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead("network");
+    if (still?.dead && item.kind === "showcase-matrix-upsert") {
+      if (isDistributionDebugEnabled()) {
+        console.debug("[dist-recon] pending-sync:matrix-upsert:dead", {
+          itemId: item.id,
+          reason: "network",
+          stillDead: !!still?.dead,
+        });
+      }
+      notifyShowcaseMatrixSyncDead("network");
+    }
   } else {
     markPendingSyncFailed(item.id, err);
     const still = listPendingSyncItems({ includeDead: true }).find((x) => x.id === item.id);
-    if (still?.dead && item.kind === "showcase-matrix-upsert") notifyShowcaseMatrixSyncDead(err);
+    if (still?.dead && item.kind === "showcase-matrix-upsert") {
+      if (isDistributionDebugEnabled()) {
+        console.debug("[dist-recon] pending-sync:matrix-upsert:dead", {
+          itemId: item.id,
+          reason: err,
+          stillDead: !!still?.dead,
+        });
+      }
+      notifyShowcaseMatrixSyncDead(err);
+    }
   }
 }
 
