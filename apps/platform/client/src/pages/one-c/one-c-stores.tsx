@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Redirect } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
@@ -21,6 +21,8 @@ import { useOneCStoresListView } from "./use-one-c-stores-list";
 import { useOneCListDensity } from "./use-one-c-list-density";
 import { useOneCStoresColumns } from "./use-one-c-stores-columns";
 import { OneCStoresColumnPicker } from "./one-c-stores-column-picker";
+import { OneCStoresDistributionKpiCards } from "./one-c-stores-distribution-kpi-cards";
+import { aggregateDistribution } from "@/lib/distribution-analytics/distribution-analytics-math";
 
 export default function OneCStoresPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
@@ -40,6 +42,13 @@ export default function OneCStoresPage() {
     serverSideSearch: true,
     nonTableView,
   });
+
+  const aggregate = useMemo(() => {
+    const metricsList = filtered
+      .map((item) => distAggregates.get(item.id_1c))
+      .filter((metric): metric is NonNullable<typeof metric> => metric != null);
+    return aggregateDistribution(metricsList);
+  }, [filtered, distAggregates]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(filters.search), 300);
@@ -93,15 +102,23 @@ export default function OneCStoresPage() {
       testId="page-one-c-stores"
       actions={<OneCRefreshStubButton />}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <OneCListKpi items={buildOneCStoresKpi(items, total)} testId="kpi-one-c-stores" />
-        <div className="flex flex-wrap items-center gap-3">
-          <OneCOnlyActiveToggle
-            checked={onlyActive}
-            onCheckedChange={setOnlyActive}
-            testId="toggle-one-c-stores-only-active"
-          />
-          <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-stores" />
+      <div className="space-y-3">
+        <OneCStoresDistributionKpiCards
+          tradePointsCount={filtered.length}
+          aggregate={aggregate}
+          loading={distLoading}
+          testId="kpi-one-c-stores-distribution"
+        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <OneCListKpi items={buildOneCStoresKpi(items, total)} testId="kpi-one-c-stores" />
+          <div className="flex flex-wrap items-center gap-3">
+            <OneCOnlyActiveToggle
+              checked={onlyActive}
+              onCheckedChange={setOnlyActive}
+              testId="toggle-one-c-stores-only-active"
+            />
+            <OneCListDensityToggle value={density} onChange={setDensity} testIdPrefix="one-c-stores" />
+          </div>
         </div>
       </div>
       <OneCStoresFilters
