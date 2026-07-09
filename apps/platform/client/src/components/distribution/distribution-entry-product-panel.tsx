@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { navigateHashPathInHash } from "@/lib/hash-location-router";
 import { ArrowLeft, Grid3x3, LayoutGrid, List, Search, Square } from "lucide-react";
 import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
 import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
@@ -57,6 +58,8 @@ type DistributionEntryProductPanelProps = {
   profile: ReleaseDemoProfile;
   dealers: readonly DealerRow[];
   filter: DistributionFilterState;
+  /** При выборе ТТ — переход на /1c/store/:id вместо inline-формы. */
+  oneCStoreNavigation?: boolean;
 };
 
 function presenceBadgeClass(presence: EntryProductTradePointRow["presence"]): string {
@@ -73,6 +76,7 @@ export function DistributionEntryProductPanel({
   profile,
   dealers,
   filter,
+  oneCStoreNavigation = false,
 }: DistributionEntryProductPanelProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
@@ -135,7 +139,7 @@ export function DistributionEntryProductPanel({
 
   const selectedRef = useMemo(
     () =>
-      selectedTpRow
+      !oneCStoreNavigation && selectedTpRow
         ? findDealerTradePointForEntryRow(dealers, {
             dealerId: selectedTpRow.dealerId,
             tradePointId: selectedTpRow.tradePointId,
@@ -152,7 +156,19 @@ export function DistributionEntryProductPanel({
             installedOursBySegment: { vh: 0, mk: 0, hardware: 0 },
           })
         : null,
-    [dealers, selectedTpRow],
+    [dealers, selectedTpRow, oneCStoreNavigation],
+  );
+
+  const handleSelectTradePoint = useCallback(
+    (tradePointId: string) => {
+      if (oneCStoreNavigation) {
+        navigateHashPathInHash(`/1c/store/${encodeURIComponent(tradePointId)}`);
+        return;
+      }
+      setSelectedTradePointId(tradePointId);
+      setStep("showcase");
+    },
+    [oneCStoreNavigation],
   );
 
   const actorUserId = user?.id ?? profile.personaUserId;
@@ -386,10 +402,7 @@ export function DistributionEntryProductPanel({
                 >
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedTradePointId(row.tradePointId);
-                      setStep("showcase");
-                    }}
+                    onClick={() => handleSelectTradePoint(row.tradePointId)}
                     className={cn(
                       "w-full rounded-xl border px-3 py-3 text-left transition-colors",
                       selectedTradePointId === row.tradePointId
@@ -419,7 +432,7 @@ export function DistributionEntryProductPanel({
   ) : null;
 
   const showcase =
-    selectedRef && selectedTpRow ? (
+    !oneCStoreNavigation && selectedRef && selectedTpRow ? (
       <DistributionTradePointMatrixEntry
         dealer={selectedRef.dealer}
         point={selectedRef.point}
@@ -427,13 +440,13 @@ export function DistributionEntryProductPanel({
         actorUserId={actorUserId}
         actorName={actorName}
       />
-    ) : (
+    ) : !oneCStoreNavigation ? (
       <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
         <CardContent className="px-4 py-10 text-center">
           <p className="text-sm text-muted-foreground">Выберите торговую точку, чтобы внести факт по витрине.</p>
         </CardContent>
       </Card>
-    );
+    ) : null;
 
   const localBack = () => {
     if (step === "showcase") {
@@ -479,25 +492,31 @@ export function DistributionEntryProductPanel({
 
       {(step === "tradePoints" || step === "showcase") &&
         (isDesktopLayout ? (
-          <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+          oneCStoreNavigation ? (
             <Card className="rounded-xl border border-border bg-card shadow-xs">
               <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
             </Card>
-            <div className="min-w-0">
-              {step === "showcase" ? (
-                showcase
-              ) : (
-                <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
-                  <CardContent className="px-4 py-10 text-center">
-                    <p className="text-sm text-muted-foreground">Выберите торговую точку в списке.</p>
-                  </CardContent>
-                </Card>
-              )}
+          ) : (
+            <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+              <Card className="rounded-xl border border-border bg-card shadow-xs">
+                <CardContent className="p-3 sm:p-4">{tpList}</CardContent>
+              </Card>
+              <div className="min-w-0">
+                {step === "showcase" ? (
+                  showcase
+                ) : (
+                  <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
+                    <CardContent className="px-4 py-10 text-center">
+                      <p className="text-sm text-muted-foreground">Выберите торговую точку в списке.</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <div className="space-y-4">
-            {step === "showcase" ? (
+            {step === "showcase" && !oneCStoreNavigation ? (
               showcase
             ) : (
               <Card className="rounded-xl border border-border bg-card shadow-xs">

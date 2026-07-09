@@ -12,9 +12,14 @@ import { DistributionEntryCityPanel } from "@/components/distribution/distributi
 import { DistributionEntryProductPanel } from "@/components/distribution/distribution-entry-product-panel";
 import { DistributionEntryTradePointPanel } from "@/components/distribution/distribution-entry-tradepoint-panel";
 import { DistributionFiltersBar } from "@/components/distribution/distribution-filters-bar";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
 import { useOneCScopedStores } from "@/hooks/use-one-c-scoped-stores";
 import { buildDistributionEntryTradePointRowsFromOneC } from "@/lib/one-c-distribution-adapter";
+import {
+  readDistributionAnalyticsSourceFromHash,
+  resolveDistributionEntrySource,
+} from "@/lib/distribution-analytics/distribution-analytics-source";
 import { mapSalesRoleToDealerBaseAccess } from "@/lib/dealer-base-role-views";
 import {
   defaultDistributionEntryTradePointFilterState,
@@ -40,12 +45,18 @@ type DistributionEntryWizardProps = {
 
 export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSelect }: DistributionEntryWizardProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
+  const { user } = useAuthUser();
+  const qs = readDistributionAnalyticsSourceFromHash(window.location.hash);
+  const entrySource = resolveDistributionEntrySource(user?.role, qs);
+  const oneCStoreNavigation = entrySource === "one-c";
+
   const [filter, setFilter] = useState<DistributionFilterState>(defaultDistributionFilterState);
   const [ttFilter, setTtFilter] = useState<DistributionEntryTradePointFilterState>(
     defaultDistributionEntryTradePointFilterState,
   );
-  const scoped = useDistributionScopedDealers(profile);
+  const legacyScoped = useDistributionScopedDealers(profile);
   const oneCStores = useOneCScopedStores();
+  const sourceDealers = entrySource === "one-c" ? oneCStores.dealers : legacyScoped;
 
   const oneCEntryRows = useMemo(
     () => buildDistributionEntryTradePointRowsFromOneC(oneCStores.items),
@@ -69,13 +80,13 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
 
   const filteredDealers = useMemo(() => {
     if (axis === "tradePoint") {
-      return filterScopeDealersByEntryTradePointFilters(scoped, ttFilter);
+      return filterScopeDealersByEntryTradePointFilters(sourceDealers, ttFilter);
     }
-    return filterScopeDealers(scoped, filter);
-  }, [axis, filter, scoped, ttFilter]);
+    return filterScopeDealers(sourceDealers, filter);
+  }, [axis, filter, sourceDealers, ttFilter]);
 
-  const regionOptions = useMemo(() => extractRegionOptions(scoped), [scoped]);
-  const cityOptions = useMemo(() => extractCityOptions(scoped), [scoped]);
+  const regionOptions = useMemo(() => extractRegionOptions(sourceDealers), [sourceDealers]);
+  const cityOptions = useMemo(() => extractCityOptions(sourceDealers), [sourceDealers]);
 
   const activeChips = useMemo(() => listActiveDistributionFilterChips(filter), [filter]);
 
@@ -143,29 +154,52 @@ export function DistributionEntryWizard({ profile, axis, onAxisChange, onAxisSel
       {!axis ? (
         <DistributionEntryAxisPicker onSelect={onAxisSelect} />
       ) : axis === "tradePoint" ? (
-        oneCStores.loading ? (
+        oneCStoreNavigation && oneCStores.loading ? (
           <p className="text-sm text-muted-foreground" data-testid="distribution-entry-one-c-loading">
             Загрузка магазинов 1С…
           </p>
-        ) : oneCStores.error ? (
+        ) : oneCStoreNavigation && oneCStores.error ? (
           <p className="text-sm text-destructive">{oneCStores.error}</p>
         ) : (
         <DistributionEntryTradePointPanel
           profile={profile}
           dealers={filteredDealers}
-          scopedDealers={scoped}
+          scopedDealers={sourceDealers}
           filter={ttFilter}
           onFilterChange={setTtFilter}
           hideRegion={filterScope.hideRegion}
           oneCEntryRows={oneCEntryRows}
           oneCRowRefs={oneCStores.rowRefs}
-          oneCStoreNavigation
+          oneCStoreNavigation={oneCStoreNavigation}
         />
         )
       ) : axis === "product" ? (
-        <DistributionEntryProductPanel profile={profile} dealers={filteredDealers} filter={filter} />
+        oneCStoreNavigation && oneCStores.loading ? (
+          <p className="text-sm text-muted-foreground" data-testid="distribution-entry-one-c-loading">
+            Загрузка магазинов 1С…
+          </p>
+        ) : oneCStoreNavigation && oneCStores.error ? (
+          <p className="text-sm text-destructive">{oneCStores.error}</p>
+        ) : (
+          <DistributionEntryProductPanel
+            profile={profile}
+            dealers={filteredDealers}
+            filter={filter}
+            oneCStoreNavigation={oneCStoreNavigation}
+          />
+        )
+      ) : oneCStoreNavigation && oneCStores.loading ? (
+        <p className="text-sm text-muted-foreground" data-testid="distribution-entry-one-c-loading">
+          Загрузка магазинов 1С…
+        </p>
+      ) : oneCStoreNavigation && oneCStores.error ? (
+        <p className="text-sm text-destructive">{oneCStores.error}</p>
       ) : (
-        <DistributionEntryCityPanel profile={profile} dealers={filteredDealers} />
+        <DistributionEntryCityPanel
+          profile={profile}
+          dealers={filteredDealers}
+          oneCStoreNavigation={oneCStoreNavigation}
+        />
       )}
       <DistributionRefreshDiag enabled={diagEnabled} axis={axis} />
     </div>

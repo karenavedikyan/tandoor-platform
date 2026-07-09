@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from "react";
+import { navigateHashPathInHash } from "@/lib/hash-location-router";
 import { ArrowLeft, Search } from "lucide-react";
 import { DistributionRefreshDiag } from "@/components/diag/distribution-refresh-diag";
 import { useDistributionRefreshDiagEnabled } from "@/lib/diag-distribution-refresh-enabled";
@@ -35,6 +36,8 @@ import { useCurrentUser, displayUserName } from "@/hooks/use-current-user";
 type DistributionEntryCityPanelProps = {
   profile: ReleaseDemoProfile;
   dealers: readonly DealerRow[];
+  /** При выборе ТТ — переход на /1c/store/:id вместо inline-формы. */
+  oneCStoreNavigation?: boolean;
 };
 
 function filterRowsByCity(rows: DistributionEntryTradePointRow[], city: string): DistributionEntryTradePointRow[] {
@@ -42,7 +45,11 @@ function filterRowsByCity(rows: DistributionEntryTradePointRow[], city: string):
   return rows.filter((r) => (r.city ?? "").trim().toLowerCase() === c);
 }
 
-export function DistributionEntryCityPanel({ profile, dealers }: DistributionEntryCityPanelProps) {
+export function DistributionEntryCityPanel({
+  profile,
+  dealers,
+  oneCStoreNavigation = false,
+}: DistributionEntryCityPanelProps) {
   const diagEnabled = useDistributionRefreshDiagEnabled();
   const { user } = useCurrentUser();
   const isDesktopLayout = useDistributionEntryDesktopLayout();
@@ -73,8 +80,22 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
   );
 
   const selectedRef = useMemo(
-    () => (selectedRow ? findDealerTradePointForEntryRow(dealers, selectedRow) : null),
-    [dealers, selectedRow],
+    () =>
+      !oneCStoreNavigation && selectedRow
+        ? findDealerTradePointForEntryRow(dealers, selectedRow)
+        : null,
+    [dealers, selectedRow, oneCStoreNavigation],
+  );
+
+  const handleSelectTradePoint = useCallback(
+    (tradePointId: string) => {
+      if (oneCStoreNavigation) {
+        navigateHashPathInHash(`/1c/store/${encodeURIComponent(tradePointId)}`);
+        return;
+      }
+      setSelectedTradePointId(tradePointId);
+    },
+    [oneCStoreNavigation],
   );
 
   const actorUserId = user?.id ?? profile.personaUserId;
@@ -193,7 +214,7 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
                 >
                   <button
                     type="button"
-                    onClick={() => setSelectedTradePointId(row.tradePointId)}
+                    onClick={() => handleSelectTradePoint(row.tradePointId)}
                     className={cn(
                       "w-full rounded-xl border px-3 py-3 text-left transition-colors",
                       selected ? "border-primary/50 bg-primary/5" : "border-border bg-card hover:bg-muted/40",
@@ -233,7 +254,7 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
   ) : null;
 
   const showcase =
-    selectedRef && selectedRow ? (
+    !oneCStoreNavigation && selectedRef && selectedRow ? (
       <DistributionTradePointMatrixEntry
         dealer={selectedRef.dealer}
         point={selectedRef.point}
@@ -241,16 +262,16 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
         actorUserId={actorUserId}
         actorName={actorName}
       />
-    ) : (
+    ) : !oneCStoreNavigation ? (
       <Card className="rounded-xl border border-dashed border-border bg-muted/10 shadow-none">
         <CardContent className="px-4 py-10 text-center">
           <p className="text-sm text-muted-foreground">Выберите торговую точку в списке.</p>
         </CardContent>
       </Card>
-    );
+    ) : null;
 
   const showTpColumn = selectedCity != null;
-  const showShowcase = selectedTradePointId != null;
+  const showShowcase = !oneCStoreNavigation && selectedTradePointId != null;
 
   return (
     <div className="min-w-0 space-y-4" data-testid="distribution-entry-city-panel">
@@ -279,7 +300,7 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
           <CardContent className="p-3 sm:p-4">{cityList}</CardContent>
         </Card>
       ) : isDesktopLayout ? (
-        <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        oneCStoreNavigation ? (
           <Card className="rounded-xl border border-border bg-card shadow-xs">
             <CardContent className="p-3 sm:p-4">
               <Button
@@ -298,8 +319,29 @@ export function DistributionEntryCityPanel({ profile, dealers }: DistributionEnt
               {tpList}
             </CardContent>
           </Card>
-          <div className="min-w-0">{showcase}</div>
-        </div>
+        ) : (
+          <div className="grid min-h-[min(70vh,780px)] gap-4 grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+            <Card className="rounded-xl border border-border bg-card shadow-xs">
+              <CardContent className="p-3 sm:p-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mb-3 min-h-9 px-0 text-muted-foreground"
+                  onClick={() => {
+                    setSelectedCity(null);
+                    setSelectedTradePointId(null);
+                  }}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                  Города
+                </Button>
+                {tpList}
+              </CardContent>
+            </Card>
+            <div className="min-w-0">{showcase}</div>
+          </div>
+        )
       ) : showShowcase ? (
         showcase
       ) : (

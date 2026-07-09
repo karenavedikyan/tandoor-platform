@@ -11,6 +11,15 @@ export function resolveDistributionAnalyticsSource(
   return "one-c";
 }
 
+export type DistributionEntrySource = DistributionAnalyticsSource;
+
+export function resolveDistributionEntrySource(
+  role: UserRole | undefined,
+  qs?: URLSearchParams,
+): DistributionEntrySource {
+  return resolveDistributionAnalyticsSource(role, qs);
+}
+
 export function readDistributionAnalyticsSourceFromHash(hash: string): URLSearchParams {
   const query = hash.includes("?") ? hash.split("?")[1] ?? "" : "";
   return new URLSearchParams(query);
