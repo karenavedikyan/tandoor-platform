@@ -47,6 +47,11 @@ import {
   computeOneCOverviewVisibility,
   type OneCOverviewVisibility,
 } from "./one-c-overview-visibility.js";
+import {
+  resolveOneCStoreScope,
+  scopeInputFromLegal,
+  type OneCStoreScopeInput,
+} from "./one-c-store-scope-resolver.js";
 
 export { normalizeName, nameMatches } from "./one-c-name-matching.js";
 export type { OneCViewer } from "./one-c-showroom-scope.js";
@@ -351,7 +356,7 @@ export async function fetchOneCRm(
     });
 
   const rmScope = resolveOneCScope("regional_manager", userId, ctx);
-  const stores = await queryStoresWithScope(pool, rmScope, q, limit, offset);
+  const stores = await queryStoresWithScope(pool, ctx, rmScope, q, limit, offset);
   return { user: card, teamName: team?.name ?? null, ropName: card.ropName, managers, ...stores };
 }
 
@@ -374,7 +379,7 @@ export async function fetchOneCManager(
   if (!card) return null;
 
   const mgrScope = resolveOneCScope("manager", userId, ctx);
-  const stores = await queryStoresWithScope(pool, mgrScope, q, limit, offset);
+  const stores = await queryStoresWithScope(pool, ctx, mgrScope, q, limit, offset);
   return { user: card, ...stores };
 }
 
@@ -415,8 +420,8 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
        l.regional_manager_name AS legal_regional_manager_name,
        l.responsible_manager_name AS legal_responsible_manager_name,
        l.furniture_manager_name AS legal_furniture_manager_name,
-       team.rop_user_id::text AS rop_user_id,
-       urop.full_name AS rop_name,
+       p.regional_manager_name AS parent_regional_manager_name,
+       p.responsible_manager_name AS parent_responsible_manager_name,
        l.payment_form AS legal_payment_form,
        l.phone AS legal_phone,
        l.email AS legal_email,
@@ -426,15 +431,6 @@ const ONE_C_STORE_LIST_SELECT = `SELECT
 const ONE_C_STORE_LIST_JOINS = `FROM exchange_stores_raw s
      LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
      LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
-     LEFT JOIN users urm ON urm.full_name = l.regional_manager_name AND urm.status = 'active'
-     LEFT JOIN LATERAL (
-       SELECT t.rop_user_id
-       FROM user_team_memberships utm
-       INNER JOIN teams t ON t.id = utm.team_id
-       WHERE utm.user_id = urm.id AND t.rop_user_id IS NOT NULL
-       LIMIT 1
-     ) team ON urm.id IS NOT NULL
-     LEFT JOIN users urop ON urop.id = team.rop_user_id
      LEFT JOIN (
        SELECT store_uuid, COUNT(*)::int AS orders_count
        FROM bitrix_orders_snapshot
@@ -451,7 +447,39 @@ const ONE_C_STORE_LIST_SEARCH = `(
       OR p.name ILIKE $SEARCH
     )`;
 
+type OneCStoreListRowSql = Omit<
+  OneCStoreListItem,
+  "distribution_filled" | "distribution_total" | "rop_user_id" | "rop_name"
+> & {
+  parent_regional_manager_name: string | null;
+  parent_responsible_manager_name: string | null;
+};
+
 type OneCStoreListRow = Omit<OneCStoreListItem, "distribution_filled" | "distribution_total">;
+
+function enrichStoreListRows(rows: OneCStoreListRowSql[], ctx: OneCShowroomContext): OneCStoreListRow[] {
+  return rows.map((row) => {
+    const {
+      parent_regional_manager_name,
+      parent_responsible_manager_name,
+      ...rest
+    } = row;
+    const scope = resolveOneCStoreScope(
+      {
+        legal_regional_manager_name: row.legal_regional_manager_name,
+        legal_responsible_manager_name: row.legal_responsible_manager_name,
+        parent_regional_manager_name,
+        parent_responsible_manager_name,
+      } satisfies OneCStoreScopeInput,
+      ctx,
+    );
+    return {
+      ...rest,
+      rop_user_id: scope.rop_user_id,
+      rop_name: scope.rop_name,
+    };
+  });
+}
 
 async function attachDistributionFill(
   pool: PoolLike,
@@ -473,6 +501,7 @@ async function attachDistributionFill(
 
 async function queryStoresWithScope(
   pool: PoolLike,
+  ctx: OneCShowroomContext,
   scope: OneCScope,
   q: string,
   limit: number,
@@ -519,7 +548,7 @@ async function queryStoresWithScope(
      ${where}`,
     params,
   );
-  const rows = await pool.query<OneCStoreListRow>(
+  const rows = await pool.query<OneCStoreListRowSql>(
     `${ONE_C_STORE_LIST_SELECT}
      ${ONE_C_STORE_LIST_JOINS}
      ${where}
@@ -527,12 +556,13 @@ async function queryStoresWithScope(
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     [...params, limit, offset],
   );
-  const items = await attachDistributionFill(pool, rows.rows);
+  const items = await attachDistributionFill(pool, enrichStoreListRows(rows.rows, ctx));
   return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
 async function queryManagerStores(
   pool: PoolLike,
+  ctx: OneCShowroomContext,
   matchedNames: string[],
   q: string,
   limit: number,
@@ -552,7 +582,7 @@ async function queryManagerStores(
      ${where}`,
     [matchedNames, pattern],
   );
-  const rows = await pool.query<OneCStoreListRow>(
+  const rows = await pool.query<OneCStoreListRowSql>(
     `${ONE_C_STORE_LIST_SELECT}
      FROM exchange_legals_raw l
      JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
@@ -567,17 +597,17 @@ async function queryManagerStores(
      LIMIT $3 OFFSET $4`,
     [matchedNames, pattern, limit, offset],
   );
-  const items = await attachDistributionFill(pool, rows.rows);
+  const items = await attachDistributionFill(pool, enrichStoreListRows(rows.rows, ctx));
   return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
 async function queryRmStores(
   pool: PoolLike,
+  ctx: OneCShowroomContext,
   matchedNames: string[],
   q: string,
   limit: number,
   offset: number,
-  _ctx: OneCShowroomContext,
 ) {
   if (matchedNames.length === 0) {
     return { total: 0, items: [] as OneCStoreListItem[] };
@@ -593,7 +623,7 @@ async function queryRmStores(
      ${where}`,
     [matchedNames, pattern],
   );
-  const rows = await pool.query<OneCStoreListRow>(
+  const rows = await pool.query<OneCStoreListRowSql>(
     `${ONE_C_STORE_LIST_SELECT}
      FROM exchange_legals_raw l
      JOIN exchange_stores_raw s ON s.legal_entity_1c::text = l.id_1c::text
@@ -608,7 +638,7 @@ async function queryRmStores(
      LIMIT $3 OFFSET $4`,
     [matchedNames, pattern, limit, offset],
   );
-  const items = await attachDistributionFill(pool, rows.rows);
+  const items = await attachDistributionFill(pool, enrichStoreListRows(rows.rows, ctx));
   return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
@@ -625,7 +655,7 @@ export async function fetchOneCStores(
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
 
   if (!scopeIsUnrestricted(scope)) {
-    return queryStoresWithScope(pool, scope, q, limit, offset, ordersFilter);
+    return queryStoresWithScope(pool, ctx, scope, q, limit, offset, ordersFilter);
   }
 
   const pattern = q ? `%${q}%` : null;
@@ -662,7 +692,7 @@ export async function fetchOneCStores(
   );
   const limitIdx = onlyActive ? 4 : 2;
   const offsetIdx = onlyActive ? 5 : 3;
-  const rows = await pool.query<OneCStoreListRow>(
+  const rows = await pool.query<OneCStoreListRowSql>(
     `${ONE_C_STORE_LIST_SELECT}
      ${ONE_C_STORE_LIST_JOINS}
      ${where}
@@ -670,7 +700,7 @@ export async function fetchOneCStores(
      LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     [...params, limit, offset],
   );
-  const items = await attachDistributionFill(pool, rows.rows);
+  const items = await attachDistributionFill(pool, enrichStoreListRows(rows.rows, ctx));
   return { total: countRes.rows[0]?.n ?? 0, items };
 }
 
@@ -778,27 +808,25 @@ export async function fetchOneCStore(
     return null;
   }
 
-  const responsible_manager_user_id = row.legal_responsible_manager_name
-    ? (ctx.userIdByResponsibleName.get(row.legal_responsible_manager_name) ?? null)
-    : null;
-  const regional_manager_user_id = row.legal_regional_manager_name
-    ? (ctx.userIdByRegionalName.get(row.legal_regional_manager_name) ?? null)
-    : null;
+  const scopeResolved = resolveOneCStoreScope(
+    scopeInputFromLegal(
+      {
+        regional_manager_name: row.legal_regional_manager_name,
+        responsible_manager_name: row.legal_responsible_manager_name,
+        parent_1c: row.legal_parent_1c,
+      },
+      ctx,
+    ),
+    ctx,
+  );
 
-  let rop_user_id: string | null = null;
-  let rop_name: string | null = null;
-  if (regional_manager_user_id) {
-    const rmUser = ctx.usersById.get(regional_manager_user_id);
-    if (rmUser?.team_id) {
-      const team = ctx.teams.find((t) => t.id === rmUser.team_id);
-      if (team?.rop_user_id) {
-        rop_user_id = team.rop_user_id;
-        rop_name = ctx.usersById.get(team.rop_user_id)?.full_name ?? null;
-      }
-    }
-  }
-
-  return { ...row, responsible_manager_user_id, regional_manager_user_id, rop_user_id, rop_name };
+  return {
+    ...row,
+    responsible_manager_user_id: scopeResolved.responsible_manager_user_id,
+    regional_manager_user_id: scopeResolved.regional_manager_user_id,
+    rop_user_id: scopeResolved.rop_user_id,
+    rop_name: scopeResolved.rop_name,
+  };
 }
 
 export async function fetchOneCStoreWithDistribution(
@@ -1016,27 +1044,11 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneC
 
   if (!legalMatchesScope(legal, scope)) return null;
 
-  legal.responsible_manager_user_id = legal.responsible_manager_name
-    ? (ctx.userIdByResponsibleName.get(legal.responsible_manager_name) ?? null)
-    : null;
-  legal.regional_manager_user_id = legal.regional_manager_name
-    ? (ctx.userIdByRegionalName.get(legal.regional_manager_name) ?? null)
-    : null;
-
-  let rop_user_id: string | null = null;
-  let rop_name: string | null = null;
-  if (legal.regional_manager_user_id) {
-    const rmUser = ctx.usersById.get(legal.regional_manager_user_id);
-    if (rmUser?.team_id) {
-      const team = ctx.teams.find((t) => t.id === rmUser.team_id);
-      if (team?.rop_user_id) {
-        rop_user_id = team.rop_user_id;
-        rop_name = ctx.usersById.get(team.rop_user_id)?.full_name ?? null;
-      }
-    }
-  }
-  legal.rop_user_id = rop_user_id;
-  legal.rop_name = rop_name;
+  const scopeResolved = resolveOneCStoreScope(scopeInputFromLegal(legal, ctx), ctx);
+  legal.responsible_manager_user_id = scopeResolved.responsible_manager_user_id;
+  legal.regional_manager_user_id = scopeResolved.regional_manager_user_id;
+  legal.rop_user_id = scopeResolved.rop_user_id;
+  legal.rop_name = scopeResolved.rop_name;
 
   const childrenRes = await pool.query<OneCLegalChild>(
     `SELECT id_1c::text, name, inn FROM exchange_legals_raw WHERE parent_1c = $1 ORDER BY name ASC LIMIT 200`,
@@ -1050,7 +1062,7 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneC
         [legal.parent_1c, id1c],
       )
     : { rows: [] as OneCLegalSibling[] };
-  const storesRes = await pool.query<OneCStoreListRow>(
+  const storesRes = await pool.query<OneCStoreListRowSql>(
     `${ONE_C_STORE_LIST_SELECT}
      ${ONE_C_STORE_LIST_JOINS}
      WHERE s.legal_entity_1c = $1
@@ -1058,7 +1070,7 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneC
      LIMIT 500`,
     [id1c],
   );
-  const stores = await attachDistributionFill(pool, storesRes.rows);
+  const stores = await attachDistributionFill(pool, enrichStoreListRows(storesRes.rows, ctx));
   return { legal, children: childrenRes.rows, siblings: siblingsRes.rows, stores };
 }
 
