@@ -250,6 +250,30 @@ export function buildDistributionAnalyticsData(params: {
   installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>;
 }): DistributionAnalyticsData {
   const shByTradePointId = params.act.tradePointShowcaseActualizationById;
+  const metricsByTradePointId: Record<string, DistributionTradePointMetrics> = {};
+  for (const row of params.scopedRows) {
+    metricsByTradePointId[row.tradePointId] = computeDistributionForTradePoint(
+      shByTradePointId[row.tradePointId],
+      params.installedEntriesByTradePointId[row.tradePointId] ?? [],
+    );
+  }
+  return buildDistributionAnalyticsDataFromScoped({
+    scopedRows: params.scopedRows,
+    filters: params.filters,
+    act: params.act,
+    metricsByTradePointId,
+    installedEntriesByTradePointId: params.installedEntriesByTradePointId,
+  });
+}
+
+export function buildDistributionAnalyticsDataFromScoped(params: {
+  scopedRows: TradePointListRow[];
+  filters: DistributionAnalyticsFilters;
+  act: ActualizationState;
+  metricsByTradePointId: Record<string, DistributionTradePointMetrics | undefined>;
+  installedEntriesByTradePointId: Record<string, readonly ShowcaseMatrixEntryDto[] | undefined>;
+}): DistributionAnalyticsData {
+  const shByTradePointId = params.act.tradePointShowcaseActualizationById;
   const filteredRows = filterAnalyticsRows(
     params.scopedRows,
     params.filters,
@@ -257,11 +281,15 @@ export function buildDistributionAnalyticsData(params: {
     shByTradePointId,
     params.installedEntriesByTradePointId,
   );
-  const tradePointRows = buildAnalyticsTradePointRows(
-    filteredRows,
-    shByTradePointId,
-    params.installedEntriesByTradePointId,
-  );
+  const tradePointRows: AnalyticsTradePointRow[] = filteredRows.map((row) => ({
+    row,
+    metrics:
+      params.metricsByTradePointId[row.tradePointId] ??
+      computeDistributionForTradePoint(
+        shByTradePointId[row.tradePointId],
+        params.installedEntriesByTradePointId[row.tradePointId] ?? [],
+      ),
+  }));
   const metricsByTradePointId: Record<string, DistributionTradePointMetrics> = {};
   for (const item of tradePointRows) {
     metricsByTradePointId[item.row.tradePointId] = item.metrics;

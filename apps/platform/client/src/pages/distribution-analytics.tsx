@@ -3,20 +3,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui-platform";
 import { useDistributionAnalyticsData } from "@/hooks/use-distribution-analytics-data";
+import { useDistributionAnalyticsData1c } from "@/hooks/use-distribution-analytics-data-1c";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import type { ReleaseDemoProfile } from "@/lib/release-demo-profile";
 import { cn } from "@/lib/utils";
 import { useDistributionScopedDealers } from "@/hooks/use-distribution-scoped-dealers";
+import { useOneCScopedStores } from "@/hooks/use-one-c-scoped-stores";
+import type { DealerRow } from "@/lib/dealer-base-mock-data";
 import type { DistributionAnalyticsFilters } from "@/lib/distribution-analytics/distribution-analytics-filters";
 import {
   DISTRIBUTION_ANALYTICS_TOO_LARGE_SCOPE_THRESHOLD,
   hasAnyDistributionAnalyticsFilters,
 } from "@/lib/distribution-analytics/distribution-analytics-filters";
+import {
+  readDistributionAnalyticsSourceFromHash,
+  resolveDistributionAnalyticsSource,
+  type DistributionAnalyticsSource,
+} from "@/lib/distribution-analytics/distribution-analytics-source";
 import { DistributionAnalyticsFiltersPanel } from "@/components/distribution-analytics/distribution-analytics-filters";
 import { DistributionAnalyticsTabTradePoints } from "@/components/distribution-analytics/distribution-analytics-tab-trade-points";
 import { DistributionAnalyticsTabTerritory } from "@/components/distribution-analytics/distribution-analytics-tab-territory";
 import { DistributionAnalyticsTabProduct } from "@/components/distribution-analytics/distribution-analytics-tab-product";
 import { DistributionAnalyticsTabByRop } from "@/components/distribution-analytics/distribution-analytics-tab-by-rop";
+import type { DistributionAnalyticsHookResult } from "@/hooks/use-distribution-analytics-data";
 
 export type DistributionAnalyticsTab = "trade-points" | "territory" | "product" | "by-rop";
 
@@ -34,19 +43,26 @@ type Props = {
   onFiltersChange: (filters: DistributionAnalyticsFilters) => void;
 };
 
-export function DistributionAnalyticsPage({
+type BodyProps = Props & {
+  source: DistributionAnalyticsSource;
+  scopedDealers: DealerRow[];
+  data: DistributionAnalyticsHookResult;
+  canViewByRop: boolean;
+};
+
+function DistributionAnalyticsBody({
   profile,
   tab,
   filters,
   filtersEncoded,
   onTabChange,
   onFiltersChange,
-}: Props): ReactElement {
+  source,
+  scopedDealers,
+  data,
+  canViewByRop,
+}: BodyProps): ReactElement {
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const { user } = useAuthUser();
-  const scopedDealers = useDistributionScopedDealers(profile);
-  const data = useDistributionAnalyticsData(profile, filters);
-  const canViewByRop = canViewByRopTab(profile, user?.role);
   const effectiveTab = !canViewByRop && tab === "by-rop" ? "trade-points" : tab;
 
   const scopeTooLargeWithoutFilters =
@@ -58,12 +74,14 @@ export function DistributionAnalyticsPage({
   const hasTradePointsInScope = data.tradePointRows.length > 0;
 
   return (
-    <div className="space-y-3" data-testid="page-distribution-analytics">
+    <div className="space-y-3" data-testid="page-distribution-analytics" data-analytics-source={source}>
       <div
         className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm text-muted-foreground"
         data-testid="banner-distribution-analytics-lk-source"
       >
-        Аналитика ещё на LK-каталоге, скоро переедет на 1С.
+        {source === "one-c"
+          ? "Аналитика построена на данных 1С-витрины."
+          : "Аналитика на LK-каталоге (legacy, только admin ?source=legacy)."}
       </div>
       <DistributionAnalyticsFiltersPanel
         scopedDealers={scopedDealers}
@@ -150,4 +168,42 @@ export function DistributionAnalyticsPage({
       )}
     </div>
   );
+}
+
+function DistributionAnalyticsLegacy(props: Props & { canViewByRop: boolean }): ReactElement {
+  const scopedDealers = useDistributionScopedDealers(props.profile);
+  const data = useDistributionAnalyticsData(props.profile, props.filters);
+  return (
+    <DistributionAnalyticsBody
+      {...props}
+      source="legacy"
+      scopedDealers={scopedDealers}
+      data={data}
+    />
+  );
+}
+
+function DistributionAnalyticsOneC(props: Props & { canViewByRop: boolean }): ReactElement {
+  const { dealers } = useOneCScopedStores();
+  const data = useDistributionAnalyticsData1c(props.filters);
+  return (
+    <DistributionAnalyticsBody
+      {...props}
+      source="one-c"
+      scopedDealers={dealers}
+      data={data}
+    />
+  );
+}
+
+export function DistributionAnalyticsPage(props: Props): ReactElement {
+  const { user } = useAuthUser();
+  const qs = readDistributionAnalyticsSourceFromHash(window.location.hash);
+  const source = resolveDistributionAnalyticsSource(user?.role, qs);
+  const canViewByRop = canViewByRopTab(props.profile, user?.role);
+
+  if (source === "one-c") {
+    return <DistributionAnalyticsOneC {...props} canViewByRop={canViewByRop} />;
+  }
+  return <DistributionAnalyticsLegacy {...props} canViewByRop={canViewByRop} />;
 }
