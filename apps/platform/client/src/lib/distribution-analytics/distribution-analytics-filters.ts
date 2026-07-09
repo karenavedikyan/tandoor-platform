@@ -187,9 +187,11 @@ export function applyDistributionAnalyticsFilters(
     }
     if (filters.ropIds.length > 0) {
       const dealerRopId = getRopOverrideUserId(row.dealerId, ropOverridesState);
+      const oneCDealerRopId = row.dealer.ropId ?? null;
       const ropMatch =
         (dealerRopId != null && filters.ropIds.includes(dealerRopId)) ||
         (ids.ropId != null && filters.ropIds.includes(ids.ropId)) ||
+        (oneCDealerRopId != null && filters.ropIds.includes(oneCDealerRopId)) ||
         filters.ropIds.includes(row.rop);
       if (!ropMatch) return false;
     }
