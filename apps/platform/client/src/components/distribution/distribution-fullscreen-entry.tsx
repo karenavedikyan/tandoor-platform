@@ -1822,7 +1822,20 @@ export function DistributionFullscreenEntry({
         </div>
         {!headerCollapsed ? (
           <p className="mt-1.5 text-sm text-muted-foreground md:hidden">
-            Отмечено: <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+            {needInstallMode ? (
+              <>
+                Отмечено:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{needInstallCount}</span>
+              </>
+            ) : (
+              <>
+                Установлено:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+                <span className="mx-1.5 text-muted-foreground/50">·</span>
+                Изменено:{" "}
+                <span className="font-semibold tabular-nums text-foreground">{changedIds.length}</span>
+              </>
+            )}
           </p>
         ) : null}
         {!online ? (
@@ -2212,10 +2225,20 @@ export function DistributionFullscreenEntry({
             aria-live="polite"
           >
             <p className="mb-2 text-center text-sm text-muted-foreground md:text-right">
-              Отмечено:{" "}
-              <span className="font-semibold tabular-nums text-foreground">
-                {needInstallMode ? needInstallCount : installedCount}
-              </span>
+              {needInstallMode ? (
+                <>
+                  Отмечено:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">{needInstallCount}</span>
+                </>
+              ) : (
+                <>
+                  Установлено:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">{installedCount}</span>
+                  <span className="mx-1.5 text-muted-foreground/50">·</span>
+                  Изменено:{" "}
+                  <span className="font-semibold tabular-nums text-foreground">{changedIds.length}</span>
+                </>
+              )}
             </p>
             <div className="flex flex-wrap gap-2 md:justify-end">
               <Button
