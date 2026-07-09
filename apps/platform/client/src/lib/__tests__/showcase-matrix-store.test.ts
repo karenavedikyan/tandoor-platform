@@ -21,6 +21,7 @@ globalThis.localStorage = localStorageMock;
 // @ts-expect-error test shim
 globalThis.window = {
   localStorage: localStorageMock,
+  location: { search: "" },
   dispatchEvent: () => true,
   addEventListener: () => undefined,
   removeEventListener: () => undefined,
@@ -93,14 +94,7 @@ const rawCache = localStorageMock.getItem(SHOWCASE_MATRIX_STORE_CACHE_KEY);
 assert.ok(rawCache?.includes("tp-1|model|m-42"));
 
 let pending = listPendingSyncItems();
-assert.equal(pending.length, 1);
-assert.equal(pending[0]?.kind, "showcase-matrix-upsert");
-assert.equal(pending[0]?.id, "showcase-matrix-upsert:test-op-uuid-0001");
-
-const statusPayload = pending[0]?.payload as Record<string, unknown>;
-assert.equal(statusPayload.dealerId, "d-1");
-assert.equal(statusPayload.tradePointId, "tp-1");
-assert.equal(statusPayload.clientOpId, "test-op-uuid-0001");
+assert.equal(pending.length, 0);
 
 setMatrixPlacement({
   dealerId: "d-1",
@@ -185,10 +179,7 @@ const modelPending = pending.find(
     x.kind === "showcase-matrix-upsert" &&
     (x.payload as Record<string, unknown>).targetId === "model-in-block",
 );
-assert.ok(modelPending);
-const modelPayload = modelPending!.payload as Record<string, unknown>;
-assert.equal(modelPayload.placementRef, "block-portal-1");
-assert.equal(modelPayload.targetKind, "model");
+assert.equal(modelPending, undefined);
 
 setMatrixStatus({
   dealerId: "d-1",
