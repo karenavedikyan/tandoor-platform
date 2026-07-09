@@ -94,7 +94,6 @@ type DistributionTradePointMatrixEntryProps = {
   hideOpenTradePointCard?: boolean;
   hideDistributionOnPointSection?: boolean;
   hideEnterDistributionButton?: boolean;
-  hidePlacementBlocksSection?: boolean;
   hideCounterpartyStickyHeader?: boolean;
   matrixSectionTitle?: string;
 };
@@ -110,7 +109,6 @@ export function DistributionTradePointMatrixEntry({
   hideOpenTradePointCard = false,
   hideDistributionOnPointSection = false,
   hideEnterDistributionButton = false,
-  hidePlacementBlocksSection = false,
   hideCounterpartyStickyHeader = false,
   matrixSectionTitle,
 }: DistributionTradePointMatrixEntryProps) {
@@ -416,7 +414,6 @@ export function DistributionTradePointMatrixEntry({
             density="compact"
             hideOpenTasksSection={hideOpenTasksSection}
             hideDistributionOnPointSection={hideDistributionOnPointSection}
-            hidePlacementBlocksSection={hidePlacementBlocksSection}
             matrixSectionTitle={matrixSectionTitle}
           />
         </>
