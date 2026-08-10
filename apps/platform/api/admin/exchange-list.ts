@@ -8,6 +8,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
 import {
   EXCHANGE_S3_BASE,
+  applyExchangeRootPrefix,
+  encodeExchangePathForProxy,
   exchangeProxyAuthHeaders,
   fetchWithRetry,
   resolveExchangeProxyConfig,
@@ -48,7 +50,8 @@ export function parseExchangeListing(html: string, baseHref: string): ExchangeLi
 }
 
 function listingUrlForPath(rawPath: string): string {
-  return `${EXCHANGE_S3_BASE}${rawPath === "/" ? "/" : rawPath.replace(/\/?$/, "/")}`;
+  const prefixed = applyExchangeRootPrefix(rawPath);
+  return `${EXCHANGE_S3_BASE}${prefixed === "/" ? "/" : prefixed.replace(/\/?$/, "/")}`;
 }
 
 async function readProxyErrorMessage(r: Response): Promise<string> {
@@ -97,8 +100,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    const proxyPath = applyExchangeRootPrefix(rawPath);
     const s3Url = listingUrlForPath(rawPath);
-    const proxyUrl = `${proxy.proxyUrl}/exchange/list?path=${encodeURIComponent(rawPath)}`;
+    const proxyUrl = `${proxy.proxyUrl}/exchange/list?path=${encodeExchangePathForProxy(proxyPath)}`;
     let html: string;
     try {
       const r = await fetchWithRetry(

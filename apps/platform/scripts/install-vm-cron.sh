@@ -19,6 +19,7 @@ rsync -avz -e "ssh -i $SSH_KEY" \
 rsync -avz -e "ssh -i $SSH_KEY" \
   "$REPO_ROOT/apps/platform/yandex-vm/sync-1c-runner.mjs" \
   "$REPO_ROOT/apps/platform/yandex-vm/sync-1c-users-legals.mjs" \
+  "$REPO_ROOT/apps/platform/yandex-vm/exchange-path.mjs" \
   "${VM_HOST}:${REMOTE_DIR}/yandex-vm/"
 
 ssh -i "$SSH_KEY" "$VM_HOST" bash -s <<'REMOTE'
@@ -29,7 +30,9 @@ if [ ! -f .env ]; then
 FTP_HOST=gw.toopatch.ru
 FTP_USER=
 FTP_PASSWORD=
-FTP_PATH=/s3/IMG/exchange/full_import/catalog1.xml
+# Optional override; default is built from FTP_EXCHANGE_BASE + EXCHANGE_ROOT_PREFIX + catalog subpath
+# FTP_PATH=/s3/IMG/exchange/full_import/catalog1.xml
+EXCHANGE_ROOT_PREFIX="/full_import (test)"
 TARGET_DB=both
 DATABASE_URL_UNPOOLED=
 PG_PROXY_URL=https://tandoor-proxy.84-252-129-233.sslip.io

@@ -13,6 +13,7 @@ import { createDbTargets } from "./catalog-1c/db-target.mjs";
 import { finishSyncLog, importCatalogToDb, startSyncLog } from "./catalog-1c/importer.mjs";
 import { parseCatalogXmlFile } from "./catalog-1c/xml-parser.mjs";
 import { logLine, targetsFromEnv } from "./catalog-1c/util.mjs";
+import { resolveCatalogFtpPath } from "../yandex-vm/exchange-path.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE_FILE = "catalog1.xml";
@@ -21,8 +22,7 @@ async function downloadCatalogXml(destPath) {
   const host = process.env.FTP_HOST?.trim() || "gw.toopatch.ru";
   const user = process.env.FTP_USER?.trim();
   const password = process.env.FTP_PASSWORD?.trim();
-  const remotePath =
-    process.env.FTP_PATH?.trim() || "/s3/IMG/exchange/full_import/catalog1.xml";
+  const remotePath = process.env.FTP_PATH?.trim() || resolveCatalogFtpPath();
 
   if (!user || !password) {
     throw new Error("FTP_USER and FTP_PASSWORD are required");

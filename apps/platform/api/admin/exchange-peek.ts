@@ -8,6 +8,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { getPool, resolveCurrentUser, vercelHeaders } from "../../shared/admin/admin-auth.js";
 import {
   EXCHANGE_S3_BASE,
+  applyExchangeRootPrefix,
+  encodeExchangePathForProxy,
   exchangeProxyAuthHeaders,
   fetchWithRetry,
   resolveExchangeProxyConfig,
@@ -68,8 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         ? Math.min(Math.floor(bytesParam), MAX_BYTES)
         : DEFAULT_BYTES;
 
-    const s3Url = `${EXCHANGE_S3_BASE}${rawPath}`;
-    const proxyUrl = `${proxy.proxyUrl}/exchange/peek?path=${encodeURIComponent(rawPath)}&bytes=${bytes}`;
+    const s3Url = `${EXCHANGE_S3_BASE}${applyExchangeRootPrefix(rawPath)}`;
+    const proxyPath = applyExchangeRootPrefix(rawPath);
+    const proxyUrl = `${proxy.proxyUrl}/exchange/peek?path=${encodeExchangePathForProxy(proxyPath)}&bytes=${bytes}`;
     try {
       const r = await fetchWithRetry(proxyUrl, "*/*", exchangeProxyAuthHeaders(proxy.token));
       if (!r.ok) {

@@ -12,6 +12,8 @@ import {
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
 import {
+  applyExchangeRootPrefix,
+  encodeExchangePathForProxy,
   exchangeProxyAuthHeaders,
   fetchWithRetry,
   resolveExchangeProxyConfig,
@@ -81,7 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const sourceFile = resolveSourceFile(req);
-    const proxyUrl = `${proxy.proxyUrl}/exchange/peek?path=${encodeURIComponent(sourceFile)}&bytes=${PEEK_BYTES}`;
+    const proxyPath = applyExchangeRootPrefix(sourceFile);
+    const proxyUrl = `${proxy.proxyUrl}/exchange/peek?path=${encodeExchangePathForProxy(proxyPath)}&bytes=${PEEK_BYTES}`;
 
     let xml: string;
     try {
