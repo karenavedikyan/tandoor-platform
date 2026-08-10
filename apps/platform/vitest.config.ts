@@ -28,6 +28,7 @@ export default defineConfig({
       "client/**/*.test.ts",
       "client/**/*.test.tsx",
       "scripts/**/__tests__/**/*.test.mjs",
+      "yandex-vm/**/__tests__/**/*.spec.mjs",
     ],
   },
 });
