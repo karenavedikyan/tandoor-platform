@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  DISTRIBUTION_FTP_DIR,
+  getDistributionFtpDir,
   DISTRIBUTION_LATEST_FILENAME,
   uploadDistributionToFtp,
 } from "../../shared/distribution-export/ftp-uploader.js";
@@ -22,6 +22,7 @@ describe("uploadDistributionToFtp", () => {
     vi.stubGlobal("fetch", fetchMock);
     process.env.EXCHANGE_PROXY_URL = "https://proxy.example";
     process.env.EXCHANGE_PROXY_TOKEN = "test-token";
+    delete process.env.EXCHANGE_ROOT_PREFIX;
     fetchMock.mockResolvedValue({
       ok: true,
       text: async () => JSON.stringify({ ok: true, removedSnapshots: 2 }),
@@ -39,8 +40,8 @@ describe("uploadDistributionToFtp", () => {
     const now = new Date("2026-07-08T15:00:00.000Z");
     const result = await uploadDistributionToFtp(sampleData, now);
 
-    expect(result.latestPath).toBe(`${DISTRIBUTION_FTP_DIR}/${DISTRIBUTION_LATEST_FILENAME}`);
-    expect(result.snapshotPath).toBe(`${DISTRIBUTION_FTP_DIR}/distribution_2026-07-08_15.json`);
+    expect(result.latestPath).toBe(`${getDistributionFtpDir()}/${DISTRIBUTION_LATEST_FILENAME}`);
+    expect(result.snapshotPath).toBe(`${getDistributionFtpDir()}/distribution_2026-07-08_15.json`);
     expect(result.sizeBytes).toBeGreaterThan(0);
     expect(result.removedSnapshots).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);

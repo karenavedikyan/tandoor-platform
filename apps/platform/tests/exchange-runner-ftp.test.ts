@@ -69,6 +69,20 @@ describe("buildExchangeListHtml", () => {
 });
 
 describe("remote paths", () => {
+  const envBackup = { ...process.env };
+
+  beforeEach(() => {
+    process.env = {
+      ...envBackup,
+      FTP_EXCHANGE_BASE: "/s3/IMG/exchange",
+    };
+    delete process.env.EXCHANGE_ROOT_PREFIX;
+  });
+
+  afterEach(() => {
+    process.env = envBackup;
+  });
+
   it("maps list path to FTP base", () => {
     expect(remoteExchangeListPath("/")).toBe("/s3/IMG/exchange/");
     expect(remoteExchangeListPath("/import_stores/")).toBe("/s3/IMG/exchange/import_stores/");
@@ -77,6 +91,16 @@ describe("remote paths", () => {
   it("maps peek path to FTP file", () => {
     expect(remoteExchangePeekPath("/import_stores/stores1.xml")).toBe(
       "/s3/IMG/exchange/import_stores/stores1.xml",
+    );
+  });
+
+  it("applies EXCHANGE_ROOT_PREFIX for test folder", () => {
+    process.env.EXCHANGE_ROOT_PREFIX = "/full_import (test)";
+    expect(remoteExchangeListPath("/import_stores/")).toBe(
+      "/s3/IMG/exchange/full_import (test)/import_stores/",
+    );
+    expect(remoteExchangePeekPath("/import_stores/stores1.xml")).toBe(
+      "/s3/IMG/exchange/full_import (test)/import_stores/stores1.xml",
     );
   });
 });

@@ -11,6 +11,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import * as ftp from "basic-ftp";
+import { applyExchangeRootPrefix } from "./exchange-path.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);
@@ -131,14 +132,14 @@ export function buildExchangeListHtml(listPath, entries) {
  */
 export function remoteExchangeListPath(listPath) {
   const suffix = listPath === "/" ? "" : listPath.replace(/\/$/, "");
-  return `${FTP_EXCHANGE_BASE}${suffix}/`;
+  return `${FTP_EXCHANGE_BASE}${applyExchangeRootPrefix(suffix === "" ? "/" : `${suffix}/`)}`;
 }
 
 /**
  * @param {string} filePath — normalized file path, no trailing /
  */
 export function remoteExchangePeekPath(filePath) {
-  return `${FTP_EXCHANGE_BASE}${filePath}`;
+  return `${FTP_EXCHANGE_BASE}${applyExchangeRootPrefix(filePath)}`;
 }
 
 export async function ftpConnect() {

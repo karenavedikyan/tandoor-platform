@@ -7,6 +7,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as ftp from "basic-ftp";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
+import { resolveExchangeFtpAbsolutePath } from "../../shared/admin/exchange-fetch.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -39,6 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
+    const ftpPath = resolveExchangeFtpAbsolutePath(rawPath);
+
     const host = process.env.FTP_HOST?.trim() || "gw.toopatch.ru";
     const user = process.env.FTP_USER?.trim();
     const password = process.env.FTP_PASSWORD?.trim();
@@ -55,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         password,
         secure: process.env.FTP_SECURE === "1",
       });
-      const list = await client.list(rawPath);
+      const list = await client.list(ftpPath);
       const items = list.map((item) => ({
         name: item.name,
         type: item.type === 2 ? "directory" : item.type === 1 ? "file" : "other",
@@ -63,7 +66,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         modifiedAt: item.modifiedAt?.toISOString?.() ?? null,
         rawModifiedAt: item.rawModifiedAt ?? null,
       }));
-      sendJson(res, 200, { success: true, path: rawPath, count: items.length, items });
+      sendJson(res, 200, { success: true, path: ftpPath, count: items.length, items });
     } finally {
       client.close();
     }

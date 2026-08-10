@@ -13,6 +13,7 @@ import { PassThrough } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as ftp from "basic-ftp";
 import pg from "pg";
+import { applyExchangeRootPrefix } from "./exchange-path.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLATFORM_ROOT =
@@ -42,7 +43,7 @@ function parseArgs(argv) {
 }
 
 function remoteExchangePath(exchangePath) {
-  return `${FTP_EXCHANGE_BASE}${exchangePath}`;
+  return `${FTP_EXCHANGE_BASE}${applyExchangeRootPrefix(exchangePath)}`;
 }
 
 async function loadModules() {

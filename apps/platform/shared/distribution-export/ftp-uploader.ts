@@ -1,8 +1,15 @@
 import type { DistributionExportDto } from "./builder.js";
+import {
+  applyExchangeRootPrefix,
+  getFtpExchangeBase,
+} from "../admin/exchange-fetch.js";
 
-export const DISTRIBUTION_FTP_DIR = "/s3/IMG/exchange/from_lk";
 export const DISTRIBUTION_LATEST_FILENAME = "distribution_latest.json";
 export const DISTRIBUTION_SNAPSHOT_PREFIX = "distribution_";
+
+export function getDistributionFtpDir(): string {
+  return `${getFtpExchangeBase()}${applyExchangeRootPrefix("/from_lk")}`;
+}
 const SNAPSHOT_RETENTION_DAYS = 30;
 
 export function distributionSnapshotFilename(now: Date = new Date()): string {
@@ -78,8 +85,9 @@ export async function uploadDistributionToFtp(
   const contentBase64 = Buffer.from(json, "utf8").toString("base64");
 
   const snapshotName = distributionSnapshotFilename(now);
-  const latestPath = `${DISTRIBUTION_FTP_DIR}/${DISTRIBUTION_LATEST_FILENAME}`;
-  const snapshotPath = `${DISTRIBUTION_FTP_DIR}/${snapshotName}`;
+  const distributionDir = getDistributionFtpDir();
+  const latestPath = `${distributionDir}/${DISTRIBUTION_LATEST_FILENAME}`;
+  const snapshotPath = `${distributionDir}/${snapshotName}`;
 
   await proxyUpload(cfg, latestPath, contentBase64);
   const snap = await proxyUpload(cfg, snapshotPath, contentBase64, {
