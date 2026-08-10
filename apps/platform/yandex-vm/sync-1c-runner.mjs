@@ -8,7 +8,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { PassThrough } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import * as ftp from "basic-ftp";
 import { applyExchangeRootPrefix } from "./exchange-path.mjs";
@@ -33,6 +33,13 @@ const FTP_HOST = process.env.FTP_HOST?.trim() || "gw.toopatch.ru";
 const EXCHANGE_MAX_BYTES = 10_485_760; // 10 MB
 const EXCHANGE_HTTP_PREFIX = "/images/IMG/exchange";
 const FTP_OP_TIMEOUT_MS = 25_000;
+const FTP_UPLOAD_TIMEOUT_MS = 60_000;
+
+/** Allows /s3/IMG/exchange[/<prefix>]/from_lk/<filename> — prefix may contain spaces and (). */
+export const FROM_LK_UPLOAD_PATH_PATTERN =
+  /^\/s3\/IMG\/exchange(\/[A-Za-z0-9_.\-() ]+)?\/from_lk\/[A-Za-z0-9_.\-]+$/;
+
+const SNAPSHOT_FILENAME_RE = /^distribution_(\d{4})-(\d{2})-(\d{2})_(\d{2})\.json$/;
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let running = null;
@@ -140,6 +147,62 @@ export function remoteExchangeListPath(listPath) {
  */
 export function remoteExchangePeekPath(filePath) {
   return `${FTP_EXCHANGE_BASE}${applyExchangeRootPrefix(filePath)}`;
+}
+
+/**
+ * @param {unknown} rawPath
+ * @returns {string | null}
+ */
+export function validateDistributionUploadPath(rawPath) {
+  if (typeof rawPath !== "string") return null;
+  const trimmed = rawPath.trim();
+  if (!trimmed || trimmed.includes("..") || trimmed.includes("\\")) return null;
+  if (!FROM_LK_UPLOAD_PATH_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
+function snapshotDateFromFilename(name) {
+  const m = SNAPSHOT_FILENAME_RE.exec(name);
+  if (!m) return null;
+  const [, y, mo, d, h] = m;
+  return new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), 0, 0, 0));
+}
+
+/**
+ * @param {string} remotePath — validated absolute FTP path
+ * @param {Buffer} content
+ * @param {{ purgeSnapshotsOlderThanMs?: number, snapshotPrefix?: string }} [options]
+ */
+export async function exchangeUploadFromLk(remotePath, content, options = {}) {
+  const client = await ftpConnect();
+  try {
+    const dir = remotePath.slice(0, remotePath.lastIndexOf("/"));
+    await withTimeout(client.ensureDir(dir), FTP_UPLOAD_TIMEOUT_MS, "FTP ensureDir");
+    const body = Readable.from([content]);
+    await withTimeout(client.uploadFrom(body, remotePath), FTP_UPLOAD_TIMEOUT_MS, "FTP upload");
+
+    let removedSnapshots = 0;
+    const purgeMs = Number(options.purgeSnapshotsOlderThanMs);
+    const snapshotPrefix =
+      typeof options.snapshotPrefix === "string" ? options.snapshotPrefix.trim() : "";
+    if (Number.isFinite(purgeMs) && purgeMs > 0 && snapshotPrefix) {
+      const cutoff = Date.now() - purgeMs;
+      const entries = await withTimeout(client.list(dir), FTP_UPLOAD_TIMEOUT_MS, "FTP list");
+      for (const item of entries) {
+        if (!item?.name || item.name === "." || item.name === "..") continue;
+        if (entryIsDirectory(item)) continue;
+        if (!item.name.startsWith(snapshotPrefix)) continue;
+        const snapAt = snapshotDateFromFilename(item.name);
+        if (!snapAt || snapAt.getTime() >= cutoff) continue;
+        await withTimeout(client.remove(`${dir}/${item.name}`), FTP_UPLOAD_TIMEOUT_MS, "FTP remove");
+        removedSnapshots += 1;
+      }
+    }
+
+    return { removedSnapshots };
+  } finally {
+    client.close();
+  }
 }
 
 export async function ftpConnect() {
@@ -359,6 +422,60 @@ const server = http.createServer((req, res) => {
         }
         json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
       });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/exchange/upload") {
+    let body = "";
+    req.on("data", (c) => {
+      body += c;
+    });
+    req.on("end", () => {
+      let payload;
+      try {
+        payload = body.trim() ? JSON.parse(body) : null;
+      } catch {
+        json(res, 400, { ok: false, code: "BAD_JSON", message: "Invalid JSON body." });
+        return;
+      }
+      const rawPath = validateDistributionUploadPath(payload?.path);
+      if (!rawPath) {
+        json(res, 400, {
+          ok: false,
+          code: "BAD_PATH",
+          message: "path must match /s3/IMG/exchange[/<prefix>]/from_lk/<filename>",
+        });
+        return;
+      }
+      const contentBase64 =
+        typeof payload?.contentBase64 === "string" ? payload.contentBase64.trim() : "";
+      if (!contentBase64) {
+        json(res, 400, { ok: false, code: "BAD_CONTENT", message: "contentBase64 is required." });
+        return;
+      }
+      let content;
+      try {
+        content = Buffer.from(contentBase64, "base64");
+      } catch {
+        json(res, 400, { ok: false, code: "BAD_CONTENT", message: "contentBase64 is invalid." });
+        return;
+      }
+      if (content.length === 0) {
+        json(res, 400, { ok: false, code: "BAD_CONTENT", message: "contentBase64 is empty." });
+        return;
+      }
+
+      exchangeUploadFromLk(rawPath, content, {
+        purgeSnapshotsOlderThanMs: payload?.purgeSnapshotsOlderThanMs,
+        snapshotPrefix: payload?.snapshotPrefix,
+      })
+        .then(({ removedSnapshots }) => {
+          json(res, 200, { ok: true, path: rawPath, removedSnapshots });
+        })
+        .catch((e) => {
+          json(res, 502, { ok: false, code: "UPSTREAM_UNREACHABLE", message: String(e?.message ?? e) });
+        });
+    });
     return;
   }
 
