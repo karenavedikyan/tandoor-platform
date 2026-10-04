@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
 import sharp from 'sharp';
+// Bound decoder concurrency/cache on the approved 2-GB application instance.
+sharp.concurrency(1);
+sharp.cache({memory:16,files:0,items:10});
 export const sha256=b=>crypto.createHash('sha256').update(b).digest('hex');
 export function sourceImagePath(raw){
   if(typeof raw!=='string' || !raw || raw.length>1024 || /[\x00-\x1f:]/.test(raw))throw Error('INVALID_IMAGE_PATH');

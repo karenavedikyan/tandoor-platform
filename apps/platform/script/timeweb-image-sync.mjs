@@ -19,7 +19,8 @@ process.on('SIGTERM',()=>{stopping=true;});
 const journal=()=>fs.writeFileSync('/tmp/tandoor-lk-images-status-'+shard+'.json',JSON.stringify({at:new Date().toISOString(),shard,totalShards,stopping,...stats}),{mode:0o600});
 try{
  await db.connect();
- const lock=await db.query("SELECT pg_try_advisory_lock(hashtext($1)) AS acquired",['lk-manual-images-'+shard]);
+ // One decoder worker at a time: sharding partitions the queue, not RAM.
+ const lock=await db.query("SELECT pg_try_advisory_lock(hashtext('lk-manual-images')) AS acquired");
  if(!lock.rows[0].acquired)throw Error('SYNC_ALREADY_RUNNING');
  await db.query(`CREATE TABLE IF NOT EXISTS wholesale_catalog_media(
    asset_id char(64) PRIMARY KEY, source_path text UNIQUE NOT NULL, source_sha256 char(64) NOT NULL,

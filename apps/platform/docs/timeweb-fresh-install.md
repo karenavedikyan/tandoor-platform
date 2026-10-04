@@ -26,6 +26,8 @@ Only the existing active administrator account was transferred; there are no aut
 
 Photo source: FTP `/s3/IMG`, with each relative path taken from the validated product XML.
 Run `node script/timeweb-image-sync.mjs --apply` manually in the isolated app only.
+On the approved 2-GB instance run only one image worker at a time. Optional `--shard=0/4` through
+`--shard=3/4` partition the queue into sequential batches; a global advisory lock rejects concurrency.
 The sync verifies bounded source bytes, decodes via sharp, generates bounded WebP previews and atomically
 stores each preview and its authenticated application URL in the isolated PostgreSQL database.
 It does not use Vercel, a public bucket, a new paid resource or a scheduler.

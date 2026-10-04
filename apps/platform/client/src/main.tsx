@@ -17,6 +17,6 @@ void unregisterAllServiceWorkers();
 createRoot(document.getElementById("root")!).render(
   <>
     <App />
-    <SpeedInsights />
+    {import.meta.env.VITE_HOSTING_PROVIDER !== "timeweb" && <SpeedInsights />}
   </>,
 );
