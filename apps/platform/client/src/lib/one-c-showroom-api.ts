@@ -45,6 +45,7 @@ export type OneCRmNode = {
 
 export type OneCRopNode = {
   userId: string;
+  idKind?: "employee_1c" | "lk_user";
   fullName: string;
   phone: string | null;
   email: string | null;
@@ -117,6 +118,8 @@ export type OneCManagerResponse = {
 
 export type OneCStoreListItem = {
   id_1c: string;
+  entityKind?: "client" | "store";
+  clientGuid?: string;
   address: string | null;
   manager_name: string | null;
   legal_name: string | null;
@@ -363,13 +366,23 @@ export function fetchOneCHierarchy(q?: string): Promise<OneCHierarchyResponse> {
   return fetchOneC<OneCHierarchyResponse>("hierarchy", params);
 }
 
-export function fetchOneCRop(userId: string): Promise<OneCRopResponse> {
-  return fetchOneC<OneCRopResponse>("rop", { user_id: userId });
+export function entityDetailHref(row: OneCStoreListItem): string {
+  if (row.entityKind === "client") return `/1c/legal/${row.id_1c}`;
+  return `/1c/store/${row.id_1c}`;
+}
+
+export function fetchOneCRop(
+  userId: string,
+  opts?: { ropContext?: string | null },
+): Promise<OneCRopResponse> {
+  const params: Record<string, string> = { user_id: userId };
+  if (opts?.ropContext?.trim()) params.rop_context = opts.ropContext.trim();
+  return fetchOneC<OneCRopResponse>("rop", params);
 }
 
 export function fetchOneCRm(
   userId: string,
-  opts?: { q?: string; limit?: number; offset?: number },
+  opts?: { q?: string; limit?: number; offset?: number; ropContext?: string | null },
 ): Promise<OneCRmResponse> {
   const params: Record<string, string> = {
     user_id: userId,
@@ -377,12 +390,13 @@ export function fetchOneCRm(
     offset: String(opts?.offset ?? 0),
   };
   if (opts?.q?.trim()) params.q = opts.q.trim();
+  if (opts?.ropContext?.trim()) params.rop_context = opts.ropContext.trim();
   return fetchOneC<OneCRmResponse>("rm", params);
 }
 
 export function fetchOneCManager(
   userId: string,
-  opts?: { q?: string; limit?: number; offset?: number },
+  opts?: { q?: string; limit?: number; offset?: number; ropContext?: string | null },
 ): Promise<OneCManagerResponse> {
   const params: Record<string, string> = {
     user_id: userId,
@@ -390,6 +404,7 @@ export function fetchOneCManager(
     offset: String(opts?.offset ?? 0),
   };
   if (opts?.q?.trim()) params.q = opts.q.trim();
+  if (opts?.ropContext?.trim()) params.rop_context = opts.ropContext.trim();
   return fetchOneC<OneCManagerResponse>("manager", params);
 }
 

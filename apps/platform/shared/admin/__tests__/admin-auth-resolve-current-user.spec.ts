@@ -58,12 +58,12 @@ const sessions: SessionRow[] = [
 
 function pool(): PoolLike {
   return {
-    query: async (sql: string, params?: unknown[]) => {
+    query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => {
       const s = sql.replace(/\s+/g, " ").trim();
       if (s.includes("FROM sessions") && s.includes("refresh_token_hash = $1")) {
         const h = String(params?.[0] ?? "");
         const row = sessions.find((x) => x.refresh_token_hash === h);
-        if (!row || row.revoked_at || row.expires_at <= new Date()) return { rows: [] };
+        if (!row || row.revoked_at || row.expires_at <= new Date()) return { rows: [] as T[] };
         if (h === hash(TOKEN_BAD)) {
           return {
             rows: [
@@ -79,7 +79,7 @@ function pool(): PoolLike {
                 created_at: new Date().toISOString(),
                 refresh_token_hash: "deadbeef",
               },
-            ],
+            ] as T[],
           };
         }
         return {
@@ -96,10 +96,10 @@ function pool(): PoolLike {
               created_at: new Date().toISOString(),
               refresh_token_hash: row.refresh_token_hash,
             },
-          ],
+          ] as T[],
         };
       }
-      return { rows: [] };
+      return { rows: [] as T[] };
     },
   };
 }

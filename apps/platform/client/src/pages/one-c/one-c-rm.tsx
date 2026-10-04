@@ -3,6 +3,7 @@ import { Link, Redirect, useRoute } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCRm } from "@/lib/one-c-showroom-api";
+import { buildHashPath, useHashRouteSearchParams } from "@/lib/hash-route-utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -47,6 +48,9 @@ export default function OneCRmPage() {
   const { density, setDensity, effectiveDensity } = useOneCListDensity(`rm-${rmId}`, "grid");
   const { columns, toggleColumn, reorderColumns, resetColumns } = useOneCStoresColumns();
 
+  const routeParams = useHashRouteSearchParams();
+  const ropContext = routeParams.get("rop_context")?.trim() || null;
+
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
   const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
@@ -67,7 +71,12 @@ export default function OneCRmPage() {
     if (!canAccess || !rmId) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCRm(rmId, { q: debouncedSearch, limit: ONE_C_PAGE_LIMIT, offset })
+    void fetchOneCRm(rmId, {
+      q: debouncedSearch,
+      limit: ONE_C_PAGE_LIMIT,
+      offset,
+      ropContext,
+    })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -91,7 +100,7 @@ export default function OneCRmPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, rmId, debouncedSearch, offset]);
+  }, [canAccess, rmId, debouncedSearch, offset, ropContext]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -137,7 +146,13 @@ export default function OneCRmPage() {
                   {managers.map((row) => (
                     <TableRow key={row.userId}>
                       <TableCell>
-                        <Link href={`/1c/manager/${row.userId}`} className="text-primary hover:underline">
+                        <Link
+                          href={buildHashPath(
+                            `/1c/manager/${row.userId}`,
+                            ropContext ? { rop_context: ropContext } : undefined,
+                          )}
+                          className="text-primary hover:underline"
+                        >
                           {row.fullName}
                         </Link>
                       </TableCell>

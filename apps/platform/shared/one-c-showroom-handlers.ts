@@ -83,6 +83,11 @@ function parseUserId(req: VercelRequest): string {
   return String(req.query.user_id ?? req.query.userId ?? "").trim();
 }
 
+function parseRopContext(req: VercelRequest): string | null {
+  const raw = String(req.query.rop_context ?? req.query.ropContext ?? "").trim();
+  return raw || null;
+}
+
 function parseOnlyActive(req: VercelRequest): boolean {
   const raw = req.query.onlyActive;
   const v = Array.isArray(raw) ? String(raw[0] ?? "") : String(raw ?? "1");
@@ -217,6 +222,8 @@ export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: One
     "./wholesale-org-handlers.js"
   );
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
+    const { readWholesaleOrg } = await import("./wholesale-org-read.js");
+    const org = await readWholesaleOrg(pool);
     const wholesale = await fetchWholesaleOrgHierarchy(pool, q);
     let items = wholesale.items;
     if (viewer) {
@@ -227,7 +234,7 @@ export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: One
         viewer.role === "admin" || viewer.role === "director"
           ? null
           : await resolveConfirmedEmployeeGuid(pool, viewer.id);
-      items = filterWholesaleHierarchyForViewer(items, viewer, confirmed);
+      items = filterWholesaleHierarchyForViewer(items, viewer, confirmed, org) as typeof wholesale.items;
     }
     return {
       items,
@@ -308,11 +315,16 @@ export type OneCTeamMemberRow = {
   legalCount: number;
 };
 
-export async function fetchOneCRop(pool: PoolLike, userId: string, viewer?: OneCViewer) {
+export async function fetchOneCRop(
+  pool: PoolLike,
+  userId: string,
+  viewer?: OneCViewer,
+  ropContextGuid?: string | null,
+) {
   const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
     const { fetchWholesaleOneCRop } = await import("./wholesale-showroom-detail.js");
-    return fetchWholesaleOneCRop(pool, userId, viewer);
+    return fetchWholesaleOneCRop(pool, userId, viewer, ropContextGuid);
   }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rop", ctx)) {
@@ -362,11 +374,12 @@ export async function fetchOneCRm(
   limit: number,
   offset: number,
   viewer?: OneCViewer,
+  ropContextGuid?: string | null,
 ) {
   const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
     const { fetchWholesaleOneCRm } = await import("./wholesale-showroom-detail.js");
-    return fetchWholesaleOneCRm(pool, userId, q, limit, offset, viewer);
+    return fetchWholesaleOneCRm(pool, userId, q, limit, offset, viewer, ropContextGuid);
   }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rm", ctx)) {
@@ -404,11 +417,12 @@ export async function fetchOneCManager(
   limit: number,
   offset: number,
   viewer?: OneCViewer,
+  ropContextGuid?: string | null,
 ) {
   const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
     const { fetchWholesaleOneCManager } = await import("./wholesale-showroom-detail.js");
-    return fetchWholesaleOneCManager(pool, userId, q, limit, offset, viewer);
+    return fetchWholesaleOneCManager(pool, userId, q, limit, offset, viewer, ropContextGuid);
   }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "manager", ctx)) {
@@ -1155,7 +1169,7 @@ export async function handleOneCRop(
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
-  const data = await fetchOneCRop(pool, userId, viewer);
+  const data = await fetchOneCRop(pool, userId, viewer, parseRopContext(req));
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РОП не найден." });
     return;
@@ -1175,7 +1189,7 @@ export async function handleOneCRm(
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset, viewer);
+  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset, viewer, parseRopContext(req));
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РМ не найден." });
     return;
@@ -1195,7 +1209,7 @@ export async function handleOneCManager(
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset, viewer);
+  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset, viewer, parseRopContext(req));
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Менеджер не найден." });
     return;

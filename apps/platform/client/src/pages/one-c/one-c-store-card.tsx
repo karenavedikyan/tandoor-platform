@@ -1,7 +1,7 @@
 import { memo, type ReactElement } from "react";
 import { Link } from "wouter";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
+import { entityDetailHref, type OneCStoreListItem } from "@/lib/one-c-showroom-api";
 import { DistributionCardHeaderBlock } from "@/components/distribution/distribution-card-header-block";
 import { CompactDistributionBadge } from "@/components/distribution/compact-distribution-badge";
 import { Badge } from "@/components/ui/badge";
@@ -48,8 +48,8 @@ const OneCStoreCardGrid = memo(function OneCStoreCardGrid({
             </p>
           </div>
           <Button asChild size="sm" variant="secondary" className="h-7 shrink-0 px-2 text-[11px] font-semibold">
-            <Link href={`/1c/store/${row.id_1c}`} data-testid={`button-open-one-c-store-${row.id_1c}`}>
-              Открыть
+            <Link href={entityDetailHref(row)} data-testid={`button-open-one-c-store-${row.id_1c}`}>
+              {row.entityKind === "client" ? "Клиент" : "Открыть"}
             </Link>
           </Button>
         </div>
@@ -131,8 +131,8 @@ const OneCStoreCardLarge = memo(function OneCStoreCardLarge({
             {metaLine ? <p className="mt-1 text-xs text-muted-foreground">{metaLine}</p> : null}
           </div>
           <Button asChild size="default" variant="secondary" className="shrink-0">
-            <Link href={`/1c/store/${row.id_1c}`} data-testid={`button-open-one-c-store-${row.id_1c}`}>
-              Открыть
+            <Link href={entityDetailHref(row)} data-testid={`button-open-one-c-store-${row.id_1c}`}>
+              {row.entityKind === "client" ? "Клиент" : "Открыть"}
             </Link>
           </Button>
         </div>
@@ -221,8 +221,8 @@ const OneCStoreCardList = memo(function OneCStoreCardList({
           />
         </div>
         <Button asChild size="sm" variant="secondary" className="h-8 shrink-0 px-3 text-xs">
-          <Link href={`/1c/store/${row.id_1c}`} data-testid={`button-open-one-c-store-${row.id_1c}`}>
-            Открыть
+          <Link href={entityDetailHref(row)} data-testid={`button-open-one-c-store-${row.id_1c}`}>
+            {row.entityKind === "client" ? "Клиент" : "Открыть"}
           </Link>
         </Button>
       </div>

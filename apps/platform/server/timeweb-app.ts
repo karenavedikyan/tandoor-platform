@@ -82,7 +82,11 @@ export function createTimewebApp(routes: ApiRoute[], publicDir?: string): Expres
         return;
       }
     } catch {
-      /* non-fatal */
+      res.status(503).json({
+        code: "EMPLOYEE_PREVIEW_GUARD_UNAVAILABLE",
+        message: "Не удалось проверить режим предпросмотра. Запись временно запрещена.",
+      });
+      return;
     }
     next();
   });

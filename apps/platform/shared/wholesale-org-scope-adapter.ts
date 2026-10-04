@@ -6,7 +6,7 @@ import type { OrgScopePayload, TeamScopeMember } from "./dealers-scope-types.js"
 import { finalizeKpiScopeTotals } from "./kpi-scope-totals.js";
 import { readWholesaleOrg } from "./wholesale-org-read.js";
 import type { PoolLike } from "./responsibility-resolver.js";
-import type { WholesaleEmployeePreviewScope } from "./wholesale-org-types.js";
+import type { EmployeePreviewReadScope } from "./employee-preview-read-scope.js";
 
 function memberFromWholesale(input: {
   id: string;
@@ -74,48 +74,83 @@ function totalsFromUnion(keys: Set<string>, stores: Set<string>) {
 
 const NO_ROP_GUID = "__no_rop__";
 
+function emptyOrgScope(): OrgScopePayload {
+  const emptyTotals = {
+    active_dealers: 0,
+    active_trade_points: 0,
+    trashed_dealers: 0,
+    trashed_trade_points: 0,
+    ...finalizeKpiScopeTotals({
+      tp_status_active: 0,
+      tp_status_potential: 0,
+      tp_status_attention: 0,
+      dealer_no_status: 0,
+      avg_distribution: 0,
+      _distribution_sum: 0,
+      _distribution_weight: 0,
+    }),
+  };
+  return {
+    success: true,
+    org: { id: "wholesale-org", name: "ОПТ · данные 1С" },
+    teams: [],
+    orphan: { label: "Без команды / проверка", members: [], totals: emptyTotals },
+    org_totals: emptyTotals,
+  };
+}
+
+function resolvePreviewFilters(previewRead: EmployeePreviewReadScope | null | undefined): {
+  restrict: boolean;
+  allowedKeys: Set<string>;
+  allowedStores: Set<string>;
+} | null {
+  if (!previewRead || previewRead.mode === "off") return null;
+  if (previewRead.mode === "active" && !previewRead.readable) {
+    return { restrict: true, allowedKeys: new Set(), allowedStores: new Set() };
+  }
+  if (previewRead.mode === "active" && previewRead.readable && previewRead.scope) {
+    return {
+      restrict: true,
+      allowedKeys: new Set(previewRead.scope.activeDealerExternalKeys),
+      allowedStores: new Set(previewRead.scope.activeStoreGuids),
+    };
+  }
+  return { restrict: true, allowedKeys: new Set(), allowedStores: new Set() };
+}
+
 export async function fetchWholesaleOrgScope(
   pool: PoolLike,
-  previewScope?: WholesaleEmployeePreviewScope | null,
+  previewRead?: EmployeePreviewReadScope | null,
 ): Promise<OrgScopePayload> {
-  const org = await readWholesaleOrg(pool);
-  const allowedKeys =
-    previewScope && previewScope.activeDealerExternalKeys.length > 0
-      ? new Set(previewScope.activeDealerExternalKeys)
-      : null;
-  const allowedStores =
-    previewScope && previewScope.activeStoreGuids.length > 0
-      ? new Set(previewScope.activeStoreGuids)
-      : null;
+  const previewFilters = resolvePreviewFilters(previewRead);
+  if (previewFilters?.restrict && previewFilters.allowedKeys.size === 0 && previewFilters.allowedStores.size === 0 && previewRead?.mode === "active") {
+    return emptyOrgScope();
+  }
 
-  const filterKeys = (keys: string[]) =>
-    allowedKeys ? keys.filter((k) => allowedKeys.has(k)) : keys;
-  const filterStores = (ids: string[]) =>
-    allowedStores ? ids.filter((id) => allowedStores.has(id)) : ids;
+  const org = await readWholesaleOrg(pool);
+  const allowedKeys = previewFilters?.restrict ? previewFilters.allowedKeys : null;
+  const allowedStores = previewFilters?.restrict ? previewFilters.allowedStores : null;
+
+  const filterKeys = (keys: string[]) => (allowedKeys ? keys.filter((k) => allowedKeys.has(k)) : keys);
+  const filterStoresForClient = (clientKeys: string[], storeIds: string[]) => {
+    if (!allowedStores) return storeIds;
+    return storeIds.filter((id) => allowedStores.has(id));
+  };
 
   const teams: OrgScopePayload["teams"] = org.hierarchy
     .map((rop) => {
       const ropKey = rop.employeeGuid;
+      const ropClients = org.clients.filter(
+        (c) => (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey,
+      );
 
       const members: TeamScopeMember[] = [
         ...rop.managers.map((mgr) => {
-          const keys = filterKeys(
-            org.clients
-              .filter(
-                (c) =>
-                  (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey &&
-                  c.responsibleManagerGuid === mgr.employeeGuid,
-              )
-              .map((c) => c.externalKey),
-          );
-          const stores = filterStores(
-            org.clients
-              .filter(
-                (c) =>
-                  (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey &&
-                  c.responsibleManagerGuid === mgr.employeeGuid,
-              )
-              .flatMap((c) => c.openStoreGuids),
+          const matched = ropClients.filter((c) => c.responsibleManagerGuid === mgr.employeeGuid);
+          const keys = filterKeys(matched.map((c) => c.externalKey));
+          const stores = filterStoresForClient(
+            keys,
+            matched.flatMap((c) => c.openStoreGuids),
           );
           return memberFromWholesale({
             id: mgr.employeeGuid,
@@ -126,23 +161,11 @@ export async function fetchWholesaleOrgScope(
           });
         }),
         ...rop.rms.map((rm) => {
-          const keys = filterKeys(
-            org.clients
-              .filter(
-                (c) =>
-                  (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey &&
-                  c.regionalManagerGuid === rm.employeeGuid,
-              )
-              .map((c) => c.externalKey),
-          );
-          const stores = filterStores(
-            org.clients
-              .filter(
-                (c) =>
-                  (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey &&
-                  c.regionalManagerGuid === rm.employeeGuid,
-              )
-              .flatMap((c) => c.openStoreGuids),
+          const matched = ropClients.filter((c) => c.regionalManagerGuid === rm.employeeGuid);
+          const keys = filterKeys(matched.map((c) => c.externalKey));
+          const stores = filterStoresForClient(
+            keys,
+            matched.flatMap((c) => c.openStoreGuids),
           );
           return memberFromWholesale({
             id: rm.employeeGuid,
@@ -154,9 +177,21 @@ export async function fetchWholesaleOrgScope(
         }),
       ].filter((m) => m.active_dealer_external_keys.length > 0 || m.active_trade_points.length > 0);
 
-      if (members.length === 0 && previewScope) return null;
+      const ropOnlyClients = ropClients.filter(
+        (c) => !c.responsibleManagerGuid && !c.regionalManagerGuid,
+      );
+      const ropOnlyKeys = filterKeys(ropOnlyClients.map((c) => c.externalKey));
+      const ropOnlyStores = filterStoresForClient(
+        ropOnlyKeys,
+        ropOnlyClients.flatMap((c) => c.openStoreGuids),
+      );
 
       const union = unionMemberKeys(members);
+      for (const k of ropOnlyKeys) union.keys.add(k);
+      for (const s of ropOnlyStores) union.stores.add(s);
+
+      if (members.length === 0 && ropOnlyKeys.length === 0 && previewFilters?.restrict) return null;
+
       const teamTotals = totalsFromUnion(union.keys, union.stores);
 
       return {
@@ -198,7 +233,8 @@ export async function fetchWholesaleOrgScope(
             name: "Без закрепления",
             role: "manager",
             externalKeys: unassignedKeys,
-            storeIds: filterStores(
+            storeIds: filterStoresForClient(
+              unassignedKeys,
               org.clients
                 .filter((c) => !c.headOfSalesGuid && !c.responsibleManagerGuid)
                 .flatMap((c) => c.openStoreGuids),
@@ -215,20 +251,47 @@ export async function fetchWholesaleOrgScope(
         name: "Требуют проверки",
         role: "manager",
         externalKeys: needsReviewKeys,
-        storeIds: filterStores(org.needsReviewClients.flatMap((c) => c.openStoreGuids)),
+        storeIds: filterStoresForClient(
+          needsReviewKeys,
+          org.needsReviewClients.flatMap((c) => c.openStoreGuids),
+        ),
       }),
     );
   }
 
   const orphanUnion = unionMemberKeys(orphanMembers);
 
+  const orgUnionKeys = new Set<string>();
+  const orgUnionStores = new Set<string>();
+  for (const t of teams) {
+    for (const m of t.members) {
+      for (const k of m.active_dealer_external_keys) orgUnionKeys.add(k);
+      for (const tp of m.active_trade_points) orgUnionStores.add(tp.tp_id);
+    }
+  }
+  let orgDealers = org.totals.uniqueClients;
+  let orgStores = org.totals.openStores;
+  if (previewFilters?.restrict) {
+    orgDealers = previewFilters.allowedKeys.size;
+    orgStores = previewFilters.allowedStores.size;
+  } else {
+    for (const t of teams) {
+      for (const m of t.members) {
+        for (const k of m.active_dealer_external_keys) orgUnionKeys.add(k);
+        for (const tp of m.active_trade_points) orgUnionStores.add(tp.tp_id);
+      }
+    }
+    for (const m of orphanMembers) {
+      for (const k of m.active_dealer_external_keys) orgUnionKeys.add(k);
+      for (const tp of m.active_trade_points) orgUnionStores.add(tp.tp_id);
+    }
+    orgDealers = orgUnionKeys.size;
+    orgStores = orgUnionStores.size;
+  }
+
   const org_totals = {
-    active_dealers: previewScope
-      ? previewScope.activeDealerExternalKeys.length
-      : org.totals.uniqueClients,
-    active_trade_points: previewScope
-      ? previewScope.activeStoreGuids.length
-      : org.totals.openStores,
+    active_dealers: orgDealers,
+    active_trade_points: orgStores,
     trashed_dealers: 0,
     trashed_trade_points: 0,
     ...finalizeKpiScopeTotals({

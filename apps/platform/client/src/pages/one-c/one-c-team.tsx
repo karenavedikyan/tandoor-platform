@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCHierarchy, type OneCRopNode } from "@/lib/one-c-showroom-api";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import { cn } from "@/lib/utils";
 import {
   OneCLoadingBlock,
@@ -61,7 +62,7 @@ function RopRow({
               <p className="mb-1 text-xs font-medium text-muted-foreground">РМ ({node.rms.length})</p>
               <div className="space-y-0.5">
                 {node.rms.map((rm) => (
-                  <RmRow key={`${node.teamId}-${rm.userId}`} rm={rm} />
+                  <RmRow key={`${node.teamId}-${rm.userId}`} rm={rm} ropContextGuid={node.userId} />
                 ))}
               </div>
             </div>
@@ -73,7 +74,7 @@ function RopRow({
               </p>
               <div className="space-y-0.5">
                 {node.managers.map((mgr) => (
-                  <ManagerRow key={mgr.userId} mgr={mgr} />
+                  <ManagerRow key={mgr.userId} mgr={mgr} ropContextGuid={node.userId} />
                 ))}
               </div>
             </div>
@@ -84,7 +85,7 @@ function RopRow({
   );
 }
 
-function RmRow({ rm }: { rm: OneCRopNode["rms"][number] }) {
+function RmRow({ rm, ropContextGuid }: { rm: OneCRopNode["rms"][number]; ropContextGuid?: string }) {
   const muted = rm.storeCount === 0;
 
   return (
@@ -93,7 +94,10 @@ function RmRow({ rm }: { rm: OneCRopNode["rms"][number] }) {
       data-testid={`one-c-rm-${rm.userId}`}
     >
       <div className="min-w-0">
-        <Link href={`/1c/rm/${rm.userId}`} className="font-medium text-primary hover:underline">
+        <Link
+          href={buildHashPath(`/1c/rm/${rm.userId}`, ropContextGuid ? { rop_context: ropContextGuid } : undefined)}
+          className="font-medium text-primary hover:underline"
+        >
           {rm.fullName}
         </Link>
         <span className="ml-2 text-xs text-muted-foreground">(РМ)</span>
@@ -105,14 +109,26 @@ function RmRow({ rm }: { rm: OneCRopNode["rms"][number] }) {
   );
 }
 
-function ManagerRow({ mgr }: { mgr: OneCRopNode["managers"][number] }) {
+function ManagerRow({
+  mgr,
+  ropContextGuid,
+}: {
+  mgr: OneCRopNode["managers"][number];
+  ropContextGuid?: string;
+}) {
   const muted = mgr.storeCount === 0;
   return (
     <div
       className={cn("flex items-center justify-between gap-2 py-1 text-sm", muted && "text-muted-foreground")}
       data-testid={`one-c-manager-${mgr.userId}`}
     >
-      <Link href={`/1c/manager/${mgr.userId}`} className="text-primary hover:underline">
+      <Link
+        href={buildHashPath(
+          `/1c/manager/${mgr.userId}`,
+          ropContextGuid ? { rop_context: ropContextGuid } : undefined,
+        )}
+        className="text-primary hover:underline"
+      >
         {mgr.fullName}
       </Link>
       <span className="shrink-0 tabular-nums">{mgr.storeCount.toLocaleString("ru-RU")} ТТ</span>

@@ -415,8 +415,6 @@ function AuthenticatedShell({
   const employeePreviewQ = useQuery({
     queryKey: ["auth", "employee-preview"],
     queryFn: async (): Promise<EmployeePreviewBootstrap> => {
-      const cached = queryClient.getQueryData<EmployeePreviewBootstrap>(["auth", "employee-preview"]);
-      if (cached) return cached;
       const { fetchBootstrap } = await import("@/lib/bootstrap-api.js");
       const bootstrap = await fetchBootstrap();
       return (
@@ -437,13 +435,16 @@ function AuthenticatedShell({
   const employeePreview = employeePreviewQ.data;
 
   const employeePreviewBanner =
-    employeePreview?.active && employeePreview.fullName && !user.impersonatedBy ? (
+    employeePreview?.active && !user.impersonatedBy ? (
       <EmployeePreviewBanner
         fullName={employeePreview.fullName}
         assignmentType={employeePreview.assignmentType}
         basis={employeePreview.basis}
         confirmed={employeePreview.confirmed}
         reason={employeePreview.reason}
+        error={employeePreview.error}
+        onRetry={() => void employeePreviewQ.refetch()}
+        retryPending={employeePreviewQ.isFetching}
       />
     ) : null;
 

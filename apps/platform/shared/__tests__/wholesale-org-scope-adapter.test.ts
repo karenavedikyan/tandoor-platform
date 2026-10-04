@@ -86,4 +86,23 @@ assert.equal(scope.org_totals.active_dealers, 1);
 assert.equal(scope.org_totals.active_trade_points, 1);
 assert.equal(scope.org_totals.trashed_trade_points, 0, "closed 1C TT is not LK trash");
 
+// Active preview with empty/unreadable scope returns zero org
+{
+  const emptyPreview = {
+    mode: "active" as const,
+    session: {
+      employeeGuid: MGR,
+      assignmentType: "responsible_manager" as const,
+      startedAt: "2026-10-04T00:00:00.000Z",
+    },
+    readable: false as const,
+    error: { code: "NO_ASSIGNMENTS_FOR_TYPE", message: "Нет назначений" },
+    scope: null,
+  };
+  const restricted = await fetchWholesaleOrgScope(mockPool(), emptyPreview);
+  assert.equal(restricted.org_totals.active_dealers, 0);
+  assert.equal(restricted.org_totals.active_trade_points, 0);
+  assert.equal(restricted.teams.length, 0);
+}
+
 console.log("wholesale-org-scope-adapter.test.ts: ok");

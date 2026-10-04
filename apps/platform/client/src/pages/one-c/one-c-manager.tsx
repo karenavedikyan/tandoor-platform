@@ -3,6 +3,7 @@ import { Redirect, useRoute } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCManager } from "@/lib/one-c-showroom-api";
+import { useHashRouteSearchParams } from "@/lib/hash-route-utils";
 import { Badge } from "@/components/ui/badge";
 import {
   dash,
@@ -36,6 +37,9 @@ export default function OneCManagerPage() {
   const { density, setDensity, effectiveDensity } = useOneCListDensity(`manager-${managerId}`, "grid");
   const { columns, toggleColumn, reorderColumns, resetColumns } = useOneCStoresColumns();
 
+  const routeParams = useHashRouteSearchParams();
+  const ropContext = routeParams.get("rop_context")?.trim() || null;
+
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
   const nonTableView = effectiveDensity !== "table";
   const { act, filters, setFilters, filtered, distAggregates, distLoading } = useOneCStoresListView(stores, {
@@ -56,7 +60,12 @@ export default function OneCManagerPage() {
     if (!canAccess || !managerId) return;
     let cancelled = false;
     setLoading(true);
-    void fetchOneCManager(managerId, { q: debouncedSearch, limit: ONE_C_PAGE_LIMIT, offset })
+    void fetchOneCManager(managerId, {
+      q: debouncedSearch,
+      limit: ONE_C_PAGE_LIMIT,
+      offset,
+      ropContext,
+    })
       .then((res) => {
         if (cancelled) return;
         if (!res.success) {
@@ -79,7 +88,7 @@ export default function OneCManagerPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, managerId, debouncedSearch, offset]);
+  }, [canAccess, managerId, debouncedSearch, offset, ropContext]);
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;

@@ -18,7 +18,7 @@ import {
 } from "./dealers-team-scope-handlers.js";
 import { fetchWholesaleOrgScope } from "./wholesale-org-scope-adapter.js";
 import { hasWholesaleOrgData } from "./wholesale-org-read.js";
-import { buildEmployeePreviewState } from "./wholesale-preview-handlers.js";
+import { resolveEmployeePreviewReadScope } from "./employee-preview-read-scope.js";
 
 type TeamRow = {
   id: string;
@@ -156,14 +156,11 @@ export async function fetchOrgScopeForRequest(
 
   const wholesaleData = await hasWholesaleOrgData(pool);
   if (wholesaleData) {
-    let previewScope = null;
-    if (viewer.role === "admin" && refreshTokenHash) {
-      const preview = await buildEmployeePreviewState(pool, refreshTokenHash);
-      if (preview.active && preview.scope && !preview.error) {
-        previewScope = preview.scope;
-      }
-    }
-    return fetchWholesaleOrgScope(pool, previewScope);
+    const previewRead =
+      viewer.role === "admin" && refreshTokenHash
+        ? await resolveEmployeePreviewReadScope(pool, refreshTokenHash)
+        : { mode: "off" as const };
+    return fetchWholesaleOrgScope(pool, previewRead);
   }
 
   const teams = await fetchAllTeams(pool);

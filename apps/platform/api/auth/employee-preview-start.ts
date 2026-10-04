@@ -11,7 +11,11 @@ import {
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
-import { startEmployeePreview, parseAssignmentType } from "../../shared/wholesale-preview-handlers.js";
+import {
+  startEmployeePreview,
+  parseAssignmentType,
+  employeePreviewToBootstrap,
+} from "../../shared/wholesale-preview-handlers.js";
 import type { UserRole } from "../../shared/auth.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -72,7 +76,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    sendJson(res, 200, { success: true, employee_preview: result.state });
+    sendJson(res, 200, {
+      success: true,
+      employee_preview: employeePreviewToBootstrap(result.state),
+    });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[api/auth/employee-preview-start]", m.slice(0, 200));

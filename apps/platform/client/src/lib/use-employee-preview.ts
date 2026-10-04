@@ -3,6 +3,11 @@ import { AUTH_ME_QUERY_KEY } from "../hooks/use-auth-user.js";
 import { DEALER_BASE_ROWS_QUERY_KEY } from "./dealer-base-source.js";
 import { myDealerScopeQueryKey } from "./dealers-my-scope-api.js";
 import { orgScopeQueryKey } from "./dealers-org-scope-api.js";
+import {
+  fetchBootstrap,
+  prewarmFromBootstrap,
+  type EmployeePreviewBootstrap,
+} from "./bootstrap-api.js";
 
 export type EmployeePreviewStartInput = {
   employeeGuid: string;
@@ -14,6 +19,40 @@ export type EmployeePreviewStartInput = {
     | "store_manager";
 };
 
+type PreviewMutationResponse = {
+  success?: boolean;
+  message?: string;
+  code?: string;
+  employee_preview?: EmployeePreviewBootstrap;
+};
+
+const PREVIEW_QUERY_KEY = ["auth", "employee-preview"] as const;
+const BOOTSTRAP_QUERY_KEY = ["auth", "bootstrap"] as const;
+
+const INACTIVE_PREVIEW: EmployeePreviewBootstrap = {
+  active: false,
+  employeeGuid: null,
+  fullName: null,
+  assignmentType: null,
+  confirmed: false,
+  reason: null,
+  basis: null,
+  error: null,
+};
+
+async function refreshPreviewAndBootstrapCaches(qc: ReturnType<typeof useQueryClient>): Promise<void> {
+  await qc.cancelQueries({ queryKey: PREVIEW_QUERY_KEY });
+  await qc.cancelQueries({ queryKey: BOOTSTRAP_QUERY_KEY });
+
+  const bootstrap = await fetchBootstrap();
+  if (bootstrap) {
+    prewarmFromBootstrap(qc, bootstrap);
+    return;
+  }
+
+  qc.setQueryData(PREVIEW_QUERY_KEY, INACTIVE_PREVIEW);
+}
+
 export function useStartEmployeePreview() {
   const qc = useQueryClient();
   return useMutation({
@@ -24,20 +63,22 @@ export function useStartEmployeePreview() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
-      const body = (await res.json()) as { success?: boolean; message?: string; code?: string };
+      const body = (await res.json()) as PreviewMutationResponse;
       if (!res.ok || !body.success) {
         throw new Error(body.message ?? body.code ?? "Не удалось начать предпросмотр.");
       }
       return body;
     },
-    onSuccess: async () => {
+    onSuccess: async (body) => {
+      if (body.employee_preview) {
+        qc.setQueryData(PREVIEW_QUERY_KEY, body.employee_preview);
+      }
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
-        qc.invalidateQueries({ queryKey: ["auth", "employee-preview"] }),
-        qc.invalidateQueries({ queryKey: ["auth", "bootstrap"] }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),
+        refreshPreviewAndBootstrapCaches(qc),
       ]);
     },
   });
@@ -51,20 +92,20 @@ export function useStopEmployeePreview() {
         method: "POST",
         credentials: "include",
       });
-      const body = (await res.json()) as { success?: boolean; message?: string };
+      const body = (await res.json()) as PreviewMutationResponse;
       if (!res.ok || !body.success) {
         throw new Error(body.message ?? "Не удалось завершить предпросмотр.");
       }
       return body;
     },
-    onSuccess: async () => {
+    onSuccess: async (body) => {
+      qc.setQueryData(PREVIEW_QUERY_KEY, body.employee_preview ?? INACTIVE_PREVIEW);
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
-        qc.invalidateQueries({ queryKey: ["auth", "employee-preview"] }),
-        qc.invalidateQueries({ queryKey: ["auth", "bootstrap"] }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),
+        refreshPreviewAndBootstrapCaches(qc),
       ]);
     },
   });

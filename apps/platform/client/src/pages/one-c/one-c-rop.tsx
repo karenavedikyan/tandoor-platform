@@ -3,6 +3,7 @@ import { Link, Redirect, useRoute } from "wouter";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { canAccessOneCShowroomForUser } from "@/lib/auth-access";
 import { fetchOneCRop } from "@/lib/one-c-showroom-api";
+import { buildHashPath } from "@/lib/hash-route-utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -101,7 +102,10 @@ export default function OneCRopPage() {
                   {data.rms.map((row) => (
                     <TableRow key={row.userId}>
                       <TableCell>
-                        <Link href={`/1c/rm/${row.userId}`} className="text-primary hover:underline">
+                        <Link
+                          href={buildHashPath(`/1c/rm/${row.userId}`, { rop_context: ropId })}
+                          className="text-primary hover:underline"
+                        >
                           {row.fullName}
                         </Link>
                       </TableCell>
@@ -130,7 +134,10 @@ export default function OneCRopPage() {
                   {data.managers.map((row) => (
                     <TableRow key={row.userId}>
                       <TableCell>
-                        <Link href={`/1c/manager/${row.userId}`} className="text-primary hover:underline">
+                        <Link
+                          href={buildHashPath(`/1c/manager/${row.userId}`, { rop_context: ropId })}
+                          className="text-primary hover:underline"
+                        >
                           {row.fullName}
                         </Link>
                       </TableCell>

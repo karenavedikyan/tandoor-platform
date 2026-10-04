@@ -16,11 +16,32 @@ const EMP_ID = "10000000-0000-4000-8000-000000000010";
 const OUT_ROSTER = "10000000-0000-4000-8000-000000000099";
 const HASH = "abc123";
 
-function mockPool(opts?: { impersonating?: boolean; auditFails?: boolean }): PoolLike {
+const EMP_B = "10000000-0000-4000-8000-000000000011";
+
+function mockPool(opts?: {
+  impersonating?: boolean;
+  auditFails?: boolean;
+  auditFailsOnSwitch?: boolean;
+}): PoolLike {
   let previewGuid: string | null = null;
+  let txnSnapshot: string | null = null;
+  let auditCalls = 0;
   return {
     query: async (sql: string, params?: unknown[]) => {
       const s = sql.replace(/\s+/g, " ").trim();
+      if (s === "BEGIN") {
+        txnSnapshot = previewGuid;
+        return { rows: [] };
+      }
+      if (s === "COMMIT") {
+        txnSnapshot = null;
+        return { rows: [] };
+      }
+      if (s === "ROLLBACK") {
+        previewGuid = txnSnapshot;
+        txnSnapshot = null;
+        return { rows: [] };
+      }
       if (s.includes("FROM wholesale_source_snapshots")) {
         return {
           rows: [
@@ -28,6 +49,7 @@ function mockPool(opts?: { impersonating?: boolean; auditFails?: boolean }): Poo
               raw: {
                 employeeRoster: [
                   { guid_manager: EMP_ID, name_manager: "Тест", post: "Менеджер" },
+                  { guid_manager: EMP_B, name_manager: "Тест B", post: "Менеджер" },
                 ],
               },
               imported_at: "2026-10-04T00:00:00.000Z",
@@ -57,6 +79,21 @@ function mockPool(opts?: { impersonating?: boolean; auditFails?: boolean }): Poo
             {
               guid_client: "20000000-0000-4000-8000-000000000002",
               external_key: "client-20000000-0000-4000-8000-000000000002",
+              name: "Клиент B",
+              city: null,
+              region: null,
+              holding: null,
+              holding_link_state: null,
+              pending_holding_guid: null,
+              manager_roster_state: null,
+              raw: {
+                guid_manager: EMP_B,
+                name_manager: "Тест B",
+              },
+            },
+            {
+              guid_client: "20000000-0000-4000-8000-000000000003",
+              external_key: "client-20000000-0000-4000-8000-000000000003",
               name: "Вне roster",
               city: null,
               region: null,
@@ -111,7 +148,9 @@ function mockPool(opts?: { impersonating?: boolean; auditFails?: boolean }): Poo
         };
       }
       if (s.includes("INSERT INTO audit_log")) {
+        auditCalls += 1;
         if (opts?.auditFails) throw new Error("audit down");
+        if (opts?.auditFailsOnSwitch && auditCalls > 1) throw new Error("audit down");
         return { rows: [] };
       }
       return { rows: [] };
@@ -192,9 +231,10 @@ assert.equal(isEmployeePreviewWriteBlocked(false), false);
   if (!r.ok) assert.equal(r.code, "IMPERSONATION_ACTIVE");
 }
 
-// Audit failure rolls back preview
+// Audit failure rolls back preview — session stays cleared only if txn committed
 {
-  const r = await startEmployeePreview(mockPool({ auditFails: true }), {
+  const pool = mockPool({ auditFails: true });
+  const r = await startEmployeePreview(pool, {
     actorRole: "admin",
     actorStatus: "active",
     actorUserId: ADMIN_ID,
@@ -204,6 +244,35 @@ assert.equal(isEmployeePreviewWriteBlocked(false), false);
   });
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.code, "AUDIT_FAILED");
+}
+
+// Prior preview preserved when audit fails on switch
+{
+  const pool = mockPool({ auditFailsOnSwitch: true });
+  const first = await startEmployeePreview(pool, {
+    actorRole: "admin",
+    actorStatus: "active",
+    actorUserId: ADMIN_ID,
+    refreshTokenHash: HASH,
+    employeeGuid: EMP_ID,
+    assignmentType: "responsible_manager",
+  });
+  assert.equal(first.ok, true);
+  const second = await startEmployeePreview(pool, {
+    actorRole: "admin",
+    actorStatus: "active",
+    actorUserId: ADMIN_ID,
+    refreshTokenHash: HASH,
+    employeeGuid: EMP_B,
+    assignmentType: "responsible_manager",
+  });
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.code, "AUDIT_FAILED");
+  const session = await pool.query(
+    "SELECT employee_preview_guid FROM sessions WHERE refresh_token_hash = $1",
+    [HASH],
+  );
+  assert.equal(session.rows[0]?.employee_preview_guid, EMP_ID);
 }
 
 // Invalid GUID rejected

@@ -290,6 +290,7 @@ export type OneCRmNode = {
 
 export type OneCRopNode = {
   userId: string;
+  idKind?: "employee_1c" | "lk_user";
   fullName: string;
   phone: string | null;
   email: string | null;

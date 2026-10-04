@@ -6,12 +6,18 @@ import type { PoolLike } from "./responsibility-resolver.js";
 import type { OneCRopNode } from "./one-c-showroom-context.js";
 import type { OneCViewer } from "./one-c-showroom-scope.js";
 import type { WholesaleOrgReadResult } from "./wholesale-org-types.js";
+import {
+  buildWholesaleViewerScope,
+  clientInViewerScope,
+  type WholesaleViewerScope,
+} from "./wholesale-viewer-scope.js";
 
 export type WholesaleEntityRef = {
-  /** Route id — for wholesale this is employeeGuid, not users.id. */
   entityId: string;
   idKind: "employee_1c" | "lk_user";
 };
+
+const NO_ROP_GUID = "__no_rop__";
 
 export async function resolveConfirmedEmployeeGuid(
   pool: PoolLike,
@@ -36,29 +42,84 @@ export function wholesaleHierarchyUnrestricted(viewer: OneCViewer): boolean {
   return viewer.role === "admin" || viewer.role === "director";
 }
 
+function countStoresForClients(org: WholesaleOrgReadResult, clientGuids: Set<string>): number {
+  const stores = new Set<string>();
+  for (const c of org.clients) {
+    if (!clientGuids.has(c.guidClient)) continue;
+    for (const s of c.storeGuids) stores.add(s);
+  }
+  return stores.size;
+}
+
+function filterNodeForScope(
+  node: OneCRopNode,
+  org: WholesaleOrgReadResult,
+  scope: WholesaleViewerScope,
+): OneCRopNode | null {
+  const ropKey = node.userId;
+  const ropClients = org.clients.filter(
+    (c) => (c.headOfSalesGuid ?? NO_ROP_GUID) === ropKey && clientInViewerScope(c, scope),
+  );
+  if (ropClients.length === 0 && scope.ropContextGuid !== ropKey) return null;
+
+  const allowedMgrGuids = new Set(
+    ropClients.map((c) => c.responsibleManagerGuid).filter(Boolean) as string[],
+  );
+  const allowedRmGuids = new Set(
+    ropClients.map((c) => c.regionalManagerGuid).filter(Boolean) as string[],
+  );
+
+  const managers = node.managers
+    .filter((m) => allowedMgrGuids.has(m.userId))
+    .map((m) => {
+      const mgrClients = ropClients.filter((c) => c.responsibleManagerGuid === m.userId);
+      const storeSet = new Set(mgrClients.flatMap((c) => c.storeGuids));
+      return {
+        ...m,
+        legalCount: mgrClients.length,
+        storeCount: storeSet.size,
+      };
+    });
+
+  const rms = node.rms
+    .filter((rm) => allowedRmGuids.has(rm.userId))
+    .map((rm) => {
+      const rmClients = ropClients.filter((c) => c.regionalManagerGuid === rm.userId);
+      const storeSet = new Set(rmClients.flatMap((c) => c.storeGuids));
+      return {
+        ...rm,
+        legalCount: rmClients.length,
+        storeCount: storeSet.size,
+      };
+    });
+
+  const storeSet = new Set(ropClients.flatMap((c) => c.storeGuids));
+  return {
+    ...node,
+    managers,
+    rms,
+    managerCount: managers.length,
+    rmCount: rms.length,
+    legalCount: ropClients.length,
+    storeCount: storeSet.size,
+  };
+}
+
 export function filterWholesaleHierarchyForViewer(
   items: OneCRopNode[],
   viewer: OneCViewer,
   confirmedEmployeeGuid: string | null,
+  org: WholesaleOrgReadResult,
+  ropContextGuid?: string | null,
 ): OneCRopNode[] {
-  if (wholesaleHierarchyUnrestricted(viewer)) return items;
-  if (!confirmedEmployeeGuid) return [];
+  const scope = buildWholesaleViewerScope(org, viewer, confirmedEmployeeGuid, ropContextGuid);
+  if (scope.unrestricted && !scope.ropContextGuid) return items;
 
-  if (viewer.role === "rop") {
-    return items.filter((n) => n.userId === confirmedEmployeeGuid);
-  }
+  if (!scope.unrestricted && (scope.clientGuids?.size ?? 0) === 0) return [];
 
-  if (viewer.role === "regional_manager" || viewer.role === "rm") {
-    return items
-      .map((n) => ({
-        ...n,
-        rms: n.rms.filter((rm) => rm.userId === confirmedEmployeeGuid),
-        managers: n.managers,
-      }))
-      .filter((n) => n.rms.length > 0 || n.userId === confirmedEmployeeGuid);
-  }
-
-  return [];
+  return items
+    .map((n) => filterNodeForScope(n, org, scope))
+    .filter(Boolean) as OneCRopNode[];
 }
 
 export function canViewWholesaleEmployeePage(
@@ -67,41 +128,33 @@ export function canViewWholesaleEmployeePage(
   pageKind: "rop" | "rm" | "manager",
   org: WholesaleOrgReadResult,
   confirmedEmployeeGuid: string | null,
+  ropContextGuid?: string | null,
 ): boolean {
-  if (wholesaleHierarchyUnrestricted(viewer)) return true;
-  if (!confirmedEmployeeGuid) return false;
+  const scope = buildWholesaleViewerScope(org, viewer, confirmedEmployeeGuid, ropContextGuid);
+  if (scope.unrestricted && !scope.ropContextGuid) return true;
+  if (!scope.unrestricted && (scope.clientGuids?.size ?? 0) === 0) return false;
 
-  if (viewer.role === "manager") {
-    return pageKind === "manager" && targetEmployeeGuid === confirmedEmployeeGuid;
+  if (pageKind === "rop") {
+    return org.clients.some(
+      (c) =>
+        (c.headOfSalesGuid ?? NO_ROP_GUID) === targetEmployeeGuid && clientInViewerScope(c, scope),
+    );
   }
-
-  if (viewer.role === "regional_manager" || viewer.role === "rm") {
-    if (pageKind === "rm" && targetEmployeeGuid === confirmedEmployeeGuid) return true;
-    if (pageKind === "manager") {
-      return org.clients.some(
-        (c) =>
-          c.responsibleManagerGuid === targetEmployeeGuid &&
-          c.regionalManagerGuid === confirmedEmployeeGuid,
-      );
-    }
-    return false;
+  if (pageKind === "rm") {
+    return org.clients.some(
+      (c) => c.regionalManagerGuid === targetEmployeeGuid && clientInViewerScope(c, scope),
+    );
   }
-
-  if (viewer.role === "rop") {
-    if (targetEmployeeGuid !== confirmedEmployeeGuid && pageKind === "rop") return false;
-    if (pageKind === "rop") return targetEmployeeGuid === confirmedEmployeeGuid;
-    const ropClients = org.clients.filter((c) => c.headOfSalesGuid === confirmedEmployeeGuid);
-    if (pageKind === "rm") {
-      return ropClients.some((c) => c.regionalManagerGuid === targetEmployeeGuid);
-    }
-    if (pageKind === "manager") {
-      return ropClients.some((c) => c.responsibleManagerGuid === targetEmployeeGuid);
-    }
+  if (pageKind === "manager") {
+    return org.clients.some(
+      (c) => c.responsibleManagerGuid === targetEmployeeGuid && clientInViewerScope(c, scope),
+    );
   }
-
   return false;
 }
 
 export function wholesaleEntityRef(employeeGuid: string): WholesaleEntityRef {
   return { entityId: employeeGuid, idKind: "employee_1c" };
 }
+
+export { buildWholesaleViewerScope, type WholesaleViewerScope };
