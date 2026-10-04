@@ -6,7 +6,12 @@ import { orgScopeQueryKey } from "./dealers-org-scope-api.js";
 
 export type EmployeePreviewStartInput = {
   employeeGuid: string;
-  assignmentType: "head_of_sales" | "responsible_manager" | "regional_manager" | "hardware_manager";
+  assignmentType:
+    | "head_of_sales"
+    | "responsible_manager"
+    | "regional_manager"
+    | "hardware_manager"
+    | "store_manager";
 };
 
 export function useStartEmployeePreview() {
@@ -28,6 +33,8 @@ export function useStartEmployeePreview() {
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
+        qc.invalidateQueries({ queryKey: ["auth", "employee-preview"] }),
+        qc.invalidateQueries({ queryKey: ["auth", "bootstrap"] }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),
@@ -53,6 +60,8 @@ export function useStopEmployeePreview() {
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
+        qc.invalidateQueries({ queryKey: ["auth", "employee-preview"] }),
+        qc.invalidateQueries({ queryKey: ["auth", "bootstrap"] }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),

@@ -123,6 +123,9 @@ export async function fetchMyDealerScope(
 ): Promise<MyDealerScopePayload> {
   if (user.role === "admin" && refreshTokenHash) {
     const preview = await buildEmployeePreviewState(pool, refreshTokenHash);
+    if (preview.active && preview.error) {
+      throw new Error(`PREVIEW_SCOPE_ERROR:${preview.error.code}`);
+    }
     if (preview.active && preview.scope) {
       const keys = preview.scope.activeDealerExternalKeys;
       const scope: DbScopeResult = {

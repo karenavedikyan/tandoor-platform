@@ -182,6 +182,7 @@ const orgLike = {
   rosterAvailable: true,
   rosterError: null,
   importedAt: null,
+  outlets: [],
   employees: [
     ...employees,
     {

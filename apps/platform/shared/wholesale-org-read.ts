@@ -13,6 +13,7 @@ import type {
   WholesaleManagerNode,
   WholesaleOrgReadResult,
   WholesaleOrgTotals,
+  WholesaleOutletAssignment,
   WholesaleReviewFlag,
   WholesaleRmNode,
   WholesaleRopNode,
@@ -39,6 +40,8 @@ type OutletMetaRow = {
   guid_store: string;
   guid_client: string;
   closed: boolean;
+  storeManagerGuid: string | null;
+  storeManagerName: string | null;
 };
 
 type RosterRow = {
@@ -89,93 +92,136 @@ function parseRawJson(raw: unknown): Record<string, unknown> {
   return {};
 }
 
+const WHOLESALE_SNAPSHOT_KINDS = [
+  "wholesale",
+  "1c-wholesale",
+  "timeweb-fresh",
+  "current_1c_ftp_wholesale",
+] as const;
+
+function parseRosterPosition(row: Record<string, unknown>): string | null {
+  return normName(row.post ?? row.position ?? row.job_title) || null;
+}
+
+function parseOutletManagers(raw: unknown): { guid: string | null; name: string | null } {
+  const obj = parseRawJson(raw);
+  const managers = obj.managers;
+  if (!managers || typeof managers !== "object" || Array.isArray(managers)) {
+    return { guid: null, name: null };
+  }
+  const mgr = (managers as Record<string, unknown>).manager;
+  if (!mgr || typeof mgr !== "object" || Array.isArray(mgr)) {
+    return { guid: null, name: null };
+  }
+  const m = mgr as Record<string, unknown>;
+  return {
+    guid: normGuid(m.guid),
+    name: normName(m.name) || null,
+  };
+}
+
+function resolveHoldingFlag(row: ClientMetaRow): boolean {
+  const raw = row.raw;
+  if (typeof raw.isHolding === "boolean") return raw.isHolding;
+  const sourceRaw = raw.sourceRaw;
+  if (sourceRaw && typeof sourceRaw === "object" && !Array.isArray(sourceRaw)) {
+    const holding = (sourceRaw as Record<string, unknown>).holding;
+    if (typeof holding === "boolean") return holding;
+  }
+  return false;
+}
+
 export async function loadWholesaleEmployeeRoster(pool: PoolLike): Promise<{
   rows: RosterRow[];
   importedAt: string | null;
   error: string | null;
+  snapshotFound: boolean;
 }> {
   try {
     const snap = await pool.query<{ raw: Record<string, unknown>; imported_at: string | null }>(
       `SELECT raw, imported_at
          FROM wholesale_source_snapshots
-        WHERE source_kind IN ('wholesale', '1c-wholesale', 'timeweb-fresh')
+        WHERE source_kind = ANY($1::text[])
         ORDER BY imported_at DESC NULLS LAST
         LIMIT 1`,
+      [WHOLESALE_SNAPSHOT_KINDS],
     );
     const snapRow = snap.rows[0];
-    const rosterRaw = snapRow?.raw?.employeeRoster;
-    if (Array.isArray(rosterRaw) && rosterRaw.length > 0) {
-      const rows = rosterRaw
-        .map((r) => {
-          const row = r as Record<string, unknown>;
-          const guid = normGuid(row.guid_manager ?? row.guid);
-          const name = normName(row.name_manager ?? row.name);
-          if (!guid || !name) return null;
+    if (snapRow) {
+      const rosterRaw = snapRow.raw?.employeeRoster;
+      if (Array.isArray(rosterRaw) && rosterRaw.length > 0) {
+        const rows = rosterRaw
+          .map((r) => {
+            const row = r as Record<string, unknown>;
+            const guid = normGuid(row.guid_manager ?? row.guid);
+            const name = normName(row.name_manager ?? row.name);
+            if (!guid || !name) return null;
+            return {
+              guid_manager: guid,
+              name_manager: name,
+              position: parseRosterPosition(row),
+            };
+          })
+          .filter(Boolean) as RosterRow[];
+        if (rows.length > 0) {
           return {
-            guid_manager: guid,
-            name_manager: name,
-            position: normName(row.position ?? row.job_title) || null,
+            rows,
+            importedAt: snapRow.imported_at ? String(snapRow.imported_at) : null,
+            error: null,
+            snapshotFound: true,
           };
-        })
-        .filter(Boolean) as RosterRow[];
-      if (rows.length > 0) {
-        return { rows, importedAt: snapRow?.imported_at ? String(snapRow.imported_at) : null, error: null };
+        }
       }
+      // Snapshot exists but roster empty/invalid — do not silently substitute exchange_users_raw.
+      return {
+        rows: [],
+        importedAt: snapRow.imported_at ? String(snapRow.imported_at) : null,
+        error: "ROSTER_EMPTY",
+        snapshotFound: true,
+      };
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return { rows: [], importedAt: null, error: msg };
+    return { rows: [], importedAt: null, error: msg, snapshotFound: false };
   }
 
-  try {
-    const ex = await pool.query<{ id_1c: string; name: string }>(
-      `SELECT id_1c::text AS id_1c, name FROM exchange_users_raw ORDER BY name`,
-    );
-    const rows = ex.rows
-      .map((r) => {
-        const guid = normGuid(r.id_1c);
-        const name = normName(r.name);
-        if (!guid || !name) return null;
-        return { guid_manager: guid, name_manager: name, position: null };
-      })
-      .filter(Boolean) as RosterRow[];
-    return { rows, importedAt: null, error: rows.length === 0 ? "ROSTER_EMPTY" : null };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { rows: [], importedAt: null, error: msg };
-  }
+  return { rows: [], importedAt: null, error: "ROSTER_SNAPSHOT_MISSING", snapshotFound: false };
 }
 
-async function loadLinkedAccounts(pool: PoolLike): Promise<Map<string, LinkedAccountRow>> {
-  const r = await pool.query<LinkedAccountRow>(
-    `SELECT id::text AS id, full_name, status::text AS status FROM users WHERE status IN ('active', 'invited')`,
-  );
-  const byName = new Map<string, LinkedAccountRow[]>();
-  for (const row of r.rows) {
-    const key = normName(row.full_name).toLowerCase();
-    if (!key) continue;
-    const list = byName.get(key) ?? [];
-    list.push(row);
-    byName.set(key, list);
+async function loadEmployeeAccountLinks(pool: PoolLike): Promise<Map<string, LinkedAccountRow>> {
+  try {
+    const r = await pool.query<{ employee_guid: string; id: string; full_name: string | null; status: string }>(
+      `SELECT l.employee_guid::text,
+              u.id::text AS id,
+              u.full_name,
+              u.status::text AS status
+         FROM employee_account_links l
+         INNER JOIN users u ON u.id = l.user_id`,
+    );
+    const byEmployee = new Map<string, LinkedAccountRow>();
+    for (const row of r.rows) {
+      byEmployee.set(row.employee_guid.toLowerCase(), {
+        id: row.id,
+        full_name: row.full_name,
+        status: row.status,
+      });
+    }
+    return byEmployee;
+  } catch {
+    return new Map();
   }
-  // GUID-based links are intentionally NOT inferred from similar names.
-  void byName;
-  return new Map(r.rows.map((row) => [row.id.toLowerCase(), row]));
 }
 
 function resolveAccountLink(
   employeeGuid: string,
-  fullName: string,
-  linkedById: Map<string, LinkedAccountRow>,
+  linkedByEmployee: Map<string, LinkedAccountRow>,
 ): { state: WholesaleAccountLinkState; userId: string | null } {
-  const byGuid = linkedById.get(employeeGuid.toLowerCase());
-  if (byGuid) {
-    return {
-      state: byGuid.status === "active" ? "linked" : "inactive_account",
-      userId: byGuid.id,
-    };
-  }
-  return { state: "no_account", userId: null };
+  const link = linkedByEmployee.get(employeeGuid.toLowerCase());
+  if (!link) return { state: "no_account", userId: null };
+  return {
+    state: link.status === "active" ? "linked" : "inactive_account",
+    userId: link.id,
+  };
 }
 
 function buildReviewFlags(input: {
@@ -244,7 +290,7 @@ function clientFromRow(
     name: row.name,
     city: row.city,
     region: row.region,
-    holding: Boolean(row.holding),
+    holding: resolveHoldingFlag(row),
     holdingLinkState: row.holding_link_state,
     pendingHoldingGuid: normGuid(row.pending_holding_guid),
     managerRosterState: row.manager_roster_state,
@@ -497,16 +543,24 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
          INNER JOIN dealers d ON d.id = wm.guid_client
         ORDER BY d.name`,
     ),
-    pool.query<OutletMetaRow>(
-      `SELECT guid_store::text, guid_client::text, closed FROM wholesale_outlet_metadata`,
+    pool.query<{ guid_store: string; guid_client: string; closed: boolean; raw: unknown }>(
+      `SELECT guid_store::text, guid_client::text, closed, raw FROM wholesale_outlet_metadata`,
     ),
-    loadLinkedAccounts(pool),
+    loadEmployeeAccountLinks(pool),
   ]);
 
   const outletsByClient = new Map<string, OutletMetaRow[]>();
   for (const o of outletRes.rows) {
+    const mgr = parseOutletManagers(o.raw);
+    const outlet: OutletMetaRow = {
+      guid_store: o.guid_store,
+      guid_client: o.guid_client,
+      closed: o.closed,
+      storeManagerGuid: mgr.guid,
+      storeManagerName: mgr.name,
+    };
     const list = outletsByClient.get(o.guid_client) ?? [];
-    list.push(o);
+    list.push(outlet);
     outletsByClient.set(o.guid_client, list);
   }
 
@@ -531,9 +585,21 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
     clientFromRow(row, outletsByClient, rosterGuids, managerRopMap),
   );
 
+  const outlets: WholesaleOutletAssignment[] = [];
+  for (const o of outletRes.rows) {
+    const mgr = parseOutletManagers(o.raw);
+    outlets.push({
+      guidStore: o.guid_store,
+      guidClient: o.guid_client,
+      closed: o.closed,
+      storeManagerGuid: mgr.guid,
+      storeManagerName: mgr.name,
+    });
+  }
+
   const employeeMap = new Map<string, WholesaleEmployeeRecord>();
   for (const r of rosterLoad.rows) {
-    const link = resolveAccountLink(r.guid_manager, r.name_manager, linkedAccounts);
+    const link = resolveAccountLink(r.guid_manager, linkedAccounts);
     employeeMap.set(r.guid_manager, {
       employeeGuid: r.guid_manager,
       fullName: r.name_manager,
@@ -554,7 +620,7 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
       [c.hardwareManagerGuid, c.hardwareManagerName],
     ] as const) {
       if (!guid || employeeMap.has(guid)) continue;
-      const link = resolveAccountLink(guid, name ?? guid, linkedAccounts);
+      const link = resolveAccountLink(guid, linkedAccounts);
       employeeMap.set(guid, {
         employeeGuid: guid,
         fullName: name ?? guid,
@@ -580,6 +646,7 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
     importedAt: rosterLoad.importedAt,
     employees,
     clients,
+    outlets,
     hierarchy,
     needsReviewClients,
     totals: computeWholesaleOrgTotals(clients),
@@ -589,6 +656,7 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
 export function wholesaleHierarchyToOneCRopNodes(hierarchy: WholesaleRopNode[]) {
   return hierarchy.map((rop) => ({
     userId: rop.employeeGuid,
+    idKind: "employee_1c" as const,
     fullName: rop.fullName,
     phone: null as string | null,
     email: null as string | null,
@@ -600,6 +668,7 @@ export function wholesaleHierarchyToOneCRopNodes(hierarchy: WholesaleRopNode[]) 
     legalCount: rop.clientCount,
     rms: rop.rms.map((rm) => ({
       userId: rm.employeeGuid,
+      idKind: "employee_1c" as const,
       fullName: rm.fullName,
       phone: null as string | null,
       storeCount: rm.storeCount,
@@ -609,6 +678,7 @@ export function wholesaleHierarchyToOneCRopNodes(hierarchy: WholesaleRopNode[]) 
     })),
     managers: rop.managers.map((mgr) => ({
       userId: mgr.employeeGuid,
+      idKind: "employee_1c" as const,
       fullName: mgr.fullName,
       phone: null as string | null,
       storeCount: mgr.storeCount,
@@ -654,30 +724,36 @@ export function resolveWholesaleEmployeePreviewScope(
   let reason: string | null = null;
   let confirmed = true;
 
-  for (const c of org.clients) {
-    let match = false;
-    switch (assignmentType) {
-      case "head_of_sales":
-        match = c.headOfSalesGuid === guid;
-        break;
-      case "responsible_manager":
-        match = c.responsibleManagerGuid === guid;
-        break;
-      case "regional_manager":
-        match = c.regionalManagerGuid === guid;
-        break;
-      case "hardware_manager":
-        match = c.hardwareManagerGuid === guid;
-        break;
-      case "store_manager":
-        match = false;
-        break;
-      default:
-        match = false;
+  if (assignmentType === "store_manager") {
+    for (const o of org.outlets) {
+      if (o.closed || o.storeManagerGuid !== guid) continue;
+      const client = org.clients.find((cl) => cl.guidClient === o.guidClient);
+      if (client) keys.add(client.externalKey);
+      stores.add(o.guidStore);
     }
-    if (!match) continue;
-    keys.add(c.externalKey);
-    for (const s of c.openStoreGuids) stores.add(s);
+  } else {
+    for (const c of org.clients) {
+      let match = false;
+      switch (assignmentType) {
+        case "head_of_sales":
+          match = c.headOfSalesGuid === guid;
+          break;
+        case "responsible_manager":
+          match = c.responsibleManagerGuid === guid;
+          break;
+        case "regional_manager":
+          match = c.regionalManagerGuid === guid;
+          break;
+        case "hardware_manager":
+          match = c.hardwareManagerGuid === guid;
+          break;
+        default:
+          match = false;
+      }
+      if (!match) continue;
+      keys.add(c.externalKey);
+      for (const s of c.openStoreGuids) stores.add(s);
+    }
   }
 
   if (keys.size === 0) {

@@ -414,7 +414,24 @@ function AuthenticatedShell({
 
   const employeePreviewQ = useQuery({
     queryKey: ["auth", "employee-preview"],
-    queryFn: async (): Promise<EmployeePreviewBootstrap> => ({ active: false }),
+    queryFn: async (): Promise<EmployeePreviewBootstrap> => {
+      const cached = queryClient.getQueryData<EmployeePreviewBootstrap>(["auth", "employee-preview"]);
+      if (cached) return cached;
+      const { fetchBootstrap } = await import("@/lib/bootstrap-api.js");
+      const bootstrap = await fetchBootstrap();
+      return (
+        bootstrap?.employee_preview ?? {
+          active: false,
+          employeeGuid: null,
+          fullName: null,
+          assignmentType: null,
+          confirmed: false,
+          reason: null,
+          basis: null,
+          error: null,
+        }
+      );
+    },
     staleTime: 30_000,
   });
   const employeePreview = employeePreviewQ.data;

@@ -55,6 +55,7 @@ import {
   ImpersonationQuickSwitch,
   type ImpersonationQuickSwitchUser,
 } from "@/components/layout/impersonation-quick-switch";
+import { EmployeePreviewPicker } from "@/components/layout/employee-preview-picker";
 
 const SIDEBAR_COLLAPSED_LS_KEY = "tandoor-shell-sidebar-collapsed-v1";
 
@@ -950,22 +951,32 @@ export function AppShell({
             data-testid="sidebar-impersonation-quick-wrap"
           >
             {sidebarCollapsed ? (
-              <ImpersonationQuickSwitch
-                currentUser={shellUser}
-                isImpersonating={isImpersonating}
-                layout="collapsed"
-                sidebarCollapsed={sidebarCollapsed}
-                onRequestExpandSidebar={requestExpandForImpersonation}
-              />
+              <div className="flex flex-col gap-2">
+                <ImpersonationQuickSwitch
+                  currentUser={shellUser}
+                  isImpersonating={isImpersonating}
+                  layout="collapsed"
+                  sidebarCollapsed={sidebarCollapsed}
+                  onRequestExpandSidebar={requestExpandForImpersonation}
+                />
+                {shellUser.role === "admin" && !isImpersonating ? (
+                  <EmployeePreviewPicker layout="collapsed" />
+                ) : null}
+              </div>
             ) : (
-              <ImpersonationQuickSwitch
-                currentUser={shellUser}
-                isImpersonating={isImpersonating}
-                layout="sidebar"
-                sidebarCollapsed={sidebarCollapsed}
-                autoOpenPicker={impersonationAutoOpen}
-                onAutoOpenPickerConsumed={() => setImpersonationAutoOpen(false)}
-              />
+              <div className="flex flex-col gap-2">
+                <ImpersonationQuickSwitch
+                  currentUser={shellUser}
+                  isImpersonating={isImpersonating}
+                  layout="sidebar"
+                  sidebarCollapsed={sidebarCollapsed}
+                  autoOpenPicker={impersonationAutoOpen}
+                  onAutoOpenPickerConsumed={() => setImpersonationAutoOpen(false)}
+                />
+                {shellUser.role === "admin" && !isImpersonating ? (
+                  <EmployeePreviewPicker layout="sidebar" />
+                ) : null}
+              </div>
             )}
           </div>
         ) : null}

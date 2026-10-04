@@ -42,6 +42,7 @@ export type EmployeePreviewBootstrap = {
   confirmed: boolean;
   reason: string | null;
   basis: string | null;
+  error?: { code: string; message: string } | null;
 };
 
 export type BootstrapPayload = {
@@ -97,7 +98,19 @@ export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void
   qc.setQueryData([...AUTH_ME_QUERY_KEY], b.me);
   qc.setQueryData(["auth", "org-snapshot"], b.org_snapshot);
   qc.setQueryData(["auth", "my-visible-codes"], visibleCodesToQueryResult(b.visible_codes));
-  qc.setQueryData(["auth", "employee-preview"], b.employee_preview ?? { active: false });
+  qc.setQueryData(
+    ["auth", "employee-preview"],
+    b.employee_preview ?? {
+      active: false,
+      employeeGuid: null,
+      fullName: null,
+      assignmentType: null,
+      confirmed: false,
+      reason: null,
+      basis: null,
+      error: null,
+    },
+  );
   seedFeatureFlagsFromBootstrap(b.feature_flags);
   seedServerKpiAggregatesFromBootstrap(b.feature_flags);
   seedTpHydrationNoWritebackFromBootstrap(b.feature_flags);

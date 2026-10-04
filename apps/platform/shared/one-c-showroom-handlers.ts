@@ -218,8 +218,19 @@ export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: One
   );
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
     const wholesale = await fetchWholesaleOrgHierarchy(pool, q);
+    let items = wholesale.items;
+    if (viewer) {
+      const { filterWholesaleHierarchyForViewer, resolveConfirmedEmployeeGuid } = await import(
+        "./wholesale-showroom-scope.js"
+      );
+      const confirmed =
+        viewer.role === "admin" || viewer.role === "director"
+          ? null
+          : await resolveConfirmedEmployeeGuid(pool, viewer.id);
+      items = filterWholesaleHierarchyForViewer(items, viewer, confirmed);
+    }
     return {
-      items: wholesale.items,
+      items,
       source: wholesale.source,
       rosterAvailable: wholesale.rosterAvailable,
       rosterError: wholesale.rosterError,
@@ -236,6 +247,8 @@ export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: One
 
 export type OneCUserCard = {
   userId: string;
+  /** employee_1c when id is wholesale employeeGuid; lk_user for LK accounts. */
+  idKind?: "employee_1c" | "lk_user";
   fullName: string;
   phone: string | null;
   email: string | null;
@@ -288,6 +301,7 @@ async function fetchUserCard(
 
 export type OneCTeamMemberRow = {
   userId: string;
+  idKind?: "employee_1c" | "lk_user";
   fullName: string;
   phone: string | null;
   storeCount: number;
@@ -295,6 +309,11 @@ export type OneCTeamMemberRow = {
 };
 
 export async function fetchOneCRop(pool: PoolLike, userId: string, viewer?: OneCViewer) {
+  const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
+  if (await shouldUseWholesaleOrgHierarchy(pool)) {
+    const { fetchWholesaleOneCRop } = await import("./wholesale-showroom-detail.js");
+    return fetchWholesaleOneCRop(pool, userId, viewer);
+  }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rop", ctx)) {
     return null;
@@ -344,6 +363,11 @@ export async function fetchOneCRm(
   offset: number,
   viewer?: OneCViewer,
 ) {
+  const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
+  if (await shouldUseWholesaleOrgHierarchy(pool)) {
+    const { fetchWholesaleOneCRm } = await import("./wholesale-showroom-detail.js");
+    return fetchWholesaleOneCRm(pool, userId, q, limit, offset, viewer);
+  }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "rm", ctx)) {
     return null;
@@ -381,6 +405,11 @@ export async function fetchOneCManager(
   offset: number,
   viewer?: OneCViewer,
 ) {
+  const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
+  if (await shouldUseWholesaleOrgHierarchy(pool)) {
+    const { fetchWholesaleOneCManager } = await import("./wholesale-showroom-detail.js");
+    return fetchWholesaleOneCManager(pool, userId, q, limit, offset, viewer);
+  }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "manager", ctx)) {
     return null;

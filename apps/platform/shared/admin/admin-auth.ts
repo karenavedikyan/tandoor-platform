@@ -138,8 +138,9 @@ export async function resolveCurrentUser(
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
 ): Promise<DbUserRow | null> {
-  const hashHex = resolveRefreshTokenHash(headers);
-  if (!hashHex) return null;
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) return null;
+  const hashHex = sha256Hex(token);
   const res = await pool.query<Omit<DbUserRow, "telegram_user_id"> & { refresh_token_hash: string }>(
     `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at,
             s.refresh_token_hash
@@ -153,5 +154,15 @@ export async function resolveCurrentUser(
   if (!row || !timingSafeEqualHex(row.refresh_token_hash, token)) return null;
   const { refresh_token_hash: _h, ...u } = row;
   return { ...u, telegram_user_id: null };
+}
+
+/** Active session user — rejects inactive/invited accounts for mutating endpoints. */
+export async function resolveActiveSessionUser(
+  pool: PoolLike,
+  headers: Record<string, string | string[] | undefined>,
+): Promise<DbUserRow | null> {
+  const user = await resolveCurrentUser(pool, headers);
+  if (!user || user.status !== "active") return null;
+  return user;
 }
 // cache-bust-1781890346

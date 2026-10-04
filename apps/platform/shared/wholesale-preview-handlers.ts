@@ -13,6 +13,7 @@ const VALID_ASSIGNMENTS = new Set<WholesaleAssignmentType>([
   "responsible_manager",
   "regional_manager",
   "hardware_manager",
+  "store_manager",
 ]);
 
 export type EmployeePreviewSession = {
@@ -26,6 +27,18 @@ export type EmployeePreviewState = {
   preview: EmployeePreviewSession | null;
   scope: Awaited<ReturnType<typeof resolveWholesalePreviewScope>> | null;
   basis: string | null;
+  error?: { code: string; message: string } | null;
+};
+
+export type EmployeePreviewBootstrapFields = {
+  active: boolean;
+  employeeGuid: string | null;
+  fullName: string | null;
+  assignmentType: string | null;
+  confirmed: boolean;
+  reason: string | null;
+  basis: string | null;
+  error?: { code: string; message: string } | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -65,21 +78,16 @@ export async function readEmployeePreviewFromSession(
   };
 }
 
-export async function buildEmployeePreviewState(
+export async function sessionHasActiveEmployeePreview(
   pool: PoolLike,
   refreshTokenHash: string,
-): Promise<EmployeePreviewState> {
+): Promise<boolean> {
   const session = await readEmployeePreviewFromSession(pool, refreshTokenHash);
-  if (!session) {
-    return { active: false, preview: null, scope: null, basis: null };
-  }
-  const scope = await resolveWholesalePreviewScope(
-    pool,
-    session.employeeGuid,
-    session.assignmentType,
-  );
-  const basis = previewBasisLabel(session.assignmentType, scope.confirmed, scope.reason);
-  return { active: true, preview: session, scope, basis };
+  return session !== null;
+}
+
+export function isEmployeePreviewWriteBlocked(activePreview: boolean): boolean {
+  return activePreview;
 }
 
 function previewBasisLabel(
@@ -99,10 +107,135 @@ function previewBasisLabel(
   return base;
 }
 
+export async function buildEmployeePreviewState(
+  pool: PoolLike,
+  refreshTokenHash: string,
+): Promise<EmployeePreviewState> {
+  const session = await readEmployeePreviewFromSession(pool, refreshTokenHash);
+  if (!session) {
+    return { active: false, preview: null, scope: null, basis: null, error: null };
+  }
+  try {
+    const scope = await resolveWholesalePreviewScope(
+      pool,
+      session.employeeGuid,
+      session.assignmentType,
+    );
+    const basis = previewBasisLabel(session.assignmentType, scope.confirmed, scope.reason);
+    return { active: true, preview: session, scope, basis, error: null };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      active: true,
+      preview: session,
+      scope: null,
+      basis: null,
+      error: { code: "PREVIEW_SCOPE_ERROR", message: msg },
+    };
+  }
+}
+
+export function employeePreviewToBootstrap(state: EmployeePreviewState): EmployeePreviewBootstrapFields {
+  if (!state.active || !state.preview) {
+    return {
+      active: false,
+      employeeGuid: null,
+      fullName: null,
+      assignmentType: null,
+      confirmed: false,
+      reason: null,
+      basis: null,
+      error: null,
+    };
+  }
+  if (state.error) {
+    return {
+      active: true,
+      employeeGuid: state.preview.employeeGuid,
+      fullName: state.scope?.fullName ?? null,
+      assignmentType: state.preview.assignmentType,
+      confirmed: false,
+      reason: state.error.code,
+      basis: null,
+      error: state.error,
+    };
+  }
+  if (!state.scope) {
+    return {
+      active: true,
+      employeeGuid: state.preview.employeeGuid,
+      fullName: null,
+      assignmentType: state.preview.assignmentType,
+      confirmed: false,
+      reason: "SCOPE_UNAVAILABLE",
+      basis: null,
+      error: { code: "SCOPE_UNAVAILABLE", message: "Не удалось построить область предпросмотра." },
+    };
+  }
+  return {
+    active: true,
+    employeeGuid: state.preview.employeeGuid,
+    fullName: state.scope.fullName,
+    assignmentType: state.preview.assignmentType,
+    confirmed: state.scope.confirmed,
+    reason: state.scope.reason,
+    basis: state.basis,
+    error: null,
+  };
+}
+
+async function writeAuditLog(
+  pool: PoolLike,
+  input: {
+    actorUserId: string;
+    action: string;
+    employeeGuid: string;
+    metadata: Record<string, unknown>;
+  },
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
+     VALUES ($1::uuid, $2, 'employee_1c', $3, $4::jsonb)`,
+    [input.actorUserId, input.action, input.employeeGuid, JSON.stringify(input.metadata)],
+  );
+}
+
+async function assertSessionUpdatable(
+  pool: PoolLike,
+  refreshTokenHash: string,
+  actorUserId: string,
+): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
+  const r = await pool.query<{ user_id: string; impersonator_user_id: string | null }>(
+    `SELECT user_id::text, impersonator_user_id::text
+       FROM sessions
+      WHERE refresh_token_hash = $1
+        AND revoked_at IS NULL
+        AND expires_at > NOW()
+      LIMIT 1`,
+    [refreshTokenHash],
+  );
+  const row = r.rows[0];
+  if (!row) {
+    return { ok: false, code: "SESSION_INVALID", message: "Сессия недействительна или истекла." };
+  }
+  if (row.user_id !== actorUserId) {
+    return { ok: false, code: "SESSION_MISMATCH", message: "Сессия не принадлежит текущему пользователю." };
+  }
+  if (row.impersonator_user_id) {
+    return {
+      ok: false,
+      code: "IMPERSONATION_ACTIVE",
+      message: "Предпросмотр недоступен во время наблюдения за другим пользователем.",
+    };
+  }
+  return { ok: true };
+}
+
 export async function startEmployeePreview(
   pool: PoolLike,
   input: {
     actorRole: UserRole;
+    actorStatus: string;
     actorUserId: string;
     refreshTokenHash: string;
     employeeGuid: string;
@@ -112,6 +245,9 @@ export async function startEmployeePreview(
   if (!PREVIEW_ROLES.has(input.actorRole)) {
     return { ok: false, code: "FORBIDDEN", message: "Предпросмотр доступен только администратору." };
   }
+  if (input.actorStatus !== "active") {
+    return { ok: false, code: "INACTIVE_ADMIN", message: "Аккаунт администратора не активен." };
+  }
   if (!UUID_RE.test(input.employeeGuid)) {
     return { ok: false, code: "INVALID_GUID", message: "Некорректный GUID сотрудника." };
   }
@@ -119,30 +255,57 @@ export async function startEmployeePreview(
     return { ok: false, code: "INVALID_ASSIGNMENT", message: "Некорректный тип назначения." };
   }
 
+  const sessionCheck = await assertSessionUpdatable(pool, input.refreshTokenHash, input.actorUserId);
+  if (!sessionCheck.ok) return sessionCheck;
+
   const scope = await resolveWholesalePreviewScope(pool, input.employeeGuid, input.assignmentType);
   if (scope.reason === "EMPLOYEE_NOT_IN_ROSTER") {
     return { ok: false, code: "NOT_IN_ROSTER", message: "Сотрудник отсутствует в актуальном roster ОПТ." };
   }
+  if (scope.reason === "OUTSIDE_ROSTER" || !scope.confirmed) {
+    return {
+      ok: false,
+      code: "UNCONFIRMED_SCOPE",
+      message: `Область не подтверждена: ${scope.reason ?? "UNKNOWN"}.`,
+    };
+  }
 
-  await pool.query(
+  const upd = await pool.query<{ employee_preview_guid: string | null }>(
     `UPDATE sessions
         SET employee_preview_guid = $2::uuid,
             employee_preview_assignment = $3,
             employee_preview_started_at = NOW()
       WHERE refresh_token_hash = $1
-        AND revoked_at IS NULL`,
-    [input.refreshTokenHash, input.employeeGuid, input.assignmentType],
+        AND user_id = $4::uuid
+        AND revoked_at IS NULL
+        AND expires_at > NOW()
+        AND impersonator_user_id IS NULL
+      RETURNING employee_preview_guid::text`,
+    [input.refreshTokenHash, input.employeeGuid, input.assignmentType, input.actorUserId],
   );
+  if (!upd.rows[0]?.employee_preview_guid) {
+    return { ok: false, code: "SESSION_UPDATE_FAILED", message: "Не удалось сохранить предпросмотр в сессии." };
+  }
 
-  await pool.query(
-    `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-     VALUES ($1::uuid, 'admin.employee_preview.start', 'employee_1c', $2, $3::jsonb)`,
-    [
-      input.actorUserId,
-      input.employeeGuid,
-      JSON.stringify({ assignmentType: input.assignmentType, confirmed: scope.confirmed }),
-    ],
-  ).catch(() => undefined);
+  try {
+    await writeAuditLog(pool, {
+      actorUserId: input.actorUserId,
+      action: "admin.employee_preview.start",
+      employeeGuid: input.employeeGuid,
+      metadata: { assignmentType: input.assignmentType, confirmed: scope.confirmed },
+    });
+  } catch (e) {
+    await pool.query(
+      `UPDATE sessions
+          SET employee_preview_guid = NULL,
+              employee_preview_assignment = NULL,
+              employee_preview_started_at = NULL
+        WHERE refresh_token_hash = $1`,
+      [input.refreshTokenHash],
+    );
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, code: "AUDIT_FAILED", message: `Журналирование не выполнено: ${msg}` };
+  }
 
   const state = await buildEmployeePreviewState(pool, input.refreshTokenHash);
   return { ok: true, state };
@@ -150,30 +313,56 @@ export async function startEmployeePreview(
 
 export async function stopEmployeePreview(
   pool: PoolLike,
-  input: { actorRole: UserRole; actorUserId: string; refreshTokenHash: string },
+  input: {
+    actorRole: UserRole;
+    actorStatus: string;
+    actorUserId: string;
+    refreshTokenHash: string;
+  },
 ): Promise<{ ok: true } | { ok: false; code: string; message: string }> {
   if (!PREVIEW_ROLES.has(input.actorRole)) {
     return { ok: false, code: "FORBIDDEN", message: "Предпросмотр доступен только администратору." };
   }
+  if (input.actorStatus !== "active") {
+    return { ok: false, code: "INACTIVE_ADMIN", message: "Аккаунт администратора не активен." };
+  }
+
+  const sessionCheck = await assertSessionUpdatable(pool, input.refreshTokenHash, input.actorUserId);
+  if (!sessionCheck.ok) return sessionCheck;
 
   const prev = await readEmployeePreviewFromSession(pool, input.refreshTokenHash);
 
-  await pool.query(
-    `UPDATE sessions
-        SET employee_preview_guid = NULL,
-            employee_preview_assignment = NULL,
-            employee_preview_started_at = NULL
-      WHERE refresh_token_hash = $1
-        AND revoked_at IS NULL`,
-    [input.refreshTokenHash],
+  const upd = await pool.query<{ n: number }>(
+    `WITH u AS (
+       UPDATE sessions
+          SET employee_preview_guid = NULL,
+              employee_preview_assignment = NULL,
+              employee_preview_started_at = NULL
+        WHERE refresh_token_hash = $1
+          AND user_id = $2::uuid
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        RETURNING 1
+     )
+     SELECT COUNT(*)::int AS n FROM u`,
+    [input.refreshTokenHash, input.actorUserId],
   );
+  if ((upd.rows[0]?.n ?? 0) === 0) {
+    return { ok: false, code: "SESSION_UPDATE_FAILED", message: "Не удалось завершить предпросмотр." };
+  }
 
   if (prev) {
-    await pool.query(
-      `INSERT INTO audit_log (actor_user_id, action, entity_type, entity_id, metadata)
-       VALUES ($1::uuid, 'admin.employee_preview.stop', 'employee_1c', $2, $3::jsonb)`,
-      [input.actorUserId, prev.employeeGuid, JSON.stringify({ assignmentType: prev.assignmentType })],
-    ).catch(() => undefined);
+    try {
+      await writeAuditLog(pool, {
+        actorUserId: input.actorUserId,
+        action: "admin.employee_preview.stop",
+        employeeGuid: prev.employeeGuid,
+        metadata: { assignmentType: prev.assignmentType },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { ok: false, code: "AUDIT_FAILED", message: `Журналирование не выполнено: ${msg}` };
+    }
   }
 
   return { ok: true };

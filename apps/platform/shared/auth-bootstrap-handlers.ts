@@ -83,6 +83,7 @@ export type EmployeePreviewBootstrap = {
   confirmed: boolean;
   reason: string | null;
   basis: string | null;
+  error?: { code: string; message: string } | null;
 };
 
 export type BootstrapSuccessBody = {
@@ -468,40 +469,11 @@ export async function buildBootstrapPayload(
     fetchMyVisibleCodesInternal(pool, sessionRow),
     Promise.resolve(fetchFeatureFlagsInternal()),
     (async (): Promise<EmployeePreviewBootstrap> => {
-      try {
-        const { buildEmployeePreviewState } = await import("./wholesale-preview-handlers.js");
-        const state = await buildEmployeePreviewState(pool, refreshTokenHash);
-        if (!state.active || !state.preview || !state.scope) {
-          return {
-            active: false,
-            employeeGuid: null,
-            fullName: null,
-            assignmentType: null,
-            confirmed: false,
-            reason: null,
-            basis: null,
-          };
-        }
-        return {
-          active: true,
-          employeeGuid: state.preview.employeeGuid,
-          fullName: state.scope.fullName,
-          assignmentType: state.preview.assignmentType,
-          confirmed: state.scope.confirmed,
-          reason: state.scope.reason,
-          basis: state.basis,
-        };
-      } catch {
-        return {
-          active: false,
-          employeeGuid: null,
-          fullName: null,
-          assignmentType: null,
-          confirmed: false,
-          reason: null,
-          basis: null,
-        };
-      }
+      const { buildEmployeePreviewState, employeePreviewToBootstrap } = await import(
+        "./wholesale-preview-handlers.js"
+      );
+      const state = await buildEmployeePreviewState(pool, refreshTokenHash);
+      return employeePreviewToBootstrap(state);
     })(),
   ]);
 

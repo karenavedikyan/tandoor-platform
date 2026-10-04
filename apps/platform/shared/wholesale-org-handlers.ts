@@ -113,7 +113,7 @@ export async function resolveWholesalePreviewScope(
   return resolveWholesaleEmployeePreviewScope(org, employeeGuid, assignmentType);
 }
 
+/** Prefer wholesale metadata whenever imported — do not hide it after first LK team appears. */
 export async function shouldUseWholesaleOrgHierarchy(pool: PoolLike): Promise<boolean> {
-  const [wholesale, lkTeams] = await Promise.all([hasWholesaleOrgData(pool), hasLkTeams(pool)]);
-  return wholesale && !lkTeams;
+  return hasWholesaleOrgData(pool);
 }

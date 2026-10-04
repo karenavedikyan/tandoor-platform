@@ -4,8 +4,9 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
+  enforceCsrfOrigin,
   getPool,
-  resolveCurrentUser,
+  resolveActiveSessionUser,
   resolveRefreshTokenHash,
   sendJson,
   vercelHeaders,
@@ -19,6 +20,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       sendJson(res, 405, { success: false, code: "METHOD_NOT_ALLOWED", message: "Только POST." });
       return;
     }
+    if (!enforceCsrfOrigin(req)) {
+      sendJson(res, 403, { success: false, code: "CSRF_ORIGIN", message: "Запрос отклонён проверкой origin." });
+      return;
+    }
 
     const pool = getPool();
     if (!pool) {
@@ -27,9 +32,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const headers = vercelHeaders(req);
-    const me = await resolveCurrentUser(pool, headers);
+    const me = await resolveActiveSessionUser(pool, headers);
     if (!me) {
-      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется вход." });
+      sendJson(res, 401, { success: false, code: "UNAUTHENTICATED", message: "Требуется активная сессия." });
       return;
     }
 
@@ -41,6 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const result = await stopEmployeePreview(pool, {
       actorRole: me.role as UserRole,
+      actorStatus: me.status,
       actorUserId: me.id,
       refreshTokenHash,
     });

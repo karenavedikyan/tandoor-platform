@@ -103,6 +103,14 @@ export type WholesaleOrgTotals = {
   unassignedClientCount: number;
 };
 
+export type WholesaleOutletAssignment = {
+  guidStore: string;
+  guidClient: string;
+  closed: boolean;
+  storeManagerGuid: string | null;
+  storeManagerName: string | null;
+};
+
 export type WholesaleOrgReadResult = {
   source: "wholesale_metadata";
   rosterAvailable: boolean;
@@ -110,6 +118,7 @@ export type WholesaleOrgReadResult = {
   importedAt: string | null;
   employees: WholesaleEmployeeRecord[];
   clients: WholesaleClientAssignment[];
+  outlets: WholesaleOutletAssignment[];
   hierarchy: WholesaleRopNode[];
   needsReviewClients: WholesaleClientAssignment[];
   totals: WholesaleOrgTotals;
