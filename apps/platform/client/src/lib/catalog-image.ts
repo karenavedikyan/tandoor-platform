@@ -13,6 +13,8 @@ export function optimizedImage(
 ): string | null {
   if (!src) return null;
   if (!/^https?:\/\//i.test(src)) return src;
+  // Timeweb serves prepared image assets; Vercel's optimizer is not available.
+  if (import.meta.env.VITE_HOSTING_PROVIDER === "timeweb") return src;
   const w = Math.max(16, Math.round(width));
   const q = Math.min(100, Math.max(1, Math.round(quality)));
   return `/_vercel/image?url=${encodeURIComponent(src)}&w=${w}&q=${q}`;

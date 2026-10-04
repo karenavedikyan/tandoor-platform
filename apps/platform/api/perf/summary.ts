@@ -3,21 +3,13 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createHash } from "node:crypto";
 import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
-import { globalCacheKey, serveCachedJson } from "../../shared/api-cache-middleware.js";
 import {
   buildPerfSummary,
   canAccessPerfSummary,
   isWebVitalsEnabled,
   parsePerfRangeDays,
 } from "../../shared/web-vitals-handlers.js";
-
-function hashQuery(req: VercelRequest): string {
-  const range = typeof req.query.range === "string" ? req.query.range : "7d";
-  const groupBy = typeof req.query.groupBy === "string" ? req.query.groupBy : "pathname";
-  return createHash("sha256").update(`${range}|${groupBy}`, "utf8").digest("hex").slice(0, 16);
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {
@@ -47,17 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const rangeDays = parsePerfRangeDays(typeof req.query.range === "string" ? req.query.range : undefined);
-    const cacheKey = globalCacheKey("perf-summary", hashQuery(req));
-
-    await serveCachedJson(req, res, 200, {
-      cacheKey,
-      ttlMs: 60_000,
-      maxAgeSec: 60,
-      buildBody: async () => {
-        const summary = await buildPerfSummary(pool, rangeDays);
-        return { success: true, ...summary };
-      },
-    });
+    const summary = await buildPerfSummary(pool, rangeDays);
+    sendJson(res, 200, { success: true, ...summary });
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     console.error("[perf/summary]", m);

@@ -3,8 +3,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPool, sendJson } from "../../../shared/admin/admin-auth.js";
-import { handleClients1cStore } from "../../../shared/clients-1c/handlers.js";
+import { getPool, sendJson } from "../../../../shared/admin/admin-auth.js";
+import { handleClients1cStore } from "../../../../shared/clients-1c/handlers.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   try {

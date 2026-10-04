@@ -50,6 +50,9 @@ export function enforceCsrfOrigin(req: VercelRequest): boolean {
     "https://tandoor-platform.vercel.app",
     "https://lk.tandoor.ru",
   ]);
+  if(process.env.TANDOOR_PUBLIC_ORIGIN?.startsWith("https://")) {
+    try { allowed.add(new URL(process.env.TANDOOR_PUBLIC_ORIGIN).origin); } catch { /* fail closed */ }
+  }
   if (process.env.NODE_ENV !== "production") {
     allowed.add("http://localhost:5173");
     allowed.add("http://localhost:3000");

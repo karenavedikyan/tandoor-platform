@@ -6,6 +6,7 @@
 export const RELEASE_DEMO_BYPASS_STORAGE_KEY = "tandoor-release-demo-bypass";
 
 export function isDemoAuthBypassEnabled(): boolean {
+  if (import.meta.env.VITE_HOSTING_PROVIDER === "timeweb") return false;
   if (import.meta.env.VITE_RELEASE_DEMO === "true") return true;
   if (import.meta.env.VITE_TANDOOR_DEMO_AUTH === "1") return true;
   if (typeof window === "undefined") return false;

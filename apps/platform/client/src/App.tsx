@@ -705,6 +705,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
+          {import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" && (
+            <div role="status" className="border-b border-border bg-muted px-4 py-2 text-xs text-muted-foreground">
+              Перенос ЛК: режим просмотра и приёмки. Старая история, цены и остатки не перенесены.
+              Запись изменений и автоматический обмен временно отключены.
+            </div>
+          )}
           <Toaster />
           <OnboardingUiProvider>
             <Router hook={useHashLocation}>

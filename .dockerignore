@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/.vercel
+**/test-results
+**/playwright-report
+.git
+memory
+**/*.dump
+**/*.backup
