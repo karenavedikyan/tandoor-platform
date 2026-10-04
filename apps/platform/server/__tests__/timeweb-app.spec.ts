@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTimewebApp, type ApiRoute } from "../timeweb-app";
 import type { Server } from "node:http";
 const servers: Server[] = [];
-afterEach(async () => { await Promise.all(servers.splice(0).map(s => new Promise<void>(r => s.close(() => r())))); });
+afterEach(async () => { vi.unstubAllEnvs(); await Promise.all(servers.splice(0).map(s => new Promise<void>(r => s.close(() => r())))); });
 async function serve(routes: ApiRoute[]) {
   const app = createTimewebApp(routes);
   const s = app.listen(0, "127.0.0.1"); servers.push(s);
@@ -32,5 +32,24 @@ describe("Timeweb API compatibility", () => {
     expect((await fetch(url + "/api/admin/migrate")).status).toBe(503);
     expect((await fetch(url + "/api/dealers/save", { method: "POST" })).status).toBe(503);
     expect((await fetch(url + "/api/health")).status).toBe(200);
+  });
+  it("source transfer is disabled without a configured token", async()=>{
+    vi.stubEnv("MIGRATION_OPERATOR_TOKEN","");
+    const url=await serve([]);
+    expect((await fetch(url+"/api/internal/migration/source/clients.json")).status).toBe(404);
+  });
+  it("source transfer rejects wrong and unicode credentials without server error", async()=>{
+    vi.stubEnv("MIGRATION_OPERATOR_TOKEN","a".repeat(64));
+    const url=await serve([]);
+    for(const token of ["b".repeat(64),"é".repeat(64)]) {
+      expect((await fetch(url+"/api/internal/migration/source/clients.json",{headers:{authorization:"Bearer "+token}})).status).toBe(404);
+    }
+  });
+  it("valid transfer credential cannot read arbitrary paths", async()=>{
+    vi.stubEnv("MIGRATION_OPERATOR_TOKEN","a".repeat(64));
+    const url=await serve([]);
+    for(const file of ["passwords.json",".env","%2e%2e%2fetc%2fpasswd"]) {
+      expect((await fetch(url+"/api/internal/migration/source/"+file,{headers:{authorization:"Bearer "+"a".repeat(64)}})).status).toBe(404);
+    }
   });
 });

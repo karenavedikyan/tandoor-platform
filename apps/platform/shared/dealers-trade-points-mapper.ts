@@ -32,6 +32,9 @@ export type DbDealerRow = {
   holding: string | null;
   comment: string | null;
   manager_name: string | null;
+  source_regional_name?: string | null;
+  source_rop_name?: string | null;
+  source_phone?: string | null;
   release_address: string | null;
   client_type_label: string | null;
   release_team_id: string | null;
@@ -96,7 +99,9 @@ export function mapDbRowsToDealerRow(dealer: DbDealerRow, tradePoints: DbTradePo
   const status = (dealer.status?.trim() || "активный") as DealerStatus;
   const format = (dealer.format?.trim() || "одиночный") as DealerFormat;
   const city = dealer.city?.trim() || "—";
-  const rop = dealer.region?.trim() || "";
+  const region = dealer.region?.trim() || "";
+  const rop = dealer.source_rop_name?.trim() || "";
+  const regional = dealer.source_regional_name?.trim() || "";
   const mgr = dealer.manager_name?.trim() || "—";
   const managerUserId = dealer.manager_user_id?.trim() || null;
   const regionalManagerId = dealer.regional_manager_id?.trim() || null;
@@ -114,14 +119,14 @@ export function mapDbRowsToDealerRow(dealer: DbDealerRow, tradePoints: DbTradePo
     clientTypeLabel: dealer.client_type_label?.trim() || undefined,
     name: dealer.name?.trim() || "Клиент без названия",
     city,
-    region: rop || "—",
+    region: region || "—",
     clientCategory,
     importanceTier,
     status,
     format,
     outlets: mappedTradePoints.length,
     manager: mgr,
-    regionalManager: "",
+    regionalManager: regional,
     ropName: rop,
     releaseTeamId: dealer.release_team_id?.trim() || undefined,
     releaseManagerId: dealer.release_manager_id?.trim() || undefined,
@@ -144,13 +149,13 @@ export function mapDbRowsToDealerRow(dealer: DbDealerRow, tradePoints: DbTradePo
     responsibles: {
       director: rop || "—",
       salesManager: mgr,
-      regionalManager: "",
+      regionalManager: regional,
       assistant: "—",
     },
     contacts: {
       lpr: "—",
       buyer: "—",
-      phone: "—",
+      phone: dealer.source_phone?.trim() || "—",
       email: "—",
       channel: "—",
     },

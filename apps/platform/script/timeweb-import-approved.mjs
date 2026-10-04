@@ -16,7 +16,7 @@ for(const rows of [d.clients,d.outlets,d.products,d.sections,d.groups,d.admins])
 const clients=new Map(d.clients.map(c=>[c.guid_client,c]));
 if(clients.size!==d.clients.length || d.clients.some(c=>!uuid.test(c.guid_client)||c.baseline_status!=='active')) throw Error('INVALID_CLIENTS');
 if(d.outlets.some(o=>!uuid.test(o.guid_store)||!clients.has(o.guid_client)||typeof o.is_closed!=='boolean'))throw Error('INVALID_OUTLETS');
-if(d.products.some(p=>!uuid.test(p.code))||d.product_properties.some(p=>!uuid.test(p.property_code)))throw Error('INVALID_CATALOG');
+if(d.products.some(p=>!uuid.test(p.code)||![true,false,'Y','N'].includes(p.activity))||d.product_properties.some(p=>!uuid.test(p.property_code)))throw Error('INVALID_CATALOG');
 if(d.admins.some(a=>a.role!=='admin'||a.status!=='active'||!a.password_hash?.startsWith('$2')))throw Error('INVALID_ADMIN');
 const url=new URL(process.env.DATABASE_URL||'');
 if(!['/tandoor_lk','/lk_migration_test'].includes(url.pathname))throw Error('ISOLATED_DATABASE_ONLY');
@@ -42,9 +42,14 @@ try{
   }
   await insert('users',['id','email','phone','full_name','role','status','password_hash','must_change_password'],
     d.admins.map(a=>({...a,must_change_password:false})));
-  await insert('dealers',['id','external_key','name','release_code','status','is_active','is_closed','holding','manager_name','release_address','source'],
+  await insert('exchange_users_raw',['id_1c','name','source_file'],
+    (d.employees||[]).map(r=>({id_1c:r.guid_manager,name:r.name_manager,source_file:'all_employees.json'})));
+  await insert('dealers',['id','external_key','name','release_code','status','is_active','is_closed','holding','manager_name','release_address','source','city','region','client_type_label'],
     d.clients.map(r=>({id:r.guid_client,external_key:'client-'+r.guid_client,name:r.name_client,release_code:r.guid_client,
-      status:'активный',is_active:true,is_closed:false,holding:r.name_holding,manager_name:r.name_manager,release_address:r.address,source:'1c-wholesale'})));
+      status:'активный',is_active:true,is_closed:false,holding:r.name_holding,manager_name:r.name_manager,release_address:r.address,source:'1c-wholesale',
+      city:typeof r.sourceRaw?.Оптовик_НаселенныйПункт==='string'?r.sourceRaw.Оптовик_НаселенныйПункт.trim():null,
+      region:typeof r.sourceRaw?.Оптовик_КрайГород==='string'?r.sourceRaw.Оптовик_КрайГород.trim():null,
+      client_type_label:typeof r.sourceRaw?.Оптовик_ТипКлиента==='string'?r.sourceRaw.Оптовик_ТипКлиента.trim():null})));
   await insert('exchange_legals_raw',['id_1c','name','phone','responsible_manager_1c','responsible_manager_name',
     'regional_manager_1c','regional_manager_name','furniture_manager_1c','furniture_manager_name','parent_1c','source_file'],
     d.clients.map(r=>({id_1c:r.guid_client,name:r.name_client,phone:r.telephone,
@@ -74,9 +79,9 @@ try{
       source_sha256:r.last_source_sha256,raw:JSON.stringify(outletDetails.get(r.guid_store))})));
   await insert('catalog_categories',['id','name','parent_id'],d.sections.map(r=>({id:r.code,name:r.name,parent_id:null})));
   for(const r of d.sections)if(nullableGuid(r.parent_code))await c.query('UPDATE catalog_categories SET parent_id=$1 WHERE id=$2',[r.parent_code,r.code]);
-  await insert('catalog_groups',['id','parent_id'],d.groups.map(r=>({id:r.code,parent_id:nullableGuid(r.parent_code)})));
+  await insert('catalog_groups',['id','parent_id','name'],d.groups.map(r=>({id:r.code,parent_id:nullableGuid(r.parent_code),name:r.name})));
   await insert('catalog_products',['id','group_id','name','active','is_on_site'],
-    d.products.map(r=>({id:r.code,group_id:nullableGuid(r.group_code),name:r.name,active:r.activity===true,is_on_site:true})));
+    d.products.map(r=>({id:r.code,group_id:nullableGuid(r.group_code),name:r.name,active:r.activity===true||r.activity==='Y',is_on_site:true})));
   await insert('catalog_product_properties',['product_id','property_code','name','value'],
     d.product_properties.map(r=>({product_id:r.product_code,property_code:r.property_code,name:r.property_name,value:r.property_value})));
   await insert('catalog_product_categories',['product_id','category_id'],
@@ -89,7 +94,8 @@ try{
   await c.query('REFRESH MATERIALIZED VIEW mv_clients_1c');
   await c.query(`INSERT INTO wholesale_source_snapshots(source_kind,source_sha256,raw) VALUES($1,$2,$3::jsonb)`,
     [d.origin,expected,JSON.stringify({capturedAt:d.capturedAt,clientsSourceHashes:[...new Set(d.clients.map(r=>r.source_sha256))],
-      catalogVersion:d.catalogVersion,clients:d.clients.length,outlets:d.outlets.length,products:d.products.length,
+      catalogVersion:d.catalogVersion,sourceManifest:d.sourceManifest,quarantined:d.quarantined||[],
+      employeeRoster:d.employees||[],clients:d.clients.length,outlets:d.outlets.length,products:d.products.length,
       commercialStatus:'not_imported',historyStatus:'not_restored',employeeAccounts:'existing_admin_only'})]);
   await c.query('COMMIT');
   console.log(JSON.stringify({committed:true,clients:d.clients.length,outlets:d.outlets.length,products:d.products.length,admins:d.admins.length}));
