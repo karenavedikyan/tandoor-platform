@@ -16,6 +16,9 @@ import {
   buildTeamScopePayload,
   type TeamScopeViewer,
 } from "./dealers-team-scope-handlers.js";
+import { fetchWholesaleOrgScope } from "./wholesale-org-scope-adapter.js";
+import { hasWholesaleOrgData } from "./wholesale-org-read.js";
+import { resolveEmployeePreviewReadScope } from "./employee-preview-read-scope.js";
 
 type TeamRow = {
   id: string;
@@ -147,8 +150,18 @@ async function buildOrphanBlock(
 export async function fetchOrgScopeForRequest(
   pool: PoolLike,
   viewer: TeamScopeViewer,
+  refreshTokenHash?: string | null,
 ): Promise<OrgScopePayload | { forbidden: true }> {
   if (!canViewerAccessOrgScope(viewer.role)) return { forbidden: true };
+
+  const wholesaleData = await hasWholesaleOrgData(pool);
+  if (wholesaleData) {
+    const previewRead =
+      viewer.role === "admin" && refreshTokenHash
+        ? await resolveEmployeePreviewReadScope(pool, refreshTokenHash)
+        : { mode: "off" as const };
+    return fetchWholesaleOrgScope(pool, previewRead);
+  }
 
   const teams = await fetchAllTeams(pool);
   const teamBlocks = await Promise.all(teams.map((t) => buildTeamScopePayload(pool, t)));

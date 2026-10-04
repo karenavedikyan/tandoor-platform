@@ -3,7 +3,13 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
+import {
+  getPool,
+  resolveCurrentUser,
+  resolveRefreshTokenHash,
+  sendJson,
+  vercelHeaders,
+} from "../../shared/admin/admin-auth.js";
 import { fetchOrgScopeForRequest } from "../../shared/dealers-org-scope-handlers.js";
 import type { UserRole } from "../../shared/auth.js";
 
@@ -37,7 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       full_name: me.full_name,
     };
 
-    const result = await fetchOrgScopeForRequest(pool, viewer);
+    const refreshTokenHash = resolveRefreshTokenHash(vercelHeaders(req));
+    const result = await fetchOrgScopeForRequest(pool, viewer, refreshTokenHash);
     if ("forbidden" in result) {
       sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав для просмотра org-scope." });
       return;

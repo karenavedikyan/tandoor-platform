@@ -48,8 +48,44 @@ export function createTimewebApp(routes: ApiRoute[], publicDir?: string): Expres
     }
     if (process.env.LK_MIGRATION_READ_ONLY !== "0" &&
         !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-        !/^\/api\/auth\/(?:login|logout|logout-all)$/.test(pathname)) {
+        !/^\/api\/auth\/(?:login|logout|logout-all|employee-preview-start|employee-preview-stop)$/.test(pathname)) {
       res.status(503).json({ code: "MIGRATION_READ_ONLY", message: "Перенос данных: запись временно отключена." });
+      return;
+    }
+    next();
+  });
+  app.use(async (req, res, next) => {
+    if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
+      next();
+      return;
+    }
+    const pathname = req.path;
+    if (/^\/api\/auth\/(?:login|logout|logout-all|employee-preview-start|employee-preview-stop)$/.test(pathname)) {
+      next();
+      return;
+    }
+    try {
+      const { getPool, parseAuthRefreshToken, sha256Hex } = await import("../shared/admin/admin-auth.js");
+      const { sessionHasActiveEmployeePreview } = await import("../shared/wholesale-preview-handlers.js");
+      const pool = getPool();
+      const token = parseAuthRefreshToken(req.headers.cookie);
+      if (!pool || !token) {
+        next();
+        return;
+      }
+      const hash = sha256Hex(token);
+      if (await sessionHasActiveEmployeePreview(pool, hash)) {
+        res.status(403).json({
+          code: "EMPLOYEE_PREVIEW_READ_ONLY",
+          message: "Режим предпросмотра сотрудника: изменяющие операции запрещены.",
+        });
+        return;
+      }
+    } catch {
+      res.status(503).json({
+        code: "EMPLOYEE_PREVIEW_GUARD_UNAVAILABLE",
+        message: "Не удалось проверить режим предпросмотра. Запись временно запрещена.",
+      });
       return;
     }
     next();

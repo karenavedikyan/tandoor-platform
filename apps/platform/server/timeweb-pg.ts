@@ -37,7 +37,19 @@ export function neon(connectionString: string, defaults: Options = {}) {
   sql.query = execute;
   // Never pretend independent pooled queries provide transaction semantics.
   sql.transaction = () => { throw new Error("USE_DEDICATED_PG_TRANSACTION"); };
-  return sql;
+  (sql as TimewebPgSql & { __pgPool: pg.Pool }).__pgPool = pool;
+  return sql as TimewebPgSql;
+}
+
+export type TimewebPgSql = ReturnType<typeof neon> & { __pgPool?: pg.Pool };
+
+export function getTimewebPgPool(connectionString: string): pg.Pool {
+  neon(connectionString);
+  const url = new URL(connectionString);
+  for (const name of ["sslmode", "sslrootcert", "sslcert", "sslkey", "channel_binding"]) url.searchParams.delete(name);
+  const pool = pools.get(url.toString());
+  if (!pool) throw new Error("TIMWEB_PG_POOL_NOT_INITIALIZED");
+  return pool;
 }
 export async function closeTimewebPools() {
   await Promise.all(Array.from(pools.values()).map(p => p.end()));

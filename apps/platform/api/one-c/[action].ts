@@ -7,9 +7,11 @@ import {
   enforceCsrfOrigin,
   getPool,
   resolveCurrentUser,
+  resolveRefreshTokenHash,
   sendJson,
   vercelHeaders,
 } from "../../shared/admin/admin-auth.js";
+import { resolveOneCReadContext } from "../../shared/one-c-read-context.js";
 import {
   handleOneCStoreHistory,
   handleOneCStoreMatrixPost,
@@ -61,6 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     const viewer = { id: me.id, role: me.role };
+    const refreshTokenHash = resolveRefreshTokenHash(vercelHeaders(req));
+    const readContext = await resolveOneCReadContext(pool, viewer, refreshTokenHash);
 
     if (req.method !== "GET" && !enforceCsrfOrigin(req)) {
       sendJson(res, 403, { success: false, code: "CSRF_REJECTED", message: "Недопустимый источник запроса." });
@@ -68,31 +72,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     }
 
     if (action === "overview" && req.method === "GET") {
-      await handleOneCOverview(req, res, pool, viewer);
+      await handleOneCOverview(req, res, pool, readContext);
       return;
     }
     if (action === "hierarchy" && req.method === "GET") {
-      await handleOneCHierarchy(req, res, pool, viewer);
+      await handleOneCHierarchy(req, res, pool, readContext);
       return;
     }
     if (action === "rop" && req.method === "GET") {
-      await handleOneCRop(req, res, pool, viewer);
+      await handleOneCRop(req, res, pool, readContext);
       return;
     }
     if (action === "rm" && req.method === "GET") {
-      await handleOneCRm(req, res, pool, viewer);
+      await handleOneCRm(req, res, pool, readContext);
       return;
     }
     if (action === "manager" && req.method === "GET") {
-      await handleOneCManager(req, res, pool, viewer);
+      await handleOneCManager(req, res, pool, readContext);
       return;
     }
     if (action === "stores" && req.method === "GET") {
-      await handleOneCStores(req, res, pool, viewer);
+      await handleOneCStores(req, res, pool, readContext);
       return;
     }
     if (action === "store" && req.method === "GET") {
-      await handleOneCStore(req, res, pool, viewer);
+      await handleOneCStore(req, res, pool, readContext);
       return;
     }
     if (action === "store-history" && req.method === "GET") {
@@ -112,11 +116,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
     if (action === "legals" && req.method === "GET") {
-      await handleOneCLegals(req, res, pool, viewer);
+      await handleOneCLegals(req, res, pool, readContext);
       return;
     }
     if (action === "legal" && req.method === "GET") {
-      await handleOneCLegal(req, res, pool, viewer);
+      await handleOneCLegal(req, res, pool, readContext);
       return;
     }
     if (action === "orders" && req.method === "GET") {

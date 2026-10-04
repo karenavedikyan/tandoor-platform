@@ -15,6 +15,7 @@ import {
   intersectExternalKeyLists,
   intersectTargetDealerScopeWithViewerZone,
 } from "./dealer-scope-rop-intersection.js";
+import { resolveEmployeePreviewReadScope } from "./employee-preview-read-scope.js";
 
 export type MyDealerScopeUser = {
   id: string;
@@ -79,7 +80,9 @@ function buildPayload(
 export async function fetchActiveTradePointsForScope(
   pool: PoolLike,
   scope: DbScopeResult,
+  allowedStoreGuids?: Set<string> | null,
 ): Promise<MyDealerScopeTradePoint[]> {
+  let rows: MyDealerScopeTradePoint[];
   if (scope.scope_explanation.full_catalog) {
     const r = await pool.query<MyDealerScopeTradePoint>(
       `SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
@@ -94,31 +97,110 @@ export async function fetchActiveTradePointsForScope(
           AND ${tpJoinStatusActive("tpo")}
         ORDER BY d.external_key, tp.external_key`,
     );
-    return r.rows;
+    rows = r.rows;
+  } else if (scope.active_dealer_external_keys.length === 0) {
+    return [];
+  } else {
+    const r = await pool.query<MyDealerScopeTradePoint>(
+      `SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
+              d.external_key AS dealer_id,
+              COALESCE(tpo.is_primary, FALSE) AS is_primary
+         FROM trade_points tp
+         INNER JOIN dealers d ON d.id = tp.dealer_id
+         LEFT JOIN trade_point_overrides tpo ON (
+           tpo.tp_id = tp.id::text OR tpo.tp_id = tp.external_key
+         )
+        WHERE d.external_key = ANY($1::text[])
+          AND tp.is_active = TRUE
+          AND ${tpJoinStatusActive("tpo")}
+        ORDER BY d.external_key, tp.external_key`,
+      [scope.active_dealer_external_keys],
+    );
+    rows = r.rows;
   }
-  if (scope.active_dealer_external_keys.length === 0) return [];
-  const r = await pool.query<MyDealerScopeTradePoint>(
-    `SELECT COALESCE(tpo.tp_id, tp.external_key, tp.id::text) AS tp_id,
-            d.external_key AS dealer_id,
-            COALESCE(tpo.is_primary, FALSE) AS is_primary
-       FROM trade_points tp
-       INNER JOIN dealers d ON d.id = tp.dealer_id
-       LEFT JOIN trade_point_overrides tpo ON (
-         tpo.tp_id = tp.id::text OR tpo.tp_id = tp.external_key
-       )
-      WHERE d.external_key = ANY($1::text[])
-        AND tp.is_active = TRUE
-        AND ${tpJoinStatusActive("tpo")}
-      ORDER BY d.external_key, tp.external_key`,
-    [scope.active_dealer_external_keys],
+
+  if (!allowedStoreGuids) return rows;
+  return rows.filter(
+    (row) =>
+      allowedStoreGuids.has(row.tp_id) ||
+      allowedStoreGuids.has(row.tp_id.toLowerCase()),
   );
-  return r.rows;
+}
+
+function emptyPreviewScope(): DbScopeResult {
+  return {
+    totals: {
+      active_dealers: 0,
+      active_trade_points: 0,
+      trashed_dealers: 0,
+      trashed_trade_points: 0,
+      tp_status_active: 0,
+      tp_status_potential: 0,
+      tp_status_attention: 0,
+      dealer_no_status: 0,
+      avg_distribution: 0,
+    },
+    active_dealer_ids: [],
+    active_dealer_external_keys: [],
+    trashed_dealer_ids: [],
+    trashed_dealer_external_keys: [],
+    scope_explanation: {
+      role: "employee_preview",
+      team_ids: [],
+      own_codes: 0,
+      team_codes: 0,
+      granted_codes: 0,
+      all_codes: 0,
+      full_catalog: false,
+    },
+  };
 }
 
 export async function fetchMyDealerScope(
   pool: PoolLike,
   user: MyDealerScopeUser,
+  refreshTokenHash?: string | null,
 ): Promise<MyDealerScopePayload> {
+  if (user.role === "admin" && refreshTokenHash) {
+    const previewRead = await resolveEmployeePreviewReadScope(pool, refreshTokenHash);
+    if (previewRead.mode === "active") {
+      if (!previewRead.readable || !previewRead.scope) {
+        return buildPayload(user, emptyPreviewScope(), []);
+      }
+      const keys = previewRead.scope.activeDealerExternalKeys;
+      const allowedStores = new Set(previewRead.scope.activeStoreGuids);
+      const scope: DbScopeResult = {
+        totals: {
+          active_dealers: keys.length,
+          active_trade_points: allowedStores.size,
+          trashed_dealers: 0,
+          trashed_trade_points: 0,
+          tp_status_active: 0,
+          tp_status_potential: 0,
+          tp_status_attention: 0,
+          dealer_no_status: 0,
+          avg_distribution: 0,
+        },
+        active_dealer_ids: [],
+        active_dealer_external_keys: keys,
+        trashed_dealer_ids: [],
+        trashed_dealer_external_keys: [],
+        scope_explanation: {
+          role: "employee_preview",
+          team_ids: [],
+          own_codes: keys.length,
+          team_codes: 0,
+          granted_codes: 0,
+          all_codes: keys.length,
+          full_catalog: false,
+        },
+      };
+      const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope, allowedStores);
+      scope.totals.active_trade_points = activeTradePoints.length;
+      return buildPayload(user, scope, activeTradePoints);
+    }
+  }
+
   const scope = await computeDbScopeForUser(pool, user.id, user.role);
   const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
   return buildPayload(user, scope, activeTradePoints);
@@ -128,10 +210,11 @@ export async function fetchMyDealerScopeForRequest(
   pool: PoolLike,
   viewer: MyDealerScopeUser,
   forUserId?: string | null,
+  refreshTokenHash?: string | null,
 ): Promise<MyDealerScopePayload | { forbidden: true } | { notFound: true }> {
   const targetId = forUserId?.trim();
   if (!targetId || targetId === viewer.id) {
-    return fetchMyDealerScope(pool, viewer);
+    return fetchMyDealerScope(pool, viewer, refreshTokenHash);
   }
 
   const target = await fetchScopeTargetUser(pool, targetId);

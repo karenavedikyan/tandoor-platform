@@ -75,6 +75,17 @@ export type OrgSnapshotPayload = {
   }>;
 };
 
+export type EmployeePreviewBootstrap = {
+  active: boolean;
+  employeeGuid: string | null;
+  fullName: string | null;
+  assignmentType: string | null;
+  confirmed: boolean;
+  reason: string | null;
+  basis: string | null;
+  error?: { code: string; message: string } | null;
+};
+
 export type BootstrapSuccessBody = {
   success: true;
   bootstrap_version: number;
@@ -82,6 +93,7 @@ export type BootstrapSuccessBody = {
   org_snapshot: OrgSnapshotPayload;
   visible_codes: VisibleClientsPayload;
   feature_flags: FeatureFlagsResponse;
+  employee_preview: EmployeePreviewBootstrap;
   generated_at: string;
 };
 
@@ -173,8 +185,28 @@ export async function fetchBootstrapMeUser(
 export async function fetchMyVisibleCodesInternal(
   pool: PoolLike,
   row: DbUserRow,
+  refreshTokenHash?: string | null,
 ): Promise<VisibleClientsPayload> {
   const role = row.role as UserRole;
+  if (role === "admin" && refreshTokenHash) {
+    const { resolveEmployeePreviewReadScope } = await import("./employee-preview-read-scope.js");
+    const previewRead = await resolveEmployeePreviewReadScope(pool, refreshTokenHash);
+    if (previewRead.mode === "active") {
+      if (!previewRead.readable || !previewRead.scope) {
+        return { all: false, codes: [], assignments: [] };
+      }
+      const codes = previewRead.scope.activeDealerExternalKeys;
+      return {
+        all: false,
+        codes,
+        assignments: codes.map((code) => ({
+          code,
+          responsibleUserId: null,
+          teamId: null,
+        })),
+      };
+    }
+  }
   if (role === "admin" || role === "director" || role === "analyst" || role === "marketer" || role === "category_manager") {
     return { all: true, codes: null, assignments: null };
   }
@@ -251,10 +283,45 @@ export async function fetchMyVisibleCodesInternal(
 }
 
 // shared by bootstrap aggregator, do not change signature
-export async function fetchMyOrgSnapshotInternal(pool: PoolLike, row: DbUserRow): Promise<OrgSnapshotPayload> {
+export async function fetchMyOrgSnapshotInternal(
+  pool: PoolLike,
+  row: DbUserRow,
+  refreshTokenHash?: string | null,
+): Promise<OrgSnapshotPayload> {
   const meId = row.id;
   const role = row.role as UserRole;
   const meFullName = (row.full_name ?? "").trim() || row.email;
+
+  if (role === "admin" && refreshTokenHash) {
+    const { resolveEmployeePreviewReadScope } = await import("./employee-preview-read-scope.js");
+    const previewRead = await resolveEmployeePreviewReadScope(pool, refreshTokenHash);
+    if (previewRead.mode === "active") {
+      const codes =
+        previewRead.readable && previewRead.scope
+          ? previewRead.scope.activeDealerExternalKeys
+          : [];
+      return {
+        success: true,
+        me: { id: meId, role, fullName: meFullName, teamId: null },
+        visibility: {
+          all: false,
+          clientCodes: codes,
+          teamIds: [],
+          visibleUserIds: [meId],
+        },
+        teams: [],
+        users: [
+          {
+            id: meId,
+            fullName: meFullName,
+            role,
+            status: row.status as UserStatus,
+            teamId: null,
+          },
+        ],
+      };
+    }
+  }
 
   const teamsRes = await pool.query<{ id: string; name: string; rop_user_id: string | null; rop_name: string | null }>(
     `SELECT t.id, t.name, t.rop_user_id, u.full_name AS rop_name
@@ -444,18 +511,25 @@ export async function buildBootstrapPayload(
     };
   }
 
-  const { refresh_token_hash: _h, impersonator_full_name, impersonator_email, ...userCore } = sessionRow;
-  void _h;
+  const { refresh_token_hash: refreshTokenHash, impersonator_full_name, impersonator_email, ...userCore } =
+    sessionRow;
   let impersonatedBy: string | null = null;
   if (impersonator_full_name && impersonator_email) {
     impersonatedBy = `${impersonator_full_name} · ${impersonator_email}`;
   }
   const me = serializeAuthUser({ ...userCore, impersonatedBy });
 
-  const [orgSnapshot, visibleCodes, featureFlags] = await Promise.all([
-    fetchMyOrgSnapshotInternal(pool, sessionRow),
-    fetchMyVisibleCodesInternal(pool, sessionRow),
+  const [orgSnapshot, visibleCodes, featureFlags, employeePreview] = await Promise.all([
+    fetchMyOrgSnapshotInternal(pool, sessionRow, refreshTokenHash),
+    fetchMyVisibleCodesInternal(pool, sessionRow, refreshTokenHash),
     Promise.resolve(fetchFeatureFlagsInternal()),
+    (async (): Promise<EmployeePreviewBootstrap> => {
+      const { buildEmployeePreviewState, employeePreviewToBootstrap } = await import(
+        "./wholesale-preview-handlers.js"
+      );
+      const state = await buildEmployeePreviewState(pool, refreshTokenHash);
+      return employeePreviewToBootstrap(state);
+    })(),
   ]);
 
   return {
@@ -467,6 +541,7 @@ export async function buildBootstrapPayload(
       org_snapshot: orgSnapshot,
       visible_codes: visibleCodes,
       feature_flags: featureFlags,
+      employee_preview: employeePreview,
       generated_at: new Date().toISOString(),
     },
   };

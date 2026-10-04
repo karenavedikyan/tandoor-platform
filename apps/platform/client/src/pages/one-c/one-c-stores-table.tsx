@@ -2,7 +2,7 @@ import { memo, useState, Fragment, type ReactElement, type ReactNode } from "rea
 import { Link } from "wouter";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ActualizationState } from "@/lib/client-base-actualization-state";
-import type { OneCStoreListItem } from "@/lib/one-c-showroom-api";
+import { entityDetailHref, type OneCStoreListItem } from "@/lib/one-c-showroom-api";
 import type { DistributionTradePointMetrics } from "@/lib/distribution-analytics/distribution-analytics-math";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ const CELL_RENDERERS: Record<StoreColumnKey, (ctx: CellContext) => ReactNode> = 
   ),
   address: ({ row }) => (
     <Link
-      href={`/1c/store/${row.id_1c}`}
+      href={entityDetailHref(row)}
       className="block truncate text-primary hover:underline"
       title={row.address ?? undefined}
     >
@@ -109,9 +109,9 @@ const CELL_RENDERERS: Record<StoreColumnKey, (ctx: CellContext) => ReactNode> = 
   ),
   legal_name: ({ row }) => (
     <div className="min-w-0">
-      <div className="truncate" title={row.legal_name ?? undefined}>
+      <Link href={entityDetailHref(row)} className="block truncate text-primary hover:underline" title={row.legal_name ?? undefined}>
         {dash(row.legal_name)}
-      </div>
+      </Link>
       {row.legal_inn?.trim() ? (
         <div className="truncate font-mono text-[10px] text-muted-foreground">{row.legal_inn}</div>
       ) : null}

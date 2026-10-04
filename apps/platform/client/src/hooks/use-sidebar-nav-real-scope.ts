@@ -20,7 +20,12 @@ export function useSidebarNavRealScope(enabled = true): SidebarNavRealScope {
   const catalogQ = useDealerBaseRows();
   const dbScope = useMyScopeFromDB(enabled && isRealUser);
   const teamScopeQ = useMyTeamScope({ enabled: enabled && isRealUser && me?.role === "rop" });
-  const orgScopeQ = useOrgScope({ enabled: enabled && isRealUser && me?.role === "director" });
+  const orgScopeQ = useOrgScope({
+    enabled:
+      enabled &&
+      isRealUser &&
+      (me?.role === "director" || me?.role === "admin" || me?.role === "analyst"),
+  });
 
   const catalogStable = useStableArrayByIds(catalogQ.data ?? []);
   const dbExtKeysStable = useStableSet(

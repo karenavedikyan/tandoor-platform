@@ -3,7 +3,13 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { getPool, resolveCurrentUser, sendJson, vercelHeaders } from "../../shared/admin/admin-auth.js";
+import {
+  getPool,
+  resolveCurrentUser,
+  resolveRefreshTokenHash,
+  sendJson,
+  vercelHeaders,
+} from "../../shared/admin/admin-auth.js";
 import { fetchMyDealerScopeForRequest } from "../../shared/dealers-my-scope-handlers.js";
 import type { UserRole } from "../../shared/auth.js";
 
@@ -44,7 +50,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       full_name: me.full_name,
     };
 
-    const result = await fetchMyDealerScopeForRequest(pool, viewer, parseForUserId(req));
+    const headers = vercelHeaders(req);
+    const result = await fetchMyDealerScopeForRequest(
+      pool,
+      viewer,
+      parseForUserId(req),
+      resolveRefreshTokenHash(headers),
+    );
     if ("forbidden" in result) {
       sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Недостаточно прав для просмотра scope этого пользователя." });
       return;
