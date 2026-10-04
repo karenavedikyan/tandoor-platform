@@ -156,18 +156,18 @@ function RmTeamView({
   );
 }
 
-function buildTeamSubtitle(role: string | undefined, items: OneCRopNode[]): string {
+function buildTeamSubtitle(role: string | undefined, items: OneCRopNode[], sourceLabel: string): string {
   const mgrs = items.reduce((s, r) => s + r.managers.length, 0);
   if (role === "regional_manager") {
-    return `${mgrs} менеджеров (из ЛК)`;
+    return `${mgrs} менеджеров (${sourceLabel})`;
   }
   if (role === "rop") {
     const rms = items.reduce((s, r) => s + r.rms.length, 0);
-    return `${rms} РМ · ${mgrs} менеджеров (из ЛК)`;
+    return `${rms} РМ · ${mgrs} менеджеров (${sourceLabel})`;
   }
   const rops = items.length;
   const rms = items.reduce((s, r) => s + r.rms.length, 0);
-  return `${rops} РОП · ${rms} РМ · ${mgrs} менеджеров (из ЛК)`;
+  return `${rops} РОП · ${rms} РМ · ${mgrs} менеджеров (${sourceLabel})`;
 }
 
 export default function OneCTeamPage() {
@@ -175,6 +175,8 @@ export default function OneCTeamPage() {
   const { searchQ, setSearchQ, debouncedQ } = useDebouncedSearch();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<OneCRopNode[]>([]);
+  const [hierarchySource, setHierarchySource] = useState<string>("из ЛК");
+  const [retryNonce, setRetryNonce] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const canAccess = user ? canAccessOneCShowroomForUser(user.role) : false;
@@ -195,6 +197,9 @@ export default function OneCTeamPage() {
           return;
         }
         setItems(res.items);
+        setHierarchySource(
+          (res as { source?: string }).source === "wholesale_metadata" ? "из 1С" : "из ЛК",
+        );
         setError(null);
       })
       .catch((e) => {
@@ -206,9 +211,12 @@ export default function OneCTeamPage() {
     return () => {
       cancelled = true;
     };
-  }, [canAccess, debouncedQ, isManager]);
+  }, [canAccess, debouncedQ, isManager, retryNonce]);
 
-  const subtitle = useMemo(() => buildTeamSubtitle(user?.role, items), [items, user?.role]);
+  const subtitle = useMemo(
+    () => buildTeamSubtitle(user?.role, items, hierarchySource),
+    [items, user?.role, hierarchySource],
+  );
 
   if (userLoading) return <OneCLoadingBlock />;
   if (!user || !canAccess) return <Redirect to="/dealer-base" />;
@@ -228,7 +236,14 @@ export default function OneCTeamPage() {
         placeholder="Поиск по ФИО…"
         testId="input-one-c-team-search"
       />
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p className="text-sm text-destructive" data-testid="one-c-team-error">
+          {error}{" "}
+          <button type="button" className="underline" onClick={() => setRetryNonce((n) => n + 1)}>
+            Повторить
+          </button>
+        </p>
+      ) : null}
       {loading ? (
         <OneCLoadingBlock />
       ) : isRm ? (

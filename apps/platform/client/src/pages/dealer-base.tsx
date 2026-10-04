@@ -1565,7 +1565,9 @@ function DealerBaseContent({ scopeUserId, scopeTeamId, embedListOnly = false }: 
   const orgScopeQ = useOrgScope({
     enabled: Boolean(
       isRealUser &&
-        ((targetIsDirector && viewingOtherUserScope) || (!viewingOtherUserScope && me?.role === "director")),
+        ((targetIsDirector && viewingOtherUserScope) ||
+          (!viewingOtherUserScope &&
+            (me?.role === "director" || me?.role === "admin" || me?.role === "analyst"))),
     ),
   });
 
@@ -1713,8 +1715,13 @@ function DealerBaseContent({ scopeUserId, scopeTeamId, embedListOnly = false }: 
     if (viewingOtherUserScope) {
       return sidebarCountsFromDbScope(targetScopeQ).dealers;
     }
-    if (me?.role === "director") {
-      return sidebarCountsFromOrgScope(orgScopeQ).dealers;
+    if (me?.role === "director" || me?.role === "admin" || me?.role === "analyst") {
+      if (orgScopeQ.ready && orgScopeQ.data) {
+        return sidebarCountsFromOrgScope(orgScopeQ).dealers;
+      }
+      if (me?.role === "admin" || me?.role === "analyst") {
+        return sidebarCountsFromDbScope(selfDbScopeQ).dealers;
+      }
     }
     if (me?.role === "rop") {
       return sidebarCountsFromTeamScope(teamScopeTotalsQ).dealers;

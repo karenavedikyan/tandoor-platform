@@ -15,6 +15,7 @@ import {
   intersectExternalKeyLists,
   intersectTargetDealerScopeWithViewerZone,
 } from "./dealer-scope-rop-intersection.js";
+import { buildEmployeePreviewState } from "./wholesale-preview-handlers.js";
 
 export type MyDealerScopeUser = {
   id: string;
@@ -118,7 +119,43 @@ export async function fetchActiveTradePointsForScope(
 export async function fetchMyDealerScope(
   pool: PoolLike,
   user: MyDealerScopeUser,
+  refreshTokenHash?: string | null,
 ): Promise<MyDealerScopePayload> {
+  if (user.role === "admin" && refreshTokenHash) {
+    const preview = await buildEmployeePreviewState(pool, refreshTokenHash);
+    if (preview.active && preview.scope) {
+      const keys = preview.scope.activeDealerExternalKeys;
+      const scope: DbScopeResult = {
+        totals: {
+          active_dealers: keys.length,
+          active_trade_points: preview.scope.activeStoreGuids.length,
+          trashed_dealers: 0,
+          trashed_trade_points: 0,
+          tp_status_active: 0,
+          tp_status_potential: 0,
+          tp_status_attention: 0,
+          dealer_no_status: 0,
+          avg_distribution: 0,
+        },
+        active_dealer_ids: [],
+        active_dealer_external_keys: keys,
+        trashed_dealer_ids: [],
+        trashed_dealer_external_keys: [],
+        scope_explanation: {
+          role: "employee_preview",
+          team_ids: [],
+          own_codes: keys.length,
+          team_codes: 0,
+          granted_codes: 0,
+          all_codes: keys.length,
+          full_catalog: false,
+        },
+      };
+      const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
+      return buildPayload(user, scope, activeTradePoints);
+    }
+  }
+
   const scope = await computeDbScopeForUser(pool, user.id, user.role);
   const activeTradePoints = await fetchActiveTradePointsForScope(pool, scope);
   return buildPayload(user, scope, activeTradePoints);
@@ -128,10 +165,11 @@ export async function fetchMyDealerScopeForRequest(
   pool: PoolLike,
   viewer: MyDealerScopeUser,
   forUserId?: string | null,
+  refreshTokenHash?: string | null,
 ): Promise<MyDealerScopePayload | { forbidden: true } | { notFound: true }> {
   const targetId = forUserId?.trim();
   if (!targetId || targetId === viewer.id) {
-    return fetchMyDealerScope(pool, viewer);
+    return fetchMyDealerScope(pool, viewer, refreshTokenHash);
   }
 
   const target = await fetchScopeTargetUser(pool, targetId);

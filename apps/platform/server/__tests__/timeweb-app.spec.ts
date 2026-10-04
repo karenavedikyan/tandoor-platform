@@ -31,6 +31,9 @@ describe("Timeweb API compatibility", () => {
     expect((await fetch(url + "/api/cron/sync-catalog-1c")).status).toBe(503);
     expect((await fetch(url + "/api/admin/migrate")).status).toBe(503);
     expect((await fetch(url + "/api/dealers/save", { method: "POST" })).status).toBe(503);
+    vi.stubEnv("LK_MIGRATION_READ_ONLY", "1");
+    expect((await fetch(url + "/api/auth/employee-preview-start", { method: "POST" })).status).not.toBe(503);
+    expect((await fetch(url + "/api/auth/employee-preview-stop", { method: "POST" })).status).not.toBe(503);
     expect((await fetch(url + "/api/health")).status).toBe(200);
   });
   it("source transfer is disabled without a configured token", async()=>{

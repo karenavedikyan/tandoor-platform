@@ -126,13 +126,20 @@ export type DbUserRow = {
   telegram_user_id: string | null;
 };
 
+export function resolveRefreshTokenHash(
+  headers: Record<string, string | string[] | undefined>,
+): string | null {
+  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
+  if (!token) return null;
+  return sha256Hex(token);
+}
+
 export async function resolveCurrentUser(
   pool: PoolLike,
   headers: Record<string, string | string[] | undefined>,
 ): Promise<DbUserRow | null> {
-  const token = parseAuthRefreshToken(typeof headers.cookie === "string" ? headers.cookie : undefined);
-  if (!token) return null;
-  const hashHex = sha256Hex(token);
+  const hashHex = resolveRefreshTokenHash(headers);
+  if (!hashHex) return null;
   const res = await pool.query<Omit<DbUserRow, "telegram_user_id"> & { refresh_token_hash: string }>(
     `SELECT u.id, u.email, u.full_name, u.phone, u.role, u.status, u.must_change_password, u.last_login_at, u.created_at,
             s.refresh_token_hash

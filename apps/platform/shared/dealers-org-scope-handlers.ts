@@ -16,6 +16,8 @@ import {
   buildTeamScopePayload,
   type TeamScopeViewer,
 } from "./dealers-team-scope-handlers.js";
+import { fetchWholesaleOrgScope } from "./wholesale-org-scope-adapter.js";
+import { hasLkTeams, hasWholesaleOrgData } from "./wholesale-org-read.js";
 
 type TeamRow = {
   id: string;
@@ -149,6 +151,11 @@ export async function fetchOrgScopeForRequest(
   viewer: TeamScopeViewer,
 ): Promise<OrgScopePayload | { forbidden: true }> {
   if (!canViewerAccessOrgScope(viewer.role)) return { forbidden: true };
+
+  const [wholesaleData, lkTeams] = await Promise.all([hasWholesaleOrgData(pool), hasLkTeams(pool)]);
+  if (wholesaleData && !lkTeams) {
+    return fetchWholesaleOrgScope(pool);
+  }
 
   const teams = await fetchAllTeams(pool);
   const teamBlocks = await Promise.all(teams.map((t) => buildTeamScopePayload(pool, t)));

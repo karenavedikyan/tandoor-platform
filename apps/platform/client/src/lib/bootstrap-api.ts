@@ -34,6 +34,16 @@ type VisibleClientsPayload =
       assignments: Array<{ code: string; responsibleUserId: string | null; teamId: string | null }>;
     };
 
+export type EmployeePreviewBootstrap = {
+  active: boolean;
+  employeeGuid: string | null;
+  fullName: string | null;
+  assignmentType: string | null;
+  confirmed: boolean;
+  reason: string | null;
+  basis: string | null;
+};
+
 export type BootstrapPayload = {
   success: true;
   bootstrap_version: number;
@@ -41,6 +51,7 @@ export type BootstrapPayload = {
   org_snapshot: OrgSnapshot & { success: true };
   visible_codes: VisibleClientsPayload;
   feature_flags: BootstrapFeatureFlags;
+  employee_preview?: EmployeePreviewBootstrap;
   generated_at: string;
 };
 
@@ -86,6 +97,7 @@ export function prewarmFromBootstrap(qc: QueryClient, b: BootstrapPayload): void
   qc.setQueryData([...AUTH_ME_QUERY_KEY], b.me);
   qc.setQueryData(["auth", "org-snapshot"], b.org_snapshot);
   qc.setQueryData(["auth", "my-visible-codes"], visibleCodesToQueryResult(b.visible_codes));
+  qc.setQueryData(["auth", "employee-preview"], b.employee_preview ?? { active: false });
   seedFeatureFlagsFromBootstrap(b.feature_flags);
   seedServerKpiAggregatesFromBootstrap(b.feature_flags);
   seedTpHydrationNoWritebackFromBootstrap(b.feature_flags);

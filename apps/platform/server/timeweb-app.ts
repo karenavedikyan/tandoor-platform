@@ -48,7 +48,7 @@ export function createTimewebApp(routes: ApiRoute[], publicDir?: string): Expres
     }
     if (process.env.LK_MIGRATION_READ_ONLY !== "0" &&
         !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-        !/^\/api\/auth\/(?:login|logout|logout-all)$/.test(pathname)) {
+        !/^\/api\/auth\/(?:login|logout|logout-all|employee-preview-start|employee-preview-stop)$/.test(pathname)) {
       res.status(503).json({ code: "MIGRATION_READ_ONLY", message: "Перенос данных: запись временно отключена." });
       return;
     }

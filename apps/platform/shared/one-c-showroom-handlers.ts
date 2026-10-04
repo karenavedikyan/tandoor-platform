@@ -213,12 +213,25 @@ export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Pr
 }
 
 export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: OneCViewer) {
+  const { shouldUseWholesaleOrgHierarchy, fetchWholesaleOrgHierarchy } = await import(
+    "./wholesale-org-handlers.js"
+  );
+  if (await shouldUseWholesaleOrgHierarchy(pool)) {
+    const wholesale = await fetchWholesaleOrgHierarchy(pool, q);
+    return {
+      items: wholesale.items,
+      source: wholesale.source,
+      rosterAvailable: wholesale.rosterAvailable,
+      rosterError: wholesale.rosterError,
+    };
+  }
+
   const ctx = await loadOneCShowroomContext(pool);
   let items = buildHierarchy(ctx, q);
   if (viewer) {
     items = filterHierarchyForViewer(items, viewer.role, viewer.id, ctx);
   }
-  return { items };
+  return { items, source: "lk_teams" as const, rosterAvailable: true, rosterError: null };
 }
 
 export type OneCUserCard = {

@@ -37,3 +37,7 @@ CREATE TABLE IF NOT EXISTS wholesale_outlet_metadata (
   guid_store uuid PRIMARY KEY REFERENCES trade_points(id), guid_client uuid NOT NULL REFERENCES dealers(id),
   closed boolean NOT NULL, source_sha256 text NOT NULL, raw jsonb NOT NULL
 );
+ALTER TABLE sessions
+  ADD COLUMN IF NOT EXISTS employee_preview_guid uuid NULL,
+  ADD COLUMN IF NOT EXISTS employee_preview_assignment text NULL,
+  ADD COLUMN IF NOT EXISTS employee_preview_started_at timestamptz NULL;

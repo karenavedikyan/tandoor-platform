@@ -30,6 +30,16 @@ function scopeDealerRowsForRealCount(rows: DealerRow[], realScope: SidebarNavRea
   const { orgScope, assignmentsScope } = realScope;
   if (!orgScope) return rows;
 
+  // Admin/director full_catalog: releaseDealerRows уже содержит весь состав.
+  if (
+    !realScope.dbScopeDirect &&
+    (realScope.platformRole === "admin" ||
+      realScope.platformRole === "director" ||
+      realScope.platformRole === "analyst")
+  ) {
+    return rows;
+  }
+
   const access = orgScope.access;
   if (realScope.platformRole === "rop" && access === "team_lead") {
     if (!realScope.teamScope) return [];

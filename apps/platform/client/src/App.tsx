@@ -47,6 +47,9 @@ import { DealerBaseErrorBoundary, DealerBaseErrorFallback } from "@/components/d
 import { setRealScopeAuditUserId, attachRealScopeAuditUnloadFlush } from "@/lib/real-scope-audit";
 import { initWebVitalsReporter } from "@/lib/web-vitals-reporter";
 import { scheduleCatalogBackgroundWarmup } from "@/lib/catalog-warmup";
+import { useQuery } from "@tanstack/react-query";
+import { EmployeePreviewBanner } from "@/components/layout/employee-preview-banner";
+import type { EmployeePreviewBootstrap } from "@/lib/bootstrap-api";
 
 const LazySalesManagerWorkspace = lazy(() => import("@/pages/sales-manager-workspace"));
 const LazyMainManagerDetail = lazy(() => import("@/pages/main-manager-detail"));
@@ -363,13 +366,16 @@ function AuthenticatedShell({
   const isManagerLike = user.role === "manager" || user.role === "regional_manager";
   const isRop = user.role === "rop";
   const isDirector = user.role === "director";
+  const isOrgWideViewer = isDirector || user.role === "admin" || user.role === "analyst";
 
   const dbScope = useMyScopeFromDB(Boolean(user?.id) && (isManagerLike || user.role === "admin"));
   const teamScope = useMyTeamScopeTotals({ enabled: Boolean(user?.id) && isRop });
-  const orgScope = useOrgScope({ enabled: Boolean(user?.id) && isDirector });
+  const orgScope = useOrgScope({ enabled: Boolean(user?.id) && isOrgWideViewer });
 
-  const dbSidebarCounts = isDirector
-    ? sidebarCountsFromOrgScope(orgScope)
+  const dbSidebarCounts = isOrgWideViewer
+    ? orgScope.ready && orgScope.data
+      ? sidebarCountsFromOrgScope(orgScope)
+      : sidebarCountsFromDbScope(dbScope)
     : isRop
       ? sidebarCountsFromTeamScope(teamScope)
       : sidebarCountsFromDbScope(dbScope);
@@ -405,6 +411,24 @@ function AuthenticatedShell({
   const showAuditLogLink = userHas(user.role, "audit.read");
   const { toast } = useToast();
   const stopImpersonation = useStopImpersonation();
+
+  const employeePreviewQ = useQuery({
+    queryKey: ["auth", "employee-preview"],
+    queryFn: async (): Promise<EmployeePreviewBootstrap> => ({ active: false }),
+    staleTime: 30_000,
+  });
+  const employeePreview = employeePreviewQ.data;
+
+  const employeePreviewBanner =
+    employeePreview?.active && employeePreview.fullName && !user.impersonatedBy ? (
+      <EmployeePreviewBanner
+        fullName={employeePreview.fullName}
+        assignmentType={employeePreview.assignmentType}
+        basis={employeePreview.basis}
+        confirmed={employeePreview.confirmed}
+        reason={employeePreview.reason}
+      />
+    ) : null;
 
   const impersonationBanner =
     user.impersonatedBy ? (
@@ -450,7 +474,12 @@ function AuthenticatedShell({
       onLogout={() => void onLogout()}
       showAuditLogLink={showAuditLogLink}
       embeddedBitrix24={embeddedBitrix24}
-      impersonationBanner={impersonationBanner}
+      impersonationBanner={
+        <>
+          {employeePreviewBanner}
+          {impersonationBanner}
+        </>
+      }
       navDebugRoles={{ salesRole, platformUserRole: user.role }}
       shellUser={{
         id: user.id,

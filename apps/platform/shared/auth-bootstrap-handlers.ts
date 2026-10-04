@@ -75,6 +75,16 @@ export type OrgSnapshotPayload = {
   }>;
 };
 
+export type EmployeePreviewBootstrap = {
+  active: boolean;
+  employeeGuid: string | null;
+  fullName: string | null;
+  assignmentType: string | null;
+  confirmed: boolean;
+  reason: string | null;
+  basis: string | null;
+};
+
 export type BootstrapSuccessBody = {
   success: true;
   bootstrap_version: number;
@@ -82,6 +92,7 @@ export type BootstrapSuccessBody = {
   org_snapshot: OrgSnapshotPayload;
   visible_codes: VisibleClientsPayload;
   feature_flags: FeatureFlagsResponse;
+  employee_preview: EmployeePreviewBootstrap;
   generated_at: string;
 };
 
@@ -444,18 +455,54 @@ export async function buildBootstrapPayload(
     };
   }
 
-  const { refresh_token_hash: _h, impersonator_full_name, impersonator_email, ...userCore } = sessionRow;
-  void _h;
+  const { refresh_token_hash: refreshTokenHash, impersonator_full_name, impersonator_email, ...userCore } =
+    sessionRow;
   let impersonatedBy: string | null = null;
   if (impersonator_full_name && impersonator_email) {
     impersonatedBy = `${impersonator_full_name} · ${impersonator_email}`;
   }
   const me = serializeAuthUser({ ...userCore, impersonatedBy });
 
-  const [orgSnapshot, visibleCodes, featureFlags] = await Promise.all([
+  const [orgSnapshot, visibleCodes, featureFlags, employeePreview] = await Promise.all([
     fetchMyOrgSnapshotInternal(pool, sessionRow),
     fetchMyVisibleCodesInternal(pool, sessionRow),
     Promise.resolve(fetchFeatureFlagsInternal()),
+    (async (): Promise<EmployeePreviewBootstrap> => {
+      try {
+        const { buildEmployeePreviewState } = await import("./wholesale-preview-handlers.js");
+        const state = await buildEmployeePreviewState(pool, refreshTokenHash);
+        if (!state.active || !state.preview || !state.scope) {
+          return {
+            active: false,
+            employeeGuid: null,
+            fullName: null,
+            assignmentType: null,
+            confirmed: false,
+            reason: null,
+            basis: null,
+          };
+        }
+        return {
+          active: true,
+          employeeGuid: state.preview.employeeGuid,
+          fullName: state.scope.fullName,
+          assignmentType: state.preview.assignmentType,
+          confirmed: state.scope.confirmed,
+          reason: state.scope.reason,
+          basis: state.basis,
+        };
+      } catch {
+        return {
+          active: false,
+          employeeGuid: null,
+          fullName: null,
+          assignmentType: null,
+          confirmed: false,
+          reason: null,
+          basis: null,
+        };
+      }
+    })(),
   ]);
 
   return {
@@ -467,6 +514,7 @@ export async function buildBootstrapPayload(
       org_snapshot: orgSnapshot,
       visible_codes: visibleCodes,
       feature_flags: featureFlags,
+      employee_preview: employeePreview,
       generated_at: new Date().toISOString(),
     },
   };

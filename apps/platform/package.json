@@ -53,6 +53,8 @@
     "test:dealer-base-source": "tsx client/src/lib/__tests__/dealer-base-source.test.ts",
     "test:dealer-base-source-empty": "tsx client/src/lib/__tests__/dealer-base-source-empty.test.ts",
     "test:bootstrap": "tsx shared/__tests__/auth-bootstrap-handlers.test.ts",
+    "test:wholesale-org-read": "tsx shared/__tests__/wholesale-org-read.test.ts",
+    "test:wholesale-preview": "tsx shared/__tests__/wholesale-preview-handlers.test.ts",
     "test:feature-flags-api": "tsx server/api/__tests__/feature-flags-api.test.ts",
     "test:skeletons-render": "tsx client/src/lib/__tests__/skeletons-render.test.ts",
     "test:virtualization-large-lists": "tsx client/src/lib/__tests__/virtualization-large-lists.test.ts",
