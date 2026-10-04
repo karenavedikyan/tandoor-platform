@@ -3,6 +3,7 @@
  */
 
 import type { PoolLike } from "./responsibility-resolver.js";
+import { poolSupportsTransaction } from "./pool-transaction-support.js";
 import type { UserRole } from "./auth.js";
 import { resolveWholesalePreviewScope } from "./wholesale-org-handlers.js";
 import type { WholesaleAssignmentType } from "./wholesale-org-types.js";
@@ -184,6 +185,46 @@ export function employeePreviewToBootstrap(state: EmployeePreviewState): Employe
   };
 }
 
+type PreviewMutationInner =
+  | { ok: true }
+  | { ok: false; code: string; message: string };
+
+async function applyPreviewSessionMutation(
+  pool: PoolLike,
+  fn: (client: PoolLike) => Promise<PreviewMutationInner>,
+): Promise<PreviewMutationInner | { ok: false; error: string }> {
+  const run = async (client: PoolLike): Promise<PreviewMutationInner> => fn(client);
+  try {
+    if (poolSupportsTransaction(pool)) {
+      return await pool.withTransaction(run);
+    }
+    return await runAtomicPreviewMutation(pool, fn);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg };
+  }
+}
+
+/** Single-statement fallback when pool has no pinned connection (Neon HTTP). */
+async function runAtomicPreviewMutation(
+  pool: PoolLike,
+  fn: (client: PoolLike) => Promise<PreviewMutationInner>,
+): Promise<PreviewMutationInner> {
+  await pool.query("BEGIN");
+  try {
+    const result = await fn(pool);
+    if (!result.ok) {
+      await pool.query("ROLLBACK");
+      return result;
+    }
+    await pool.query("COMMIT");
+    return result;
+  } catch (e) {
+    await pool.query("ROLLBACK");
+    throw e;
+  }
+}
+
 async function writeAuditLog(
   pool: PoolLike,
   input: {
@@ -270,36 +311,50 @@ export async function startEmployeePreview(
     };
   }
 
-  await pool.query("BEGIN");
-  try {
-    const upd = await pool.query<{ employee_preview_guid: string | null }>(
+  const txnResult = await applyPreviewSessionMutation(pool, async (client) => {
+    const locked = await client.query<{ id: string }>(
+      `SELECT id::text
+         FROM sessions
+        WHERE refresh_token_hash = $1
+          AND user_id = $2::uuid
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+          AND impersonator_user_id IS NULL
+        FOR UPDATE`,
+      [input.refreshTokenHash, input.actorUserId],
+    );
+    if (!locked.rows[0]) {
+      return { ok: false as const, code: "SESSION_UPDATE_FAILED", message: "Не удалось сохранить предпросмотр в сессии." };
+    }
+
+    const upd = await client.query<{ employee_preview_guid: string | null }>(
       `UPDATE sessions
-          SET employee_preview_guid = $2::uuid,
-              employee_preview_assignment = $3,
+          SET employee_preview_guid = $3::uuid,
+              employee_preview_assignment = $4,
               employee_preview_started_at = NOW()
         WHERE refresh_token_hash = $1
-          AND user_id = $4::uuid
+          AND user_id = $2::uuid
           AND revoked_at IS NULL
           AND expires_at > NOW()
           AND impersonator_user_id IS NULL
         RETURNING employee_preview_guid::text`,
-      [input.refreshTokenHash, input.employeeGuid, input.assignmentType, input.actorUserId],
+      [input.refreshTokenHash, input.actorUserId, input.employeeGuid, input.assignmentType],
     );
     if (!upd.rows[0]?.employee_preview_guid) {
-      await pool.query("ROLLBACK");
-      return { ok: false, code: "SESSION_UPDATE_FAILED", message: "Не удалось сохранить предпросмотр в сессии." };
+      return { ok: false as const, code: "SESSION_UPDATE_FAILED", message: "Не удалось сохранить предпросмотр в сессии." };
     }
 
-    await writeAuditLog(pool, {
+    await writeAuditLog(client, {
       actorUserId: input.actorUserId,
       action: "admin.employee_preview.start",
       employeeGuid: input.employeeGuid,
       metadata: { assignmentType: input.assignmentType, confirmed: scope.confirmed },
     });
-    await pool.query("COMMIT");
-  } catch (e) {
-    await pool.query("ROLLBACK");
-    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: true as const };
+  });
+  if (!txnResult.ok) {
+    if ("code" in txnResult) return txnResult;
+    const msg = txnResult.error;
     return { ok: false, code: "AUDIT_FAILED", message: `Журналирование не выполнено: ${msg}` };
   }
 
@@ -326,42 +381,56 @@ export async function stopEmployeePreview(
   const sessionCheck = await assertSessionUpdatable(pool, input.refreshTokenHash, input.actorUserId);
   if (!sessionCheck.ok) return sessionCheck;
 
-  const prev = await readEmployeePreviewFromSession(pool, input.refreshTokenHash);
+  const txnResult = await applyPreviewSessionMutation(pool, async (client) => {
+    const locked = await client.query<{
+      prev_guid: string | null;
+      prev_assignment: string | null;
+    }>(
+      `SELECT employee_preview_guid::text AS prev_guid,
+              employee_preview_assignment AS prev_assignment
+         FROM sessions
+        WHERE refresh_token_hash = $1
+          AND user_id = $2::uuid
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        FOR UPDATE`,
+      [input.refreshTokenHash, input.actorUserId],
+    );
+    const prevRow = locked.rows[0];
+    if (!prevRow) {
+      return { ok: false as const, code: "SESSION_UPDATE_FAILED", message: "Не удалось завершить предпросмотр." };
+    }
 
-  await pool.query("BEGIN");
-  try {
-    const upd = await pool.query<{ n: number }>(
-      `WITH u AS (
-         UPDATE sessions
-            SET employee_preview_guid = NULL,
-                employee_preview_assignment = NULL,
-                employee_preview_started_at = NULL
-          WHERE refresh_token_hash = $1
-            AND user_id = $2::uuid
-            AND revoked_at IS NULL
-            AND expires_at > NOW()
-          RETURNING 1
-       )
-       SELECT COUNT(*)::int AS n FROM u`,
+    const upd = await client.query<{ n: number }>(
+      `UPDATE sessions
+          SET employee_preview_guid = NULL,
+              employee_preview_assignment = NULL,
+              employee_preview_started_at = NULL
+        WHERE refresh_token_hash = $1
+          AND user_id = $2::uuid
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        RETURNING 1 AS n`,
       [input.refreshTokenHash, input.actorUserId],
     );
     if ((upd.rows[0]?.n ?? 0) === 0) {
-      await pool.query("ROLLBACK");
-      return { ok: false, code: "SESSION_UPDATE_FAILED", message: "Не удалось завершить предпросмотр." };
+      return { ok: false as const, code: "SESSION_UPDATE_FAILED", message: "Не удалось завершить предпросмотр." };
     }
 
-    if (prev) {
-      await writeAuditLog(pool, {
+    if (prevRow.prev_guid) {
+      const assignmentType = parseAssignmentType(prevRow.prev_assignment);
+      await writeAuditLog(client, {
         actorUserId: input.actorUserId,
         action: "admin.employee_preview.stop",
-        employeeGuid: prev.employeeGuid,
-        metadata: { assignmentType: prev.assignmentType },
+        employeeGuid: prevRow.prev_guid,
+        metadata: { assignmentType: assignmentType ?? prevRow.prev_assignment },
       });
     }
-    await pool.query("COMMIT");
-  } catch (e) {
-    await pool.query("ROLLBACK");
-    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: true as const };
+  });
+  if (!txnResult.ok) {
+    if ("code" in txnResult) return txnResult;
+    const msg = txnResult.error;
     return { ok: false, code: "AUDIT_FAILED", message: `Журналирование не выполнено: ${msg}` };
   }
 

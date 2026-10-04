@@ -415,27 +415,39 @@ function AuthenticatedShell({
   const employeePreviewQ = useQuery({
     queryKey: ["auth", "employee-preview"],
     queryFn: async (): Promise<EmployeePreviewBootstrap> => {
+      const cached = queryClient.getQueryData<EmployeePreviewBootstrap>(["auth", "employee-preview"]);
       const { fetchBootstrap } = await import("@/lib/bootstrap-api.js");
       const bootstrap = await fetchBootstrap();
-      return (
-        bootstrap?.employee_preview ?? {
-          active: false,
-          employeeGuid: null,
-          fullName: null,
-          assignmentType: null,
-          confirmed: false,
-          reason: null,
-          basis: null,
-          error: null,
-        }
-      );
+      if (bootstrap?.employee_preview) return bootstrap.employee_preview;
+      if (cached) {
+        return {
+          ...cached,
+          error: cached.error ?? {
+            code: "BOOTSTRAP_UNAVAILABLE",
+            message: "Не удалось обновить bootstrap. Режим предпросмотра на сервере может оставаться активным.",
+          },
+        };
+      }
+      return {
+        active: false,
+        employeeGuid: null,
+        fullName: null,
+        assignmentType: null,
+        confirmed: false,
+        reason: null,
+        basis: null,
+        error: { code: "BOOTSTRAP_UNAVAILABLE", message: "Bootstrap недоступен." },
+      };
     },
     staleTime: 30_000,
   });
   const employeePreview = employeePreviewQ.data;
+  const previewBannerVisible =
+    !user.impersonatedBy &&
+    (employeePreview?.active === true || Boolean(employeePreview?.error));
 
   const employeePreviewBanner =
-    employeePreview?.active && !user.impersonatedBy ? (
+    previewBannerVisible && employeePreview ? (
       <EmployeePreviewBanner
         fullName={employeePreview.fullName}
         assignmentType={employeePreview.assignmentType}

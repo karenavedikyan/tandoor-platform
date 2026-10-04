@@ -109,6 +109,7 @@ export type WholesaleOutletAssignment = {
   closed: boolean;
   storeManagerGuid: string | null;
   storeManagerName: string | null;
+  address: string | null;
 };
 
 export type WholesaleOrgReadResult = {

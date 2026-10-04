@@ -1726,7 +1726,7 @@ function DealerBaseContent({ scopeUserId, scopeTeamId, embedListOnly = false }: 
     if (me?.role === "rop") {
       return sidebarCountsFromTeamScope(teamScopeTotalsQ).dealers;
     }
-    if (me?.role === "admin" || me?.role === "manager" || me?.role === "regional_manager") {
+    if (me?.role === "manager" || me?.role === "regional_manager") {
       return sidebarCountsFromDbScope(selfDbScopeQ).dealers;
     }
     return null;

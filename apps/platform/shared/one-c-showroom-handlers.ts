@@ -55,6 +55,13 @@ import {
 
 export { normalizeName, nameMatches } from "./one-c-name-matching.js";
 export type { OneCViewer } from "./one-c-showroom-scope.js";
+import type { OneCReadContext } from "./one-c-read-context.js";
+import {
+  canAccessWholesaleClient,
+  canAccessWholesaleStore,
+  filterWholesaleHierarchyForPreview,
+  previewBlocksAllOneCData,
+} from "./one-c-read-context.js";
 
 export function canAccessOneCShowroom(role: string): boolean {
   return (
@@ -157,8 +164,24 @@ export type OneCOverviewV2 = {
 export { computeOneCOverviewVisibility } from "./one-c-overview-visibility.js";
 export type { OneCOverviewVisibility } from "./one-c-overview-visibility.js";
 
-export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Promise<OneCOverviewV2> {
+export async function fetchOneCOverview(pool: PoolLike, readContext?: OneCReadContext): Promise<OneCOverviewV2> {
+  const viewer = readContext?.viewer;
   const role = viewer?.role ?? "";
+  if (readContext && previewBlocksAllOneCData(readContext)) {
+    const visibility = computeOneCOverviewVisibility(role);
+    return {
+      rops: visibility.showRops ? 0 : null,
+      rms: visibility.showRms ? 0 : null,
+      managers: visibility.showManagers ? 0 : null,
+      storesActive: 0,
+      storesTotal: 0,
+      legalsActive: 0,
+      legalsTotal: 0,
+      ordersTotal: 0,
+      last_imported_at: null,
+      visibility,
+    };
+  }
   const visibility = computeOneCOverviewVisibility(role);
   const ctx = await loadOneCShowroomContext(pool);
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
@@ -217,7 +240,11 @@ export async function fetchOneCOverview(pool: PoolLike, viewer?: OneCViewer): Pr
   };
 }
 
-export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: OneCViewer) {
+export async function fetchOneCHierarchy(pool: PoolLike, q: string, readContext?: OneCReadContext) {
+  const viewer = readContext?.viewer;
+  if (readContext && previewBlocksAllOneCData(readContext)) {
+    return { items: [], source: "wholesale_metadata" as const, rosterAvailable: true, rosterError: null };
+  }
   const { shouldUseWholesaleOrgHierarchy, fetchWholesaleOrgHierarchy } = await import(
     "./wholesale-org-handlers.js"
   );
@@ -235,6 +262,9 @@ export async function fetchOneCHierarchy(pool: PoolLike, q: string, viewer?: One
           ? null
           : await resolveConfirmedEmployeeGuid(pool, viewer.id);
       items = filterWholesaleHierarchyForViewer(items, viewer, confirmed, org) as typeof wholesale.items;
+    }
+    if (readContext?.previewRestricts) {
+      items = filterWholesaleHierarchyForPreview(items, org, readContext) as typeof wholesale.items;
     }
     return {
       items,
@@ -418,11 +448,12 @@ export async function fetchOneCManager(
   offset: number,
   viewer?: OneCViewer,
   ropContextGuid?: string | null,
+  readContext?: OneCReadContext,
 ) {
   const { shouldUseWholesaleOrgHierarchy } = await import("./wholesale-org-handlers.js");
   if (await shouldUseWholesaleOrgHierarchy(pool)) {
     const { fetchWholesaleOneCManager } = await import("./wholesale-showroom-detail.js");
-    return fetchWholesaleOneCManager(pool, userId, q, limit, offset, viewer, ropContextGuid);
+    return fetchWholesaleOneCManager(pool, userId, q, limit, offset, viewer, ropContextGuid, readContext);
   }
   const ctx = await loadOneCShowroomContext(pool);
   if (viewer && !canViewOneCTeamMember(viewer.role, viewer.id, userId, "manager", ctx)) {
@@ -710,9 +741,42 @@ export async function fetchOneCStores(
   onlyActive: boolean,
   ordersFilter: OneCStoresOrdersFilter = "any",
   viewer?: OneCViewer,
+  readContext?: OneCReadContext,
 ) {
+  if (readContext && previewBlocksAllOneCData(readContext)) {
+    return { total: 0, items: [] as OneCStoreListItem[] };
+  }
   const ctx = await loadOneCShowroomContext(pool);
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
+
+  if (readContext?.previewRestricts && readContext.allowedStoreGuids) {
+    const allowed = Array.from(readContext.allowedStoreGuids);
+    if (allowed.length === 0) return { total: 0, items: [] as OneCStoreListItem[] };
+    const pattern = q ? `%${q}%` : null;
+    const ordersClause = buildOrdersFilterClause(ordersFilter);
+    const countRes = await pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n
+         FROM exchange_stores_raw s
+         LEFT JOIN exchange_legals_raw l ON l.id_1c = s.legal_entity_1c
+         LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+        WHERE s.id_1c = ANY($1::uuid[])
+          AND ($2::text IS NULL OR s.address ILIKE $2 OR l.name ILIKE $2)
+          ${ordersClause}`,
+      [allowed, pattern],
+    );
+    const rows = await pool.query<OneCStoreListRowSql>(
+      `${ONE_C_STORE_LIST_SELECT}
+       ${ONE_C_STORE_LIST_JOINS}
+       WHERE s.id_1c = ANY($1::uuid[])
+         AND ($2::text IS NULL OR s.address ILIKE $2 OR l.name ILIKE $2)
+         ${ordersClause}
+       ORDER BY s.address ASC NULLS LAST
+       LIMIT $3 OFFSET $4`,
+      [allowed, pattern, limit, offset],
+    );
+    const items = await attachDistributionFill(pool, enrichStoreListRows(rows.rows, ctx));
+    return { total: countRes.rows[0]?.n ?? 0, items };
+  }
 
   if (!scopeIsUnrestricted(scope)) {
     return queryStoresWithScope(pool, ctx, scope, q, limit, offset, ordersFilter);
@@ -855,8 +919,10 @@ export async function fetchOneCStore(
   const row = res.rows[0];
   if (!row) return null;
 
+  const { hasWholesaleOrgData } = await import("./wholesale-org-read.js");
   if (
     scope &&
+    !(await hasWholesaleOrgData(pool)) &&
     !legalMatchesScope(
       {
         regional_manager_name: row.legal_regional_manager_name,
@@ -892,13 +958,21 @@ export async function fetchOneCStore(
 export async function fetchOneCStoreWithDistribution(
   pool: PoolLike,
   id1c: string,
-  viewerUserId: string | null,
-  viewerRole?: string,
+  readContext?: OneCReadContext,
 ): Promise<OneCStoreDetailWithDistribution | null> {
+  const viewerUserId = readContext?.viewer.id ?? null;
+  const viewerRole = readContext?.viewer.role;
+  const { hasWholesaleOrgData } = await import("./wholesale-org-read.js");
+  if (readContext && (await hasWholesaleOrgData(pool))) {
+    if (!(await canAccessWholesaleStore(pool, id1c, readContext))) return null;
+  }
+
   let scope: OneCScope | undefined;
-  if (viewerUserId && viewerRole) {
+  if (viewerUserId && viewerRole && !(await hasWholesaleOrgData(pool))) {
     const ctx = await loadOneCShowroomContext(pool);
     scope = resolveOneCScope(viewerRole, viewerUserId, ctx);
+  } else if (viewerUserId && viewerRole && (await hasWholesaleOrgData(pool))) {
+    scope = { responsibleNames: null, regionalNames: null };
   }
   const store = await fetchOneCStore(pool, id1c, scope);
   if (!store) return null;
@@ -906,9 +980,12 @@ export async function fetchOneCStoreWithDistribution(
     fetchStoreDistributionState(pool, id1c),
     fetchHistory1cForStore(pool, id1c, 20, 0),
   ]);
-  const canEditDistribution = viewerUserId
-    ? await canEditDistributionForStore1c(pool, viewerUserId, id1c)
-    : false;
+  const canEditDistribution =
+    readContext?.previewActive === true
+      ? false
+      : viewerUserId
+        ? await canEditDistributionForStore1c(pool, viewerUserId, id1c)
+        : false;
   return {
     ...store,
     matrix,
@@ -946,9 +1023,39 @@ export async function fetchOneCLegals(
   onlyActive: boolean,
   hasDistribution = false,
   viewer?: OneCViewer,
+  readContext?: OneCReadContext,
 ) {
+  if (readContext && previewBlocksAllOneCData(readContext)) {
+    return { total: 0, items: [] as OneCLegalListItem[] };
+  }
   const ctx = await loadOneCShowroomContext(pool);
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
+
+  if (readContext?.previewRestricts && readContext.allowedClientGuids) {
+    const allowed = Array.from(readContext.allowedClientGuids);
+    if (allowed.length === 0) return { total: 0, items: [] as OneCLegalListItem[] };
+    const pattern = q ? `%${q}%` : null;
+    const countRes = await pool.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM exchange_legals_raw l
+        LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+       WHERE l.id_1c = ANY($1::uuid[]) AND ($2::text IS NULL OR l.name ILIKE $2 OR l.inn ILIKE $2)`,
+      [allowed, pattern],
+    );
+    const rows = await pool.query<Omit<OneCLegalListItem, "has_distribution">>(
+      `SELECT l.id_1c::text, l.name, l.legal_name, l.inn, l.kpp, l.city,
+              l.parent_1c::text, p.name AS parent_name, l.client_type, l.payment_form,
+              l.regional_manager_name, l.responsible_manager_name, l.plan_sum,
+              (SELECT COUNT(*)::int FROM exchange_stores_raw s WHERE s.legal_entity_1c = l.id_1c) AS stores_count,
+              0 AS orders_count
+         FROM exchange_legals_raw l
+         LEFT JOIN exchange_legals_raw p ON p.id_1c = l.parent_1c
+        WHERE l.id_1c = ANY($1::uuid[]) AND ($2::text IS NULL OR l.name ILIKE $2 OR l.inn ILIKE $2)
+        ORDER BY l.name ASC LIMIT $3 OFFSET $4`,
+      [allowed, pattern, limit, offset],
+    );
+    const items = rows.rows.map((r) => ({ ...r, has_distribution: false }));
+    return { total: countRes.rows[0]?.n ?? 0, items };
+  }
   const pattern = q ? `%${q}%` : null;
 
   const params: unknown[] = [pattern];
@@ -1081,7 +1188,13 @@ export type OneCLegalSibling = {
   inn: string | null;
 };
 
-export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneCViewer) {
+export async function fetchOneCLegal(pool: PoolLike, id1c: string, readContext?: OneCReadContext) {
+  const viewer = readContext?.viewer;
+  const { hasWholesaleOrgData } = await import("./wholesale-org-read.js");
+  if (readContext && (await hasWholesaleOrgData(pool))) {
+    if (!(await canAccessWholesaleClient(pool, id1c, readContext))) return null;
+  }
+
   const ctx = await loadOneCShowroomContext(pool);
   const scope = viewer ? resolveOneCScope(viewer.role, viewer.id, ctx) : { responsibleNames: null, regionalNames: null };
   const res = await pool.query<OneCLegalDetail>(
@@ -1102,7 +1215,7 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneC
   const legal = res.rows[0];
   if (!legal) return null;
 
-  if (!legalMatchesScope(legal, scope)) return null;
+  if (!(await hasWholesaleOrgData(pool)) && !legalMatchesScope(legal, scope)) return null;
 
   const scopeResolved = resolveOneCStoreScope(scopeInputFromLegal(legal, ctx), ctx);
   legal.responsible_manager_user_id = scopeResolved.responsible_manager_user_id;
@@ -1130,7 +1243,10 @@ export async function fetchOneCLegal(pool: PoolLike, id1c: string, viewer?: OneC
      LIMIT 500`,
     [id1c],
   );
-  const stores = await attachDistributionFill(pool, enrichStoreListRows(storesRes.rows, ctx));
+  let stores = await attachDistributionFill(pool, enrichStoreListRows(storesRes.rows, ctx));
+  if (readContext?.previewRestricts && readContext.allowedStoreGuids) {
+    stores = stores.filter((s) => readContext.allowedStoreGuids!.has(s.id_1c));
+  }
   return { legal, children: childrenRes.rows, siblings: siblingsRes.rows, stores };
 }
 
@@ -1138,9 +1254,9 @@ export async function handleOneCOverview(
   _req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
-  const data = await fetchOneCOverview(pool, viewer);
+  const data = await fetchOneCOverview(pool, readContext);
   sendJson(res, 200, { success: true, ...data });
 }
 
@@ -1148,13 +1264,13 @@ export async function handleOneCHierarchy(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
-  if (viewer.role === "manager") {
+  if (readContext.viewer.role === "manager") {
     sendJson(res, 403, { success: false, code: "FORBIDDEN", message: "Страница команды недоступна для менеджера." });
     return;
   }
-  const data = await fetchOneCHierarchy(pool, parseSearch(req), viewer);
+  const data = await fetchOneCHierarchy(pool, parseSearch(req), readContext);
   sendJson(res, 200, { success: true, ...data });
 }
 
@@ -1162,14 +1278,14 @@ export async function handleOneCRop(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const userId = parseUserId(req);
   if (!userId) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "user_id обязателен." });
     return;
   }
-  const data = await fetchOneCRop(pool, userId, viewer, parseRopContext(req));
+  const data = await fetchOneCRop(pool, userId, readContext.viewer, parseRopContext(req));
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РОП не найден." });
     return;
@@ -1181,7 +1297,7 @@ export async function handleOneCRm(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const userId = parseUserId(req);
   if (!userId) {
@@ -1189,7 +1305,15 @@ export async function handleOneCRm(
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCRm(pool, userId, parseSearch(req), limit, offset, viewer, parseRopContext(req));
+  const data = await fetchOneCRm(
+    pool,
+    userId,
+    parseSearch(req),
+    limit,
+    offset,
+    readContext.viewer,
+    parseRopContext(req),
+  );
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "РМ не найден." });
     return;
@@ -1201,7 +1325,7 @@ export async function handleOneCManager(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const userId = parseUserId(req);
   if (!userId) {
@@ -1209,7 +1333,16 @@ export async function handleOneCManager(
     return;
   }
   const { limit, offset } = parseLimitOffset(req);
-  const data = await fetchOneCManager(pool, userId, parseSearch(req), limit, offset, viewer, parseRopContext(req));
+  const data = await fetchOneCManager(
+    pool,
+    userId,
+    parseSearch(req),
+    limit,
+    offset,
+    readContext.viewer,
+    parseRopContext(req),
+    readContext,
+  );
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Менеджер не найден." });
     return;
@@ -1221,7 +1354,7 @@ export async function handleOneCStores(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const { limit, offset } = parseLimitOffset(req);
   const ordersFilter = parseOrdersFilter(req);
@@ -1232,7 +1365,8 @@ export async function handleOneCStores(
     offset,
     parseOnlyActive(req),
     ordersFilter,
-    viewer,
+    readContext.viewer,
+    readContext,
   );
   sendJson(res, 200, {
     success: true,
@@ -1248,14 +1382,14 @@ export async function handleOneCStore(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const id1c = String(req.query.id_1c ?? "").trim();
   if (!id1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
-  const store = await fetchOneCStoreWithDistribution(pool, id1c, viewer.id, viewer.role);
+  const store = await fetchOneCStoreWithDistribution(pool, id1c, readContext);
   if (!store) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Торговая точка не найдена." });
     return;
@@ -1267,7 +1401,7 @@ export async function handleOneCLegals(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const { limit, offset } = parseLimitOffset(req);
   const data = await fetchOneCLegals(
@@ -1277,7 +1411,8 @@ export async function handleOneCLegals(
     offset,
     parseOnlyActive(req),
     parseHasDistribution(req),
-    viewer,
+    readContext.viewer,
+    readContext,
   );
   sendJson(res, 200, {
     success: true,
@@ -1293,14 +1428,14 @@ export async function handleOneCLegal(
   req: VercelRequest,
   res: VercelResponse,
   pool: PoolLike,
-  viewer: OneCViewer,
+  readContext: OneCReadContext,
 ) {
   const id1c = String(req.query.id_1c ?? "").trim();
   if (!id1c) {
     sendJson(res, 400, { success: false, code: "BAD_REQUEST", message: "id_1c обязателен." });
     return;
   }
-  const data = await fetchOneCLegal(pool, id1c, viewer);
+  const data = await fetchOneCLegal(pool, id1c, readContext);
   if (!data) {
     sendJson(res, 404, { success: false, code: "NOT_FOUND", message: "Юрлицо не найдено." });
     return;

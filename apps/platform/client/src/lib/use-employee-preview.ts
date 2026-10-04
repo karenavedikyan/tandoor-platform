@@ -29,28 +29,38 @@ type PreviewMutationResponse = {
 const PREVIEW_QUERY_KEY = ["auth", "employee-preview"] as const;
 const BOOTSTRAP_QUERY_KEY = ["auth", "bootstrap"] as const;
 
-const INACTIVE_PREVIEW: EmployeePreviewBootstrap = {
-  active: false,
-  employeeGuid: null,
-  fullName: null,
-  assignmentType: null,
-  confirmed: false,
-  reason: null,
-  basis: null,
-  error: null,
-};
+let bootstrapRefreshGeneration = 0;
 
-async function refreshPreviewAndBootstrapCaches(qc: ReturnType<typeof useQueryClient>): Promise<void> {
+export function markBootstrapRefreshPending(): number {
+  bootstrapRefreshGeneration += 1;
+  return bootstrapRefreshGeneration;
+}
+
+async function refreshPreviewAndBootstrapCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  generation: number,
+): Promise<void> {
   await qc.cancelQueries({ queryKey: PREVIEW_QUERY_KEY });
   await qc.cancelQueries({ queryKey: BOOTSTRAP_QUERY_KEY });
 
   const bootstrap = await fetchBootstrap();
+  if (generation !== bootstrapRefreshGeneration) return;
+
   if (bootstrap) {
     prewarmFromBootstrap(qc, bootstrap);
     return;
   }
 
-  qc.setQueryData(PREVIEW_QUERY_KEY, INACTIVE_PREVIEW);
+  const previous = qc.getQueryData<EmployeePreviewBootstrap>(PREVIEW_QUERY_KEY);
+  if (previous?.active) {
+    qc.setQueryData(PREVIEW_QUERY_KEY, {
+      ...previous,
+      error: {
+        code: "BOOTSTRAP_UNAVAILABLE",
+        message: "Не удалось обновить bootstrap. Режим предпросмотра на сервере может оставаться активным.",
+      },
+    });
+  }
 }
 
 export function useStartEmployeePreview() {
@@ -73,12 +83,13 @@ export function useStartEmployeePreview() {
       if (body.employee_preview) {
         qc.setQueryData(PREVIEW_QUERY_KEY, body.employee_preview);
       }
+      const generation = markBootstrapRefreshPending();
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),
-        refreshPreviewAndBootstrapCaches(qc),
+        refreshPreviewAndBootstrapCaches(qc, generation),
       ]);
     },
   });
@@ -99,13 +110,16 @@ export function useStopEmployeePreview() {
       return body;
     },
     onSuccess: async (body) => {
-      qc.setQueryData(PREVIEW_QUERY_KEY, body.employee_preview ?? INACTIVE_PREVIEW);
+      if (body.employee_preview) {
+        qc.setQueryData(PREVIEW_QUERY_KEY, body.employee_preview);
+      }
+      const generation = markBootstrapRefreshPending();
       await Promise.all([
         qc.invalidateQueries({ queryKey: AUTH_ME_QUERY_KEY }),
         qc.invalidateQueries({ queryKey: myDealerScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: orgScopeQueryKey() }),
         qc.invalidateQueries({ queryKey: DEALER_BASE_ROWS_QUERY_KEY }),
-        refreshPreviewAndBootstrapCaches(qc),
+        refreshPreviewAndBootstrapCaches(qc, generation),
       ]);
     },
   });

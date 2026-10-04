@@ -26,8 +26,8 @@ function mockPool(opts?: {
   let previewGuid: string | null = null;
   let txnSnapshot: string | null = null;
   let auditCalls = 0;
-  return {
-    query: async (sql: string, params?: unknown[]) => {
+
+  const queryImpl = async (sql: string, params?: unknown[]) => {
       const s = sql.replace(/\s+/g, " ").trim();
       if (s === "BEGIN") {
         txnSnapshot = previewGuid;
@@ -121,20 +121,20 @@ function mockPool(opts?: {
           ],
         };
       }
-      if (s.includes("UPDATE sessions") && s.includes("employee_preview_guid = $2")) {
+      if (s.includes("FROM sessions") && s.includes("FOR UPDATE")) {
         if (opts?.impersonating) return { rows: [] };
-        previewGuid = String(params?.[1] ?? "");
+        return { rows: [{ id: "session-1", prev_guid: previewGuid, prev_assignment: "responsible_manager" }] };
+      }
+      if (s.includes("UPDATE sessions") && s.includes("employee_preview_guid = $3")) {
+        if (opts?.impersonating) return { rows: [] };
+        previewGuid = String(params?.[2] ?? "");
         return { rows: [{ employee_preview_guid: previewGuid }] };
       }
       if (s.includes("UPDATE sessions") && s.includes("employee_preview_guid = NULL")) {
         previewGuid = null;
         return { rows: [{ n: 1 }] };
       }
-      if (s.includes("WITH u AS") && s.includes("employee_preview_guid = NULL")) {
-        previewGuid = null;
-        return { rows: [{ n: 1 }] };
-      }
-      if (s.includes("employee_preview_guid") && s.includes("FROM sessions")) {
+      if (s.includes("employee_preview_guid") && s.includes("FROM sessions") && !s.includes("FOR UPDATE")) {
         return {
           rows: previewGuid
             ? [
@@ -154,8 +154,22 @@ function mockPool(opts?: {
         return { rows: [] };
       }
       return { rows: [] };
+  };
+
+  const pool: PoolLike & { withTransaction?: <T>(fn: (c: PoolLike) => Promise<T>) => Promise<T> } = {
+    query: queryImpl,
+    withTransaction: async (fn) => {
+      const snap = previewGuid;
+      try {
+        const result = await fn({ query: queryImpl });
+        return result;
+      } catch (e) {
+        previewGuid = snap;
+        throw e;
+      }
     },
   };
+  return pool;
 }
 
 assert.equal(isEmployeePreviewWriteBlocked(true), true);

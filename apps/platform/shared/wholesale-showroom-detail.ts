@@ -18,6 +18,10 @@ import {
   resolveConfirmedEmployeeGuid,
 } from "./wholesale-showroom-scope.js";
 import type { OneCViewer } from "./one-c-showroom-scope.js";
+import {
+  filterClientsForReadContext,
+  type OneCReadContext,
+} from "./one-c-read-context.js";
 
 const NO_ROP_GUID = "__no_rop__";
 
@@ -263,6 +267,7 @@ export async function fetchWholesaleOneCManager(
   offset: number,
   viewer?: OneCViewer,
   ropContextGuid?: string | null,
+  readContext?: OneCReadContext,
 ) {
   const org = await readWholesaleOrg(pool);
   const confirmed =
@@ -278,28 +283,34 @@ export async function fetchWholesaleOneCManager(
     return null;
   }
 
-  const mgrClientsAll = clientsForManager(org, employeeGuid, scope, parseRopContext(ropContextGuid));
+  let mgrClientsAll = clientsForManager(org, employeeGuid, scope, parseRopContext(ropContextGuid));
+  if (readContext) {
+    mgrClientsAll = filterClientsForReadContext(mgrClientsAll, readContext);
+  }
   const emp = org.employees.find((e) => e.employeeGuid === employeeGuid);
   if (!emp && mgrClientsAll.length === 0) return null;
 
   const card = employeeCard(org, employeeGuid, "manager", mgrClientsAll);
   if (!card) return null;
 
+  const allowedStores = readContext?.previewRestricts ? readContext.allowedStoreGuids : null;
   const pattern = q.trim().toLowerCase();
-  const mgrClients = mgrClientsAll.filter((c) => {
-    if (!pattern) return true;
-    return (
-      c.name.toLowerCase().includes(pattern) ||
-      c.externalKey.toLowerCase().includes(pattern)
+  let allItems = buildAssignmentListItems(mgrClientsAll, org, allowedStores);
+  if (pattern) {
+    allItems = allItems.filter(
+      (item) =>
+        (item.legal_name ?? "").toLowerCase().includes(pattern) ||
+        (item.address ?? "").toLowerCase().includes(pattern) ||
+        item.id_1c.toLowerCase().includes(pattern),
     );
-  });
-  const total = mgrClients.length;
-  const slice = mgrClients.slice(offset, offset + limit);
+  }
+  const total = allItems.length;
+  const items = allItems.slice(offset, offset + limit);
 
   return {
     user: card,
     total,
-    items: buildAssignmentListItems(slice, org),
+    items,
     listEntityKind: "mixed" as const,
     idKind: "employee_1c" as const,
     ropContextGuid: parseRopContext(ropContextGuid),

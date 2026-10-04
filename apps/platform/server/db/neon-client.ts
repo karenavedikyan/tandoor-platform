@@ -4,7 +4,9 @@
  */
 
 import { neon } from "@neondatabase/serverless";
+import type pg from "pg";
 import { buildTaggedQuery } from "./pg-client.js";
+import { attachPgPoolTransaction } from "./pool-transaction.js";
 import { shadowWriteAsync } from "./shadow-write.js";
 
 export type NeonHttp = ReturnType<typeof neon>;
@@ -15,6 +17,9 @@ export interface PoolLike {
     params?: unknown[],
   ) => Promise<{ rows: T[]; rowCount?: number }>;
 }
+
+export type { TransactionCapablePool } from "./pool-transaction.js";
+export { poolSupportsTransaction, attachPgPoolTransaction } from "./pool-transaction.js";
 
 function resolveDatabaseUrl(): string | null {
   const a = process.env.DATABASE_URL?.trim();
@@ -92,7 +97,7 @@ export function getNeonHttp(): NeonHttp | null {
 }
 
 export function makePoolFromNeon(sql: NeonHttp): PoolLike {
-  return {
+  const base: PoolLike = {
     async query<T>(text: string, params?: unknown[]): Promise<{ rows: T[]; rowCount?: number }> {
       const raw = (await runNeonQuery(sql, text, params ?? [])) as unknown;
       scheduleShadowWrite(text, params ?? [], "pool.query");
@@ -107,4 +112,8 @@ export function makePoolFromNeon(sql: NeonHttp): PoolLike {
       return { rows: [] as T[] };
     },
   };
+
+  const pgPool = (sql as NeonHttp & { __pgPool?: pg.Pool }).__pgPool;
+  if (pgPool) return attachPgPoolTransaction(base, pgPool);
+  return base;
 }

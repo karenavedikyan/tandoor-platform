@@ -543,8 +543,14 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
          INNER JOIN dealers d ON d.id = wm.guid_client
         ORDER BY d.name`,
     ),
-    pool.query<{ guid_store: string; guid_client: string; closed: boolean; raw: unknown }>(
-      `SELECT guid_store::text, guid_client::text, closed, raw FROM wholesale_outlet_metadata`,
+    pool.query<{ guid_store: string; guid_client: string; closed: boolean; raw: unknown; address: string | null }>(
+      `SELECT om.guid_store::text,
+              om.guid_client::text,
+              om.closed,
+              om.raw,
+              esr.address
+         FROM wholesale_outlet_metadata om
+         LEFT JOIN exchange_stores_raw esr ON esr.id_1c::text = om.guid_store::text`,
     ),
     loadEmployeeAccountLinks(pool),
   ]);
@@ -594,6 +600,7 @@ export async function readWholesaleOrg(pool: PoolLike): Promise<WholesaleOrgRead
       closed: o.closed,
       storeManagerGuid: mgr.guid,
       storeManagerName: mgr.name,
+      address: o.address?.trim() || null,
     });
   }
 
