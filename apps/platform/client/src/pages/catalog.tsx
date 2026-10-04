@@ -242,8 +242,14 @@ export default function CatalogPage() {
       priceFilterActive,
     ],
   );
+  const listingKey = JSON.stringify(productsQueryKey);
+  const latestListingKey = useRef(listingKey);
+  latestListingKey.current = listingKey;
+  const loadedListingKey = useRef<string | null>(null);
 
   async function loadProducts(nextOffset: number, append = false) {
+    const requestKey = listingKey;
+    if (append && (loadedListingKey.current !== requestKey || abortRef.current)) return;
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
@@ -271,21 +277,26 @@ export default function CatalogPage() {
       params.set("offset", String(nextOffset));
       const r = await fetch(`/api/catalog/products?${params}`, { signal: ac.signal, credentials: "include" });
       const data = await r.json();
+      if (ac.signal.aborted || latestListingKey.current !== requestKey || abortRef.current !== ac) return;
       if (!r.ok || !data.success) {
         throw new Error(data.message || `HTTP ${r.status}`);
       }
       setTotal(data.total ?? 0);
       setOffset(nextOffset);
       setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+      loadedListingKey.current = requestKey;
     } catch (e) {
-      if ((e as Error).name === "AbortError") return;
+      if ((e as Error).name === "AbortError" || latestListingKey.current !== requestKey || abortRef.current !== ac) return;
       toast({
         title: "Не удалось загрузить каталог",
         description: e instanceof Error ? e.message : String(e),
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (abortRef.current === ac) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -402,15 +413,23 @@ export default function CatalogPage() {
   }, []);
 
   useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    loadedListingKey.current = null;
+    setItems([]);
+    setTotal(0);
+    setOffset(0);
+    setLoading(true);
     const t = setTimeout(() => {
       void loadProducts(0, false);
     }, 250);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); abortRef.current?.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, productsQueryKey);
 
   useEffect(() => {
-    if (loading || total <= items.length || total < LARGE_LIST_VIRTUAL_THRESHOLD) return;
+    if (loading || loadedListingKey.current !== listingKey || abortRef.current ||
+        total <= items.length || total < LARGE_LIST_VIRTUAL_THRESHOLD) return;
     void loadProducts(items.length, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, items.length, total]);
@@ -504,7 +523,7 @@ export default function CatalogPage() {
               size="sm"
               variant="outline"
               onClick={() => void triggerSync()}
-              disabled={syncing || lastSync?.status === "running"}
+              disabled={import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" || syncing || lastSync?.status === "running"}
               data-testid="catalog-sync-button"
             >
               <RefreshCw className={cn("mr-2 h-4 w-4", syncing && "animate-spin")} />
@@ -514,7 +533,7 @@ export default function CatalogPage() {
               size="sm"
               variant="outline"
               onClick={() => void triggerPhotoSync()}
-              disabled={syncingPhotos}
+              disabled={import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" || syncingPhotos}
               data-testid="catalog-sync-photos-button"
             >
               <RefreshCw className={cn("mr-2 h-4 w-4", syncingPhotos && "animate-spin")} />

@@ -198,7 +198,7 @@ export function ProductListRow({ product }: { product: CatalogListProduct }) {
             "hidden w-16 shrink-0 text-right text-xs tabular-nums min-[650px]:block",
             stock > 0 ? "text-foreground" : "text-muted-foreground",
           )}
-          title={stock > 0 ? `В наличии: ${formatCatalogStock(stock)}` : "Нет в наличии"}
+          title={import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" ? "Остатки не загружены" : stock > 0 ? `В наличии: ${formatCatalogStock(stock)}` : "Нет в наличии"}
         >
           {stock > 0 ? `${formatCatalogStock(stock)}` : "—"}
         </span>
@@ -339,7 +339,7 @@ export function ProductCardGrid({
                 "h-2 w-2 rounded-full",
                 (groupStock ?? 0) > 0 ? "bg-[#9aca3c]" : "bg-muted-foreground/40",
               )}
-              title={`В наличии: ${groupStock ?? 0}`}
+              title={import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" ? "Остатки не загружены" : `В наличии: ${groupStock ?? 0}`}
             />
           </div>
         ) : null}

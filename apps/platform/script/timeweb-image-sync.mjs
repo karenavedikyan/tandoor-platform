@@ -6,24 +6,32 @@ import {sha256,sourceImagePath,makePreview} from '../shared/timeweb-media.mjs';
 const url=new URL(process.env.DATABASE_URL||'');
 if(url.pathname!=='/tandoor_lk')throw Error('ISOLATED_DATABASE_ONLY');
 if(!process.argv.includes('--apply'))throw Error('MANUAL_APPLY_REQUIRED');
+const shardArg=process.argv.find(a=>a.startsWith('--shard='))?.slice(8)||'0/1';
+const [shard,totalShards]=shardArg.split('/').map(Number);
+if(!Number.isInteger(shard)||!Number.isInteger(totalShards)||totalShards<1||totalShards>4||shard<0||shard>=totalShards)throw Error('INVALID_SHARD');
+const byteBudget=Math.floor(2*1024**3/totalShards);
 const db=new pg.Client({connectionString:url.toString(),ssl:{rejectUnauthorized:true,
   ca:process.env.PG_SSL_ROOT_CERT,servername:process.env.PG_TLS_SERVERNAME||url.hostname}});
 const ftp=new Client(30000);
 const stats={attempted:0,ready:0,skipped:0,failed:0,sourceBytes:0,previewBytes:0,errors:{}};
-const journal=()=>fs.writeFileSync('/tmp/tandoor-lk-images-status.json',JSON.stringify({at:new Date().toISOString(),...stats}),{mode:0o600});
+let stopping=false;
+process.on('SIGTERM',()=>{stopping=true;});
+const journal=()=>fs.writeFileSync('/tmp/tandoor-lk-images-status-'+shard+'.json',JSON.stringify({at:new Date().toISOString(),shard,totalShards,stopping,...stats}),{mode:0o600});
 try{
  await db.connect();
- const lock=await db.query("SELECT pg_try_advisory_lock(hashtext('lk-manual-images')) AS acquired");
+ const lock=await db.query("SELECT pg_try_advisory_lock(hashtext($1)) AS acquired",['lk-manual-images-'+shard]);
  if(!lock.rows[0].acquired)throw Error('SYNC_ALREADY_RUNNING');
  await db.query(`CREATE TABLE IF NOT EXISTS wholesale_catalog_media(
    asset_id char(64) PRIMARY KEY, source_path text UNIQUE NOT NULL, source_sha256 char(64) NOT NULL,
    source_bytes bigint NOT NULL, preview bytea NOT NULL, preview_sha256 char(64) NOT NULL,
    created_at timestamptz NOT NULL DEFAULT now())`);
- const paths=await db.query('SELECT DISTINCT path FROM catalog_product_images ORDER BY path');
+ const paths=await db.query(`SELECT path FROM (SELECT path,row_number() OVER(ORDER BY path DESC)-1 AS n
+   FROM (SELECT DISTINCT path FROM catalog_product_images) unique_paths) partitioned WHERE mod(n,$1)=$2 ORDER BY path DESC`,[totalShards,shard]);
+ journal();
  await ftp.access({host:process.env.FTP_HOST,port:Number(process.env.FTP_PORT||21),
    user:process.env.FTP_USER,password:process.env.FTP_PASSWORD,secure:process.env.FTP_SECURE==='1'});
  for(const {path} of paths.rows){
-  if(stats.sourceBytes>=2*1024**3 || stats.attempted>=4000)break;
+  if(stopping || stats.sourceBytes>=byteBudget || stats.attempted>=Math.ceil(4000/totalShards))break;
   try{
    const remote=sourceImagePath(path),assetId=sha256(Buffer.from(path));
    const existing=await db.query('SELECT preview,preview_sha256 FROM wholesale_catalog_media WHERE asset_id=$1',[assetId]);
@@ -33,11 +41,11 @@ try{
    stats.attempted++;
    const before=await ftp.size(remote);
    if(before>16*1024**2)throw Error('FILE_TOO_LARGE');
-   if(stats.sourceBytes+before>2*1024**3)break;
+   if(stats.sourceBytes+before>byteBudget)break;
    const chunks=[];let total=0;
    await ftp.downloadTo(new Writable({write(chunk,_e,cb){
      total+=chunk.length;stats.sourceBytes+=chunk.length;
-     if(total>16*1024**2 || stats.sourceBytes>2*1024**3)return cb(Error('BYTE_BUDGET'));
+     if(total>16*1024**2 || stats.sourceBytes>byteBudget)return cb(Error('BYTE_BUDGET'));
      chunks.push(chunk);cb();
    }}),remote);
    if(before!==total || await ftp.size(remote)!==total)throw Error('SOURCE_CHANGED');

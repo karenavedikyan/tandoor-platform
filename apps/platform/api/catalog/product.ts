@@ -4,7 +4,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import type { Pool } from "pg";
+import type { PoolLike as Pool } from "../../shared/admin/admin-auth.js";
 import {
   getPool,
   resolveCurrentUser,
@@ -40,14 +40,14 @@ async function fetchGroupBreadcrumbs(pool: Pool, groupId: string): Promise<Bread
 
 async function fetchCategoryBreadcrumbs(pool: Pool, productId: string): Promise<BreadcrumbRow[]> {
   const r = await pool.query<{ id: string; name: string | null; kind: string }>(
-    `WITH first_cat AS (
+    `WITH RECURSIVE first_cat AS (
        SELECT category_id
        FROM catalog_product_categories
        WHERE product_id = $1::uuid
        ORDER BY category_id
        LIMIT 1
      ),
-     RECURSIVE chain AS (
+     chain AS (
        SELECT c.id, c.name, c.parent_id, 1 AS depth
        FROM catalog_categories c
        INNER JOIN first_cat fc ON fc.category_id = c.id
@@ -133,7 +133,7 @@ async function fetchRelated(
         AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_hit,
        EXISTS (SELECT 1 FROM catalog_product_properties pp
         WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция'
-        AND NULLIF(TRIM(pp.value), '') IS NOT NULL) AS is_sale
+        AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')) AS is_sale
      FROM catalog_products p
      WHERE p.group_id = $1::uuid AND p.id <> $2::uuid AND p.active = TRUE
      ORDER BY p.name ASC
@@ -265,7 +265,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const badges = {
       is_new: propsLc.some((x) => x.name === "новинка" && truthy(x.value)),
       is_hit: propsLc.some((x) => x.name === "хит продаж" && truthy(x.value)),
-      is_sale: propsLc.some((x) => x.name === "акция" && x.value !== ""),
+      is_sale: propsLc.some((x) => x.name === "акция" && truthy(x.value)),
     };
 
     const prices = pricesR.rows.map((r) => ({

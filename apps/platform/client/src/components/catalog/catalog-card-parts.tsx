@@ -390,6 +390,9 @@ export function CatalogStockLine({
   stock: number | null;
   className?: string;
 }) {
+  if (import.meta.env.VITE_HOSTING_PROVIDER === "timeweb") {
+    return <p className={cn("text-xs text-muted-foreground",className)}>Остатки не загружены</p>;
+  }
   const n = stock ?? 0;
   return (
     <p className={cn("text-xs text-muted-foreground", className)}>

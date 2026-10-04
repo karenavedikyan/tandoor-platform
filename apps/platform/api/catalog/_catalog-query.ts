@@ -243,7 +243,7 @@ export function buildCatalogProductWhere(
   }
   if (includeListing && filters.onlySale) {
     clauses.push(
-      `EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND NULLIF(TRIM(pp.value), '') IS NOT NULL)`,
+      `EXISTS (SELECT 1 FROM catalog_product_properties pp WHERE pp.product_id = p.id AND LOWER(TRIM(pp.name)) = 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1'))`,
     );
   }
 

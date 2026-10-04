@@ -67,6 +67,8 @@ describe("catalog model grouping", () => {
     expect(sql).toContain("MAX(CASE WHEN gv.is_sale THEN 1 ELSE 0 END) OVER (PARTITION BY gv.group_key)");
     expect(sql).not.toContain("FROM group_variants v WHERE v.group_key = r.group_key");
     expect(sql).toContain("SELECT * FROM paged");
+    expect(sql).toContain("= 'акция' AND LOWER(TRIM(pp.value)) IN ('да','y','yes','true','1')");
+    expect(sql).not.toContain("= 'акция' AND NULLIF");
     expect(sortSql).toContain("ORDER BY grp_is_sale DESC");
   });
 });

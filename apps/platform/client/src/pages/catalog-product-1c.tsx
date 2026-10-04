@@ -520,7 +520,11 @@ export default function CatalogProduct1cPage() {
                 <p className="mt-1 text-xs text-muted-foreground">за единицу</p>
               </div>
 
-              {totalQty > 0 ? (
+              {import.meta.env.VITE_HOSTING_PROVIDER === "timeweb" ? (
+                <div className="rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                  Цены и остатки не загружены
+                </div>
+              ) : totalQty > 0 ? (
                 <div className="rounded-lg border border-[#9aca3c]/40 bg-[#9aca3c]/10 px-3 py-2 text-sm font-medium text-foreground">
                   В наличии: {fmtQty(totalQty)} шт.
                 </div>
